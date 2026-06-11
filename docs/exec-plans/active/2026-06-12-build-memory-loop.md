@@ -2,6 +2,7 @@
 status: active
 last_verified: 2026-06-12
 owner: harness
+base_commit: 5f17c42
 ---
 # Build the memory loop (Phases 3-5) + retrospective (Phase 6)
 

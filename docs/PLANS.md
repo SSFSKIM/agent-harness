@@ -18,6 +18,7 @@ architecture/memory semantics, or needs a completion gate. Otherwise throwaway.
     status: active
     last_verified: <today>
     owner: <who drives>
+    base_commit: <git rev-parse HEAD at plan creation>
     ---
     # <Title>
     ## Goal

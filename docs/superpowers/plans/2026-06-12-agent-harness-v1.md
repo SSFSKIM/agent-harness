@@ -503,7 +503,7 @@ FM_EXEMPT = ("generated/", "superpowers/")
 SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/")
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
-LINK = re.compile(r"\]\(([^)#\s]+\.md)\)")
+LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
 
 
 def _fail(errors, rule, path, problem, fix):
@@ -630,7 +630,7 @@ def check_coverage(root, errors, plugin):
         hay += (root / "AGENTS.md").read_text(encoding="utf-8")
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if not _exempt(p, docs, ("generated/",)):
+        if not _exempt(p, docs, ("generated/", "superpowers/")):
             hay += p.read_text(encoding="utf-8")
     for name in names:
         if name not in hay:

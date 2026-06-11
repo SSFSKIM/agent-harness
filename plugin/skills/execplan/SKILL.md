@@ -11,7 +11,8 @@ Method and template live in `docs/PLANS.md` — read it first.
    `docs/exec-plans/active/YYYY-MM-DD-<slug>.md` (kebab-case slug).
 2. Fill Goal (observable definition of done), Context (links a novice needs),
    Milestones (each independently verifiable).
-3. Run `python3 plugin/scripts/check.py`; commit.
+3. Record `base_commit: $(git rev-parse HEAD)` in the plan frontmatter, run
+   `python3 plugin/scripts/check.py`, commit.
 
 ## Maintain (as you work, not after)
 - Append to Progress log each working block; record Surprises & discoveries
@@ -20,13 +21,15 @@ Method and template live in `docs/PLANS.md` — read it first.
 ## Completion gate (the PR-boundary equivalent)
 1. Run `python3 plugin/scripts/check.py` — must be GREEN.
 2. **Self-review first**: read the full diff
-   (`git diff <plan-start-commit>..HEAD`) against the plan's Goal; fix what
-   you would flag.
+   (`git diff <base_commit from plan frontmatter>..HEAD`) against the plan's
+   Goal; fix what you would flag.
 3. Dispatch all three personas **in parallel** (Task tool), each with:
-   "Review the diff for ExecPlan <slug>. Run `git diff <base>..HEAD` to see
-   it. Read your grounding doc first. Output P1/P2 findings with file:line
-   and a Verdict."
+   "Review the diff for ExecPlan <slug>. Run `git diff <base_commit>..HEAD`
+   (substitute the actual SHA from the plan's frontmatter) to see it. Read
+   your grounding doc first. Output P1/P2 findings with file:line and a
+   Verdict."
    - review-arch · review-reliability · review-security
+   (Task tool subagent_type is plugin-namespaced: `agent-harness:review-arch` etc.)
 4. Process findings: P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
    `docs/exec-plans/tech-debt-tracker.md`.

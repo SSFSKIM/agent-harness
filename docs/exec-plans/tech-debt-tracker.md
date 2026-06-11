@@ -14,3 +14,5 @@ GCs continuously — debt is a high-interest loan.
 | D8 registration uses substring match (`plan.md` counts as registered via `master-plan.md`) | Minor | 2026-06-12 | Phase 0-1 quality review M4 | open |
 | tests run_all() duplicates main() check lists — new checks can silently escape green-path tests; extract shared CHECKS tuple | Minor | 2026-06-12 | Phase 0-1 quality review M5 | open |
 | Fresh-clone fragility: empty untracked dirs (plugin/skills etc.) make lint_structure raise FileNotFoundError until later phases populate them | Minor | 2026-06-12 | Phase 0-1 spec review | open |
+| doc-gardener drift scan bumps last_verified on fresh pages (erodes D4 signal); gate step 2 on pages near the 30-day threshold | Minor | 2026-06-12 | Phase 2 quality review #3 | open |
+| garden/dream `git add -A` safety silently depends on .claude/harness/ being gitignored — document the coupling | Minor | 2026-06-12 | Phase 2 quality review #4 | open |
