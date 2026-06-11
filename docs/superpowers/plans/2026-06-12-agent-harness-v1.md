@@ -1859,9 +1859,9 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - References: docs/references/*.txt (hook contracts).
 
 ## Milestones
-- [ ] M1 memory STORE tree + lint green (Task 12)
-- [ ] M2 SessionStart feeder injects context pack (Task 13)
-- [ ] M3 first-prompt enrichment works (Task 14)
+- [x] M1 memory STORE tree + lint green (Task 12)
+- [x] M2 SessionStart feeder injects context pack (Task 13)
+- [x] M3 first-prompt enrichment works (Task 14)
 - [ ] M4 imprint queue: session digest written after a session ends (Task 15)
 - [ ] M5 /dream consolidates and gate stays green (Task 16)
 - [ ] M6 completion gate + spec §7 validation (Tasks 17-18)
@@ -2654,7 +2654,7 @@ ExecPlan M5 체크.
 
 - [ ] **Step 1: self-review**
 
-`git log --oneline | tail -1`로 base commit 확인 → `git diff <base>..HEAD --stat` 전체 훑고, plan Goal 대비 자가 점검. 발견 사항 즉시 수정.
+base commit = living ExecPlan frontmatter의 `base_commit` 값 → `git diff <base_commit>..HEAD --stat` 전체 훑고, plan Goal 대비 자가 점검. 발견 사항 즉시 수정.
 
 - [ ] **Step 2: 3 persona 병렬 dispatch**
 

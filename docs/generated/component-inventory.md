@@ -13,3 +13,4 @@
 | agent | review-reliability | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1  | plugin/agents/review-reliability.md |
 | agent | review-security | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1 in  | plugin/agents/review-security.md |
 | hook | SessionStart | runs `feeder_sessionstart.py` | plugin/hooks/hooks.json |
+| hook | UserPromptSubmit | runs `feeder_firstprompt.py` | plugin/hooks/hooks.json |

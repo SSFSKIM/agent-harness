@@ -19,7 +19,7 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 ## Milestones
 - [x] M1 memory STORE tree + lint green (Task 12)
 - [x] M2 SessionStart feeder injects context pack (Task 13)
-- [ ] M3 first-prompt enrichment works (Task 14)
+- [x] M3 first-prompt enrichment works (Task 14)
 - [ ] M4 imprint queue: session digest written after a session ends (Task 15)
 - [ ] M5 /dream consolidates and gate stays green (Task 16)
 - [ ] M6 completion gate + spec §7 validation (Tasks 17-18)
@@ -31,6 +31,8 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - 2026-06-12: M1 done — memory STORE tree (bootloader, progress, 4 category indexes).
 - 2026-06-12: M2 done — SessionStart feeder (feeder_sessionstart.py + hooks/hooks.json). Live
   verification: haiku quoted "Phase 0-2 complete..." from the injected pack. 33 tests green.
+- 2026-06-12: M3 done — first-prompt feeder (feeder_firstprompt.py + UserPromptSubmit hook).
+  mark_if_new R7 confirmed: second call returns immediately; seen-sessions.txt written. 34 tests green.
 
 ## Surprises & discoveries
 - lint_structure must exempt itself from S2/S3 (defines the token literals
