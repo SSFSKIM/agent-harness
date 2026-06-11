@@ -17,7 +17,7 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - References: docs/references/ digests (hook contracts).
 
 ## Milestones
-- [ ] M1 memory STORE tree + lint green (Task 12)
+- [x] M1 memory STORE tree + lint green (Task 12)
 - [ ] M2 SessionStart feeder injects context pack (Task 13)
 - [ ] M3 first-prompt enrichment works (Task 14)
 - [ ] M4 imprint queue: session digest written after a session ends (Task 15)
@@ -28,6 +28,7 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - 2026-06-12: plan created; Phases 0-2 done (foundation, lint gate, skills,
   personas). Phase 0-1 review gate passed: D5/D9 lints tightened per quality
   review (be20209); 4 fix-forward items logged in tech-debt-tracker.
+- 2026-06-12: M1 done — memory STORE tree (bootloader, progress, 4 category indexes).
 
 ## Surprises & discoveries
 - lint_structure must exempt itself from S2/S3 (defines the token literals
