@@ -7,4 +7,4 @@ owner: imprint-job
 
 Reusable how-things-work pages. Register every page here (lint D8).
 
-(none yet)
+- [recursion-guard.md](recursion-guard.md) — HARNESS_HEADLESS env guard: prevents infinite SessionStart recursion when hooks spawn headless claude children.
