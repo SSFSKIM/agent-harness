@@ -1,0 +1,133 @@
+# claude-cli-headless — digest (verified: 2026-06-12, source: code.claude.com/docs/en/cli-reference + code.claude.com/docs/en/headless + code.claude.com/docs/en/model-config)
+
+## -p / --print flag
+
+`claude -p "<prompt>"` — non-interactive mode; prints response and exits.
+Alias: `--print`.
+All CLI flags work with -p.
+Stdin is read; pipe content via `cat file | claude -p "..."`.
+Stdin capped at 10MB (v2.1.128+).
+
+## --model flag
+
+`--model <alias|full-model-id>`
+Overrides model for the current session.
+Does NOT persist across sessions.
+
+### Model aliases
+
+| Alias | Resolves to |
+|---|---|
+| sonnet | Latest Sonnet (Sonnet 4.6 on Anthropic API) |
+| opus | Latest Opus (Opus 4.8 on Anthropic API) |
+| haiku | Latest Haiku |
+| fable | Claude Fable 5 |
+| best | Fable 5 where available, else latest Opus |
+| sonnet[1m] | Sonnet with 1M token context window |
+| opus[1m] | Opus with 1M token context window |
+| opusplan | Opus in plan mode, Sonnet in execution mode |
+| default | Clears override; reverts to recommended model for account type |
+
+`[1m]` suffix can also be appended to full model names:
+`claude --model claude-opus-4-8[1m]`
+
+Note: sonnet[1m] requires usage credits on Pro/Team plans; on Max/Team/Enterprise
+opus auto-upgrades to 1M with no extra config. Fable 5 always uses 1M window on
+Anthropic API.
+
+## --allowedTools / --allowed-tools flag
+
+Both spellings accepted: `--allowedTools` and `--allowed-tools`.
+Takes comma- or space-separated tool names.
+Tools listed execute without permission prompts.
+
+```bash
+claude -p "query" --allowedTools "Read,Grep,Glob"
+claude -p "query" --allowedTools "Bash,Read,Edit"
+```
+
+### Bash restriction pattern syntax
+
+`Bash(<prefix> *)` — allows only Bash commands matching the prefix.
+The space before `*` is required for correct prefix matching:
+  `Bash(git diff *)` matches `git diff --stat` but not `git diff-index`
+  Without space: `Bash(git diff*)` would also match `git diff-index`
+
+Path patterns work the same way:
+  `Bash(python3 plugin/scripts/*)` — allows python3 calls with path matching `plugin/scripts/*`
+
+Multiple tools in one flag value:
+```bash
+--allowedTools "Bash(git log *),Bash(git diff *),Read"
+# or space-separated:
+--allowedTools "Bash(git log *)" "Bash(git diff *)" "Read"
+```
+
+Tool names are case-sensitive: `Read`, `Grep`, `Glob`, `Edit`, `Write`, `Bash`.
+
+## --disallowedTools / --disallowed-tools flag
+
+Both spellings accepted.
+Bare tool name removes tool from model context entirely.
+Scoped rule (e.g. `Bash(rm *)`) leaves tool available but denies matching calls.
+
+## --plugin-dir flag
+
+`claude --plugin-dir <path>` — load plugin from directory or .zip for this session only.
+Repeat for multiple plugins: `--plugin-dir A --plugin-dir B.zip`
+
+## --bare flag
+
+`claude --bare -p "query"` — skip auto-discovery of hooks, skills, plugins, MCP
+servers, auto memory, and CLAUDE.md. Sets CLAUDE_CODE_SIMPLE=1.
+Recommended for CI/scripted calls; will become default for -p in a future release.
+Auth in bare mode requires ANTHROPIC_API_KEY or apiKeyHelper via --settings.
+
+## --permission-mode flag
+
+`--permission-mode <mode>` — begin in specified permission mode.
+Values: default, acceptEdits, plan, auto, dontAsk, bypassPermissions.
+
+## Environment variables available to hook processes
+
+`CLAUDE_PROJECT_DIR` — absolute path to project root (cwd where claude was started).
+`CLAUDE_PLUGIN_ROOT` — plugin installation directory.
+`CLAUDE_PLUGIN_DATA` — plugin persistent data directory.
+`CLAUDE_ENV_FILE` — path to persist env vars across hook runs (SessionStart, Setup, etc.).
+`CLAUDE_CODE_REMOTE` — set to "true" in remote environments.
+`CLAUDE_EFFORT` — current effort level string.
+
+## Output format flags
+
+`--output-format text|json|stream-json`
+`--output-format json` response includes: result, session_id, total_cost_usd, per-model cost.
+`--output-format stream-json` — newline-delimited JSON events; use with --verbose.
+
+## Other useful headless flags
+
+`--max-turns N` — limit agentic turns (print mode only; exits with error on limit).
+`--max-budget-usd N` — max spend on API calls (print mode only).
+`--continue` / `-c` — load most recent conversation in current directory.
+`--resume <id|name>` / `-r` — resume specific session.
+`--session-id <uuid>` — use specific session ID.
+`--append-system-prompt "<text>"` — append to default system prompt.
+`--system-prompt "<text>"` — replace entire system prompt.
+`--init-only` — run Setup and SessionStart hooks, then exit without conversation.
+`--init` — run Setup hooks with init matcher before session (print mode only).
+`--maintenance` — run Setup hooks with maintenance matcher (print mode only).
+`--no-session-persistence` — do not save session to disk (print mode only).
+
+## Hooks in -p mode
+
+SessionStart fires in -p mode.
+UserPromptSubmit fires in -p mode.
+Setup fires with --init or --maintenance flags.
+PreToolUse, PostToolUse, PostToolBatch, Stop, StopFailure fire in -p mode.
+SessionEnd in -p mode: UNVERIFIED — docs don't explicitly confirm firing in -p sessions.
+
+## claude --help cross-check notes
+
+--allowedTools and --allowed-tools both listed in --help output (confirmed dual spelling).
+--model listed in --help (no [1m] examples shown in --help, but confirmed in model-config docs).
+--plugin-dir listed in --help.
+CLAUDE_PROJECT_DIR confirmed as env var received by hook processes.

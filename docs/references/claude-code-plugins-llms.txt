@@ -1,0 +1,161 @@
+# claude-code-plugins — digest (verified: 2026-06-12, source: code.claude.com/docs/en/plugins-reference + code.claude.com/docs/en/skills)
+
+## Plugin directory structure
+
+```
+<plugin-root>/
+├── .claude-plugin/           # Metadata directory (optional)
+│   └── plugin.json           # Manifest (optional; name is only required field if present)
+├── skills/                   # Skills (auto-discovered; default path)
+│   └── <skill-name>/
+│       └── SKILL.md
+├── commands/                 # Flat .md skills (legacy; skills/ preferred for new plugins)
+├── agents/                   # Subagent definitions (auto-discovered; default path)
+│   └── <agent-name>.md
+├── hooks/
+│   └── hooks.json            # Hook configuration (auto-discovered default path)
+├── scripts/                  # Hook and utility scripts (convention, not auto-discovered)
+├── bin/                      # Executables added to Bash tool PATH
+├── .mcp.json                 # MCP server definitions
+└── .lsp.json                 # LSP server configurations
+```
+
+WARNING: All component directories (skills/, agents/, hooks/, etc.) must be at the
+plugin root, NOT inside .claude-plugin/. Only plugin.json lives in .claude-plugin/.
+
+## plugin.json manifest — required field
+
+`name` is the only required field when a manifest is present. Manifest itself is optional
+(omit it and Claude Code auto-discovers components in default locations, deriving plugin
+name from directory name).
+
+## plugin.json manifest — metadata fields
+
+| Field | Type | Notes |
+|---|---|---|
+| name | string | Unique kebab-case identifier; required if manifest present |
+| displayName | string | Human-readable name for UI (v2.1.143+) |
+| version | string | Semver; omit → git commit SHA |
+| description | string | Brief plugin purpose |
+| author | object | {name, email, url} |
+| homepage | string | Documentation URL |
+| repository | string | Source code URL |
+| license | string | e.g. "MIT" |
+| keywords | array | Discovery tags |
+| defaultEnabled | boolean | Default: true (v2.1.154+) |
+
+## plugin.json manifest — component path fields
+
+| Field | Type | Behavior |
+|---|---|---|
+| skills | string\|array | Adds to default skills/ scan |
+| commands | string\|array | Replaces default commands/ |
+| agents | string\|array | Replaces default agents/ |
+| hooks | string\|array\|object | Inline config or path(s) |
+| mcpServers | string\|array\|object | Inline config or path(s) |
+| outputStyles | string\|array | Replaces default output-styles/ |
+| lspServers | string\|array\|object | LSP configs |
+| experimental.themes | string\|array | Replaces default themes/ |
+| experimental.monitors | string\|array | Background monitors config |
+| userConfig | object | User-configurable values prompted at enable time |
+| dependencies | array | Other plugins this plugin requires |
+
+All custom paths must be relative to plugin root and start with `./`.
+
+## Component auto-discovery (when manifest absent or fields omitted)
+
+| Component | Default location |
+|---|---|
+| Manifest | .claude-plugin/plugin.json |
+| Skills | skills/ (each subdir with SKILL.md) |
+| Commands | commands/ (flat .md files) |
+| Agents | agents/ (.md files) |
+| Hooks | hooks/hooks.json |
+| MCP servers | .mcp.json |
+| LSP servers | .lsp.json |
+| Monitors | monitors/monitors.json |
+| Executables | bin/ |
+
+## SKILL.md frontmatter fields
+
+All fields optional. `description` strongly recommended.
+
+| Field | Required | Description |
+|---|---|---|
+| name | No | Display name in listings; sets command name only for plugin-root SKILL.md |
+| description | Recommended | What skill does; Claude uses to decide auto-invocation |
+| when_to_use | No | Additional invocation context; appended to description in listings |
+| argument-hint | No | Hint shown in autocomplete (e.g. `[issue-number]`) |
+| arguments | No | Named positional args for $name substitution |
+| disable-model-invocation | No | true = prevent Claude auto-loading; default false |
+| user-invocable | No | false = hide from / menu; default true |
+| allowed-tools | No | Tools auto-approved when skill is active |
+| disallowed-tools | No | Tools removed from pool while skill active |
+| model | No | Model override for this skill's turn |
+| effort | No | Effort level override for this skill's turn |
+| context | No | "fork" = run in forked subagent |
+| agent | No | Subagent type when context: fork |
+| hooks | No | Hooks scoped to skill lifecycle |
+| paths | No | Glob patterns limiting when skill activates |
+| shell | No | bash (default) or powershell for !`command` blocks |
+
+## Agent .md frontmatter fields
+
+Plugin agents support these frontmatter fields:
+
+| Field | Notes |
+|---|---|
+| name | Agent identifier |
+| description | What agent specializes in; when Claude should invoke it |
+| model | e.g. sonnet, opus, haiku, fable, or full model ID |
+| effort | low, medium, high, xhigh, max |
+| maxTurns | Integer |
+| tools | Allowed tools list |
+| disallowedTools | Denied tools list |
+| skills | Skills available to agent |
+| memory | Memory config |
+| background | Boolean |
+| isolation | Only valid value: "worktree" |
+
+NOT supported in plugin agents (security restriction): hooks, mcpServers, permissionMode.
+
+## Agent naming / subagent_type reference
+
+Plugin agent `my-plugin/agents/reviewer.md` with frontmatter `name: reviewer` →
+referenced as subagent_type `plugin-dev:reviewer` (plugin-name:agent-name).
+
+General pattern: `<plugin-name>:<agent-name>` (kebab-case, colon separator).
+Agent name comes from frontmatter `name` field or filename without extension.
+
+## ${CLAUDE_PLUGIN_ROOT} variable
+
+Absolute path to plugin installation directory. Changes when plugin updates.
+Available for substitution in: skill content, agent content, hook commands,
+monitor commands, MCP/LSP server configs.
+Also exported as env var to hook processes and MCP/LSP subprocesses.
+
+Companion variables:
+- `${CLAUDE_PLUGIN_DATA}` — persistent data dir; survives updates (~/.claude/plugins/data/{id}/)
+- `${CLAUDE_PROJECT_DIR}` — project root
+
+In shell-form hooks: wrap in double quotes → `"${CLAUDE_PLUGIN_ROOT}"/scripts/foo.sh`
+In exec-form hooks (with `args`): pass as arg directly, no quoting needed.
+
+## Plugin loading via --plugin-dir
+
+`claude --plugin-dir ./plugin` — loads plugin for current session only.
+`--plugin-dir` can be repeated for multiple plugins.
+Accepts directory path or .zip archive path.
+Permanent install: `claude plugin install` (marketplace) or skills-dir layout.
+
+## Skills-directory plugin layout
+
+`<skills-dir>/<name>/.claude-plugin/plugin.json` → loads as `<name>@skills-dir`.
+Personal: `~/.claude/skills/<name>/`
+Project: `<cwd>/.claude/skills/<name>/`
+
+## Plugin agent auto-invocation
+
+Agents appear in /agents interface.
+Claude invokes agents automatically based on task context matching description.
+Plugin agents work alongside built-in Claude agents.

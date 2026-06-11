@@ -1,0 +1,203 @@
+# claude-code-hooks — digest (verified: 2026-06-12, source: code.claude.com/docs/en/hooks)
+
+## Hook events and matchers
+
+| Event | Matcher values |
+|---|---|
+| SessionStart | startup, resume, clear, compact |
+| Setup | init, maintenance |
+| UserPromptSubmit | (no matcher) |
+| PreCompact | manual, auto |
+| PostCompact | manual, auto |
+| SessionEnd | clear, resume, logout, prompt_input_exit, bypass_permissions_disabled, other |
+| PreToolUse | tool name |
+| PostToolUse | tool name |
+| PostToolUseFailure | tool name |
+| PostToolBatch | (no matcher) |
+| PermissionRequest | tool name |
+| PermissionDenied | tool name |
+| SubagentStart | agent type |
+| SubagentStop | agent type |
+| Stop | (no matcher) |
+| StopFailure | error type (rate_limit, overloaded, authentication_failed, oauth_org_not_allowed, billing_error, invalid_request, model_not_found, server_error, max_output_tokens, unknown) |
+| Notification | notification type |
+| MessageDisplay | (no matcher) |
+| UserPromptExpansion | command name |
+| TaskCreated | (no matcher) |
+| TaskCompleted | (no matcher) |
+| TeammateIdle | (no matcher) |
+| InstructionsLoaded | session_start, nested_traversal, path_glob_match, include, compact |
+| ConfigChange | user_settings, project_settings, local_settings, policy_settings, skills |
+| CwdChanged | (no matcher) |
+| FileChanged | literal filename to watch |
+| WorktreeCreate | (no matcher) |
+| WorktreeRemove | (no matcher) |
+| Elicitation | MCP server name |
+| ElicitationResult | MCP server name |
+
+## Common stdin fields (all events)
+
+```json
+{
+  "session_id": "string",
+  "transcript_path": "string",
+  "cwd": "string",
+  "permission_mode": "default|plan|acceptEdits|auto|dontAsk|bypassPermissions",
+  "hook_event_name": "string",
+  "effort": {"level": "low|medium|high|xhigh|max"},
+  "agent_id": "string (subagent only)",
+  "agent_type": "string (subagent only)"
+}
+```
+
+## Event-specific stdin fields
+
+**SessionStart**: `source` (startup|resume|clear|compact), `model`
+**Setup**: `trigger` (init|maintenance)
+**UserPromptSubmit**: `prompt`
+**PreCompact**: `trigger` (manual|auto)
+**PostCompact**: `trigger` (manual|auto)
+**PreToolUse**: `tool_name`, `tool_input`
+**PostToolUse**: `tool_name`, `tool_input`, `tool_output`
+**PostToolUseFailure**: `tool_name`, `tool_input`, `error`
+**PostToolBatch**: `batch_results`
+**Stop**: `text`
+**SubagentStart**: `agent_type`, `agent_id`
+**SubagentStop**: `agent_type`, `agent_id`
+**SessionEnd**: (common fields only; reason comes from matcher not stdin field)
+**CwdChanged**: `new_cwd`, `previous_cwd`
+**FileChanged**: `file_path`, `file_type` (modified|created|deleted)
+
+## Stdout handling — universal fields
+
+```json
+{
+  "continue": true,
+  "stopReason": "string",
+  "suppressOutput": false,
+  "systemMessage": "string",
+  "terminalSequence": "string"
+}
+```
+
+## Stdout — hookSpecificOutput shape
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "string (required — must match the firing event)",
+    "additionalContext": "string",
+    "permissionDecision": "allow|deny|ask|defer",
+    "permissionDecisionReason": "string",
+    "decision": {"behavior": "allow|deny", "updatedInput": {}},
+    "updatedToolOutput": "string",
+    "updatedInput": {},
+    "retry": true,
+    "displayContent": "string",
+    "worktreePath": "string",
+    "action": "accept|decline|cancel",
+    "content": {},
+    "sessionTitle": "string",
+    "watchPaths": ["string"],
+    "reloadSkills": true
+  }
+}
+```
+
+## Events that support additionalContext
+
+SessionStart, Setup, SubagentStart, UserPromptSubmit, UserPromptExpansion,
+PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop.
+
+**PreCompact does NOT support additionalContext (or any hookSpecificOutput injection).**
+PostCompact is not listed as supporting additionalContext either.
+
+## Exit code semantics
+
+- Exit 0: success; JSON on stdout processed
+- Exit 2: blocking error; stderr sent to Claude/user
+- Other non-zero: non-blocking (most events); stderr logged, first line shown
+- WorktreeCreate: aborts on any non-zero exit
+
+## Default timeouts
+
+- command / http / mcp_tool: 600 s (10 min)
+- prompt: 30 s
+- agent: 60 s
+- UserPromptSubmit command/http/mcp_tool: 30 s (shortened)
+- MessageDisplay command/http/mcp_tool: 10 s (shortened)
+
+## hooks.json schema (plugin hooks/hooks.json)
+
+```json
+{
+  "description": "string (optional)",
+  "hooks": {
+    "EventName": [
+      {
+        "matcher": "string",
+        "hooks": [
+          {
+            "type": "command|http|mcp_tool|prompt|agent",
+            "command": "string",
+            "args": ["string"],
+            "url": "string",
+            "server": "string",
+            "tool": "string",
+            "prompt": "string",
+            "timeout": 600,
+            "if": "string",
+            "statusMessage": "string",
+            "async": false,
+            "asyncRewake": false,
+            "shell": "bash|powershell",
+            "once": false
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Location: `hooks/hooks.json` relative to plugin root (default auto-discovery path).
+Can also be declared inline in plugin.json `hooks` field or via manifest path override.
+
+## Path variables available to hook processes
+
+- `${CLAUDE_PROJECT_DIR}` — project root (also exported as env var)
+- `${CLAUDE_PLUGIN_ROOT}` — plugin installation directory (changes on updates)
+- `${CLAUDE_PLUGIN_DATA}` — plugin persistent data directory (survives updates)
+- `CLAUDE_ENV_FILE` — path to persist env vars (SessionStart, Setup, CwdChanged, FileChanged)
+- `CLAUDE_CODE_REMOTE` — set to "true" in remote environments
+- `CLAUDE_EFFORT` — current effort level
+
+## Matcher pattern rules
+
+- `"*"`, `""`, omitted → match all
+- Only `[a-zA-Z0-9_|]` chars → exact string or `|`-separated list (e.g. `Bash|Edit`)
+- Other chars → JavaScript RegExp (e.g. `^Notebook`, `mcp__.*`)
+- MCP tool pattern: `mcp__<server>__<tool>`
+
+## Hooks in claude -p (non-interactive) sessions
+
+Fires in -p mode: Setup (with --init/--maintenance), SessionStart, UserPromptSubmit,
+all tool-related hooks (PreToolUse, PostToolUse, etc.), Stop, StopFailure.
+
+SessionEnd behavior in -p mode: UNVERIFIED — docs say SessionEnd fires "when a session
+terminates" but do not explicitly confirm it fires in -p sessions. Use at-least-once
+queue strategy for critical writes rather than relying on SessionEnd in -p.
+
+## Shell form vs exec form
+
+Shell form (no `args`): runs via `sh -c` (macOS/Linux); supports pipes, globs, &&.
+Exec form (with `args`): spawns directly, no shell, no quoting needed for special chars.
+Exec form required on Windows for .cmd/.bat; use `node` directly instead.
+
+## Hook configuration priority order
+
+1. Managed policy settings (highest)
+2. Plugin hooks/hooks.json
+3. .claude/settings.json (project)
+4. .claude/settings.local.json (project local, gitignored)
+5. ~/.claude/settings.json (user, lowest)
