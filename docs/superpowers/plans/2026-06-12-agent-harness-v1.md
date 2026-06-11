@@ -377,7 +377,7 @@ git add plugin/scripts/harness_lib.py tests/ && git commit -m "Add harness_lib: 
 | D1 | `AGENTS.md` 존재 + ≤120줄 |
 | D3 | `docs/**.md` frontmatter `status/last_verified/owner` 필수 (exempt: generated/, superpowers/, MEMORY.md) |
 | D4 | `last_verified` ISO 형식 + 30일 초과 stale FAIL (`status: archived|completed`는 stale 면제) |
-| D5 | 상대 `.md` 링크가 실제 파일로 resolve (AGENTS.md, ARCHITECTURE.md 포함) |
+| D5 | 상대 `.md` 링크가 실제 파일로 resolve (AGENTS.md, ARCHITECTURE.md 포함; generated/·superpowers/ 면제) |
 | D6 | docs/ 파일명 kebab-case (예외: MEMORY.md, docs/ 최상위 UPPERCASE) |
 | D7 | 파일 크기: MEMORY.md ≤60줄, 기본 ≤400줄 (exempt: exec-plans/, references/, generated/, superpowers/) |
 | D8 | INDEXED_DIRS 각각에 index.md 존재 + 형제 .md 전부 index에 등록 |
@@ -561,7 +561,8 @@ def check_frontmatter(root, errors):
 
 
 def check_links(root, errors):
-    targets = list(hl.iter_md(root / "docs"))
+    docs = root / "docs"
+    targets = [p for p in hl.iter_md(docs) if not _exempt(p, docs, FM_EXEMPT)]
     for name in ("AGENTS.md", "ARCHITECTURE.md"):
         if (root / name).exists():
             targets.append(root / name)
@@ -604,7 +605,7 @@ def check_indexes(root, errors):
     docs = root / "docs"
     for cat in INDEXED_DIRS:
         d = docs / cat
-        if not d.is_dir():
+        if not d.is_dir() or not any(d.glob("*.md")):  # 빈 카테고리는 index 불요
             continue
         idx = d / "index.md"
         if not idx.exists():
@@ -807,7 +808,7 @@ def check_imports(plugin, errors):
 
 def check_path_discipline(plugin, errors):
     for p in sorted((plugin / "scripts").glob("*.py")):
-        if p.name == "harness_lib.py":
+        if p.name in ("harness_lib.py", "lint_structure.py"):  # 후자는 PATH_TOKENS 리터럴 정의
             continue
         text = p.read_text(encoding="utf-8")
         for tok in PATH_TOKENS:
