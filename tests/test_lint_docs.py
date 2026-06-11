@@ -86,6 +86,25 @@ class TestLintDocs(unittest.TestCase):
         (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
         self.assertTrue(any("D9" in e and "mystery" in e for e in run_all(self.root, plugin)))
 
+    def test_d5_anchored_broken_link_fails(self):
+        (self.root / "AGENTS.md").write_text("[gone](docs/nope.md#section)\n")
+        self.assertTrue(any("D5" in e for e in run_all(self.root)))
+
+    def test_d5_anchored_valid_link_passes(self):
+        (self.root / "AGENTS.md").write_text(
+            "[ok](docs/design-docs/core-beliefs.md#golden-rules)\n")
+        self.assertFalse(any("D5" in e for e in run_all(self.root)))
+
+    def test_d9_superpowers_mention_does_not_count(self):
+        plugin = make_plugin(self.root)
+        sk = plugin / "skills" / "mystery"
+        sk.mkdir()
+        (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
+        sp = self.root / "docs" / "superpowers" / "plans"
+        sp.mkdir(parents=True)
+        (sp / "plan.md").write_text("mentions mystery here\n")
+        self.assertTrue(any("D9" in e for e in run_all(self.root, plugin)))
+
 
 if __name__ == "__main__":
     unittest.main()

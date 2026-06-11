@@ -60,6 +60,14 @@ class TestLintStructure(unittest.TestCase):
         (self.plugin / "skills" / "ghost").mkdir()
         self.assertTrue(any("S6" in e for e in run_all(self.plugin)))
 
+    def test_s4_missing_referenced_script(self):
+        hooks = {"hooks": {"SessionStart": [{"hooks": [
+            {"type": "command",
+             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/ghost.py\""}]}]}}
+        (self.plugin / "hooks" / "hooks.json").write_text(json.dumps(hooks))
+        errs = run_all(self.plugin)
+        self.assertTrue(any("S4" in e and "ghost.py" in e for e in errs))
+
 
 if __name__ == "__main__":
     unittest.main()

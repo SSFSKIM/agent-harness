@@ -76,7 +76,7 @@ def check_hooks(plugin, errors):
     for event, entries in cfg.get("hooks", {}).items():
         if event not in ALLOWED_EVENTS:
             _fail(errors, "S4", "hooks/hooks.json", f"unknown event `{event}`.",
-                  f"Use one of: {', '.join(sorted(ALLOWED_EVENTS))} (see docs/references/claude-code-hooks-llms.txt).")
+                  "If docs/references/claude-code-hooks-llms.txt confirms the event, add it to ALLOWED_EVENTS in lint_structure.py; otherwise fix the event name.")
         for entry in entries:
             for h in entry.get("hooks", []):
                 cmd = h.get("command", "")
