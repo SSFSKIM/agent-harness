@@ -4,3 +4,6 @@
 
 | Type | Name | Description / wiring | Source |
 |---|---|---|---|
+| skill | docs-tree | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, applies fro | plugin/skills/docs-tree/SKILL.md |
+| skill | execplan | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory changes) or wh | plugin/skills/execplan/SKILL.md |
+| skill | harness-lint | Use to run the deterministic gate (taste lints + structure lints + generated-file check + unit tests | plugin/skills/harness-lint/SKILL.md |
