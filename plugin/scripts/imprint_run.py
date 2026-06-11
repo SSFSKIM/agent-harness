@@ -65,12 +65,17 @@ def main():
                                             event=event,
                                             event_slug=event.replace("_", "-"))
                 model = os.environ.get("HARNESS_IMPRINT_MODEL", "sonnet")
-                subprocess.run(
-                    ["claude", "-p", prompt, "--model", model,
-                     "--allowedTools",
-                     "Read,Grep,Glob,Write,Edit,Bash(python3 plugin/scripts/*)"],
-                    cwd=root, env=hl.headless_env(), timeout=TIMEOUT)
-            guard.mark_processed(root, e["key"])  # R5: mark even if skipped
+                try:
+                    subprocess.run(
+                        ["claude", "-p", prompt, "--model", model,
+                         "--allowedTools",
+                         "Read,Grep,Glob,Write,Edit,Bash(python3 plugin/scripts/*)"],
+                        cwd=root, env=hl.headless_env(), timeout=TIMEOUT)
+                except (subprocess.TimeoutExpired, OSError) as exc:  # R4/R1
+                    log = hl.state_dir(root) / "imprint.log"
+                    with open(log, "a") as f:
+                        f.write(f"imprint_run: entry {e['key']} failed: {exc}\n")
+            guard.mark_processed(root, e["key"])  # R5: mark even if skipped/failed
     finally:
         os.close(fd)
         lock.unlink()

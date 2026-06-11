@@ -22,7 +22,8 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - [x] M3 first-prompt enrichment works (Task 14)
 - [x] M4 imprint queue: session digest written after a session ends (Task 15)
 - [x] M5 /dream consolidates and gate stays green (Task 16)
-- [ ] M6 completion gate + spec §7 validation (Tasks 17-18)
+- [x] M6a completion gate passed (Task 17)
+- [ ] M6b spec §7 validation (Task 18)
 
 ## Progress log
 - 2026-06-12: plan created; Phases 0-2 done (foundation, lint gate, skills,
@@ -40,6 +41,11 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - 2026-06-12: M5 done — dreamer agent + dream skill (direct-write, lint-terminated). Live consolidation
   against 2026-06-12-e2e-test.md: recursion-guard.md already current (truthful no-op, UPDATE-beats-duplicate
   verified). Marker written. progress/current.md updated. check.py GREEN. 36 tests green.
+- 2026-06-12: M6a done — completion gate (Task 17). 3 persona reviews (parallel). arch: SATISFIED (0P1);
+  reliability: NOT SATISFIED → P1 fixed (per-entry exception isolation in imprint_run.py) → SATISFIED;
+  security: NOT SATISFIED → P1 fixed (json.dumps encoding in feeder_firstprompt.py prompt) → SATISFIED.
+  R8/R9/R10 added to RELIABILITY.md; T6/T7 added to SECURITY.md; DESIGN.md updated (skills, agents).
+  MEMORY.md digest filename contract added. 2 new P2s in tech-debt-tracker. check.py GREEN.
 
 ## Surprises & discoveries
 - lint_structure must exempt itself from S2/S3 (defines the token literals
@@ -60,5 +66,17 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
   collision fixed immediately (event suffix added); 13 fix-forward findings
   logged in tech-debt-tracker (3 Important: poison-entry drain stall,
   untested compile_pack degradation, drain logic untestable in main()).
+- 2026-06-12 Task 17 completion gate (3 personas): review-arch SATISFIED;
+  review-reliability NOT SATISFIED (P1: no per-entry exception isolation in
+  imprint_run drain → fixed immediately, re-verified SATISFIED); review-security
+  NOT SATISFIED (P1: raw user prompt interpolated into feeder child prompt,
+  T1 violation → fixed with json.dumps encoding, re-verified SATISFIED).
+  2 new P2s added to tech-debt-tracker (dreamer T7 guard, imprint Bash glob).
+  Rule additions adopted: RELIABILITY.md R8/R9/R10; SECURITY.md T6/T7;
+  DESIGN.md skill commit-scoping + non-review persona grounding discipline;
+  MEMORY.md session-digest filename contract.
+  "Non-review persona grounding doc lint enforcement" noted as tech-debt (not
+  yet lint-enforced). Arch proposed rule "skill git add -A discipline" adopted
+  in DESIGN.md (already had m3 in tracker for the dream case).
 
 ## Outcomes & retrospective

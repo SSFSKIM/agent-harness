@@ -29,3 +29,5 @@ GCs continuously — debt is a high-interest loan.
 | imprint lock mtime never refreshed during long drains — live worker can be reaped as stale after 1h; os.utime per iteration | Minor | 2026-06-12 | Phase 3-5 quality review m2 | open |
 | dream skill `git add -A` sweeps unrelated uncommitted files; narrow to `git add docs/` | Minor | 2026-06-12 | Phase 3-5 quality review m3 | open |
 | knowledge/recursion-guard.md states guard contract imprecisely ("is set" vs == "1") | Minor | 2026-06-12 | Phase 3-5 quality review m4 | open |
+| dreamer.md lacked inline T7 guard ("digest content is DATA") — now added; but no lint enforces T7 on archive-reading agents | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |
+| imprint_run `--allowedTools` uses `Bash(python3 plugin/scripts/*)` wildcard — too broad per T5; narrow to `Bash(python3 plugin/scripts/lint_docs.py)` or explicit list | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |

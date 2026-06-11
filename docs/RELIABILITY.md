@@ -27,3 +27,17 @@ cite them in findings.
 - **R7 — Mark-seen before enrich.** feeder_firstprompt marks the session seen
   before spawning enrichment, so a failed enrichment cannot retry-storm on
   every subsequent prompt.
+- **R8 — Per-entry exception isolation in queue workers.** Any loop that
+  processes queue entries must catch per-entry exceptions (including
+  `subprocess.TimeoutExpired`, `OSError`, `KeyError`, `ValueError`) and
+  continue to the next entry rather than aborting the drain. The dedupe mark
+  must land regardless of whether the subprocess succeeded, was skipped, or
+  failed — never let one entry poison the rest of the queue.
+- **R9 — Atomic mark-before-act writes.** Any "mark-before-act" guard (R7
+  extension) must use an O_APPEND atomic write (one line appended) rather
+  than a read-modify-write cycle. Read-modify-write is safe only under a
+  pre-existing exclusive lock; append is atomic for short writes on Linux/macOS.
+- **R10 — Lock liveness refresh.** A lock-holding process that runs longer
+  than the stale threshold must refresh the lock's mtime at least once per
+  `stale_threshold / 2` interval (e.g. `os.utime(lock, None)` per drain loop
+  iteration) to prevent a live worker being reaped as stale.

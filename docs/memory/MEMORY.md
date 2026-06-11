@@ -17,5 +17,8 @@ Write rules:
   `progress/current.md` plus the page your work touched; register new pages
   in their directory's index.md.
 - Every page carries frontmatter `status / last_verified / owner` (lint D3).
-- Session digests are `status: archived` (stale-exempt, immutable).
+- Session digests are `status: archived` (stale-exempt, immutable). Filename
+  contract: `YYYY-MM-DD-{sid8}-{event_slug}.md` (event_slug = `session-end` or
+  `pre-compact`). No two digests may share a name — the event suffix makes
+  same-session, same-date pre_compact + session_end distinct.
 - This file is an index, not a knowledge dump (max 60 lines, lint D7).

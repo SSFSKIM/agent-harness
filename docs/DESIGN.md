@@ -19,11 +19,18 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 - A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
   belongs in docs/, not in SKILL.md (skills point, docs explain).
 - Frontmatter description states WHEN to use it, in trigger language.
+- Commit steps must narrow `git add` to the changed subtree (e.g.
+  `git add docs/memory/` for dream, `git add docs/` for garden) — never
+  `git add -A`. The state dir `.claude/harness/` is gitignored, so the guard
+  works today, but explicit scoping makes the invariant written and lint-able.
 
 ## Agents (personas)
 - One persona ↔ one grounding doc, 1:1 (lint S5). Personas must not invent
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
 - Output contract: P1 (blocks) / P2 (fix-forward) / Verdict.
+- Non-review personas must cite at least one `docs/` path in their body as the
+  primary grounding doc. Secondary constraint docs (e.g. SECURITY.md) are
+  allowed but should be labeled as constraints, not primary authority.
 
 ## Hooks
 - hooks.json is wiring only; all logic in scripts. Hook scripts: parse stdin
