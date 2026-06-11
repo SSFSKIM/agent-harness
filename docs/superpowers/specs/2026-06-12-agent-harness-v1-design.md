@@ -77,6 +77,8 @@ agent-harness/
 - **계획 = 1급 아티팩트**: 비자명한 작업은 `exec-plans/active/` 에 living ExecPlan
   (Progress / Surprises & Discoveries / Decision Log / Outcomes & Retrospective 갱신 의무),
   완료 시 `completed/` 이동. `docs/PLANS.md` 가 방법론 소유, `execplan` skill 이 절차 소유.
+  **작은 변경은 일시적 간단 plan 으로 충분** — 모든 것을 ExecPlan 으로 격상하지 않는다
+  (블로그: "일시적이며 간단한 계획은 작은 변경에 사용").
 - `references/` 에 의존 도구 문서를 llms.txt 스타일로 체크인 (Claude Code plugin API,
   hooks API digest 등).
 - `generated/` 는 스크립트가 생성 (예: `component-inventory.md` — plugin 의
@@ -88,16 +90,25 @@ agent-harness/
   `scripts (순수 stdlib, 의존 없음) → skills (절차) → agents (persona) → hooks (wiring)`.
   cross-cutting (경로/설정 해석) 은 단일 `harness_lib` 모듈로만 (Providers analog).
   `lint_structure.py` 가 기계 강제.
-- **taste lints** (`lint_docs.py` 등): cross-link 유효성, frontmatter 필수 필드,
-  stale 검사 (`last_verified`), 파일 크기 제한, kebab-case 명명, index 등록.
+- **taste lints** (`lint_docs.py` 등): 블로그의 기계 검사 4축 = **coverage · 신선도 ·
+  소유권 · 교차 연결** 전부 커버 —
+  cross-link 유효성, frontmatter 필수 필드 (`status / last_verified / owner` — owner 는
+  해당 문서를 관리하는 persona/agent), stale 검사, **coverage 검사** (plugin 의 모든
+  skill/agent/hook 이 docs 어딘가에 등록·설명되어 있는가 — `generated/
+  component-inventory.md` 와 대조), 파일 크기 제한, kebab-case 명명, index 등록.
 - **모든 lint 에러 메시지에 수정 지침 포함** — agent context 에 직접 주입되는 교정 신호.
 - **golden rules** 는 `design-docs/core-beliefs.md` 에 인코딩 (공유 util 선호, 경계에서
-  parse-don't-validate, 내재화 선호 — 외부 의존 최소화 + 작은 helper 직접 구현).
+  parse-don't-validate, 내재화 선호 — 외부 의존 최소화 + 작은 helper 직접 구현,
+  그리고 **"수작업 코드 없음"** — 사람은 프롬프트·문서 피드백·milestone 확인으로만
+  개입하고 코드/문서/스크립트는 전부 agent 가 작성한다. 블로그 팀의 제 1 철학).
 
 ### 2.3 리뷰 — CI review jobs 의 로컬 치환
 
 - 트리거 = **ExecPlan 완료 게이트** (OpenAI 의 "PR 생성" 경계의 로컬 등가물).
-  plan 완료 선언 시 review persona subagent 3개가 diff 를 병렬 리뷰:
+- **순서: self-review 먼저** — 구현 agent 가 자기 diff 를 스스로 리뷰·정리한 뒤
+  persona review 를 요청하고, 모든 reviewer 가 만족할 때까지 반복한다
+  (블로그의 Ralph Wiggum Loop). plan 완료 선언 시 review persona subagent 3개가
+  diff 를 병렬 리뷰:
   - `review-arch` ← `ARCHITECTURE.md` + `DESIGN.md` grounding
   - `review-reliability` ← `RELIABILITY.md` grounding (idempotency, dedupe, hook 실패 모드)
   - `review-security` ← `SECURITY.md` grounding (hook 안전, prompt injection, memory poisoning)
@@ -117,6 +128,16 @@ agent-harness/
 agent 가 어려움을 겪으면 그것은 **harness 누락 신호** 다: 도구/가드레일/문서 중 무엇이
 빠졌는지 진단 → repo 에 인코딩 → 재시도. 인간 취향 피드백은 1-2회 받으면 문서 또는
 lint 로 승격해 영구 반영.
+
+### 2.6 게이트/커밋 철학 — 최소 차단, fix-forward
+
+블로그의 병합 철학 (`최소한의 차단 병합 게이트` · `수정 비용이 저렴하고 대기 시간은
+오래 걸린다`) 의 로컬 번역:
+- **차단 게이트는 결정적 검사만**: lint suite + tests green = 커밋 가능. 그 외
+  (P2 finding, 문서 보강 여지, flaky 의심) 는 커밋을 막지 않고 ExecPlan feedback /
+  `tech-debt-tracker.md` 후속 작업으로 돌린다.
+- agent 처리량 > 인간 주의력인 시스템에서 과잉 게이트는 역효과 — 잘못 들어간 것은
+  싸게 고치면 된다 (fix-forward). 이 원칙도 `core-beliefs.md` 에 명문화.
 
 ## 3. Layer 2 — 메모리 루프
 
@@ -171,12 +192,20 @@ docs/memory/
 **① 세션을 열고 task 를 준다 ② (선택) ExecPlan milestone 방향 확인.** 끝.
 계획·구현·lint·persona review·doc gardening·메모리 각인·dreaming 은 전부 하네스가 돈다.
 
+**에스컬레이션은 agent 가 개시한다**: 블로그의 "판단이 필요한 경우에만 사람에게
+에스컬레이션" — 기계적으로 답이 나오는 것 (lint, 테스트, 문서 근거가 있는 결정) 은
+agent 가 진행하고, 진짜 판단 (제품 방향, trade-off 에 취향이 걸린 결정) 만 인간에게
+질문으로 올린다. 이 기준은 AGENTS.md operating model 에 명문화.
+
 ## 5. 테스트 전략
 
 - `plugin/scripts/*.py` 는 stdlib python3 + 단위 테스트 (`tests/`).
 - doc invariant 자체도 테스트 (taste test): AGENTS.md 줄 수, index 등록, frontmatter,
   generated/ 손편집 금지 등 — lint suite green = 커밋 게이트.
 - hook 통합은 실제 세션 기동으로 검증 (self-hosting 이므로 일상 사용이 곧 통합 테스트).
+- **eval harness 에 대한 주석**: 블로그는 "평가 하네스"도 agent 생성 artifact 로 꼽는다.
+  v1 의 eval = lint suite + tests + §7 수동 기준. feeder 품질 eval (cold-start continuity
+  benchmark 등) 같은 본격 eval harness 는 v2 후보 — 위키 Q40 (eval anchor) 과 직결.
 
 ## 6. 빌드 순서 (각 phase 가 이전 phase 를 dogfood)
 
