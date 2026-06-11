@@ -80,7 +80,8 @@ def check_frontmatter(root, errors):
 
 
 def check_links(root, errors):
-    targets = list(hl.iter_md(root / "docs"))
+    docs = root / "docs"
+    targets = [p for p in hl.iter_md(docs) if not _exempt(p, docs, FM_EXEMPT)]
     for name in ("AGENTS.md", "ARCHITECTURE.md"):
         if (root / name).exists():
             targets.append(root / name)
@@ -123,7 +124,7 @@ def check_indexes(root, errors):
     docs = root / "docs"
     for cat in INDEXED_DIRS:
         d = docs / cat
-        if not d.is_dir():
+        if not d.is_dir() or not any(d.glob("*.md")):
             continue
         idx = d / "index.md"
         if not idx.exists():

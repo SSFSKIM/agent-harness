@@ -69,6 +69,16 @@ class TestLintDocs(unittest.TestCase):
         extra.write_text(fm() + "# loose\n")
         self.assertTrue(any("D8" in e for e in run_all(self.root)))
 
+    def test_d5_exempt_dirs_not_link_checked(self):
+        sp = self.root / "docs" / "superpowers" / "plans"
+        sp.mkdir(parents=True)
+        (sp / "plan.md").write_text("[fake example](docs/nope.md)\n")
+        self.assertFalse(any("D5" in e for e in run_all(self.root)))
+
+    def test_d8_empty_category_needs_no_index(self):
+        (self.root / "docs" / "product-specs").mkdir()
+        self.assertFalse(any("D8" in e for e in run_all(self.root)))
+
     def test_d9_undocumented_component(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"
