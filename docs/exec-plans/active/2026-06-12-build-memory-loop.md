@@ -21,7 +21,7 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - [x] M2 SessionStart feeder injects context pack (Task 13)
 - [x] M3 first-prompt enrichment works (Task 14)
 - [x] M4 imprint queue: session digest written after a session ends (Task 15)
-- [ ] M5 /dream consolidates and gate stays green (Task 16)
+- [x] M5 /dream consolidates and gate stays green (Task 16)
 - [ ] M6 completion gate + spec §7 validation (Tasks 17-18)
 
 ## Progress log
@@ -37,6 +37,9 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
   synthetic transcript → digest 2026-06-12-e2e-test.md (status: archived), knowledge/recursion-guard.md
   written, progress/current.md updated, lint GREEN. Idempotency confirmed (duplicate enqueue skipped).
   36 tests green. Commit 1a9ca64.
+- 2026-06-12: M5 done — dreamer agent + dream skill (direct-write, lint-terminated). Live consolidation
+  against 2026-06-12-e2e-test.md: recursion-guard.md already current (truthful no-op, UPDATE-beats-duplicate
+  verified). Marker written. progress/current.md updated. check.py GREEN. 36 tests green.
 
 ## Surprises & discoveries
 - lint_structure must exempt itself from S2/S3 (defines the token literals
