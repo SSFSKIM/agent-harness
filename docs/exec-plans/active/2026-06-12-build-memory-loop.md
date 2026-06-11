@@ -56,5 +56,9 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - 2026-06-12: CLAUDE.md = 3-line pointer to AGENTS.md.
 
 ## Feedback (from completion gate)
+- 2026-06-12 Phase 3-5 review gate: spec COMPLIANT (no P1); digest filename
+  collision fixed immediately (event suffix added); 13 fix-forward findings
+  logged in tech-debt-tracker (3 Important: poison-entry drain stall,
+  untested compile_pack degradation, drain logic untestable in main()).
 
 ## Outcomes & retrospective
