@@ -1,0 +1,5 @@
+{
+  "name": "agent-harness",
+  "version": "0.1.0",
+  "description": "AI-native harness: docs-as-memory knowledge system, taste lints, review-persona gates, and a memory loop (feeder / imprint / dreaming) for minimum human-in-loop software development."
+}
