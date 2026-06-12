@@ -22,8 +22,9 @@ needs them in step 3.
 Idempotent — seeded files are never overwritten (CREATE/SKIP per path);
 `.gitignore` is append-only; the component inventory is (re)generated.
 Creates the docs tree, seed grounding docs, memory bootloader, the
-CLAUDE.md→AGENTS.md pointer, and a `.git/hooks/pre-commit` gate hook.
-New repo: `git init` first.
+CLAUDE.md→AGENTS.md pointer, and a `.git/hooks/pre-commit` gate hook — the
+hook IS the recorded gate command (machine-local absolute paths; rerunning
+scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
 
 ## 3. Write the map (judgment)
 

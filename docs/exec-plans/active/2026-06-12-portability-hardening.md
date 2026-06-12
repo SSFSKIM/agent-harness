@@ -126,7 +126,30 @@ missing. After this plan, all of the following are observable:
 - 2026-06-12: Stop-tidy blocks via exit 2 + stderr (digest-verified contract)
   running the fast deterministic subset (lint_structure, lint_docs,
   gen_inventory --check) — unittest stays out of the hook for latency.
+- 2026-06-12 (gate iteration): a ported host's exact gate command is recorded
+  in `.git/hooks/pre-commit` itself — unversioned and machine-local — not in
+  a versioned doc, because a versioned doc cannot hold a machine-local
+  absolute path without breaking on every clone (resolves arch P1 and the
+  instance-path-hygiene concern jointly). Versioned docs only point at it.
 
 ## Feedback (from completion gate)
+
+- review-arch: NOT SATISFIED — P1: the template gate line used literal
+  `<plugin>` placeholders that no FILL grep enforces; the gate-command
+  indirection dead-ended in ported hosts. Fixed: the pre-commit hook IS the
+  recorded gate command (machine-local truth in an unversioned file); the
+  versioned page points at it; scaffold now REWRITES ours-marked hooks
+  (making "rerun scaffold to refresh" true — also arch P2#1). P2 fixed:
+  garden/dream scoped `git add` per DESIGN.md. P2 deferred: components-table
+  duplication (conflicts with D9 coverage — tracker row).
+- review-reliability: SATISFIED — P2s fixed anyway: crash-vs-FAIL
+  distinction (tooling crashes log + never block), per-check timeout 30s
+  (fits the 120s hook budget), atomic fingerprint write (os.replace),
+  headless check inside try, R11 wording narrowed, activation sentinel
+  (no-op in non-harness repos — was a proposed rule). Rest → tracker rows.
+- review-security: SATISFIED — P2 fixed: DATA-guard preamble on tidy stderr
+  (T7 transitive channel) + D4 value clamp; proposed-T8 fixed now via
+  shlex.quote in the generated pre-commit. Deferred: symlink-refusal,
+  T7-extension codification (tracker rows).
 
 ## Outcomes & retrospective

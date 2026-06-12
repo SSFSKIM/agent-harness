@@ -67,6 +67,11 @@ class TestTidyStop(unittest.TestCase):
         r = run_tidy(self.root)  # changed state — rechecks, now green
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_non_harness_repo_is_ignored(self):
+        (self.root / "docs" / "memory" / "MEMORY.md").unlink()
+        r = run_tidy(self.root)  # activation sentinel gone — must no-op
+        self.assertEqual(r.returncode, 0)
+
     def test_non_git_root_fails_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

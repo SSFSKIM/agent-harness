@@ -6,6 +6,7 @@ Renders seed templates from skills/harness-init/templates/ and regenerates
 the component inventory so a fresh host starts lint-GREEN.
 """
 import argparse
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -91,28 +92,31 @@ def scaffold(root, plugin, log):
 
 
 def git_hook(root, plugin, log):
-    """Install .git/hooks/pre-commit running the check gate.
+    """Install/refresh .git/hooks/pre-commit running the check gate.
 
-    .git/hooks is unversioned: absolute paths are machine-local and
-    regenerable by rerunning scaffold. Never overwrites a foreign hook.
+    The hook IS the recorded gate command for this repo (machine-local
+    absolute paths, unversioned). Ours-marked hooks are rewritten on every
+    run so paths refresh after a repo/plugin move; foreign hooks are never
+    touched.
     """
     hooks_dir = root / ".git" / "hooks"
     if not hooks_dir.is_dir():
         log("SKIP   .git/hooks/pre-commit (not a git repo)")
         return
     hook = hooks_dir / "pre-commit"
-    if hook.exists():
-        ours = HOOK_MARKER in hook.read_text(encoding="utf-8", errors="ignore")
-        log(f"SKIP   .git/hooks/pre-commit ({'ours' if ours else 'foreign hook'} exists)")
+    existed = hook.exists()
+    if existed and HOOK_MARKER not in hook.read_text(encoding="utf-8",
+                                                     errors="ignore"):
+        log("SKIP   .git/hooks/pre-commit (foreign hook exists)")
         return
     gate = (Path(plugin) / "scripts" / "check.py").resolve()
     hook.write_text(
         "#!/bin/sh\n"
-        f"{HOOK_MARKER} — regenerate by rerunning scaffold.py\n"
-        f'exec python3 "{gate}" --root "{root.resolve()}"\n',
+        f"{HOOK_MARKER} — rerun scaffold.py to refresh after a repo/plugin move\n"
+        f"exec python3 {shlex.quote(str(gate))} --root {shlex.quote(str(root.resolve()))}\n",
         encoding="utf-8")
     hook.chmod(0o755)
-    log("CREATE .git/hooks/pre-commit")
+    log(("REWRITE" if existed else "CREATE") + " .git/hooks/pre-commit")
 
 
 def gitignore(root, log):

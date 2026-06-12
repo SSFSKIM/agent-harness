@@ -80,7 +80,7 @@ def check_frontmatter(root, errors):
                           f"stale: last_verified {lv} is over {STALE_DAYS} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
             except ValueError:
-                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv}`.",
+                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv[:40]}`.",
                       "Use ISO format YYYY-MM-DD.")
 
 

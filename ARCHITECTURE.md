@@ -24,6 +24,10 @@ referenced by"; nothing references rightward).
 exists ONLY in `plugin/scripts/harness_lib.py`. Other scripts never call
 `os.getcwd()` / `Path.cwd()` / `CLAUDE_PROJECT_DIR` directly (lint S2).
 
+**Prose exceptions:** the layer law governs imports/invocation. Scripts MAY
+read skill-owned *data* (harness-init seed templates), and FIX texts MAY
+point rightward at skills — the most actionable instruction wins.
+
 ## Invariants
 
 1. **Portability:** nothing in `plugin/` hardcodes an absolute path (lint S3).

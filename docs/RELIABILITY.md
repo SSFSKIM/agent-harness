@@ -43,9 +43,15 @@ cite them in findings.
   iteration) to prevent a live worker being reaped as stale.
 - **R11 — Stop-tidy blocks at most once per state.** The Stop tidy hook
   (`tidy_stop.py`) fingerprints the dirty tree (status+diff SHA256); a
-  fingerprint that was already checked never blocks again, so a session can
-  always end even when the tree cannot be made green. It runs only the
-  deterministic lint subset (no unittest — latency), is headless-guarded
-  (Stop fires in `-p` sessions), and fails open per R6. Two concurrent
-  sessions in one repo may each block once for the same state (last-writer
-  wins on the fingerprint file) — accepted.
+  fingerprint that was already checked never blocks again (atomic
+  `os.replace` write — a torn fingerprint must not re-block), so a session
+  can always end even when the tree cannot be made green. Scope guards:
+  harness-spawned headless recursion (HARNESS_HEADLESS) and an activation
+  sentinel (no-op unless `docs/memory/MEMORY.md` exists — a plugin loaded
+  into a non-harness repo must not judge it). Only lint FAILs block; the
+  hook's own tooling crashes (child timeout/traceback) are logged and never
+  block (R6). Runs only the deterministic lint subset with per-child
+  timeouts that fit inside the hook's own budget. Untracked files are
+  fingerprinted by name only (can under-block, never over-block). Two
+  concurrent sessions in one repo may each block once for the same state
+  (last-writer wins) — accepted.

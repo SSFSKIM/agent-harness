@@ -11,5 +11,5 @@ description: Use periodically (or after several work sessions) to consolidate me
    docs/memory/ (sanity, not approval — dreaming writes directly).
 3. Update the marker:
    `date +%F > .claude/harness/last-dream.txt`
-4. Commit: `git add -A && git commit -m "dream: <one-line summary from report>"`.
-   (`-A` is safe: the runtime state dir `.claude/harness/` is gitignored.)
+4. Commit: `git add docs/memory/ && git commit -m "dream: <one-line summary from report>"`
+   (scoped add per DESIGN.md — never `git add -A`).

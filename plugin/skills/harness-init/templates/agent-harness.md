@@ -14,10 +14,11 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 
 - Load: `claude --plugin-dir <path-to-agent-harness>/plugin` from this repo's
   root. The SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
-- Gate: `python3 <plugin>/scripts/check.py --root <this-repo-root>` must be
-  GREEN before every commit. The `harness-lint` skill interprets failures.
-- The gate is mechanical: scaffold installs `.git/hooks/pre-commit` running
-  it (`--no-verify` only for emergencies — fix forward right after).
+- Gate: run `.git/hooks/pre-commit` — scaffold installs it with this
+  machine's exact `check.py` invocation (no placeholders to resolve; rerun
+  scaffold.py after moving the repo or plugin and the hook is rewritten).
+  Must be GREEN before every commit; the `harness-lint` skill interprets
+  failures. `--no-verify` only for emergencies — fix forward right after.
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
   `HARNESS_TEST_CMD="pytest -q"`); default is unittest discovery when a
   `tests/` directory exists, skipped otherwise.

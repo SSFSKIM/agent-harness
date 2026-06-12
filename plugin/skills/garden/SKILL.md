@@ -9,4 +9,5 @@ description: Use periodically (or when docs feel stale) to run the entropy GC â€
    repo."
 2. Review its report; verify the gate is GREEN (command in
    `docs/design-docs/agent-harness.md`).
-3. Commit: `git add -A && git commit -m "garden: <one-line summary from report>"`.
+3. Commit: `git add docs/ && git commit -m "garden: <one-line summary from report>"`
+   (scoped add per DESIGN.md â€” never `git add -A`).

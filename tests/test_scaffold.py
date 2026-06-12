@@ -61,16 +61,16 @@ class TestScaffold(unittest.TestCase):
         gi2 = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertEqual(gi2.count(".claude/harness/"), 1)
 
-    def test_git_hook_installed_and_idempotent(self):
+    def test_git_hook_installed_and_rewritten_when_ours(self):
         (self.root / ".git" / "hooks").mkdir(parents=True)
         scaffold.scaffold(self.root, PLUGIN, lambda _: None)
         hook = self.root / ".git" / "hooks" / "pre-commit"
         self.assertTrue(hook.exists())
         self.assertTrue(hook.stat().st_mode & 0o111)
         self.assertIn("check.py", hook.read_text(encoding="utf-8"))
-        logs = []
+        logs = []  # ours-marked hooks are rewritten (paths refresh on move)
         scaffold.scaffold(self.root, PLUGIN, logs.append)
-        self.assertTrue(any("SKIP" in l and "pre-commit" in l for l in logs))
+        self.assertTrue(any("REWRITE" in l and "pre-commit" in l for l in logs))
 
     def test_foreign_pre_commit_never_overwritten(self):
         hooks = self.root / ".git" / "hooks"
