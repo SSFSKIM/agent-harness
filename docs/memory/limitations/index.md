@@ -7,4 +7,4 @@ owner: imprint-job
 
 Known landmines. Register every page here (lint D8).
 
-(none yet)
+- [progress-staleness.md](progress-staleness.md) — `progress/current.md` goes stale when work bypasses hooked sessions (external orchestrators); rule: update current.md in the same commit.

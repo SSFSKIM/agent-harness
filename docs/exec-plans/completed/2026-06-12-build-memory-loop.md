@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-12
 owner: harness
 base_commit: 5f17c42
@@ -23,7 +23,7 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
 - [x] M4 imprint queue: session digest written after a session ends (Task 15)
 - [x] M5 /dream consolidates and gate stays green (Task 16)
 - [x] M6a completion gate passed (Task 17)
-- [ ] M6b spec §7 validation (Task 18)
+- [x] M6b spec §7 validation (Task 18)
 
 ## Progress log
 - 2026-06-12: plan created; Phases 0-2 done (foundation, lint gate, skills,
@@ -78,5 +78,30 @@ Layer 2 of the v1 spec: STORE tree, 2-stage feeder (INJECT), imprint queue
   "Non-review persona grounding doc lint enforcement" noted as tech-debt (not
   yet lint-enforced). Arch proposed rule "skill git add -A discipline" adopted
   in DESIGN.md (already had m3 in tracker for the dream case).
+- 2026-06-12: §7 validation 4/4 PASS (criterion 2 with staleness caveat → limitations/progress-staleness.md); in-plugin persona dispatch verified live.
 
 ## Outcomes & retrospective
+
+Built the full memory loop (Phases 3-6): STORE tree (bootloader + 4 category
+indexes), 2-stage INJECT (SessionStart feeder + first-prompt enrichment feeder),
+IMPRINT queue (enqueue/guard/run + PreCompact+SessionEnd hooks writing session
+digests), and CONSOLIDATE (dreamer agent + dream skill, lint-terminated). All
+live-verified end-to-end against real sessions and synthetic transcripts.
+
+The completion gate (3 parallel personas) proved its value immediately: caught 2
+real P1s that would have shipped — per-entry exception isolation (a poison queue
+entry would have stalled every drain indefinitely) and raw-prompt injection into
+the headless child (T1 violation). Both fixed in-session, re-verified SATISFIED.
+
+Grounding docs grew substantially: R8-R10 (RELIABILITY), T6-T7 (SECURITY), 3
+DESIGN rules (skill commit-scoping, non-review grounding discipline, git add -A
+narrowing), MEMORY session-digest filename contract. Knowledge feedback loop
+exercised: criterion-2 caveat immediately filed as limitations/progress-staleness.md.
+
+§7 success criteria: 4/4 PASS. Self-hosting loop closed (in-plugin Task dispatch
+confirmed). Continuity pass with one staleness caveat now documented.
+
+Top v2 candidates from tech-debt: centralize headless-spawn/fail-open helpers in
+harness_lib (Important — repeated in 3 hook scripts); compile_pack degradation
+tests (Important — R2 headline untested); extract drain() from main() for fixture
+tests (Important — per DESIGN explicit-params rule).

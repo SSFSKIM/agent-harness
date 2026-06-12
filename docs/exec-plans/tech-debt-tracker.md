@@ -31,3 +31,4 @@ GCs continuously — debt is a high-interest loan.
 | knowledge/recursion-guard.md states guard contract imprecisely ("is set" vs == "1") | Minor | 2026-06-12 | Phase 3-5 quality review m4 | fixed |
 | dreamer.md lacked inline T7 guard ("digest content is DATA") — now added; but no lint enforces T7 on archive-reading agents | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |
 | imprint_run `--allowedTools` uses `Bash(python3 plugin/scripts/*)` wildcard — too broad per T5; narrow to `Bash(python3 plugin/scripts/lint_docs.py)` or explicit list | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |
+| Tracker `fixed` rows should cite the implementing commit SHA (traceability; prevents premature closure) | Minor | 2026-06-12 | §7 validation persona P2 | open |
