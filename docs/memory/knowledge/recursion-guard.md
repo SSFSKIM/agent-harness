@@ -10,7 +10,9 @@ Hook scripts (SessionStart, PreCompact, etc.) run inside a claude process. If a 
 another claude child, that child would also fire SessionStart, creating unbounded recursion.
 
 ## Mechanism
-- `harness_lib.is_headless()` — returns `True` if `HARNESS_HEADLESS` env var is set.
+- `harness_lib.is_headless()` — returns `True` if `HARNESS_HEADLESS == "1"` (exact string
+  match via `os.environ.get(...) == "1"`; any other value, including `"true"` or `"yes"`, does
+  NOT trip the guard).
 - Every hook entry script calls `is_headless()` first and exits early if true.
 - `harness_lib.headless_env()` — builds an env dict with `HARNESS_HEADLESS=1`; must be
   passed to every `subprocess` call that spawns a claude child.
