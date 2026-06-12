@@ -1,6 +1,6 @@
 ---
-status: active
-last_verified: 2026-06-12
+status: completed
+last_verified: 2026-06-13
 owner: harness
 base_commit: 3744c4e8bc175cd82e8d0a43cd1841713428fb66
 ---
@@ -84,7 +84,7 @@ missing. After this plan, all of the following are observable:
       block-once, fail-open, headless guard) + hooks.json entry + RELIABILITY
       R11 + DESIGN.md gate-hook exception + ARCHITECTURE data flow + tests.
 - [x] M7 — docs sync: QUALITY_SCORE rows, progress/current.md, inventory.
-- [ ] M8 — completion gate: self-review → review-arch / review-reliability /
+- [x] M8 — completion gate: self-review → review-arch / review-reliability /
       review-security → iterate → move to completed/.
 
 ## Progress log
@@ -151,5 +151,32 @@ missing. After this plan, all of the following are observable:
   (T7 transitive channel) + D4 value clamp; proposed-T8 fixed now via
   shlex.quote in the generated pre-commit. Deferred: symlink-refusal,
   T7-extension codification (tracker rows).
+- review-arch re-verdict (2026-06-13): SATISFIED — walked the pointer chain
+  cold in a scaffolded temp host: plugin markdown → agent-harness.md →
+  `.git/hooks/pre-commit` → executable GREEN gate, zero placeholders. Two
+  residual P2s (harness-lint wording claiming hosts inline the invocation;
+  template Load line's `<path-to-agent-harness>` placeholder) fixed in the
+  completion commit.
 
 ## Outcomes & retrospective
+
+All six Goal behaviors are observable: (1) `grep -rn "plugin/scripts/"
+plugin/ --include="*.md"` prints nothing and S7 enforces it; (2) a fresh
+scaffold seeds all eight machine-read docs and D10 fails any repo missing
+one (proved by the fresh-host-lint-green test running lint_docs whole);
+(3) commits are hook-gated — the M4 commit was the first through it, every
+later commit shows the gate banner; (4) tidy_stop blocks once per dirty
+fingerprint with FAIL/FIX + DATA guard (5+1 tests); (5) PLANS.md carries the
+upstream quality rules; (6) harness-init gained instance-skills/app-verify
+steps and templates carry Review + negative-space.
+
+Retrospective. The gate caught a real P1 for the second plan running — this
+time a *design* hole (placeholder indirection) rather than a code bug, which
+self-review and 52 green tests both missed; persona review pays for itself
+precisely where lints cannot look. Lesson promoted into the build style:
+machine-local truths (absolute paths) belong in unversioned artifacts that
+scaffold can rewrite; versioned docs hold only pointers. Reliability's
+"checks crash ≠ repo fails" distinction is a pattern the imprint worker
+should adopt too (tracker row exists). Source analysis (vault gap analysis +
+OpenAI public-repo evidence) made this the fastest plan yet: every milestone
+was specified before the session started.

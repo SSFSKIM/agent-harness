@@ -28,7 +28,10 @@ owner: dreamer
   S7 lint (no self-host paths in plugin markdown), D10 lint + scaffold seeds
   for machine-read docs, pre-commit gate hook, Stop-hook tidy (R11,
   block-once), PLANS.md upstream quality rules, harness-init steps for
-  instance skills (.claude/skills/) + app-verify. Completion gate (M8) next.
-- Next: after the gate, pick the second target (real external big-codebase
-  repo) and run harness-init against it — that run is the portability
-  validation.
+  instance skills (.claude/skills/) + app-verify. Gate (M8) PASSED
+  2026-06-13: arch caught a real P1 (placeholder gate indirection in the
+  host template — resolved: the pre-commit hook IS the recorded gate
+  command); reliability/security P2s hardened tidy_stop (crash≠FAIL,
+  timeouts, atomic write, T7 DATA guard). Plan → completed/.
+- Next: pick the second target (real external big-codebase repo) and run
+  harness-init against it — that run is the portability validation.

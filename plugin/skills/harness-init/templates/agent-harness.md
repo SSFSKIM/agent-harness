@@ -12,8 +12,10 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 
 ## Run it
 
-- Load: `claude --plugin-dir <path-to-agent-harness>/plugin` from this repo's
-  root. The SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
+- Load: `claude --plugin-dir <plugin>` from this repo's root — the plugin's
+  location on this machine is recorded in `.git/hooks/pre-commit` (its
+  check.py path reveals the plugin dir). The SessionStart feeder activates
+  once `docs/memory/MEMORY.md` exists.
 - Gate: run `.git/hooks/pre-commit` — scaffold installs it with this
   machine's exact `check.py` invocation (no placeholders to resolve; rerun
   scaffold.py after moving the repo or plugin and the hook is rewritten).

@@ -4,9 +4,9 @@ description: Use to run the deterministic gate (taste lints + structure lints + 
 ---
 # Harness lint
 
-Run the gate command recorded in `docs/design-docs/agent-harness.md` —
-every harness repo (self-host or scaffolded host) records its exact
-`check.py` invocation there.
+Run the gate as recorded in `docs/design-docs/agent-harness.md` — self-host
+inlines the `check.py` invocation there; scaffolded hosts point to
+`.git/hooks/pre-commit`, which holds the machine-local invocation.
 
 - GREEN → commit allowed.
 - FAIL → every failure line carries a FIX instruction; apply it verbatim,
