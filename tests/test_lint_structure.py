@@ -14,6 +14,7 @@ def run_all(plugin):
     lint_structure.check_hooks(plugin, errors)
     lint_structure.check_agents(plugin, errors)
     lint_structure.check_skills(plugin, errors)
+    lint_structure.check_self_host_paths(plugin, errors)
     return errors
 
 
@@ -59,6 +60,13 @@ class TestLintStructure(unittest.TestCase):
     def test_s6_skill_missing_skill_md(self):
         (self.plugin / "skills" / "ghost").mkdir()
         self.assertTrue(any("S6" in e for e in run_all(self.plugin)))
+
+    def test_s7_self_host_path_in_plugin_markdown(self):
+        d = self.plugin / "skills" / "x"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            "---\nname: x\ndescription: d\n---\nRun python3 plugin/scripts/check.py\n")
+        self.assertTrue(any("S7" in e for e in run_all(self.plugin)))
 
     def test_s4_missing_referenced_script(self):
         hooks = {"hooks": {"SessionStart": [{"hooks": [

@@ -6,7 +6,8 @@ description: Use periodically (or after several work sessions) to consolidate me
 
 1. Dispatch the `dreamer` agent (Task tool, subagent_type
    `agent-harness:dreamer`): "Run your full consolidation procedure."
-2. Verify `python3 plugin/scripts/check.py` is GREEN; skim `git diff` of
+2. Verify the gate is GREEN (command in `docs/design-docs/agent-harness.md`);
+   skim `git diff` of
    docs/memory/ (sanity, not approval — dreaming writes directly).
 3. Update the marker:
    `date +%F > .claude/harness/last-dream.txt`

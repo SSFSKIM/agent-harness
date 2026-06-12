@@ -25,7 +25,7 @@ Procedure:
    (freshness objective: last_verified is a promise, not a timestamp).
 4. Rewrite docs/memory/progress/current.md if digests show it stale.
 5. Register every new page in its directory index.md; cross-link.
-6. Run `python3 plugin/scripts/check.py` and fix every FAIL you introduced —
-   GREEN is your termination condition.
+6. Run the gate (command in `docs/design-docs/agent-harness.md`) and fix every
+   FAIL you introduced — GREEN is your termination condition.
 7. Report: pages created/updated/retired, patterns found, queue of things
    a human should know.

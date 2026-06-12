@@ -4,7 +4,9 @@ description: Use to run the deterministic gate (taste lints + structure lints + 
 ---
 # Harness lint
 
-Run: `python3 plugin/scripts/check.py`
+Run the gate command recorded in `docs/design-docs/agent-harness.md` —
+every harness repo (self-host or scaffolded host) records its exact
+`check.py` invocation there.
 
 - GREEN → commit allowed.
 - FAIL → every failure line carries a FIX instruction; apply it verbatim,

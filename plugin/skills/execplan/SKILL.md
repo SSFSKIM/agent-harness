@@ -12,14 +12,14 @@ Method and template live in `docs/PLANS.md` — read it first.
 2. Fill Goal (observable definition of done), Context (links a novice needs),
    Milestones (each independently verifiable).
 3. Record `base_commit: $(git rev-parse HEAD)` in the plan frontmatter, run
-   `python3 plugin/scripts/check.py`, commit.
+   the gate (command in `docs/design-docs/agent-harness.md`), commit.
 
 ## Maintain (as you work, not after)
 - Append to Progress log each working block; record Surprises & discoveries
   and Decision log entries the moment they happen.
 
 ## Completion gate (the PR-boundary equivalent)
-1. Run `python3 plugin/scripts/check.py` — must be GREEN.
+1. Run the gate (command in `docs/design-docs/agent-harness.md`) — must be GREEN.
 2. **Self-review first**: read the full diff
    (`git diff <base_commit from plan frontmatter>..HEAD`) against the plan's
    Goal; fix what you would flag.

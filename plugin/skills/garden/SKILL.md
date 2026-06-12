@@ -7,5 +7,6 @@ description: Use periodically (or when docs feel stale) to run the entropy GC â€
 1. Dispatch the `doc-gardener` agent (Task tool, subagent_type
    `agent-harness:doc-gardener`): "Run your full gardening procedure on this
    repo."
-2. Review its report; verify `python3 plugin/scripts/check.py` is GREEN.
+2. Review its report; verify the gate is GREEN (command in
+   `docs/design-docs/agent-harness.md`).
 3. Commit: `git add -A && git commit -m "garden: <one-line summary from report>"`.

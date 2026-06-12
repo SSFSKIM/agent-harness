@@ -122,6 +122,14 @@ def check_skills(plugin, errors):
                   "Add `name:` and `description:` frontmatter.")
 
 
+def check_self_host_paths(plugin, errors):
+    for p in sorted(plugin.rglob("*.md")):
+        if "plugin/scripts/" in p.read_text(encoding="utf-8"):
+            _fail(errors, "S7", p.relative_to(plugin).as_posix(),
+                  "assumes the self-host layout (`plugin/scripts/` literal).",
+                  "Plugin markdown travels to hosts where plugin/ is not in-repo: point to the gate command recorded in docs/design-docs/agent-harness.md instead.")
+
+
 def main():
     plugin = hl.plugin_root()
     errors = []
@@ -131,6 +139,7 @@ def main():
     check_hooks(plugin, errors)
     check_agents(plugin, errors)
     check_skills(plugin, errors)
+    check_self_host_paths(plugin, errors)
     for e in errors:
         print(e)
     print(f"lint_structure: {'OK' if not errors else str(len(errors)) + ' FAIL'}")

@@ -20,4 +20,5 @@ description: Use when adding or relocating knowledge — decides where a page be
 
 Procedure: kebab-case filename → frontmatter (`status / last_verified /
 owner`) → write the page → register in that directory's `index.md` →
-cross-link related pages → `python3 plugin/scripts/check.py`.
+cross-link related pages → run the gate (command in
+`docs/design-docs/agent-harness.md`).

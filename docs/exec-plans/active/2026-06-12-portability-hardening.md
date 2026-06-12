@@ -66,7 +66,7 @@ missing. After this plan, all of the following are observable:
 
 ## Milestones
 
-- [ ] M1 — G1: portable gate references in 7 plugin markdown files + lint S7
+- [x] M1 — G1: portable gate references in 7 plugin markdown files + lint S7
       (no `plugin/scripts/` literal in plugin markdown) + test.
 - [ ] M2 — A2: enrich docs/PLANS.md with the four upstream rules (done before
       M3 so the host template copies final text).
@@ -90,6 +90,10 @@ missing. After this plan, all of the following are observable:
 ## Progress log
 
 - 2026-06-12: Plan created from vault gap analysis + repo evidence research.
+- 2026-06-12: M1 done — 7 plugin markdown files now point to the gate via
+  docs/design-docs/agent-harness.md; lint S7 + test added. Transient state:
+  self-host gets its agent-harness.md page in M4 (backtick references are not
+  D5 links, so the gate stays green meanwhile).
 
 ## Surprises & discoveries
 
