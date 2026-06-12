@@ -54,6 +54,12 @@ Deep truth lives in `docs/` — follow the pointers.
 - **Not in the repo = does not exist.** Decisions made in chat must end up in
   `docs/` or `docs/memory/` (imprint hooks do this; verify when in doubt).
 
+## Porting
+
+- The `harness-init` skill bootstraps this harness into another host repo:
+  deterministic scaffold (`scaffold.py`) → write the map → migrate existing
+  docs → adapt seeds → check GREEN. Templates live inside the skill.
+
 ## Memory (read/write paths)
 
 - Read: feeder injects a compiled context pack at SessionStart + a targeted

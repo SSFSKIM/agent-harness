@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Bootstrap the harness docs-tree convention into a host repo (harness-init).
+
+Idempotent: never overwrites an existing file; prints CREATE/SKIP per path.
+Renders seed templates from skills/harness-init/templates/ and regenerates
+the component inventory so a fresh host starts lint-GREEN.
+"""
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+import harness_lib as hl
+
+DIRS = (
+    "docs/design-docs", "docs/exec-plans/active", "docs/exec-plans/completed",
+    "docs/generated", "docs/product-specs", "docs/references",
+    "docs/memory/adr", "docs/memory/archive/sessions", "docs/memory/knowledge",
+    "docs/memory/limitations", "docs/memory/openq", "docs/memory/progress",
+)
+SEEDS = (  # (template, destination relative to host root)
+    ("agents-md.md", "AGENTS.md"),
+    ("claude-md.md", "CLAUDE.md"),
+    ("agent-harness.md", "docs/design-docs/agent-harness.md"),
+    ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
+    ("design-docs-index.md", "docs/design-docs/index.md"),
+    ("reliability.md", "docs/RELIABILITY.md"),
+    ("security.md", "docs/SECURITY.md"),
+    ("memory-bootloader.md", "docs/memory/MEMORY.md"),
+    ("progress-current.md", "docs/memory/progress/current.md"),
+    ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
+)
+CATEGORY_INDEXES = ("adr", "knowledge", "openq", "limitations")
+GITIGNORE_LINES = (".claude/harness/",)
+
+
+def components_table(plugin):
+    rows = []
+    for md in sorted((plugin / "skills").glob("*/SKILL.md")):
+        fm = hl.read_frontmatter(md) or {}
+        rows.append(f"| skill | `{md.parent.name}` | {fm.get('description', '')[:90]} |")
+    for md in sorted((plugin / "agents").glob("*.md")):
+        fm = hl.read_frontmatter(md) or {}
+        rows.append(f"| agent | `{md.stem}` | {fm.get('description', '')[:90]} |")
+    return "\n".join(rows)
+
+
+def render(text, subs):
+    for key, val in subs.items():
+        text = text.replace("{{" + key + "}}", val)
+    return text
+
+
+def seed(templates, template, target, rel, subs, log):
+    if target.exists():
+        log(f"SKIP   {rel} (exists)")
+        return
+    text = render((templates / template).read_text(encoding="utf-8"), subs)
+    target.write_text(text, encoding="utf-8")
+    log(f"CREATE {rel}")
+
+
+def scaffold(root, plugin, log):
+    root = Path(root)
+    templates = plugin / "skills" / "harness-init" / "templates"
+    subs = {"PROJECT": root.name, "TODAY": hl.today().isoformat(),
+            "COMPONENTS": components_table(plugin)}
+    for d in DIRS:
+        (root / d).mkdir(parents=True, exist_ok=True)
+    for template, dest in SEEDS:
+        seed(templates, template, root / dest, dest, subs, log)
+    for cat in CATEGORY_INDEXES:
+        rel = f"docs/memory/{cat}/index.md"
+        seed(templates, "category-index.md", root / rel, rel,
+             {**subs, "CATEGORY": cat}, log)
+    gitignore(root, log)
+    inventory(root, plugin, log)
+
+
+def gitignore(root, log):
+    gi = root / ".gitignore"
+    existing = gi.read_text(encoding="utf-8") if gi.exists() else ""
+    missing = [l for l in GITIGNORE_LINES if l not in existing.splitlines()]
+    if not missing:
+        return
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    gi.write_text(existing + "\n".join(missing) + "\n", encoding="utf-8")
+    log("APPEND .gitignore")
+
+
+def inventory(root, plugin, log):
+    r = subprocess.run(
+        [sys.executable, str(plugin / "scripts" / "gen_inventory.py")],
+        cwd=root, env=hl.project_env(root), capture_output=True, text=True)
+    if r.returncode == 0:
+        log("GEN    docs/generated/component-inventory.md")
+    else:
+        log(f"WARN   gen_inventory failed: {(r.stderr or r.stdout).strip()}")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Bootstrap the harness docs tree into a host repo.")
+    ap.add_argument("--root", default=None,
+                    help="host repo root (default: detected via harness_lib)")
+    args = ap.parse_args()
+    root = Path(args.root).resolve() if args.root else hl.repo_root()
+    scaffold(root, hl.plugin_root(), print)
+    print(f"scaffold: done — fill the FILL markers, then run check.py "
+          f"against {root} (harness-init skill, steps 3-6).")
+
+
+if __name__ == "__main__":
+    main()

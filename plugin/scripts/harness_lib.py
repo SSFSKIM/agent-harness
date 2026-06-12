@@ -23,6 +23,13 @@ def headless_env():
     return env
 
 
+def project_env(root):
+    """Env for running harness scripts against an explicit host repo root."""
+    env = dict(os.environ)
+    env["CLAUDE_PROJECT_DIR"] = str(root)
+    return env
+
+
 def repo_root():
     """Instance repo root. Hooks get CLAUDE_PROJECT_DIR; otherwise walk up."""
     env = os.environ.get("CLAUDE_PROJECT_DIR")
