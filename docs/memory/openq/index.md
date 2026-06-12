@@ -7,4 +7,4 @@ owner: imprint-job
 
 Unresolved questions. Register every page here (lint D8).
 
-(none yet)
+- [tracker-fixed-traceability.md](tracker-fixed-traceability.md) — Should `fixed` tracker rows cite the implementing commit SHA to prevent premature closure?

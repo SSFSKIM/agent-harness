@@ -17,4 +17,4 @@ owner: dreamer
     docs/memory/limitations/progress-staleness.md).
   - Criterion 3 (dreaming lint-green): PASS.
   - Criterion 4 (human touchpoints): PASS.
-- Next: final whole-build review + wiki file-back.
+- Next: wiki file-back (Task 19) — record Q37/Q2/Q36-2 findings in the vault wiki; v1 build otherwise complete (final review passed with 2 P2s fixed).

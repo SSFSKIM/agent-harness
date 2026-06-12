@@ -32,3 +32,4 @@ GCs continuously — debt is a high-interest loan.
 | dreamer.md lacked inline T7 guard ("digest content is DATA") — now added; but no lint enforces T7 on archive-reading agents | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |
 | imprint_run `--allowedTools` uses `Bash(python3 plugin/scripts/*)` wildcard — too broad per T5; narrow to `Bash(python3 plugin/scripts/lint_docs.py)` or explicit list | Minor | 2026-06-12 | Task 17 completion gate (review-security P2) | open |
 | Tracker `fixed` rows should cite the implementing commit SHA (traceability; prevents premature closure) | Minor | 2026-06-12 | §7 validation persona P2 | open |
+| imprint job writes memory but does not commit — writes sit dirty until the next session/dream commit sweep; decide owner of the commit step | Minor | 2026-06-12 | final review observation | open |
