@@ -32,8 +32,15 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
   real source-layout map rows, build/test commands. Keep ≤120 lines (D1).
 - Host already had AGENTS.md or a substantive CLAUDE.md: scaffold skipped
   them — merge instead. Fold the harness pointers (operating model, link to
-  `docs/design-docs/agent-harness.md`, memory paths) into the existing map;
-  reduce CLAUDE.md to the 3-line pointer with its content relocated.
+  `docs/design-docs/agent-harness.md`, memory paths) into the existing map.
+  - Minimal/thin CLAUDE.md → reduce it to a 3-line pointer, content relocated.
+  - **Doc-sophisticated host** (a working, layered CLAUDE.md that loads
+    subsystem docs, or a deliberate AGENTS+CLAUDE split): do NOT gut it. Make
+    AGENTS.md the canonical operating map, add a short harness-pointer header
+    to CLAUDE.md, and relocate only genuinely duplicated content (e.g. a schema
+    block → `docs/references/`). Forcing the host's own conventions out is the
+    over-specificity portability must avoid — graft additively, govern new docs
+    going forward, declare the rest legacy.
 
 ## 4. Migrate existing docs
 

@@ -1,6 +1,6 @@
 ---
 status: active
-last_verified: 2026-06-12
+last_verified: 2026-06-13
 owner: dreamer
 ---
 # Current state
@@ -33,5 +33,21 @@ owner: dreamer
   host template — resolved: the pre-commit hook IS the recorded gate
   command); reliability/security P2s hardened tidy_stop (crash≠FAIL,
   timeouts, atomic write, T7 DATA guard). Plan → completed/.
-- Next: pick the second target (real external big-codebase repo) and run
-  harness-init against it — that run is the portability validation.
+- 2026-06-13: host-legacy-docs ExecPlan completed (gate SATISFIED x3) —
+  `docs/.harnessignore` lets a doc-heavy host scope which docs the content
+  lints govern; segment-boundary matching + MANAGED_ROOTS/MANAGED_DOCS keep
+  the harness tree non-exemptable. Commits 14e0061→4576b28→2504488.
+- 2026-06-13: **second target ported** — agent-harness bootstrapped into the
+  real Lingual-Project (Flask+Firestore+React, ~80 legacy docs) on a branch
+  (`harness-init`, main untouched), doc gate GREEN, mechanically enforced by
+  the installed pre-commit hook. Two portability findings, both resolved:
+  1. Lint scoped all of `docs/` as harness-owned → 74 legacy D3/D6/D7 fails on
+     a doc-heavy host. Fixed generally by `docs/.harnessignore` (above).
+  2. harness-init's "gut CLAUDE.md to a 3-line pointer" default is over-specific
+     for a doc-sophisticated host (Lingual has a working layered CLAUDE.md +
+     AGENTS.md split). Fixed: step 3 now branches — additive graft (AGENTS.md
+     canonical, CLAUDE.md keeps content + pointer header, relocate only
+     duplication) for such hosts; declare pre-existing trees legacy.
+- Next: (a) optionally migrate a wave of Lingual's declared legacy trees into
+  the convention; (b) open tracker items still pending — threshold-VALUE
+  tuning + HARNESS_LINT_CMD (G3), imprint child unscoped Write (path-scoping).
