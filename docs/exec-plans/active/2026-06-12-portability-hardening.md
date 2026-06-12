@@ -68,9 +68,9 @@ missing. After this plan, all of the following are observable:
 
 - [x] M1 — G1: portable gate references in 7 plugin markdown files + lint S7
       (no `plugin/scripts/` literal in plugin markdown) + test.
-- [ ] M2 — A2: enrich docs/PLANS.md with the four upstream rules (done before
+- [x] M2 — A2: enrich docs/PLANS.md with the four upstream rules (done before
       M3 so the host template copies final text).
-- [ ] M3 — G2: new seed templates (plans, design, architecture, quality-score,
+- [x] M3 — G2: new seed templates (plans, design, architecture, quality-score,
       product-sense, product-specs/references indexes) + SEEDS update +
       template AGENTS.md Review step + lint D10 (machine-referenced docs
       exist) + tests.
@@ -94,6 +94,12 @@ missing. After this plan, all of the following are observable:
   docs/design-docs/agent-harness.md; lint S7 + test added. Transient state:
   self-host gets its agent-harness.md page in M4 (backtick references are not
   D5 links, so the gate stays green meanwhile).
+- 2026-06-12: M2+M3 done — PLANS.md quality rules; 5 new seed templates +
+  product-specs/references indexes; lint D10; template AGENTS.md Review step.
+  Pulled the self-host agent-harness.md seeding forward from M4 into M3
+  because D10 would otherwise fail self-host (decision: D10 and the page must
+  land in the same commit). Scaffold run on self-host doubled as a live
+  idempotency check: 21 SKIP, 1 CREATE.
 
 ## Surprises & discoveries
 

@@ -29,8 +29,15 @@ SEEDS = (  # (template, destination relative to host root)
     ("memory-bootloader.md", "docs/memory/MEMORY.md"),
     ("progress-current.md", "docs/memory/progress/current.md"),
     ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
+    # docs the machine reads (lint D10) — gate/personas break without them:
+    ("plans-md.md", "docs/PLANS.md"),
+    ("design-md.md", "docs/DESIGN.md"),
+    ("architecture-md.md", "ARCHITECTURE.md"),
+    ("quality-score.md", "docs/QUALITY_SCORE.md"),
+    ("product-sense.md", "docs/PRODUCT_SENSE.md"),
 )
 CATEGORY_INDEXES = ("adr", "knowledge", "openq", "limitations")
+TOP_INDEXES = ("product-specs", "references")  # docs/<cat>/index.md
 GITIGNORE_LINES = (".claude/harness/",)
 
 
@@ -71,6 +78,10 @@ def scaffold(root, plugin, log):
         seed(templates, template, root / dest, dest, subs, log)
     for cat in CATEGORY_INDEXES:
         rel = f"docs/memory/{cat}/index.md"
+        seed(templates, "category-index.md", root / rel, rel,
+             {**subs, "CATEGORY": cat}, log)
+    for cat in TOP_INDEXES:
+        rel = f"docs/{cat}/index.md"
         seed(templates, "category-index.md", root / rel, rel,
              {**subs, "CATEGORY": cat}, log)
     gitignore(root, log)

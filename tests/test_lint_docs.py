@@ -47,6 +47,11 @@ class TestLintDocs(unittest.TestCase):
         p.write_text(fm(status="archived", last_verified="2020-01-01") + "# old\n")
         self.assertFalse(any("D4" in e for e in run_all(self.root)))
 
+    def test_d10_machine_docs_missing(self):
+        errs = []
+        lint_docs.check_machine_refs(self.root, errs)
+        self.assertTrue(any("D10" in e and "docs/PLANS.md" in e for e in errs))
+
     def test_d5_broken_link(self):
         (self.root / "AGENTS.md").write_text("[gone](docs/nope.md)\n")
         self.assertTrue(any("D5" in e for e in run_all(self.root)))

@@ -53,7 +53,7 @@ seeds grow later via feedback-twice→promote.
 
 Iterate on FAILs — every message carries its own FIX (`harness-lint` skill).
 Then confirm no marker survived: `grep -rn "FILL" <host-root>/AGENTS.md
-<host-root>/docs/` must print nothing.
+<host-root>/ARCHITECTURE.md <host-root>/docs/` must print nothing.
 Tests: with no `tests/` dir the step is skipped; a host with its own suite
 wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 -q" python3 ... check.py`) — the default only understands unittest discovery.

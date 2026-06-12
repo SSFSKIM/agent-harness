@@ -15,7 +15,10 @@ Deep truth lives in `docs/` — follow the pointers.
    in [the harness page](docs/design-docs/agent-harness.md).
 4. **Validate.** The harness lint gate must be GREEN before every commit —
    exact command in [the harness page](docs/design-docs/agent-harness.md).
-5. **Write back.** Update `docs/memory/progress/current.md` before ending a
+5. **Review.** Declaring an ExecPlan complete triggers the completion gate:
+   self-review the diff first, then dispatch the review personas; iterate
+   until all are satisfied (execplan skill).
+6. **Write back.** Update `docs/memory/progress/current.md` before ending a
    long session; imprint hooks handle session digests automatically.
 
 ## Map

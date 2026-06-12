@@ -22,12 +22,16 @@ class TestScaffold(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_tree_created(self):
-        for rel in ("AGENTS.md", "CLAUDE.md", "docs/memory/MEMORY.md",
+        for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md",
+                    "docs/memory/MEMORY.md",
                     "docs/memory/progress/current.md",
                     "docs/memory/openq/index.md",
                     "docs/design-docs/agent-harness.md",
                     "docs/exec-plans/tech-debt-tracker.md",
-                    "docs/generated/component-inventory.md"):
+                    "docs/generated/component-inventory.md",
+                    "docs/PLANS.md", "docs/DESIGN.md", "docs/QUALITY_SCORE.md",
+                    "docs/PRODUCT_SENSE.md", "docs/product-specs/index.md",
+                    "docs/references/index.md"):
             self.assertTrue((self.root / rel).exists(), rel)
 
     def test_no_unrendered_tokens(self):

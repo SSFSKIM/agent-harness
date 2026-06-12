@@ -20,6 +20,11 @@ SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
 DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
 SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/")
+MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
+    "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
+    "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
+    "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
+)
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
 LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
@@ -158,10 +163,19 @@ def check_coverage(root, errors, plugin):
                   f"Document `{name}` (at minimum: one line in AGENTS.md map or docs/DESIGN.md).")
 
 
+def check_machine_refs(root, errors):
+    for rel in MACHINE_DOCS:
+        if not (root / rel).exists():
+            _fail(errors, "D10", rel,
+                  "missing — the machine reads this doc (execplan gate / review personas / doc-gardener).",
+                  "Seed it: run scaffold.py (harness-init skill), or create the page from its template in the skill's templates/.")
+
+
 def main():
     root = hl.repo_root()
     errors = []
     check_entrypoints(root, errors)
+    check_machine_refs(root, errors)
     check_frontmatter(root, errors)
     check_links(root, errors)
     check_naming(root, errors)

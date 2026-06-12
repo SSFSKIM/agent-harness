@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: {{TODAY}}
+last_verified: 2026-06-12
 owner: harness
 ---
 # agent-harness — the installed harness
@@ -8,14 +8,14 @@ owner: harness
 This repo is operated by the `agent-harness` Claude Code plugin: docs-as-memory
 knowledge system, taste lints whose FAIL messages carry FIX instructions,
 review personas grounded 1:1 in docs, and a memory loop (feeder / imprint /
-dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
+dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 
 ## Run it
 
-- Load: `claude --plugin-dir <path-to-agent-harness>/plugin` from this repo's
-  root. The SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
-- Gate: `python3 <plugin>/scripts/check.py --root <this-repo-root>` must be
-  GREEN before every commit. The `harness-lint` skill interprets failures.
+- Load: `claude --plugin-dir ./plugin` from this repo's root. The
+  SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
+- Gate: `python3 plugin/scripts/check.py` must be GREEN before every commit.
+  The `harness-lint` skill interprets failures.
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
   `HARNESS_TEST_CMD="pytest -q"`); default is unittest discovery when a
   `tests/` directory exists, skipped otherwise.
@@ -24,7 +24,17 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 
 | Kind | Name | What it does |
 |---|---|---|
-{{COMPONENTS}}
+| skill | `docs-tree` | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, a |
+| skill | `dream` | Use periodically (or after several work sessions) to consolidate memory — dispatches the d |
+| skill | `execplan` | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory chan |
+| skill | `garden` | Use periodically (or when docs feel stale) to run the entropy GC — dispatches the doc-gard |
+| skill | `harness-init` | Use when setting up, installing, initializing, bootstrapping, or porting this harness into |
+| skill | `harness-lint` | Use to run the deterministic gate (taste lints + structure lints + generated-file check +  |
+| agent | `doc-gardener` | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden |
+| agent | `dreamer` | Memory consolidation persona (CONSOLIDATE). Dispatch via the dream skill to compress recen |
+| agent | `review-arch` | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the |
+| agent | `review-reliability` | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Gro |
+| agent | `review-security` | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Ground |
 
 ## Docs placement
 
