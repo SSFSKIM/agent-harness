@@ -74,16 +74,16 @@ missing. After this plan, all of the following are observable:
       product-sense, product-specs/references indexes) + SEEDS update +
       template AGENTS.md Review step + lint D10 (machine-referenced docs
       exist) + tests.
-- [ ] M4 — G4: scaffold installs pre-commit hook (idempotent, never
+- [x] M4 — G4: scaffold installs pre-commit hook (idempotent, never
       overwrites) + run scaffold against self-host (installs hook, seeds
       docs/design-docs/agent-harness.md) + register/adapt that page + tests.
-- [ ] M5 — G7/A1/A8: harness-init steps for app-verify skill and
+- [x] M5 — G7/A1/A8: harness-init steps for app-verify skill and
       `.claude/skills/`; AGENTS.md template mandatory-skills stub +
       negative-space line; self-host AGENTS.md negative-space line.
-- [ ] M6 — A3: `tidy_stop.py` Stop hook (fingerprint-deduped lint subset,
+- [x] M6 — A3: `tidy_stop.py` Stop hook (fingerprint-deduped lint subset,
       block-once, fail-open, headless guard) + hooks.json entry + RELIABILITY
       R11 + DESIGN.md gate-hook exception + ARCHITECTURE data flow + tests.
-- [ ] M7 — docs sync: QUALITY_SCORE rows, progress/current.md, inventory.
+- [x] M7 — docs sync: QUALITY_SCORE rows, progress/current.md, inventory.
 - [ ] M8 — completion gate: self-review → review-arch / review-reliability /
       review-security → iterate → move to completed/.
 
@@ -100,8 +100,18 @@ missing. After this plan, all of the following are observable:
   because D10 would otherwise fail self-host (decision: D10 and the page must
   land in the same commit). Scaffold run on self-host doubled as a live
   idempotency check: 21 SKIP, 1 CREATE.
+- 2026-06-12: M4-M7 done. The M4 commit itself was the first through the new
+  pre-commit hook (observable per Goal 3). tidy_stop tests passed first run
+  (5/5: block-once, fail-open, headless guard, fix-then-green, non-git).
+  QUALITY_SCORE gained porting + stop-tidy rows.
 
 ## Surprises & discoveries
+
+- D10 forced an ordering constraint discovered mid-build: the self-host repo
+  itself lacked docs/design-docs/agent-harness.md, so the lint and the page
+  had to land in one commit (pulled forward from M4 to M3).
+- `hashlib` was missing from the S1 import allowlist — first allowlist
+  addition since v1; justified for tree fingerprinting and recorded below.
 
 ## Decision log
 
