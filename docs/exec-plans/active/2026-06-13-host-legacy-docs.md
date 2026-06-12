@@ -89,5 +89,33 @@ drops such entries so a host cannot un-govern the memory tree.
   harness's own memory/design tree.
 
 ## Feedback (from completion gate)
+- **review-reliability: SATISFIED** (round 1). Empirically verified fail-open
+  on every bad input (missing/dir/perm/non-UTF8/BOM/CRLF/whitespace/`.`/`..`/`/`),
+  no gate crash, scaffold idempotent, deterministic. Flagged the substring
+  footgun as accept-as-is; security escalated it — see below.
+- **review-arch: CHANGES REQUESTED** (round 1) → both P1s fixed:
+  - P1 prefix collision: `_exempt` used bare `startswith` → entry `business`
+    matched `business-plan.md`. FIXED: segment-boundary match in `_exempt`
+    (`rel == x or rel.startswith(x.rstrip('/')+'/')`). Trailing slash now
+    optional/forgiving. Test: slashless_entry_is_segment_matched.
+  - P1 top-level grounding docs exemptable: `MANAGED_ROOTS` covered only
+    subdirs. FIXED: `MANAGED_DOCS` added; `exempt_roots` drops those entries.
+    Test: cannot_exempt_top_level_machine_doc.
+- **review-security: CHANGES REQUESTED** (round 1) → both P1s fixed (same
+  root cause):
+  - P1 `mem` bypassed the managed-root guard (segment-equality guard vs
+    substring `_exempt`) → could reach `memory/…` and, with a one-line index
+    edit (D8) + the feeder reading by content, inject a poisoned page on a
+    GREEN gate. FIXED by the segment-match in `_exempt` (a partial prefix can
+    no longer reach `memory/…`). Test: partial_prefix_cannot_bypass_managed_guard.
+  - P1 grounding docs exemptable: same fix as arch P1.
+  - P2 T8 overclaimed ("feeder's structural checks" don't exist). FIXED: T8
+    reworded to credit only D8 + content lints, and to name MANAGED_DOCS.
+  - P2 imprint child has unscoped Write (pre-existing T1/T2): a transcript
+    injection could write `docs/.harnessignore`. Logged as an Important
+    tracker row (path-scope imprint writes to docs/memory/); T8 now notes the
+    Tier-0 framing depends on the T1 guard.
+- Post-fix: 60 tests green (+3 boundary tests); host PoC still 0 legacy fails
+  under segment matching; self-host gate GREEN.
 
 ## Outcomes & retrospective

@@ -42,8 +42,9 @@ point rightward at skills — the most actionable instruction wins.
 6. **Govern-by-default, declared legacy:** the content lints (D3/D5/D6/D7)
    hold every `docs/*.md` to the convention. A host adopting the harness over
    a pre-existing `docs/` declares its unmigrated subtrees in
-   `docs/.harnessignore` (a shrinking migration backlog); harness-managed
-   trees (`hl.MANAGED_ROOTS`) are never exemptable.
+   `docs/.harnessignore` (a shrinking migration backlog), matched on
+   path-segment boundaries; harness-managed trees (`hl.MANAGED_ROOTS`) and
+   top-level machine docs (`hl.MANAGED_DOCS`) are never exemptable.
 
 ## Data flows
 

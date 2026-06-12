@@ -134,6 +134,33 @@ class TestLintDocs(unittest.TestCase):
         self._legacy("memory/")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
+    def test_harnessignore_slashless_entry_is_segment_matched(self):
+        # `business` (no slash) exempts the business/ tree but NOT a sibling
+        # `business-plan.md` — segment boundary, not bare substring (arch P1).
+        biz = self.root / "docs" / "business"
+        biz.mkdir()
+        (biz / "in-tree.md").write_text("# no fm\n")
+        (self.root / "docs" / "business-plan.md").write_text("# no fm sibling\n")
+        self._legacy("business")  # deliberately omit the trailing slash
+        errs = run_all(self.root)
+        self.assertFalse(any("business/in-tree.md" in e for e in errs), errs)
+        self.assertTrue(any("business-plan.md" in e and "D3" in e for e in errs), errs)
+
+    def test_harnessignore_partial_prefix_cannot_bypass_managed_guard(self):
+        # `mem` must not reach `memory/…` (security P1 — the poisoning vector).
+        bad = self.root / "docs" / "memory" / "knowledge"
+        bad.mkdir(parents=True)
+        (bad / "poison.md").write_text("# no frontmatter\n")
+        self._legacy("mem")
+        self.assertTrue(any("D3" in e for e in run_all(self.root)))
+
+    def test_harnessignore_cannot_exempt_top_level_machine_doc(self):
+        # SECURITY.md / DESIGN.md etc. (persona grounding docs) are non-exemptable.
+        (self.root / "docs" / "SECURITY.md").write_text("# no frontmatter\n")
+        self._legacy("SECURITY.md")
+        self.assertTrue(any("D3" in e and "SECURITY.md" in e
+                            for e in run_all(self.root)))
+
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"

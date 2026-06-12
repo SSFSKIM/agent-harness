@@ -39,8 +39,12 @@ def _rel(p, root):
 
 
 def _exempt(p, docs, parts):
+    # Match on path-segment boundaries, never bare substring: an entry `business`
+    # exempts the `business/` tree and the file `business`, but NOT a sibling
+    # `business-plan.md`. This is what stops a partial prefix (`mem`) from
+    # reaching `memory/…` and what makes the trailing `/` optional/forgiving.
     rel = p.relative_to(docs).as_posix()
-    return any(rel.startswith(x) for x in parts)
+    return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in parts)
 
 
 def check_entrypoints(root, errors):

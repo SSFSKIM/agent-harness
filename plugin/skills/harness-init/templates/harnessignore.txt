@@ -1,7 +1,9 @@
 # docs/.harnessignore — legacy doc roots the content lints skip (D3/D5/D6/D7).
 #
-# Docs-relative path prefixes, one per line. Directory entries end with `/`
-# (e.g. `business/`); a bare filename matches one file (e.g. `README.md`).
+# Docs-relative path prefixes, one per line. Matching is on path-segment
+# boundaries, so a trailing `/` is optional and forgiving: `business` and
+# `business/` both mean the `business/` tree and neither touches a sibling
+# `business-plan.md`. A bare filename matches one file (e.g. `README.md`).
 # `#` comments and blank lines are ignored.
 #
 # This is a MIGRATION BACKLOG, not a dumping ground: every line is a subtree
@@ -10,8 +12,9 @@
 # into the memory tree), then delete its line. Empty file = govern all of docs/.
 #
 # Cannot exempt harness-managed trees (design-docs/ memory/ exec-plans/
-# product-specs/ references/ generated/) — those entries are ignored; the
-# harness always governs its own tree.
+# product-specs/ references/ generated/) or top-level machine docs
+# (PLANS/DESIGN/SECURITY/RELIABILITY/QUALITY_SCORE/PRODUCT_SENSE.md) — those
+# entries are ignored; the harness always governs its own tree.
 #
 # Fresh host: leave this empty. Ported host: harness-init lists pre-existing
 # docs/ subtrees here so the gate can reach GREEN on adoption.
