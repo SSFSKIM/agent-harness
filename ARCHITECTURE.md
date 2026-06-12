@@ -39,6 +39,11 @@ point rightward at skills — the most actionable instruction wins.
 4. **Generated files** carry a GENERATED header; only scripts write them.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
    `.claude/harness/` — gitignored, never under `docs/`.
+6. **Govern-by-default, declared legacy:** the content lints (D3/D5/D6/D7)
+   hold every `docs/*.md` to the convention. A host adopting the harness over
+   a pre-existing `docs/` declares its unmigrated subtrees in
+   `docs/.harnessignore` (a shrinking migration backlog); harness-managed
+   trees (`hl.MANAGED_ROOTS`) are never exemptable.
 
 ## Data flows
 

@@ -7,12 +7,13 @@ from fixtures import fm, make_repo, make_plugin
 
 
 def run_all(root, plugin=None):
+    host = lint_docs.hl.exempt_roots(root)  # mirror main()'s host-aware path
     errors = []
     lint_docs.check_entrypoints(root, errors)
-    lint_docs.check_frontmatter(root, errors)
-    lint_docs.check_links(root, errors)
-    lint_docs.check_naming(root, errors)
-    lint_docs.check_sizes(root, errors)
+    lint_docs.check_frontmatter(root, errors, host)
+    lint_docs.check_links(root, errors, host)
+    lint_docs.check_naming(root, errors, host)
+    lint_docs.check_sizes(root, errors, host)
     lint_docs.check_indexes(root, errors)
     if plugin is not None:
         lint_docs.check_coverage(root, errors, plugin)
@@ -99,6 +100,39 @@ class TestLintDocs(unittest.TestCase):
         (self.root / "AGENTS.md").write_text(
             "[ok](docs/design-docs/core-beliefs.md#golden-rules)\n")
         self.assertFalse(any("D5" in e for e in run_all(self.root)))
+
+    def _legacy(self, *lines):
+        (self.root / "docs" / ".harnessignore").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_harnessignore_exempts_legacy_subtree(self):
+        biz = self.root / "docs" / "business"
+        biz.mkdir()
+        (biz / "VC_Report (시장).md").write_text("# no fm, bad name\n" + "x\n" * 500)
+        self.assertTrue(run_all(self.root))  # fails D3/D6/D7 before declaring
+        self._legacy("business/")
+        errs = run_all(self.root)
+        self.assertFalse(any(r in e for e in errs for r in ("D3", "D6", "D7")), errs)
+
+    def test_harnessignore_exempts_single_file(self):
+        (self.root / "docs" / "README.md").write_text("# legacy root doc, no fm\n")
+        self._legacy("README.md")
+        self.assertFalse(any("D3" in e for e in run_all(self.root)))
+
+    def test_harnessignore_does_not_exempt_unlisted_doc(self):
+        d = self.root / "docs" / "notes"
+        d.mkdir()
+        (d / "loose.md").write_text("# no frontmatter\n")
+        self._legacy("business/")  # declares a DIFFERENT root
+        self.assertTrue(any("D3" in e for e in run_all(self.root)))
+
+    def test_harnessignore_cannot_exempt_managed_tree(self):
+        # a host listing the memory tree must not un-govern it (security)
+        bad = self.root / "docs" / "memory" / "knowledge"
+        bad.mkdir(parents=True)
+        (bad / "loose.md").write_text("# no frontmatter\n")
+        self._legacy("memory/")
+        self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)

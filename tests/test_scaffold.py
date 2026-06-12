@@ -34,6 +34,14 @@ class TestScaffold(unittest.TestCase):
                     "docs/references/index.md"):
             self.assertTrue((self.root / rel).exists(), rel)
 
+    def test_harnessignore_seeded_empty(self):
+        f = self.root / "docs" / ".harnessignore"
+        self.assertTrue(f.exists())
+        # comments only — declares no exemptions on a fresh host
+        body = [l for l in f.read_text(encoding="utf-8").splitlines()
+                if l.strip() and not l.strip().startswith("#")]
+        self.assertEqual(body, [])
+
     def test_no_unrendered_tokens(self):
         for p in self.root.rglob("*.md"):
             self.assertNotIn("{{", p.read_text(encoding="utf-8"), p.name)

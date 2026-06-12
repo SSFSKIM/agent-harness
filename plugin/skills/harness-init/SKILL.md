@@ -42,6 +42,16 @@ Follow `references/migration.md`: triage every existing doc into the tree
 delete content — obsolete pages get `status: archived`. Big repos migrate in
 waves: gate first, remaining docs as tech-debt rows.
 
+**Declare the wave boundary in `docs/.harnessignore`** (scaffold seeded it
+empty). List the host's pre-existing `docs/` subtrees that won't follow the
+convention yet — docs-relative prefixes, dir entries end `/` (e.g.
+`business/`, `school-integration/`), bare filenames match one file. The
+content lints (D3/D5/D6/D7) skip them, so the gate reaches GREEN without
+force-renaming human-curated business/spec/research trees. The file is the
+migration backlog: migrate a wave, delete its line. Harness-managed trees
+(`memory/`, `design-docs/`, …) cannot be listed — the harness always governs
+its own tree.
+
 ## 5. Adapt the seeds (judgment — confirm with the human)
 
 `docs/design-docs/core-beliefs.md` ships harness defaults; rules like "no

@@ -51,6 +51,10 @@ Procedure for a new page: kebab-case filename → frontmatter (`status /
 last_verified / owner`) → write → register in that directory's `index.md` →
 cross-link → run the gate (the `docs-tree` skill owns this).
 
+Pre-existing docs that don't follow the convention yet are declared in
+`docs/.harnessignore` (a migration backlog the content lints skip). Migrate a
+subtree, then delete its line; harness-managed trees can't be listed there.
+
 ## Memory loop
 
 - Read path: the SessionStart feeder compiles a context pack from

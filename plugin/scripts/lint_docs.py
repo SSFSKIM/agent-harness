@@ -56,10 +56,10 @@ def check_entrypoints(root, errors):
               "AGENTS.md is a map, not an encyclopedia: move detail into docs/ and link it.")
 
 
-def check_frontmatter(root, errors):
+def check_frontmatter(root, errors, host=()):
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if _exempt(p, docs, FM_EXEMPT) or p.name == "MEMORY.md":
+        if _exempt(p, docs, FM_EXEMPT + host) or p.name == "MEMORY.md":
             continue
         fm = hl.read_frontmatter(p)
         if fm is None:
@@ -84,9 +84,9 @@ def check_frontmatter(root, errors):
                       "Use ISO format YYYY-MM-DD.")
 
 
-def check_links(root, errors):
+def check_links(root, errors, host=()):
     docs = root / "docs"
-    targets = [p for p in hl.iter_md(docs) if not _exempt(p, docs, FM_EXEMPT)]
+    targets = [p for p in hl.iter_md(docs) if not _exempt(p, docs, FM_EXEMPT + host)]
     for name in ("AGENTS.md", "ARCHITECTURE.md"):
         if (root / name).exists():
             targets.append(root / name)
@@ -101,10 +101,10 @@ def check_links(root, errors):
                       "Fix the relative path or create the target page.")
 
 
-def check_naming(root, errors):
+def check_naming(root, errors, host=()):
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if _exempt(p, docs, FM_EXEMPT):
+        if _exempt(p, docs, FM_EXEMPT + host):
             continue
         ok = (KEBAB.match(p.name) or p.name == "MEMORY.md"
               or (p.parent == docs and UPPER.match(p.name)))
@@ -113,10 +113,10 @@ def check_naming(root, errors):
                   "Rename to lowercase-kebab-case.md (top-level docs/ taste docs may be UPPERCASE.md).")
 
 
-def check_sizes(root, errors):
+def check_sizes(root, errors, host=()):
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if _exempt(p, docs, SIZE_EXEMPT):
+        if _exempt(p, docs, SIZE_EXEMPT + host):
             continue
         limit = SIZE_LIMITS.get(p.name, DEFAULT_LIMIT)
         n = len(p.read_text(encoding="utf-8").splitlines())
@@ -173,13 +173,14 @@ def check_machine_refs(root, errors):
 
 def main():
     root = hl.repo_root()
+    host = hl.exempt_roots(root)  # host-declared legacy doc roots (docs/.harnessignore)
     errors = []
     check_entrypoints(root, errors)
     check_machine_refs(root, errors)
-    check_frontmatter(root, errors)
-    check_links(root, errors)
-    check_naming(root, errors)
-    check_sizes(root, errors)
+    check_frontmatter(root, errors, host)
+    check_links(root, errors, host)
+    check_naming(root, errors, host)
+    check_sizes(root, errors, host)
     check_indexes(root, errors)
     check_coverage(root, errors, hl.plugin_root())
     for e in errors:

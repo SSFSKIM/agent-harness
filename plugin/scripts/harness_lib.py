@@ -79,5 +79,34 @@ def iter_md(base):
     return sorted(p for p in base.rglob("*.md"))
 
 
+# Doc subtrees the harness always governs — never exemptable via .harnessignore,
+# so a host can't un-govern (and silently poison) the memory/design tree.
+MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
+                 "product-specs", "references")
+
+
+def exempt_roots(root):
+    """Host-declared legacy doc subtrees the content lints skip.
+
+    Reads `<root>/docs/.harnessignore`: docs-relative path prefixes, one per
+    line (dir entries end `/`; a bare filename matches one file). `#` comments
+    and blanks ignored. Absent file → () (fresh-host behavior unchanged). The
+    list is a migration backlog — it shrinks as legacy docs adopt the
+    convention. Entries under a MANAGED_ROOT are dropped: the harness governs
+    its own tree regardless of what a host writes here.
+    """
+    try:
+        lines = (Path(root) / "docs" / ".harnessignore").read_text(
+            encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ()
+    out = []
+    for line in lines:
+        s = line.split("#", 1)[0].strip()
+        if s and s.split("/", 1)[0] not in MANAGED_ROOTS:
+            out.append(s)
+    return tuple(out)
+
+
 def today():
     return datetime.date.today()

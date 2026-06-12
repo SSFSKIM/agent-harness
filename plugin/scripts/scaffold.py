@@ -30,6 +30,7 @@ SEEDS = (  # (template, destination relative to host root)
     ("memory-bootloader.md", "docs/memory/MEMORY.md"),
     ("progress-current.md", "docs/memory/progress/current.md"),
     ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
+    ("harnessignore.txt", "docs/.harnessignore"),  # legacy-doc migration backlog
     # docs the machine reads (lint D10) — gate/personas break without them:
     ("plans-md.md", "docs/PLANS.md"),
     ("design-md.md", "docs/DESIGN.md"),
