@@ -161,6 +161,12 @@ class TestLintDocs(unittest.TestCase):
         self.assertTrue(any("D3" in e and "SECURITY.md" in e
                             for e in run_all(self.root)))
 
+    def test_harnessignore_drop_guard_normalizes_dotslash(self):
+        # `./memory` must be dropped by the guard itself (both layers agree),
+        # not merely rendered inert by _exempt.
+        self._legacy("./memory", "memory//knowledge", "business/")
+        self.assertEqual(lint_docs.hl.exempt_roots(self.root), ("business",))
+
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"

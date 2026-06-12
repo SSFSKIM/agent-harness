@@ -111,10 +111,16 @@ def exempt_roots(root):
         return ()
     out = []
     for line in lines:
-        s = line.split("#", 1)[0].strip().rstrip("/")
-        if not s or s.split("/", 1)[0] in MANAGED_ROOTS or s in MANAGED_DOCS:
+        s = line.split("#", 1)[0].strip()
+        # Normalize so the managed-tree drop-guard and _exempt agree: strip
+        # `./`, leading/`//`, and `.` segments. (Without this, `./memory` slips
+        # the guard's first-segment test — inert in _exempt, but the two layers
+        # should not disagree.) `..` segments are kept (inert) and never escape.
+        segs = [seg for seg in s.split("/") if seg and seg != "."]
+        norm = "/".join(segs)
+        if not norm or segs[0] in MANAGED_ROOTS or norm in MANAGED_DOCS:
             continue
-        out.append(s)
+        out.append(norm)
     return tuple(out)
 
 

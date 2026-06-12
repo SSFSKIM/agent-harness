@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-13
 owner: harness
 base_commit: ae0e7cf7b9cf6987225412f41146ec51b26101a2
@@ -56,8 +56,8 @@ drops such entries so a host cannot un-govern the memory tree.
 - [x] M5 PoC against the real host: temp `docs/.harnessignore` with the four
   roots → host lint_docs legacy fails 74 → 0; remove temp file. (No host
   writes committed in this plan; the full port is the follow-on.)
-- [ ] M6 Completion gate: self-review + review-arch/reliability/security until
-  SATISFIED.
+- [x] M6 Completion gate: self-review + review-arch/reliability/security until
+  SATISFIED (reliability r1; arch + security r2 after the P1 fixes).
 
 ## Progress log
 - 2026-06-13: plan created from the Lingual port-attempt evidence.
@@ -87,6 +87,16 @@ drops such entries so a host cannot un-govern the memory tree.
 - 2026-06-13: managed roots are non-exemptable (defense in depth) so
   `.harnessignore` can never be used to hide an unindexed/poisoned page in the
   harness's own memory/design tree.
+- 2026-06-13 (gate r1): `_exempt` matches on path-segment boundaries, not bare
+  `startswith` — one root cause behind both arch-P1 (sibling over-exemption)
+  and security-P1 (`mem`→`memory/` guard bypass). Trailing `/` is now optional.
+- 2026-06-13 (gate r1): top-level machine docs get their own non-exemptable set
+  `MANAGED_DOCS` (they're not under a managed subdir, so the dir-prefix guard
+  missed them).
+- 2026-06-13 (gate r2 P2, fixed-now): `exempt_roots` normalizes entries
+  (strip `./`, `//`, `.` segments) before the drop-guard so both enforcement
+  layers agree on `./memory`-style inputs (was inert via `_exempt`, now also
+  dropped at source).
 
 ## Feedback (from completion gate)
 - **review-reliability: SATISFIED** (round 1). Empirically verified fail-open
@@ -119,3 +129,29 @@ drops such entries so a host cannot un-govern the memory tree.
   under segment matching; self-host gate GREEN.
 
 ## Outcomes & retrospective
+Shipped: `docs/.harnessignore` lets a doc-heavy host scope which `docs/` the
+content lints govern — govern-by-default preserved, harness-managed trees and
+top-level machine docs non-exemptable, segment-boundary matching. 61 tests
+green (+6 over the plan's life). The real Lingual host went from 74 legacy
+D3/D6/D7 failures to 0 by declaring 4 subtrees + 3 root docs — the lint-scoping
+blocker to adoption is closed.
+
+Retrospective:
+- The gate paid off a THIRD consecutive time: two personas independently
+  converged on one root cause (substring vs segment match) that self-review +
+  57 green tests missed, and security caught that the change could exempt its
+  OWN grounding doc — a self-referential hole. The fixture (fresh empty host)
+  is structurally blind to this entire class; only the real port surfaced it.
+- Methodology lesson: "demonstrably working" must be tested at the boundary,
+  not the center. The first round's 5 tests all used well-formed slash-dir
+  entries and passed while both P1s sat undetected. Boundary/negative tests
+  (slashless, partial-prefix, machine-doc, dotslash) are where the value was.
+- This is the harness improving itself from a real adoption attempt — the
+  intended compounding loop. The fix is general (no Lingual-specific code); the
+  next doc-heavy host adopts with a `.harnessignore` and a GREEN gate.
+
+Follow-on (not this plan): complete the actual Lingual port — scaffold, merge
+the existing 6KB AGENTS.md + 12KB CLAUDE.md, write the real `.harnessignore`,
+migrate/triage docs in waves, author instance verify/boot skills for the
+Firebase+Python+frontend app, gate GREEN, commit to the host. The threshold-
+VALUE tuning + HARNESS_LINT_CMD (G3) remain open tracker items.
