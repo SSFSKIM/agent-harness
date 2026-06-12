@@ -55,14 +55,19 @@ Pre-existing docs that don't follow the convention yet are declared in
 `docs/.harnessignore` (a migration backlog the content lints skip). Migrate a
 subtree, then delete its line; harness-managed trees can't be listed there.
 
-## Memory loop
+## Memory loop — currently DISABLED (hand-maintained memory)
 
-- Read path: the SessionStart feeder compiles a context pack from
-  `docs/memory/`; a first-prompt addendum targets the session's actual topic.
-- Write path: PreCompact/SessionEnd hooks enqueue imprint jobs (session
-  digests + memory page updates); `/dream` consolidates; `garden` GCs entropy.
-- Never bypass the `docs/memory/` structure — lints enforce frontmatter,
-  naming, and index registration.
+The automatic memory loop ships **off**: the SessionStart/UserPromptSubmit
+(feeder) and PreCompact/SessionEnd (imprint) hooks are unwired pending a more
+sophisticated redesign. Until then `docs/memory/` is **maintained by hand** —
+write progress/ADRs/knowledge/limitations directly; lints still enforce
+frontmatter, naming, and index registration.
+
+- Retained but dormant (re-enable by restoring the hook entries in the
+  plugin's `hooks.json`): `feeder_*` (read path: context pack + addendum),
+  `imprint_*` (write path: session digests + memory updates). The `/dream`
+  (consolidate) and `garden` (entropy GC) skills run manually.
+- Never bypass the `docs/memory/` structure even when editing by hand.
 
 ## Growing the grounding docs
 

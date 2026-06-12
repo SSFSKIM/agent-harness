@@ -48,16 +48,26 @@ point rightward at skills — the most actionable instruction wins.
 
 ## Data flows
 
-1. **INJECT** — SessionStart hook → `feeder_sessionstart.py` → headless
-   Sonnet(1M) reads `docs/memory/` + `docs/exec-plans/active/` → compiles a
-   context pack → `additionalContext`. First user prompt →
-   `feeder_firstprompt.py` → task-targeted addendum (2-stage feeder).
-2. **IMPRINT** — PreCompact/SessionEnd → `imprint_enqueue.py` (at-least-once
-   queue) → `imprint_run.py` (single-flight lock; dedupe via `imprint_guard`)
-   → headless claude writes a session digest + memory updates → lint_docs.
-3. **CONSOLIDATE** — `/dream` → dreamer agent reads `archive/sessions/`
-   digests → rewrites knowledge/limitations/openq/adr directly → `check.py`
-   green is the termination condition.
+> **The automatic memory loop (INJECT/IMPRINT/CONSOLIDATE) is currently
+> DISABLED.** Its hooks (SessionStart, UserPromptSubmit, PreCompact,
+> SessionEnd) are unwired from `hooks.json` pending a more sophisticated
+> redesign — see `docs/memory/openq/memory-loop-redesign.md`. The scripts
+> (`feeder_*`, `imprint_*`) and the `dream`/`garden` skills are RETAINED
+> (dormant, re-enable by restoring the hook entries). The active runtime is
+> REVIEW (#4) + TIDY (#5) + the deterministic gate. The `docs/memory/` tree
+> itself stays fully governed by the lints — it is hand-maintained for now.
+
+1. **INJECT** *(disabled — hook unwired)* — SessionStart hook →
+   `feeder_sessionstart.py` → headless Sonnet(1M) reads `docs/memory/` +
+   `docs/exec-plans/active/` → compiles a context pack → `additionalContext`.
+   First user prompt → `feeder_firstprompt.py` → task-targeted addendum.
+2. **IMPRINT** *(disabled — hooks unwired)* — PreCompact/SessionEnd →
+   `imprint_enqueue.py` (at-least-once queue) → `imprint_run.py` (single-flight
+   lock; dedupe via `imprint_guard`) → headless claude writes a session digest
+   + memory updates → lint_docs.
+3. **CONSOLIDATE** *(manual; no automatic input while IMPRINT is off)* —
+   `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
+   knowledge/limitations/openq/adr directly → `check.py` green terminates.
 4. **REVIEW** — `execplan` completion gate → self-review → review-arch /
    review-reliability / review-security (each grounded 1:1 in its doc) →
    iterate until satisfied.

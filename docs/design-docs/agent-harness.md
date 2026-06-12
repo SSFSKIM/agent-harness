@@ -58,14 +58,22 @@ Procedure for a new page: kebab-case filename → frontmatter (`status /
 last_verified / owner`) → write → register in that directory's `index.md` →
 cross-link → run the gate (the `docs-tree` skill owns this).
 
-## Memory loop
+## Memory loop — currently DISABLED (hand-maintained memory)
 
-- Read path: the SessionStart feeder compiles a context pack from
-  `docs/memory/`; a first-prompt addendum targets the session's actual topic.
-- Write path: PreCompact/SessionEnd hooks enqueue imprint jobs (session
-  digests + memory page updates); `/dream` consolidates; `garden` GCs entropy.
-- Never bypass the `docs/memory/` structure — lints enforce frontmatter,
-  naming, and index registration.
+The automatic memory loop is **off**: the SessionStart/UserPromptSubmit
+(feeder) and PreCompact/SessionEnd (imprint) hooks are unwired from
+`hooks.json` pending a more sophisticated redesign (see
+`docs/memory/openq/memory-loop-redesign.md`). Until then `docs/memory/` is
+**maintained by hand** — write progress/ADRs/knowledge/limitations directly
+(lints still enforce frontmatter, naming, and index registration).
+
+- Retained but dormant (re-enable by restoring the hook entries):
+  - Read path: `feeder_sessionstart.py` (context pack) + `feeder_firstprompt.py`
+    (task-targeted addendum).
+  - Write path: `imprint_enqueue.py`/`imprint_run.py` (session digests + memory
+    updates). `/dream` (consolidate) and `garden` (entropy GC) skills still run
+    manually but have no automatic input while imprint is off.
+- Never bypass the `docs/memory/` structure even when editing by hand.
 
 ## Growing the grounding docs
 

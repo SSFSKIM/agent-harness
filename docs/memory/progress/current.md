@@ -56,7 +56,15 @@ owner: dreamer
   travel; scaffold detects a blanket `.claude/` ignore → emits a NOTE instead
   of a redundant ignore line. Structural tension (gitignored runtime +
   must-travel skills both under `.claude/`) logged to the tracker.
-- Next: (a) optionally migrate a wave of Lingual's declared legacy trees into
-  the convention; (b) open tracker items still pending — threshold-VALUE
-  tuning + HARNESS_LINT_CMD (G3), imprint child unscoped Write (path-scoping),
-  cleaner `.claude/` runtime/skills split.
+- 2026-06-13: **automatic memory loop DISABLED** (user decision — needs a more
+  sophisticated redesign first). Unwired the SessionStart/UserPromptSubmit
+  (feeder) + PreCompact/SessionEnd (imprint) hooks from `hooks.json`; only the
+  Stop tidy-gate remains. Scripts (`feeder_*`/`imprint_*`) + dream/garden
+  skills retained dormant; `docs/memory/` now hand-maintained (still
+  lint-governed). Redesign captured in
+  `docs/memory/openq/memory-loop-redesign.md`. ARCHITECTURE data flows +
+  agent-harness.md (self-host + template) updated to say so.
+- Next: (a) memory-loop redesign (openq) — the deferred sophistication;
+  (b) optionally migrate a wave of Lingual's declared legacy trees;
+  (c) open tracker items — threshold-VALUE tuning + HARNESS_LINT_CMD (G3),
+  imprint child unscoped Write, cleaner `.claude/` runtime/skills split.
