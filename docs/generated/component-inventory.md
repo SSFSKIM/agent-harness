@@ -18,4 +18,5 @@
 | hook | PreCompact | runs `imprint_enqueue.py` | plugin/hooks/hooks.json |
 | hook | SessionEnd | runs `imprint_enqueue.py` | plugin/hooks/hooks.json |
 | hook | SessionStart | runs `feeder_sessionstart.py` | plugin/hooks/hooks.json |
+| hook | Stop | runs `tidy_stop.py` | plugin/hooks/hooks.json |
 | hook | UserPromptSubmit | runs `feeder_firstprompt.py` | plugin/hooks/hooks.json |

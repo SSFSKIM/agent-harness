@@ -51,6 +51,10 @@ exists ONLY in `plugin/scripts/harness_lib.py`. Other scripts never call
 4. **REVIEW** — `execplan` completion gate → self-review → review-arch /
    review-reliability / review-security (each grounded 1:1 in its doc) →
    iterate until satisfied.
+5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
+   on the dirty tree; FAIL blocks once per state with FIX lines (R11).
+   Commits are also gated mechanically by the scaffold-installed
+   `.git/hooks/pre-commit` running `check.py`.
 
 ## Failure modes
 

@@ -41,3 +41,11 @@ cite them in findings.
   than the stale threshold must refresh the lock's mtime at least once per
   `stale_threshold / 2` interval (e.g. `os.utime(lock, None)` per drain loop
   iteration) to prevent a live worker being reaped as stale.
+- **R11 — Stop-tidy blocks at most once per state.** The Stop tidy hook
+  (`tidy_stop.py`) fingerprints the dirty tree (status+diff SHA256); a
+  fingerprint that was already checked never blocks again, so a session can
+  always end even when the tree cannot be made green. It runs only the
+  deterministic lint subset (no unittest — latency), is headless-guarded
+  (Stop fires in `-p` sessions), and fails open per R6. Two concurrent
+  sessions in one repo may each block once for the same state (last-writer
+  wins on the fingerprint file) — accepted.

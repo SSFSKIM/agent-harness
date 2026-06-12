@@ -10,9 +10,10 @@ import sys
 import harness_lib as hl
 
 ALLOWED_IMPORTS = {
-    "argparse", "ast", "datetime", "difflib", "errno", "json", "os",
-    "pathlib", "re", "shlex", "shutil", "subprocess", "sys", "tempfile",
-    "textwrap", "time", "unittest", "harness_lib", "imprint_guard",
+    "argparse", "ast", "datetime", "difflib", "errno", "hashlib", "json",
+    "os", "pathlib", "re", "shlex", "shutil", "subprocess", "sys",
+    "tempfile", "textwrap", "time", "unittest", "harness_lib",
+    "imprint_guard",
 }
 ALLOWED_EVENTS = {"SessionStart", "UserPromptSubmit", "PreCompact", "SessionEnd",
                   "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"}

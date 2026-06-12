@@ -44,6 +44,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/tidy_stop.py\"",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }

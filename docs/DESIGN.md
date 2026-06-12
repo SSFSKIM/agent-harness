@@ -36,3 +36,6 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 - hooks.json is wiring only; all logic in scripts. Hook scripts: parse stdin
   JSON, guard headless, delegate, exit 0 (never break the user's session —
   fail open, log to state dir).
+- Exception — gate hooks: a hook whose job is corrective feedback
+  (tidy_stop) may exit 2 to feed FAIL/FIX lines back to the agent, but it
+  must be loop-guarded (R11) and still fail open on its own errors.
