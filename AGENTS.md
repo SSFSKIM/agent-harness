@@ -53,6 +53,8 @@ Deep truth lives in `docs/` — follow the pointers.
   rule or a lint.
 - **Not in the repo = does not exist.** Decisions made in chat must end up in
   `docs/` or `docs/memory/` (imprint hooks do this; verify when in doubt).
+- **Negative space.** Commands/scripts not named in this map or a skill are
+  out of scope for routine work — do not run them ad hoc.
 
 ## Porting
 

@@ -44,3 +44,11 @@ Deep truth lives in `docs/` — follow the pointers.
   commit; everything else is fix-forward via the tech-debt tracker.
 - **Feedback twice → promote.** A repeated human correction becomes a doc
   rule or a lint.
+
+## Mandatory skill usage
+
+<!-- FILL: repo-local skills in .claude/skills/ that sessions MUST use and
+when — at minimum a `verify` skill encoding this repo's check order. -->
+
+Commands not listed in this file or in a mandatory skill are out of scope
+for routine work — do not run them ad hoc.

@@ -21,8 +21,9 @@ needs them in step 3.
 
 Idempotent — seeded files are never overwritten (CREATE/SKIP per path);
 `.gitignore` is append-only; the component inventory is (re)generated.
-Creates the docs tree, seed grounding docs, memory bootloader, and the
-CLAUDE.md→AGENTS.md pointer. New repo: `git init` first.
+Creates the docs tree, seed grounding docs, memory bootloader, the
+CLAUDE.md→AGENTS.md pointer, and a `.git/hooks/pre-commit` gate hook.
+New repo: `git init` first.
 
 ## 3. Write the map (judgment)
 
@@ -47,7 +48,18 @@ hand-written code" are policy, not mechanics. Confirm which rules the host
 adopts, prune or amend, then treat survivors as law. RELIABILITY/SECURITY
 seeds grow later via feedback-twice→promote.
 
-## 6. Verify GREEN
+## 6. Instance skills & app verification (judgment)
+
+The machine's skills are generic; the host's own procedures live in
+`.claude/skills/<name>/SKILL.md` (instance layer — travels with the repo).
+
+- Always: create a `verify` skill encoding this repo's full verification
+  order (build → checks → tests, with barriers) so sessions never guess it.
+  Wire it into AGENTS.md under "Mandatory skill usage".
+- Runnable app: also create a boot/observe skill (run one instance, read its
+  logs/output/UI) — agents must be able to SEE the app to validate work.
+
+## 7. Verify GREEN
 
     python3 "$PLUGIN/scripts/check.py" --root <host-repo-root>
 
@@ -58,7 +70,7 @@ Tests: with no `tests/` dir the step is skipped; a host with its own suite
 wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 -q" python3 ... check.py`) — the default only understands unittest discovery.
 
-## 7. Write back, commit, hand off
+## 8. Write back, commit, hand off
 
 - Fill `docs/memory/progress/current.md` with the host's real state (it
   ships with FILL markers).
