@@ -41,6 +41,11 @@ SEEDS = (  # (template, destination relative to host root)
 CATEGORY_INDEXES = ("adr", "knowledge", "openq", "limitations")
 TOP_INDEXES = ("product-specs", "references")  # docs/<cat>/index.md
 GITIGNORE_LINES = (".claude/harness/",)
+# Forms by which a host may already blanket-ignore all of .claude/ — then
+# .claude/harness/ runtime state is covered, but instance skills under
+# .claude/skills/ won't travel without `git add -f`.
+CLAUDE_IGNORE_FORMS = frozenset(
+    {".claude", ".claude/", "/.claude", "/.claude/", ".claude/*"})
 HOOK_MARKER = "# agent-harness gate"
 
 
@@ -123,7 +128,15 @@ def git_hook(root, plugin, log):
 def gitignore(root, log):
     gi = root / ".gitignore"
     existing = gi.read_text(encoding="utf-8") if gi.exists() else ""
-    missing = [l for l in GITIGNORE_LINES if l not in existing.splitlines()]
+    lines = {l.strip() for l in existing.splitlines()}
+    if lines & CLAUDE_IGNORE_FORMS:
+        # Host already ignores all of .claude/: runtime state is covered, but
+        # instance skills (.claude/skills/) then need `git add -f` to travel.
+        # Surface it at port time; don't append a redundant ignore line.
+        log("NOTE   host ignores .claude/ — `git add -f` instance skills under "
+            ".claude/skills/ so they travel (.claude/harness/ already covered)")
+        return
+    missing = [l for l in GITIGNORE_LINES if l not in lines]
     if not missing:
         return
     if existing and not existing.endswith("\n"):

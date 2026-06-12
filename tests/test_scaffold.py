@@ -69,6 +69,21 @@ class TestScaffold(unittest.TestCase):
         gi2 = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertEqual(gi2.count(".claude/harness/"), 1)
 
+    def test_gitignore_broad_claude_ignore_notes_no_redundant_append(self):
+        # Host already ignores all of .claude/: scaffold must not append a
+        # redundant .claude/harness/ line, and must warn that instance skills
+        # need `git add -f` to travel.
+        import tempfile as _tf
+        with _tf.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".gitignore").write_text(".venv/\n.claude/\n", encoding="utf-8")
+            logs = []
+            scaffold.scaffold(root, PLUGIN, logs.append)
+            gi = (root / ".gitignore").read_text(encoding="utf-8")
+            self.assertEqual(gi.count(".claude/harness/"), 0)
+            self.assertTrue(any(l.startswith("NOTE") and "git add -f" in l
+                                for l in logs), logs)
+
     def test_git_hook_installed_and_rewritten_when_ours(self):
         (self.root / ".git" / "hooks").mkdir(parents=True)
         scaffold.scaffold(self.root, PLUGIN, lambda _: None)

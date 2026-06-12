@@ -48,6 +48,15 @@ owner: dreamer
      AGENTS.md split). Fixed: step 3 now branches — additive graft (AGENTS.md
      canonical, CLAUDE.md keeps content + pointer header, relocate only
      duplication) for such hosts; declare pre-existing trees legacy.
+- 2026-06-13: post-port harness polish (3 more findings from the Lingual run,
+  all fix-forward, 62 tests green): harness-init step 7 FILL grep scoped to
+  `*.md` (data files like CSV legitimately contain the substring); step 6 +
+  `templates/verify-skill.md` make the instance `verify` skill turnkey and
+  document that `.claude/`-ignoring hosts need `git add -f` for skills to
+  travel; scaffold detects a blanket `.claude/` ignore → emits a NOTE instead
+  of a redundant ignore line. Structural tension (gitignored runtime +
+  must-travel skills both under `.claude/`) logged to the tracker.
 - Next: (a) optionally migrate a wave of Lingual's declared legacy trees into
   the convention; (b) open tracker items still pending — threshold-VALUE
-  tuning + HARNESS_LINT_CMD (G3), imprint child unscoped Write (path-scoping).
+  tuning + HARNESS_LINT_CMD (G3), imprint child unscoped Write (path-scoping),
+  cleaner `.claude/` runtime/skills split.

@@ -73,17 +73,24 @@ The machine's skills are generic; the host's own procedures live in
 
 - Always: create a `verify` skill encoding this repo's full verification
   order (build → checks → tests, with barriers) so sessions never guess it.
-  Wire it into AGENTS.md under "Mandatory skill usage".
+  Start from `templates/verify-skill.md` (copy → fill the FILL markers with the
+  host's real commands). Wire it into AGENTS.md under "Mandatory skill usage".
 - Runnable app: also create a boot/observe skill (run one instance, read its
   logs/output/UI) — agents must be able to SEE the app to validate work.
+- **Make them travel.** `.claude/skills/` only travels if it's tracked. Hosts
+  that blanket-ignore `.claude/` (scaffold logs a NOTE when it detects this)
+  drop instance skills silently — `git add -f .claude/skills/<name>` to track
+  them, matching how the host already tracks any existing instance assets.
 
 ## 7. Verify GREEN
 
     python3 "$PLUGIN/scripts/check.py" --root <host-repo-root>
 
 Iterate on FAILs — every message carries its own FIX (`harness-lint` skill).
-Then confirm no marker survived: `grep -rn "FILL" <host-root>/AGENTS.md
-<host-root>/ARCHITECTURE.md <host-root>/docs/` must print nothing.
+Then confirm no template marker survived: `grep -rn --include="*.md" "FILL"
+<host-root>/AGENTS.md <host-root>/ARCHITECTURE.md <host-root>/docs/` must print
+nothing. (Scope to `*.md` — markers only live in markdown; a bare grep also
+hits data files like CSV/JSON that legitimately contain the substring.)
 Tests: with no `tests/` dir the step is skipped; a host with its own suite
 wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 -q" python3 ... check.py`) — the default only understands unittest discovery.
