@@ -61,6 +61,25 @@ class TestScaffold(unittest.TestCase):
         gi2 = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertEqual(gi2.count(".claude/harness/"), 1)
 
+    def test_git_hook_installed_and_idempotent(self):
+        (self.root / ".git" / "hooks").mkdir(parents=True)
+        scaffold.scaffold(self.root, PLUGIN, lambda _: None)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        self.assertTrue(hook.exists())
+        self.assertTrue(hook.stat().st_mode & 0o111)
+        self.assertIn("check.py", hook.read_text(encoding="utf-8"))
+        logs = []
+        scaffold.scaffold(self.root, PLUGIN, logs.append)
+        self.assertTrue(any("SKIP" in l and "pre-commit" in l for l in logs))
+
+    def test_foreign_pre_commit_never_overwritten(self):
+        hooks = self.root / ".git" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "pre-commit").write_text("#!/bin/sh\necho custom\n")
+        scaffold.scaffold(self.root, PLUGIN, lambda _: None)
+        self.assertEqual((hooks / "pre-commit").read_text(),
+                         "#!/bin/sh\necho custom\n")
+
     def test_fresh_host_is_lint_green(self):
         env = dict(os.environ)
         env["CLAUDE_PROJECT_DIR"] = str(self.root)

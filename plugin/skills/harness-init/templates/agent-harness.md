@@ -16,6 +16,8 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   root. The SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
 - Gate: `python3 <plugin>/scripts/check.py --root <this-repo-root>` must be
   GREEN before every commit. The `harness-lint` skill interprets failures.
+- The gate is mechanical: scaffold installs `.git/hooks/pre-commit` running
+  it (`--no-verify` only for emergencies — fix forward right after).
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
   `HARNESS_TEST_CMD="pytest -q"`); default is unittest discovery when a
   `tests/` directory exists, skipped otherwise.

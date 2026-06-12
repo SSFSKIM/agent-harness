@@ -39,6 +39,7 @@ SEEDS = (  # (template, destination relative to host root)
 CATEGORY_INDEXES = ("adr", "knowledge", "openq", "limitations")
 TOP_INDEXES = ("product-specs", "references")  # docs/<cat>/index.md
 GITIGNORE_LINES = (".claude/harness/",)
+HOOK_MARKER = "# agent-harness gate"
 
 
 def components_table(plugin):
@@ -85,7 +86,33 @@ def scaffold(root, plugin, log):
         seed(templates, "category-index.md", root / rel, rel,
              {**subs, "CATEGORY": cat}, log)
     gitignore(root, log)
+    git_hook(root, plugin, log)
     inventory(root, plugin, log)
+
+
+def git_hook(root, plugin, log):
+    """Install .git/hooks/pre-commit running the check gate.
+
+    .git/hooks is unversioned: absolute paths are machine-local and
+    regenerable by rerunning scaffold. Never overwrites a foreign hook.
+    """
+    hooks_dir = root / ".git" / "hooks"
+    if not hooks_dir.is_dir():
+        log("SKIP   .git/hooks/pre-commit (not a git repo)")
+        return
+    hook = hooks_dir / "pre-commit"
+    if hook.exists():
+        ours = HOOK_MARKER in hook.read_text(encoding="utf-8", errors="ignore")
+        log(f"SKIP   .git/hooks/pre-commit ({'ours' if ours else 'foreign hook'} exists)")
+        return
+    gate = (Path(plugin) / "scripts" / "check.py").resolve()
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"{HOOK_MARKER} — regenerate by rerunning scaffold.py\n"
+        f'exec python3 "{gate}" --root "{root.resolve()}"\n',
+        encoding="utf-8")
+    hook.chmod(0o755)
+    log("CREATE .git/hooks/pre-commit")
 
 
 def gitignore(root, log):
