@@ -1,0 +1,101 @@
+---
+status: active
+last_verified: 2026-06-13
+owner: harness
+base_commit: 35deac5df7fd5efd08d289ba865f95d29e360322
+---
+# Architecture-setter: agent → skill, output FORM-routed
+
+## Goal
+A repo's architecture & taste enforcement is **set up by a skill the main agent
+follows** (with the repo's full context), not by a dispatched persona — and that
+skill routes each concern to its right enforcement **FORM**: a deterministic
+**lint** for mechanical invariants (always-true, machine-checkable, costly if
+missed — e.g. dependency direction), a host **guide-skill** for methodology (how
+to develop respecting the architecture — no single frozen answer), persona
+review or fix-forward otherwise. Terms: *FORM* = the medium an invariant is
+enforced through; *mechanical invariant* = a property a script can decide and
+that one bad line silently breaks; *methodology* = how-to-work guidance that
+needs judgment, not a frozen rule; *guide-skill* = a host `.claude/skills/` skill
+that encodes that methodology. Demonstrable:
+
+1. `plugin/skills/architecture-setup/SKILL.md` exists, the gate is GREEN, and it
+   triggers on setup language; `plugin/agents/architecture-setter.md` is gone and
+   **no live doc or skill references the old agent** (`grep -rl architecture-setter`
+   over the plugin + live docs returns only this plan's history).
+2. `harness-init` step 7 **runs the architecture-setup skill**, not a Task
+   dispatch of a persona.
+3. On the live Lingual host, the skill's method produces a **host guide-skill**
+   encoding a methodology invariant a lint cannot capture (e.g. the safe
+   procedure for touching a dual-write/read-flag persistence seam) — proving the
+   skill-FORM output the way the locale L1 lint proved the lint-FORM. Committed to
+   the `harness-init` branch.
+
+## Context
+Follows the host-taste-setter plan (the setter axis: `.harness.json` host-lint
+substrate + the `architecture-setter` persona). Two findings drove this rework:
+(a) the setter only ever ran **inline** — it was already skill-shaped, never
+dispatched as an isolated agent; (b) the deeper design call (user + the fork
+analysis): enforcement has two media — a **skill enforces by instruction**
+(soft; the agent reads and follows it with judgment — right for *methodology*)
+and a **lint enforces by interception** (hard; the gate blocks regardless of
+what the agent looked at — right for *mechanical invariants*). The setter's
+*authoring process* is a procedure → it belongs in a skill. But the **output is
+not skill-only**: layered-architecture enforcement decomposes — "respect the
+layers while developing" is a guide-skill, "no upward import" is a lint (our own
+**S2** is exactly that dependency-direction lint). So this plan converts the
+medium (agent → skill) and adds **skill** as a first-class FORM the procedure
+can emit, without removing lint as the FORM for mechanical invariants.
+
+Why a skill (not an agent) for setup: the procedure must read the codebase
+deeply → it needs the main agent's full repo context, not an isolated subagent;
+its description triggers it at the right moment (harness-init / arch evolution);
+and a skill's soft-enforcement weakness does not bite a one-time *explicit setup
+action* (unlike a per-commit invariant, which is why those stay lints).
+review-arch stays an **agent**: review wants isolated, independent judgment;
+setup wants construction with full context. The asymmetry is intentional.
+
+## Milestones
+- [ ] M1 New `plugin/skills/architecture-setup/` skill: lean imperative SKILL.md
+  (third-person trigger description) + `references/` (the full FORM rubric, the
+  `FAIL…FIX:` authoring contract, the lint skeleton pointer, the guide-skill
+  pattern). Content converted from `architecture-setter.md`'s Method, with
+  **skill** added as a FORM. Follows skill-dev best-practices (progressive
+  disclosure; SKILL.md ≤ ~2k words). Gate GREEN.
+- [ ] M2 Remove `plugin/agents/architecture-setter.md`; rewire `harness-init`
+  step 7 (run the skill, not dispatch a persona); update every LIVE reference —
+  ARCHITECTURE invariant 7 + data-flow note, DESIGN (host-vs-machine rule +
+  constructive-personas note), SECURITY T9, AGENTS porting line, agent-harness.md
+  (template + self-host components table), QUALITY_SCORE host-enforcement row;
+  regenerate the component inventory. Gate GREEN.
+- [ ] M3 Demonstrate the skill-FORM on the live Lingual host (`harness-init`
+  branch): run the architecture-setup method, author one host guide-skill under
+  `.claude/skills/` encoding a methodology invariant, `git add -f`, gate GREEN,
+  commit. (The lint-FORM was proven by L1; this proves the skill-FORM.)
+- [ ] M4 Completion gate: self-review + review-arch + review-reliability until
+  SATISFIED. (review-security skipped — this diff touches skills/agents/docs, not
+  the live exec surface — hooks/`.harness.json`/`.harnessignore`.)
+
+## Progress log
+- 2026-06-13: plan created from the user decision + fork synthesis (decompose,
+  don't replace; setter's medium → skill, output stays FORM-routed).
+
+## Surprises & discoveries
+
+## Decision log
+- 2026-06-13: agent → skill because setup needs the main agent's full repo
+  context, triggers at the right moment, and soft-enforcement doesn't bite a
+  one-time explicit action. The setter only ever ran inline = already a skill.
+- 2026-06-13: NOT a replacement of lint by skill. The skill's output is
+  FORM-routed: mechanical invariant → lint (S2-style); methodology → guide-skill.
+  Decompose, not replace (preserves the deterministic floor at big-codebase
+  scale, where pattern-replication drift is exactly the blog's warning).
+- 2026-06-13: review-arch stays an agent (isolated judgment); only setup becomes
+  a skill (construction with full context). doc-gardener/dreamer stay agents for
+  now (bounded memory/docs scope) — revisit separately, out of scope here.
+- 2026-06-13: security review skipped for this plan's gate per the 2026-06-13
+  scoping — no change to hooks/`.harness.json`/`.harnessignore`.
+
+## Feedback (from completion gate)
+
+## Outcomes & retrospective
