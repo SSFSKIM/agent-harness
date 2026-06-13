@@ -82,27 +82,26 @@ The machine's skills are generic; the host's own procedures live in
   drop instance skills silently — `git add -f .claude/skills/<name>` to track
   them, matching how the host already tracks any existing instance assets.
 
-## 7. Mechanize host invariants (the setter — judgment)
+## 7. Mechanize host invariants (architecture-setup skill — judgment)
 
-Docs *map* the architecture; this step *enforces* it. Dispatch the
-`architecture-setter` persona (Task tool) to derive THIS repo's layer law and
-invariants and mechanize the ones worth enforcing into the gate:
+Docs *map* the architecture; this step *enforces* it. Run the
+`architecture-setup` skill to derive THIS repo's layer law and invariants and
+mechanize each into its right FORM:
 
-- The setter classifies each invariant by FORM — deterministic lint
-  (always-true, mechanically checkable, costly if missed), LLM-judge (semantic;
-  deferred — recorded as a `review-*`/`openq` concern, never faked with a
-  brittle lint), persona review, or fix-forward — and authors the deterministic
-  ones as host lints under `.claude/lints/` (template:
-  `templates/host-lint.py`), wired via `<root>/.harness.json` `lint_cmd`. The
-  harness hardcodes no app-code rule; the lint set is this repo's output. Zero
-  lints is a valid answer for a low-risk repo.
+- The skill classifies each invariant — **deterministic lint** (mechanical,
+  always-true, costly if missed → `.claude/lints/`, template
+  `templates/host-lint.py`, wired via `<root>/.harness.json` `lint_cmd`),
+  **guide-skill** (methodology → `.claude/skills/`), judge (semantic; deferred),
+  or fix-forward. The harness hardcodes no app-code rule; the lint AND
+  guide-skill sets are this repo's output (zero of either is valid).
 - Threshold defaults are overridable, not mandates: if the host's map or pages
   legitimately exceed a harness default (e.g. a 295-line AGENTS.md), set
   `.harness.json` `size_limits` / `default_size_limit` / `stale_days` instead of
   fighting D1/D7/D4.
 - `.harness.json` + `.claude/lints/` are executable config that run on every
-  commit (SECURITY.md T9) — `git add -f` them if the host blanket-ignores
-  `.claude/`, and review changes to them as code.
+  commit (SECURITY.md T9) — `git add -f` them (and any authored
+  `.claude/skills/`) if the host blanket-ignores `.claude/`, and review changes
+  to the executable config as code.
 
 ## 8. Verify GREEN
 

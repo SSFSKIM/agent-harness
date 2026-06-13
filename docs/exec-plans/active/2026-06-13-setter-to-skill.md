@@ -56,13 +56,13 @@ review-arch stays an **agent**: review wants isolated, independent judgment;
 setup wants construction with full context. The asymmetry is intentional.
 
 ## Milestones
-- [ ] M1 New `plugin/skills/architecture-setup/` skill: lean imperative SKILL.md
+- [x] M1 New `plugin/skills/architecture-setup/` skill: lean imperative SKILL.md
   (third-person trigger description) + `references/` (the full FORM rubric, the
   `FAIL…FIX:` authoring contract, the lint skeleton pointer, the guide-skill
   pattern). Content converted from `architecture-setter.md`'s Method, with
   **skill** added as a FORM. Follows skill-dev best-practices (progressive
   disclosure; SKILL.md ≤ ~2k words). Gate GREEN.
-- [ ] M2 Remove `plugin/agents/architecture-setter.md`; rewire `harness-init`
+- [x] M2 Remove `plugin/agents/architecture-setter.md`; rewire `harness-init`
   step 7 (run the skill, not dispatch a persona); update every LIVE reference —
   ARCHITECTURE invariant 7 + data-flow note, DESIGN (host-vs-machine rule +
   constructive-personas note), SECURITY T9, AGENTS porting line, agent-harness.md
@@ -79,6 +79,14 @@ setup wants construction with full context. The asymmetry is intentional.
 ## Progress log
 - 2026-06-13: plan created from the user decision + fork synthesis (decompose,
   don't replace; setter's medium → skill, output stays FORM-routed).
+- 2026-06-13: M1+M2 done (one commit — D9 coverage + inventory couple them).
+  New `architecture-setup` skill (SKILL.md ≤2k words, imperative, third-person
+  trigger desc; references/forms.md + authoring.md per progressive disclosure).
+  Agent removed; harness-init step 7 runs the skill; ARCHITECTURE inv7, DESIGN
+  (host-vs-machine + a new "construction needing full context = skill, not
+  persona" rule), SECURITY T9, AGENTS porting, both agent-harness.md, QUALITY_
+  SCORE updated; inventory regen. Gate GREEN, 82 tests. Plugin has zero live
+  refs to the old agent (only historical plan/tracker/quality-score records).
 
 ## Surprises & discoveries
 

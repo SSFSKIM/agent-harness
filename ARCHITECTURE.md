@@ -52,12 +52,14 @@ point rightward at skills — the most actionable instruction wins.
    (S1–S7, D1–D10) enforce only the harness's OWN structure (`plugin/`,
    `docs/`, and the root map docs `AGENTS.md`/`ARCHITECTURE.md`). A host's
    app-code invariants are not hardcoded by the machine —
-   the `architecture-setter` persona derives them per-repo and authors
-   deterministic lints under `.claude/lints/`, wired into the gate via
-   `<root>/.harness.json` `lint_cmd` (`hl.gate_config`; `check.py` runs it as
-   the `host-lint` step). The harness ships the substrate (the gate step, the
-   `FAIL … FIX:` contract, the override knobs) and the authoring role — never
-   the rules; the lint set is the host's output (zero is valid). Harness
+   the `architecture-setup` **skill** (run with the repo's full context) derives
+   them per-repo and routes each by FORM: **lints** under `.claude/lints/` for
+   mechanical invariants (wired into the gate via `<root>/.harness.json`
+   `lint_cmd` — `hl.gate_config`; `check.py` runs it as the `host-lint` step),
+   **guide-skills** under `.claude/skills/` for methodology. The harness ships
+   the substrate (the gate step, the `FAIL … FIX:` contract, the override knobs)
+   and the authoring method — never the rules; the lint and skill sets are the
+   host's output (zero of either is valid). Harness
    threshold defaults (D1 120 / D7 400 / D4 30d / MEMORY 60) are per-repo
    overridable via the same file (`size_limits` / `default_size_limit` /
    `stale_days`); absent → defaults unchanged. `lint_cmd`/`test_cmd` are
