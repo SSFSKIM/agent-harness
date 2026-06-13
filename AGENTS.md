@@ -16,8 +16,10 @@ Deep truth lives in `docs/` — follow the pointers.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
 5. **Review.** Declaring an ExecPlan complete triggers the completion gate:
-   self-review the diff first, then dispatch review-arch, review-reliability,
-   review-security in parallel; iterate until all are satisfied (`execplan` skill).
+   self-review the diff first, then dispatch review-arch + review-reliability in
+   parallel (review-security only when the diff touches the live exec surface —
+   hooks / `.harness.json` / `.harnessignore`; the rest of the threat model is
+   dormant with the disabled memory loop); iterate until satisfied (`execplan`).
 
 ## Map
 

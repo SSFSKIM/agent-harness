@@ -86,8 +86,10 @@ point rightward at skills — the most actionable instruction wins.
    `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
    knowledge/limitations/openq/adr directly → `check.py` green terminates.
 4. **REVIEW** — `execplan` completion gate → self-review → review-arch /
-   review-reliability / review-security (each grounded 1:1 in its doc) →
-   iterate until satisfied.
+   review-reliability (each grounded 1:1 in its doc) + review-security only when
+   the diff touches the live exec surface (hooks / `.harness.json` /
+   `.harnessignore`; the rest of SECURITY.md is dormant with the disabled memory
+   loop — deferred 2026-06-13) → iterate until satisfied.
 5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
    on the dirty tree; FAIL blocks once per state with FIX lines (R11).
    Commits are also gated mechanically by the scaffold-installed

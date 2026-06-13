@@ -23,12 +23,16 @@ Method and template live in `docs/PLANS.md` — read it first.
 2. **Self-review first**: read the full diff
    (`git diff <base_commit from plan frontmatter>..HEAD`) against the plan's
    Goal; fix what you would flag.
-3. Dispatch all three personas **in parallel** (Task tool), each with:
+3. Dispatch the review personas **in parallel** (Task tool): **review-arch** and
+   **review-reliability** always; add **review-security** only when the diff
+   touches the live exec surface — `hooks/`, `.harness.json` / `.claude/lints/`
+   (host commands that run on commit), or `docs/.harnessignore` (lint scoping).
+   (The rest of the threat model guards the disabled memory loop — SECURITY.md is
+   deferred; see its status note.) Each persona prompt:
    "Review the diff for ExecPlan <slug>. Run `git diff <base_commit>..HEAD`
    (substitute the actual SHA from the plan's frontmatter) to see it. Read
    your grounding doc first. Output P1/P2 findings with file:line and a
    Verdict."
-   - review-arch · review-reliability · review-security
    (Task tool subagent_type is plugin-namespaced: `agent-harness:review-arch` etc.)
 4. Process findings: P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
