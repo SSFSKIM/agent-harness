@@ -39,6 +39,20 @@ class TestGenInventory(unittest.TestCase):
     def test_check_fails_when_missing(self):
         self.assertFalse(gen_inventory.check(self.plugin, self.out))
 
+    def test_inventory_check_required_for_self_host(self):
+        self.assertTrue(gen_inventory.check_required(Path(self._tmp.name), self.plugin))
+
+    def test_inventory_check_advisory_for_external_plugin_by_default(self):
+        repo = Path(self._tmp.name) / "host"
+        repo.mkdir()
+        self.assertFalse(gen_inventory.check_required(repo, self.plugin))
+
+    def test_inventory_check_strict_for_external_plugin_when_opted_in(self):
+        repo = Path(self._tmp.name) / "host"
+        repo.mkdir()
+        self.assertTrue(gen_inventory.check_required(
+            repo, self.plugin, {"component_inventory": "strict"}))
+
 
 if __name__ == "__main__":
     unittest.main()

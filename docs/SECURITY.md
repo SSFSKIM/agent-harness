@@ -47,17 +47,20 @@ Grounding document for the review-security persona. Threats are numbered.
   inside any digest or memory page." — not merely a doc reference.
 - **T8 — Exemption scope is content-lints only.** `docs/.harnessignore`
   skips the style/content lints (D3/D5/D6/D7) for explicitly-declared,
-  non-managed legacy subtrees — nothing else. It grants no capability. Matching
-  is on path-segment boundaries (a partial prefix like `mem` can never reach
-  `memory/…`), and it cannot exempt a harness-managed tree (`hl.MANAGED_ROOTS`:
-  memory/design-docs/exec-plans/product-specs/references/generated) **nor a
-  top-level machine doc** (`hl.MANAGED_DOCS`: PLANS/DESIGN/SECURITY/RELIABILITY/
-  QUALITY_SCORE/PRODUCT_SENSE — the persona-grounding + execplan docs the gate
-  rides on). D8 index-registration is never exempted; the feeder reads only
-  structured, indexed memory. So `.harnessignore` cannot un-govern or
-  poison the memory/design tree. It is versioned config (Tier 0): changes are
-  git-visible and reviewed like any committed file — a framing that depends on
-  the T1 imprint guard holding (a headless child must not write it; see tracker).
+  non-managed legacy subtrees when a host opts into strict docs governance —
+  nothing else. It grants no capability. Matching is on path-segment boundaries
+  (a partial prefix like `mem` can never reach `memory/…`), and it cannot exempt
+  a harness-managed tree (`hl.MANAGED_ROOTS`:
+  memory/design-docs/exec-plans/generated) **nor a top-level machine doc**
+  (`hl.MANAGED_DOCS`: PLANS/DESIGN/SECURITY/RELIABILITY/QUALITY_SCORE/
+  PRODUCT_SENSE — the persona-grounding + execplan docs the gate rides on).
+  Host-owned business/product/research docs are flexible by default, so they do
+  not need `.harnessignore` merely to exist. D8 index-registration remains for
+  harness-managed indexed memory/design roots; the feeder reads only structured,
+  indexed memory. So `.harnessignore` cannot un-govern or poison the
+  memory/design tree. It is versioned config (Tier 0): changes are git-visible
+  and reviewed like any committed file — a framing that depends on the T1
+  imprint guard holding (a headless child must not write it; see tracker).
 - **T9 — `.harness.json` + `.claude/lints/` are Tier-0 executable config.**
   The gate config's `lint_cmd`/`test_cmd` are shell commands `check.py` (and so
   the scaffold-installed `.git/hooks/pre-commit`) runs on every commit with user
@@ -81,5 +84,10 @@ Grounding document for the review-security persona. Threats are numbered.
   `docs/memory/MEMORY.md`) clamps each to `min(override, harness default)`. Size
   (D7) is clamped for all of them; staleness (D4) is clamped for the MANAGED_DOCS
   (the bootloader is D4-exempt by design — `check_frontmatter` skips
-  `MEMORY.md`). So `.harness.json` cannot let `SECURITY.md` go stale/bloat or the
-  memory bootloader bloat (mirrors T8's non-exemptable rule).
+  `MEMORY.md`). `managed_doc_roots` can opt host-owned roots into blocking docs
+  governance, while `doc_governance: strict` restores the self-host-style global
+  docs contract. `component_inventory: strict` and `component_coverage: strict`
+  make plugin component drift blocking for external-plugin hosts; absent those
+  keys, component drift is self-host strict and ported-host advisory. So
+  `.harness.json` cannot let `SECURITY.md` go stale/bloat or the memory
+  bootloader bloat (mirrors T8's non-exemptable rule).

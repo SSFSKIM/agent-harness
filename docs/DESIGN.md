@@ -27,6 +27,17 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   and WHO authors it (ARCHITECTURE invariant 7). A universal hardcoded rule
   applied to every host is the lint-layer form of the monolithic-AGENTS.md
   anti-pattern.
+- Docs governance is tiered, not global. Machine-critical docs and
+  harness-managed roots (`design-docs`, `exec-plans`, `memory`) stay strict by
+  default because the machine reads them. Host-owned business/product/research
+  docs under `docs/` are flexible by default; `harness-init` should shape them
+  into natural project-specific roots and only opt a root into blocking
+  governance (`.harness.json` `managed_doc_roots` or `doc_governance: strict`)
+  when the host actually wants that contract.
+- Plugin component drift is self-host strict and ported-host advisory by
+  default. A host that wants plugin inventory or component mention coverage to
+  block commits opts in with `.harness.json` `component_inventory: strict` or
+  `component_coverage: strict`.
 
 ## Skills
 - A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
@@ -40,6 +51,10 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 ## Agents (personas)
 - One persona ↔ one grounding doc, 1:1 (lint S5). Personas must not invent
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
+  Grounding docs are **taste/contract authority**, not blinders: review personas
+  may still raise demonstrable correctness, reliability, or security bugs when
+  the diff, tests, or runtime evidence prove them. A P1 needs either a cited
+  written rule or concrete bug evidence.
 - Output contract — **review** personas (review-arch/reliability/security):
   P1 (blocks) / P2 (fix-forward) / Verdict. **Constructive** personas
   (doc-gardener, dreamer) instead report their work product (what they

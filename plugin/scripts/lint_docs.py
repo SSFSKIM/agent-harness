@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Taste lints for the docs knowledge base.
+"""Taste lints for the tiered docs knowledge base.
 
 Every FAIL message includes a FIX instruction: lint output is injected into
 agent context, so errors double as corrective signals (core-beliefs).
+Self-host is strict; ported hosts keep machine-critical docs strict while
+project-specific docs stay host-owned unless opted into governance.
 Exit 0 = green; exit 1 = at least one FAIL.
 """
 import datetime
@@ -16,6 +18,13 @@ FM_REQUIRED = ("status", "last_verified", "owner")
 INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/adr", "memory/knowledge", "memory/openq",
                 "memory/limitations")
+HOST_INDEXED_DIRS = ("design-docs", "memory/adr", "memory/knowledge",
+                     "memory/openq", "memory/limitations")
+# Relaxed-mode content-governed roots. `generated/` is intentionally absent: it
+# is content-lint-exempt (FM_EXEMPT/SIZE_EXEMPT) and guarded from .harnessignore
+# un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it. Do not
+# "reconcile" the two tuples; the one-element divergence is by design.
+HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory")
 SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
 DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
@@ -54,6 +63,51 @@ def _exempt(p, docs, parts):
     return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in parts)
 
 
+def _strict_doc_governance(root, cfg=None, plugin=None):
+    cfg = cfg or {}
+    return hl.is_self_host(root, plugin) or cfg.get("doc_governance") == "strict"
+
+
+def _managed_roots(cfg=None):
+    """Docs-relative roots governed in relaxed host mode.
+
+    The harness owns the minimum substrate by default. Host/project-specific
+    roots (for example `business/` or `marketing/`) become governed only when
+    the host opts them in through `.harness.json` `managed_doc_roots`.
+    """
+    cfg = cfg or {}
+    roots = list(HOST_MANAGED_ROOTS)
+    extra = cfg.get("managed_doc_roots")
+    if isinstance(extra, list):
+        for item in extra:
+            if not isinstance(item, str):
+                continue
+            segs = [seg for seg in item.split("/") if seg and seg != "."]
+            norm = "/".join(segs)
+            if norm and norm not in roots:
+                roots.append(norm)
+    return tuple(roots)
+
+
+def _machine_doc(p, root):
+    try:
+        rel = p.relative_to(root).as_posix()
+    except ValueError:
+        return False
+    return rel in MACHINE_DOCS or rel in PROTECTED_PATHS
+
+
+def _governed_doc(p, root, docs, cfg=None, plugin=None):
+    """Whether content-style lints should block on this docs/ page."""
+    if _strict_doc_governance(root, cfg, plugin):
+        return True
+    if _machine_doc(p, root):
+        return True
+    rel = p.relative_to(docs).as_posix()
+    return any(rel == x or rel.startswith(x.rstrip("/") + "/")
+               for x in _managed_roots(cfg))
+
+
 def check_entrypoints(root, errors, limits=None):
     limits = limits or SIZE_LIMITS
     cap = limits.get("AGENTS.md", SIZE_LIMITS["AGENTS.md"])
@@ -69,10 +123,12 @@ def check_entrypoints(root, errors, limits=None):
               "AGENTS.md is a map, not an encyclopedia: move detail into docs/ and link it.")
 
 
-def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
+def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, FM_EXEMPT + host) or p.name == "MEMORY.md":
+            continue
+        if not _governed_doc(p, root, docs, cfg):
             continue
         fm = hl.read_frontmatter(p)
         if fm is None:
@@ -100,9 +156,11 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
                       "Use ISO format YYYY-MM-DD.")
 
 
-def check_links(root, errors, host=()):
+def check_links(root, errors, host=(), cfg=None):
     docs = root / "docs"
-    targets = [p for p in hl.iter_md(docs) if not _exempt(p, docs, FM_EXEMPT + host)]
+    targets = [p for p in hl.iter_md(docs)
+               if not _exempt(p, docs, FM_EXEMPT + host)
+               and _governed_doc(p, root, docs, cfg)]
     for name in ("AGENTS.md", "ARCHITECTURE.md"):
         if (root / name).exists():
             targets.append(root / name)
@@ -117,10 +175,12 @@ def check_links(root, errors, host=()):
                       "Fix the relative path or create the target page.")
 
 
-def check_naming(root, errors, host=()):
+def check_naming(root, errors, host=(), cfg=None):
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, FM_EXEMPT + host):
+            continue
+        if not _governed_doc(p, root, docs, cfg):
             continue
         ok = (KEBAB.match(p.name) or p.name == "MEMORY.md"
               or (p.parent == docs and UPPER.match(p.name)))
@@ -129,12 +189,15 @@ def check_naming(root, errors, host=()):
                   "Rename to lowercase-kebab-case.md (top-level docs/ taste docs may be UPPERCASE.md).")
 
 
-def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT):
+def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT,
+                cfg=None):
     limits = limits or SIZE_LIMITS
     default_limit = _int_or(default_limit, DEFAULT_LIMIT)  # robust to direct calls
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, SIZE_EXEMPT + host):
+            continue
+        if not _governed_doc(p, root, docs, cfg):
             continue
         limit = _int_or(limits.get(p.name, default_limit), default_limit)
         if p.relative_to(root).as_posix() in PROTECTED_PATHS:
@@ -145,9 +208,10 @@ def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT)
                   "Split the page or move detail to a linked sub-page; bootloaders stay terse.")
 
 
-def check_indexes(root, errors):
+def check_indexes(root, errors, cfg=None):
     docs = root / "docs"
-    for cat in INDEXED_DIRS:
+    cats = INDEXED_DIRS if _strict_doc_governance(root, cfg) else HOST_INDEXED_DIRS
+    for cat in cats:
         d = docs / cat
         if not d.is_dir() or not any(d.glob("*.md")):
             continue
@@ -163,7 +227,11 @@ def check_indexes(root, errors):
                       f"Add `{f.name}` (with a one-line description) to docs/{cat}/index.md.")
 
 
-def check_coverage(root, errors, plugin):
+def check_coverage(root, errors, plugin, cfg=None):
+    cfg = cfg or {}
+    if not (_strict_doc_governance(root, cfg, plugin)
+            or cfg.get("component_coverage") == "strict"):
+        return
     names = []
     for sk in sorted((plugin / "skills").glob("*/SKILL.md")):
         names.append(sk.parent.name)
@@ -211,12 +279,12 @@ def main():
     errors = []
     check_entrypoints(root, errors, limits)
     check_machine_refs(root, errors)
-    check_frontmatter(root, errors, host, stale_days)
-    check_links(root, errors, host)
-    check_naming(root, errors, host)
-    check_sizes(root, errors, host, limits, default_limit)
-    check_indexes(root, errors)
-    check_coverage(root, errors, hl.plugin_root())
+    check_frontmatter(root, errors, host, stale_days, cfg)
+    check_links(root, errors, host, cfg)
+    check_naming(root, errors, host, cfg)
+    check_sizes(root, errors, host, limits, default_limit, cfg)
+    check_indexes(root, errors, cfg)
+    check_coverage(root, errors, hl.plugin_root(), cfg)
     for e in errors:
         print(e)
     print(f"lint_docs: {'OK' if not errors else str(len(errors)) + ' FAIL'}")

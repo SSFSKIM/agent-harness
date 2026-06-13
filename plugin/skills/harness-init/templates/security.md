@@ -6,7 +6,7 @@ owner: review-security
 # SECURITY.md
 
 Grounding document for the review-security persona. Threats are numbered;
-cite them in findings. This is a **seed** — grow it: every threat or
+cite relevant ones in findings. This is a **seed** — grow it: every threat or
 mitigation this repo learns becomes the next numbered entry.
 
 - **T1 — Transcript prompt injection.** Session transcripts and external

@@ -64,7 +64,22 @@ owner: dreamer
   lint-governed). Redesign captured in
   `docs/memory/openq/memory-loop-redesign.md`. ARCHITECTURE data flows +
   agent-harness.md (self-host + template) updated to say so.
+- 2026-06-13: flexible host governance maturity step implemented in active
+  ExecPlan `flexible-host-governance`: ported hosts now keep only
+  machine-critical docs + harness-managed roots strict by default; host-owned
+  project docs under `docs/` stay flexible unless opted into `.harness.json`
+  `managed_doc_roots` / `doc_governance: strict`. D9 component coverage now
+  defaults to self-host only (`component_coverage: strict` opt-in for ported
+  hosts), and generated component inventory is advisory for external-plugin
+  hosts unless `component_inventory: strict`. ExecPlans gained `review_level`
+  (`none`/`targeted`/`standard`/`full`);
+  review personas now treat grounding docs as taste/contract authority while
+  still allowing demonstrable bug findings. Negative-space command language was
+  replaced with preferred-path + promote-if-repeated guidance. Gate GREEN
+  (89 tests). Formal subagent review not dispatched in this environment because
+  subagent tools require explicit user authorization.
 - Next: (a) memory-loop redesign (openq) — the deferred sophistication;
   (b) optionally migrate a wave of Lingual's declared legacy trees;
-  (c) open tracker items — threshold-VALUE tuning + HARNESS_LINT_CMD (G3),
-  imprint child unscoped Write, cleaner `.claude/` runtime/skills split.
+  (c) complete review/close `flexible-host-governance` if subagent dispatch is
+  authorized; (d) open tracker items — imprint child unscoped Write, cleaner
+  `.claude/` runtime/skills split.

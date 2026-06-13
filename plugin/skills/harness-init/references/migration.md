@@ -1,8 +1,9 @@
 # Migrating an existing repo's docs into the harness convention
 
-Detailed playbook for harness-init step 4. Goal: every existing doc gets a
-home in the tree, passes the lints, and stays discoverable — without losing
-content or git history.
+Detailed playbook for harness-init step 4. Goal: machine-critical docs pass the
+harness contract, and existing host docs get a discoverable project-specific
+home without losing content or git history. Do not force every host into one
+universal taxonomy.
 
 ## Triage table
 
@@ -18,20 +19,23 @@ content or git history.
 | External API / service notes | `docs/references/` (llms.txt-style digests) |
 | Product / feature specs | `docs/product-specs/` |
 | Historical / superseded docs | Keep in place or move alongside successors; set `status: archived` (D4-exempt) |
+| Host-specific bodies of knowledge | Create/keep the natural root (`docs/business/`, `docs/marketing/`, `docs/curriculum/`, etc.); opt into blocking governance only when useful |
 
 ## Per-document procedure
 
-1. `git mv` (preserves history) to the destination; rename to
-   lowercase-kebab-case.md (D6).
+1. `git mv` (preserves history) to the destination when moving helps the
+   agent. For machine-critical and managed roots, rename to
+   lowercase-kebab-case.md (D6). For host-owned project roots, preserve
+   meaningful existing names unless the host opts the root into governance.
 2. Backfill frontmatter (D3): `status / last_verified / owner`.
    - `status: draft` for content believed current, `archived` for historical.
    - **Do not stamp `last_verified: <today>` blind.** The stamp asserts the
      page was checked against reality. Re-read the page; fix or trim what is
      wrong, then stamp. If not worth re-verifying now, mark `archived`.
    - `owner`: the team/agent accountable; `harness` as fallback.
-3. Register the page in its directory's `index.md` with a one-line
-   description (D8). Create the index from the category-index template if
-   the category was empty.
+3. Register managed pages in their directory's `index.md` with a one-line
+   description (D8). Host-owned project roots may use whatever index or README
+   shape makes the agent effective.
 4. Fix inbound links repo-wide (D5): grep the old path, update references.
 5. Pages over 400 lines (D7): split detail into linked sub-pages, or move to
    a size-exempt area only if it genuinely belongs there
@@ -62,6 +66,7 @@ content or git history.
 ## Wave strategy for big repos
 
 Do not block init on a full migration. Wave 1: scaffold + map + gate GREEN
-(possible with zero migrated docs). Wave 2+: triage highest-traffic docs
+(possible with zero migrated host docs). Wave 2+: triage highest-traffic docs
 first; add a tech-debt row per remaining batch so the gardener and future
-sessions keep pulling the thread.
+sessions keep pulling the thread. Use `.harness.json` `managed_doc_roots` only
+for roots where the host wants blocking frontmatter/naming/size/index behavior.

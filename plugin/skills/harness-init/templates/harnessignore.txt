@@ -1,4 +1,4 @@
-# docs/.harnessignore — legacy doc roots the content lints skip (D3/D5/D6/D7).
+# docs/.harnessignore — strict-mode legacy doc roots skipped by content lints.
 #
 # Docs-relative path prefixes, one per line. Matching is on path-segment
 # boundaries, so a trailing `/` is optional and forgiving: `business` and
@@ -6,15 +6,17 @@
 # `business-plan.md`. A bare filename matches one file (e.g. `README.md`).
 # `#` comments and blank lines are ignored.
 #
-# This is a MIGRATION BACKLOG, not a dumping ground: every line is a subtree
-# the harness does not yet govern. Govern-by-default holds — only what you list
-# here is skipped. Migrate a wave (frontmatter + kebab-case + index, or `git mv`
-# into the memory tree), then delete its line. Empty file = govern all of docs/.
+# This is a MIGRATION BACKLOG for hosts that opt into global docs governance
+# (`.harness.json` `doc_governance: strict`). Host-owned project docs are
+# flexible by default, so most hosts leave this empty. In strict mode, every
+# line is a subtree the harness does not yet govern. Migrate a wave
+# (frontmatter + kebab-case + index, or `git mv` into a managed tree), then
+# delete its line.
 #
 # Cannot exempt harness-managed trees (design-docs/ memory/ exec-plans/
-# product-specs/ references/ generated/) or top-level machine docs
+# generated/) or top-level machine docs
 # (PLANS/DESIGN/SECURITY/RELIABILITY/QUALITY_SCORE/PRODUCT_SENSE.md) — those
 # entries are ignored; the harness always governs its own tree.
 #
-# Fresh host: leave this empty. Ported host: harness-init lists pre-existing
-# docs/ subtrees here so the gate can reach GREEN on adoption.
+# Fresh host: leave this empty. Ported host: only list pre-existing docs/
+# subtrees here after choosing strict docs governance.

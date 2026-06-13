@@ -49,6 +49,21 @@ def plugin_root():
     return Path(__file__).resolve().parent.parent
 
 
+def is_self_host(root, plugin=None):
+    """True when the plugin machine lives inside the checked repo.
+
+    Self-host is the reference implementation: it may keep stricter internal
+    governance than a ported host whose plugin is loaded from elsewhere.
+    """
+    base = Path(root).resolve()
+    cand = Path(plugin).resolve() if plugin else plugin_root().resolve()
+    try:
+        cand.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
 def state_dir(root):
     """Gitignored runtime state (queues, locks, seen-sessions)."""
     d = Path(root) / ".claude" / "harness"
@@ -85,24 +100,23 @@ def iter_md(base):
 # so a host can't un-govern (and silently poison) the memory/design tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
 # (the persona grounding + execplan docs that the review gate itself rides on).
-MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
-                 "product-specs", "references")
+MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory")
 MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")
 
 
 def exempt_roots(root):
-    """Host-declared legacy doc subtrees the content lints skip.
+    """Host-declared strict-mode legacy doc subtrees content lints skip.
 
     Reads `<root>/docs/.harnessignore`: docs-relative path prefixes, one per
     line (a trailing `/` is optional — matching is on path-segment boundaries
     either way, so `business` and `business/` both mean the `business/` tree
     and neither touches a sibling `business-plan.md`). `#` comments and blanks
-    ignored. Absent/unreadable → () (fresh-host behavior unchanged; fail-open =
-    govern everything). The list is a migration backlog — it shrinks as legacy
-    docs adopt the convention. Entries naming a MANAGED_ROOT subtree or a
-    MANAGED_DOC are dropped: the harness governs its own tree regardless of
-    what a host writes here.
+    ignored. Absent/unreadable → (). The list is a migration backlog for hosts
+    that opt into `doc_governance: strict`; relaxed hosts usually do not need
+    it because project-specific docs are host-owned by default. Entries naming
+    a MANAGED_ROOT subtree or a MANAGED_DOC are dropped: the harness governs its
+    own tree regardless of what a host writes here.
     """
     try:
         # errors="replace" is the load-bearing guard against non-UTF8 bytes;
@@ -137,6 +151,10 @@ def gate_config(root):
       - `size_limits` (dict name→int) — merged over D1/D7 line caps.
       - `default_size_limit` (int) — D7 default cap.
       - `stale_days` (int) — D4 staleness window.
+      - `doc_governance` ("strict") / `managed_doc_roots` (list[str]) —
+        opt host-owned docs into blocking docs governance.
+      - `component_inventory` / `component_coverage` ("strict") — make plugin
+        component inventory/coverage blocking for external-plugin hosts.
 
     Parse-don't-validate (core-belief #6): any read/parse error, or a non-object
     top level, returns `{}` — fail-open to harness defaults, exactly like
