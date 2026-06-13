@@ -4,7 +4,7 @@
 
 | Type | Name | Description / wiring | Source |
 |---|---|---|---|
-| skill | architecture-setup | This skill should be used to set up or revise a repo's architecture & taste enforcement — at harness | plugin/skills/architecture-setup/SKILL.md |
+| skill | architecture-setup | This skill should be used to "write ARCHITECTURE.md", "create an architecture map", "set up architec | plugin/skills/architecture-setup/SKILL.md |
 | skill | docs-tree | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, applies fro | plugin/skills/docs-tree/SKILL.md |
 | skill | dream | Use periodically (or after several work sessions) to consolidate memory — dispatches the dreamer age | plugin/skills/dream/SKILL.md |
 | skill | execplan | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory changes) or wh | plugin/skills/execplan/SKILL.md |

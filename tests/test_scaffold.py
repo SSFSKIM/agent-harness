@@ -62,6 +62,41 @@ class TestScaffold(unittest.TestCase):
         for name in names:
             self.assertIn(name, page)
 
+    def test_architecture_template_guides_host_specific_codemap(self):
+        arch = (self.root / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        for phrase in (
+            "Bird's Eye View",
+            "where is the thing that does X?",
+            "Boundaries and API Surfaces",
+            "Cross-Cutting Concerns",
+            "Invariant -> FORM",
+        ):
+            self.assertIn(phrase, arch)
+
+    def test_harness_init_separates_architecture_authoring_from_scaffold(self):
+        skill = (PLUGIN / "skills" / "harness-init" / "SKILL.md").read_text(
+            encoding="utf-8")
+        for phrase in (
+            "Do not treat the scaffolded `ARCHITECTURE.md` as complete",
+            "Author architecture + mechanize host invariants",
+            "write/refine THIS repo's `ARCHITECTURE.md`",
+            "source tree",
+            "not a copy of the harness self-host architecture",
+        ):
+            self.assertIn(phrase, skill)
+
+    def test_architecture_authoring_reference_carries_architecture_md_principles(self):
+        guide = (PLUGIN / "skills" / "architecture-setup" / "references" /
+                 "architecture-authoring.md").read_text(encoding="utf-8")
+        for phrase in (
+            "where to change the code",
+            "map of a country, not an atlas",
+            "symbol search",
+            "revisit it a couple of times a year",
+            "API Boundary",
+        ):
+            self.assertIn(phrase, guide)
+
     def test_gitignore_appended_once(self):
         gi = (self.root / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".claude/harness/", gi)

@@ -42,6 +42,9 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
     block → `docs/references/`). Forcing the host's own conventions out is the
     over-specificity portability must avoid — graft additively, govern new docs
     going forward, declare the rest legacy.
+- Do not treat the scaffolded `ARCHITECTURE.md` as complete. It is an
+  authoring frame for the host's real mental map; step 7 writes/refines it from
+  source-code exploration.
 
 ## 4. Shape and migrate existing docs
 
@@ -90,11 +93,13 @@ The machine's skills are generic; the host's own procedures live in
   drop instance skills silently — `git add -f .claude/skills/<name>` to track
   them, matching how the host already tracks any existing instance assets.
 
-## 7. Mechanize host invariants (architecture-setup skill — judgment)
+## 7. Author architecture + mechanize host invariants (architecture-setup skill — judgment)
 
-Docs *map* the architecture; this step *enforces* it. Run the
-`architecture-setup` skill to derive THIS repo's layer law and invariants and
-mechanize each into its right FORM:
+Docs *map* the architecture first; only then does the harness enforce the parts
+that deserve enforcement. Run the `architecture-setup` skill with the host's
+full repo context to write/refine THIS repo's `ARCHITECTURE.md` from the real
+source tree, then derive its layer law/invariants and mechanize each into its
+right FORM:
 
 - The skill classifies each invariant — **deterministic lint** (mechanical,
   always-true, costly if missed → `.claude/lints/`, template
@@ -102,6 +107,9 @@ mechanize each into its right FORM:
   **guide-skill** (methodology → `.claude/skills/`), judge (semantic; deferred),
   or fix-forward. The harness hardcodes no app-code rule; the lint AND
   guide-skill sets are this repo's output (zero of either is valid).
+- The host `ARCHITECTURE.md` must answer "where is the thing that does X?",
+  name boundaries/absences, and record an `Invariant -> FORM` table. It is the
+  host's map, not a copy of the harness self-host architecture.
 - Threshold defaults are overridable, not mandates: if the host's map or pages
   legitimately exceed a harness default (e.g. a 295-line AGENTS.md), set
   `.harness.json` `size_limits` / `default_size_limit` / `stale_days` instead of

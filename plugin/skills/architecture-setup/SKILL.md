@@ -1,18 +1,37 @@
 ---
 name: architecture-setup
-description: This skill should be used to set up or revise a repo's architecture & taste enforcement — at harness-init, when the architecture evolves, or when a domain/subsystem is added. Triggers on "set up architecture enforcement", "mechanize the repo's invariants", "the architecture changed", "enforce the layer law", or "add a domain". It derives the repo's layer law and invariants, classifies each by enforcement FORM (deterministic lint / methodology guide-skill / persona review / fix-forward), and authors the enforcement. The harness ships no app-code rules of its own.
+description: This skill should be used to "write ARCHITECTURE.md", "create an architecture map", "set up architecture enforcement", or revise a repo's architecture/taste enforcement at harness-init, when the architecture evolves, or when a domain/subsystem is added. It authors the host-specific architecture map, derives the repo's layer law and invariants, classifies each by enforcement FORM (deterministic lint / methodology guide-skill / persona review / fix-forward), and authors the enforcement. The harness ships no app-code rules of its own.
 ---
-# Architecture setup — mechanize a repo's own invariants
+# Architecture setup — author and mechanize a repo's own architecture
 
-Set up THIS repo's architecture & taste enforcement. The harness provides the
-substrate and this method; the *rules are the repo's*, derived from its code —
-never hardcoded by the machine. This is the constructive counterpart to the
-`review-arch` persona: that one reviews against the enforcement, this one authors
-it.
+Set up THIS repo's `ARCHITECTURE.md` and architecture/taste enforcement. The
+harness provides the substrate and this method; the *map and rules are the
+repo's*, derived from its code — never hardcoded by the machine. This is the
+constructive counterpart to the `review-arch` persona: that one reviews against
+the map/enforcement, this one authors it.
 
 Run with the repo's full context — do not delegate to an isolated subagent; the
 work requires reading the codebase deeply. Re-run when the architecture evolves
 or a new domain is added.
+
+## Author the map first
+
+Before mechanizing anything, write or refresh the host `ARCHITECTURE.md` as a
+repo-specific mental map. Follow `references/architecture-authoring.md`:
+
+1. Start with a stable bird's-eye view: what the repo does, its inputs/outputs,
+   and the major runtime shape.
+2. Build a code map from the real source tree. It must answer "where is the
+   thing that does X?" and "what does this thing do?" without becoming an atlas.
+3. Name important files, modules, commands, types, and entrypoints, but keep
+   volatile implementation detail in deeper docs or inline comments.
+4. Call out boundaries and absences explicitly: which layers never know about
+   which others, which state never lives where, which interfaces are public.
+5. Add cross-cutting concerns and data flows only at the level needed to orient a
+   new contributor.
+
+The scaffolded `ARCHITECTURE.md` is a placeholder. Replace every FILL marker
+with observations from the host repo before treating enforcement as complete.
 
 ## Two media — pick the right one per concern
 
@@ -60,7 +79,7 @@ mechanical invariants (a lint).
      the judgment calls). Wire it into AGENTS.md "Mandatory skill usage".
 
 4. **Record the decisions.** In `ARCHITECTURE.md`, write/refresh the layer law
-   and an **invariant → FORM** table (which invariants are lints, which are
+   and an **Invariant -> FORM** table (which invariants are lints, which are
    guide-skills, which are judge/persona/fix-forward, and why) — the durable
    record of which medium holds each invariant.
 
@@ -93,3 +112,5 @@ run on every commit (SECURITY.md T9).
 - `references/authoring.md` — the `FAIL…FIX:` lint contract, the guide-skill
   pattern, `.harness.json` wiring, the invariant→FORM table format. The lint
   skeleton lives at `../harness-init/templates/host-lint.py`.
+- `references/architecture-authoring.md` — how to write the host-specific
+  `ARCHITECTURE.md` from the repo's real source tree.
