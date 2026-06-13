@@ -1,6 +1,6 @@
 ---
 status: active
-last_verified: 2026-06-13
+last_verified: 2026-06-14
 owner: dreamer
 ---
 # Current state
@@ -84,6 +84,18 @@ owner: dreamer
   roots strict by default. Additional host-owned roots such as
   business/marketing/research/curriculum stay flexible unless opted in;
   `docs/references/` remains host-owned/advisory by default.
+- 2026-06-14: **Product Design entry mode** added (ExecPlan
+  `product-design-phase`, completed). A spec-first phase now sits in front of the
+  ExecPlan methodology: before work the agent picks an entry mode by judgment
+  (throwaway / Product Design / ExecPlan), and when the *what* outlives a single
+  plan, fans out, or needs independent verification, it writes a durable spec in
+  `docs/product-specs/` (new `product-design` skill) that ExecPlans reference
+  instead of re-deriving. Wired into PLANS.md + AGENTS.md (and both harness-init
+  seeds), core-beliefs #12, execplan Context. This adopts superpowers'
+  front-loading as a *separable artifact*, not a human gate — Product Design is
+  the one place product-direction escalation lands; ExecPlan stays fully
+  autonomous. Gate GREEN (92 tests); codex review-arch caught one P1 (host
+  AGENTS.md seed missed the entry decision) → fixed.
 - Next: (a) memory-loop redesign (openq) — the deferred sophistication;
   (b) optionally migrate a wave of Lingual's declared legacy trees;
   (c) complete review/close `flexible-host-governance` if subagent dispatch is

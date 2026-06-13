@@ -11,7 +11,9 @@ Method and template live in `docs/PLANS.md` — read it first.
    `docs/exec-plans/active/YYYY-MM-DD-<slug>.md` (kebab-case slug).
 2. **Scope check.** If the work spans independent subsystems, split into linked
    ExecPlans (one per subsystem) before going further — see PLANS.md "When".
-3. Fill Goal (observable definition of done), Context (links a novice needs),
+3. Fill Goal (observable definition of done), Context (links a novice needs; if
+   a product-spec exists for this work in docs/product-specs/, link it and do
+   not re-derive its requirements — see the entry decision in PLANS.md),
    Approach (generate ≥2 alternatives yourself, then choose), Assumptions & open
    questions (surface what you take as given; resolve ambiguities autonomously),
    Milestones (each independently verifiable). These front-loading sections are

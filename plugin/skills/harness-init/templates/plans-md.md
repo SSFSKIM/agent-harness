@@ -9,6 +9,24 @@ Internalized from the OpenAI Codex cookbook practice and the published
 openai-agents-js `PLANS.md` spec: complex work rides a self-contained
 **living ExecPlan**; small changes use throwaway plans.
 
+## Entry decision (pick the mode first)
+Before starting, judge the work and pick how to enter. This is your own
+risk-budgeted call (like `review_level`), not a checklist gate — the signals
+below are questions, not thresholds. Escalate only a product-direction/taste
+fork (PRODUCT_SENSE.md), never "what next?".
+- **throwaway** — small, low-risk, the *what* is obvious. In-conversation plan.
+- **Product Design (spec first)** — the *what* deserves settling before the
+  *how*: requirements outlive a single plan, fan out across linked plans, or are
+  rich/contested enough to verify independently. Write a spec in
+  `docs/product-specs/` (the `product-design` skill), then an ExecPlan that
+  references it. The spec owns "what/why"; the ExecPlan owns "how".
+- **ExecPlan** — non-trivial work whose *what* is already clear enough.
+  Front-load Approach/Assumptions inline (Template below); no separate spec.
+
+A single rich plan can still carry its spec inline; a tiny change never needs
+one. Product Design is also where the rare human touch lands — the agent drafts
+the spec autonomously and escalates only a genuine product-direction call.
+
 ## When
 ExecPlan if any: multi-session work, touches ≥3 components, changes
 architecture/memory semantics, or needs a durable decision log. Otherwise
@@ -40,7 +58,9 @@ independent verifiability and the plan stops fitting in one context.
     ## Goal
     One paragraph. Definition of done, observable.
     ## Context
-    Links to specs/ADRs/pages a novice needs. Self-contained.
+    Links to specs/ADRs/pages a novice needs. Self-contained. If a product-spec
+    exists for this work (docs/product-specs/), link it and do not re-derive its
+    requirements — the spec owns "what/why", this plan owns "how".
     ## Approach (self-generated alternatives)
     Generate ≥2 viable approaches yourself and choose — your own reasoning, not
     a human dialogue. (review_level: none → one line naming the choice + why.)

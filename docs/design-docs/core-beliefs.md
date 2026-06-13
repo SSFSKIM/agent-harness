@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 owner: harness
 ---
 # Core beliefs (golden rules)
@@ -35,3 +35,9 @@ violations should become blocking lints.
     never be needed a third time.
 11. **Tech debt is a high-interest loan.** GC continuously (doc-gardener),
     not in big batches.
+12. **Spec is a separable, risk-budgeted artifact.** When the *what* outlives a
+    single plan, fans out across plans, or is rich enough to verify
+    independently, it earns its own durable spec (`product-specs/`, the
+    `product-design` skill); otherwise it stays a thin inline layer in the
+    ExecPlan. Pick the entry mode (throwaway / Product Design / ExecPlan) by
+    judgment, not a fixed gate.

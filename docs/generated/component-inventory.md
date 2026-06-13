@@ -11,6 +11,7 @@
 | skill | garden | Use periodically (or when docs feel stale) to run the entropy GC — dispatches the doc-gardener agent | plugin/skills/garden/SKILL.md |
 | skill | harness-init | Use when setting up, installing, initializing, bootstrapping, or porting this harness into a new or  | plugin/skills/harness-init/SKILL.md |
 | skill | harness-lint | Use to run the deterministic gate (taste lints + structure lints + generated-file check + unit tests | plugin/skills/harness-lint/SKILL.md |
+| skill | product-design | Use before non-trivial work when the *what* deserves settling before the *how* — requirements that o | plugin/skills/product-design/SKILL.md |
 | agent | doc-gardener | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden-rule devi | plugin/agents/doc-gardener.md |
 | agent | dreamer | Memory consolidation persona (CONSOLIDATE). Dispatch via the dream skill to compress recent session  | plugin/agents/dreamer.md |
 | agent | review-arch | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the diff rang | plugin/agents/review-arch.md |

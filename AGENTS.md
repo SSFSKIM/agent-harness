@@ -9,9 +9,11 @@ Deep truth lives in `docs/` — follow the pointers.
 1. **Orient.** The automatic context feeder is disabled. Read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
    protocol.
-2. **Plan.** Non-trivial work gets a living ExecPlan in `docs/exec-plans/active/`
-   (method: `docs/PLANS.md`; procedure: `execplan` skill). Small changes use a
-   throwaway in-conversation plan; do not add ceremony when the risk is low.
+2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
+   throwaway in-conversation plan for small work; **Product Design** (write a
+   spec in `docs/product-specs/` via the `product-design` skill) when the *what*
+   must be settled before the *how*; otherwise a living ExecPlan in
+   `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
    style. New knowledge pages: the `docs-tree` skill decides where they live.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every

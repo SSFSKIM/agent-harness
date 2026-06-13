@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 owner: harness
 ---
 # agent-harness — the installed harness
@@ -48,6 +48,7 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | skill | `garden` | Use periodically (or when docs feel stale) to run the entropy GC — dispatches the doc-gard |
 | skill | `harness-init` | Use when setting up, installing, initializing, bootstrapping, or porting this harness into |
 | skill | `harness-lint` | Use to run the deterministic gate (taste lints + structure lints + generated-file check +  |
+| skill | `product-design` | Use before non-trivial work when the *what* needs settling first — writes a product spec, then hands off to execplan |
 | agent | `doc-gardener` | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden |
 | agent | `dreamer` | Memory consolidation persona (CONSOLIDATE). Dispatch via the dream skill to compress recen |
 | agent | `review-arch` | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the |

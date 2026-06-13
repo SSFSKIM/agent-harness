@@ -11,9 +11,11 @@ Deep truth lives in `docs/` — follow the pointers.
 1. **Orient.** The automatic context feeder may be disabled. Read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
    protocol.
-2. **Plan.** Non-trivial work gets a plan the human can see; long-running work
-   gets a living ExecPlan in `docs/exec-plans/active/`. Small changes use a
-   throwaway in-conversation plan.
+2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
+   throwaway in-conversation plan for small work; **Product Design** (write a
+   spec in `docs/product-specs/` via the `product-design` skill) when the *what*
+   must be settled before the *how*; otherwise a living ExecPlan in
+   `docs/exec-plans/active/` (execplan skill). No ceremony when risk is low.
 3. **Implement.** Match existing style. New knowledge pages: placement table
    in [the harness page](docs/design-docs/agent-harness.md).
 4. **Validate.** The harness lint gate must be GREEN before every commit —
