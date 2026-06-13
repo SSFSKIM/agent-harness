@@ -41,16 +41,20 @@ Grounding document for the review-security persona. Threats are numbered.
     Code has **no `writable_roots` sandbox** — a headless `claude -p` with Write
     can write ANYWHERE (verified empirically). So the path restriction is
     enforced POST-HOC (`dream_phase2.enforce_workspace_scope`): snapshot every
-    git-visible file in the host repo before the agent (the workspace is
-    gitignored ⇒ git-visible == OUTSIDE the workspace), and after, revert
-    byte-for-byte any that changed — restoring user WIP exactly, deleting
-    agent-created files. **Any escape hard-fails the run and rolls the workspace
-    back** (a poisoning signal). Tool minimization (Read/Write/Edit/Glob/LS — no
-    Bash, no network) leaves an out-of-scope Write/Edit as the only escape vector,
-    which the check catches. **Residual:** writes OUTSIDE the host repo are not
-    git-visible → not reverted; bounded by no-network (no exfil) + least-priv (no
-    Bash) + the prompt DATA guard. Tracked for a stronger sandbox if Claude Code
-    gains writable-roots.
+    filesystem entry under the host repo EXCEPT the workspace subtree (and git's
+    object stores) before the agent — **the boundary is the filesystem, not
+    git-visibility, so it covers gitignored files and the host `.git/`
+    (`hooks`/`config` are code-exec vectors)** — and after, restore byte-for-byte
+    any that changed, recreating the exact entry (symlink-safe: snapshot/restore
+    never follow links, so a symlink swap can't be written through; over-cap files
+    are change-detected by sha256 and best-effort `git checkout`-restored). **Any
+    escape hard-fails the run and rolls the workspace back** (a poisoning signal).
+    Tool minimization (Read/Write/Edit/Glob/LS — no Bash, no network) leaves an
+    out-of-scope Write/Edit as the only escape vector, which the check catches.
+    **Residual:** writes OUTSIDE the host repo (e.g. `~/.ssh`, `/tmp`) are not
+    under the walked root → not reverted; bounded by no-network (no exfil) +
+    least-priv (no Bash) + the prompt DATA guard. Tracked for a stronger sandbox
+    (PreToolUse deny-hook, or writable-roots if Claude Code gains it).
 - **T3 — Hook execution surface.** Hook scripts run with user permissions:
   stdlib only (lint S1), no network calls, no secrets in code or docs.
 - **T4 — No secrets in memory.** Imprint/dream prompts forbid writing

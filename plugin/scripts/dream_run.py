@@ -47,16 +47,29 @@ def run(conn, root, now, *, phase1_model=None, phase2_model=None,
 
 
 def acquire_lock(lock, stale=LOCK_STALE):
-    """Single-flight: return an open fd, or None if a fresh lock is held. A lock
-    older than `stale` is reclaimed (a crashed prior run)."""
+    """Single-flight (best-effort): return an open fd, or None if a fresh lock is
+    held. A lock older than `stale` is reclaimed (a crashed prior run). This is an
+    optimization, not the authority — Phase 2's global DB lock + 6h cooldown is
+    the real single-flight guarantee, so a rare reclaim race at worst starts a
+    second process that the DB lock then short-circuits. Crash-safe: never raises
+    on a vanished/contended lock; yields (returns None) to the winner."""
     lock = Path(lock)
     try:
         return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        if time.time() - lock.stat().st_mtime < stale:
-            return None
-        lock.unlink()
-        return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            if time.time() - lock.stat().st_mtime < stale:
+                return None
+        except FileNotFoundError:
+            pass                                   # vanished between EEXIST and stat
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return None                            # another process reclaimed first
 
 
 def main():
@@ -75,7 +88,7 @@ def main():
     finally:
         conn.close()
         os.close(fd)
-        Path(lock).unlink()
+        Path(lock).unlink(missing_ok=True)
     json.dump(result, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
 

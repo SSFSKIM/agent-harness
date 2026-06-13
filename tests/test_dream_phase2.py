@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import tempfile
@@ -67,6 +68,33 @@ class TestScopeCheck(_RepoCase):
         before = dp2.snapshot_outside_workspace(self.root)
         self._write_good_outputs()                            # writes inside the workspace
         self.assertEqual(dp2.enforce_workspace_scope(self.root, before), [])
+
+    def test_gitignored_and_dotgit_escapes_are_caught(self):
+        # codex P1: the boundary is the filesystem, not git-visibility. A write
+        # into a gitignored path or .git/hooks (code-exec) must be reverted.
+        (self.root / ".gitignore").write_text(".claude/harness/\nsecret.env\n", encoding="utf-8")
+        (self.root / ".git" / "hooks").mkdir(exist_ok=True)
+        before = dp2.snapshot_outside_workspace(self.root)
+        (self.root / "secret.env").write_text("KEY=1", encoding="utf-8")            # gitignored
+        (self.root / ".git" / "hooks" / "pre-commit").write_text("#!/bin/sh\nevil\n", encoding="utf-8")
+        escaped = dp2.enforce_workspace_scope(self.root, before)
+        self.assertIn("secret.env", escaped)
+        self.assertIn(os.path.join(".git", "hooks", "pre-commit"), escaped)
+        self.assertFalse((self.root / "secret.env").exists())                       # reverted
+        self.assertFalse((self.root / ".git" / "hooks" / "pre-commit").exists())
+
+    def test_symlink_swap_does_not_write_through(self):
+        # codex P1: replacing a file with a symlink must restore the original file,
+        # never write the saved bytes THROUGH the link into an outside target.
+        outside = self.root.parent / "outside_target.txt"
+        outside.write_text("ORIGINAL_OUTSIDE", encoding="utf-8")
+        before = dp2.snapshot_outside_workspace(self.root)
+        (self.root / "src" / "app.py").unlink()
+        os.symlink(outside, self.root / "src" / "app.py")          # swap file → symlink
+        dp2.enforce_workspace_scope(self.root, before)
+        self.assertFalse((self.root / "src" / "app.py").is_symlink())   # link removed
+        self.assertEqual((self.root / "src" / "app.py").read_text(), "print('original')\n")
+        self.assertEqual(outside.read_text(), "ORIGINAL_OUTSIDE")   # NOT written through
 
     def test_overcap_new_file_reverted_preexisting_kept(self):
         orig = dp2.SNAPSHOT_FILE_CAP
