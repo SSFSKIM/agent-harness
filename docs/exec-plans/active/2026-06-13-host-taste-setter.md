@@ -91,7 +91,7 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
   T9 (`.harness.json` lint_cmd/test_cmd is Tier-0 executable config) +
   agent-harness.md template pointer + self-host AGENTS.md map row +
   component-inventory regen + tracker row resolved.
-- [ ] M5 (demonstration) Run the setter method on the live Lingual host
+- [x] M5 (demonstration) Run the setter method on the live Lingual host
   (`harness-init` branch, main untouched): author one genuine invariant lint
   (lead candidate: locale-parametric), wire `.harness.json`, prove gate GREEN +
   violation→RED, commit to the branch.
@@ -114,8 +114,29 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
   rule, SECURITY T9 (`.harness.json` Tier-0 exec config), agent-harness.md
   pointers (template + self-host) + AGENTS porting line, inventory regen,
   tracker G3/threshold row resolved. Gate GREEN, 75 tests.
+- 2026-06-13: M5 done on the live Lingual host (`harness-init` branch, commit
+  d6e953e). The setter's judgment step rejected the naive locale lint (banning
+  hardcoded locale strings → 15+ false positives on legit `'ko-KR'` defaults)
+  and authored the correct one: L1 = `ALLOWED_LEARNING_LOCALES ⊆
+  LEARNING_LOCALE_PROMPT_CONFIG` (the invariant's exact stated coupling, parsed
+  from main.py via ast, zero-FP). Wired via `.harness.json` `lint_cmd`; Lingual
+  gate GREEN with `== host-lint ==` active; injecting a 7th locale into ALLOWED
+  only turned the gate RED with the L1 FIX, revert → GREEN.
 
 ## Surprises & discoveries
+- **Adding a plugin component retroactively reddened an already-ported host's
+  gate.** Shipping the `architecture-setter` agent made Lingual's gate FAIL on
+  D9 (component coverage checks the HOST's docs mention every plugin component)
+  and `gen_inventory --check` (host inventory lists them). The inventory regen
+  is mechanical, but D9 needs a hand-doc mention (`check_coverage` excludes
+  `generated/`). So a plugin roster change couples to every ported host's docs.
+  Fixed Lingual by resyncing its `agent-harness.md` + inventory; logged the
+  coupling as a tracker row (separable from this axis).
+- **The setter's value showed on first contact**, blog-style: while picking the
+  locale lint, found `tl-PH` is in `ALLOWED_LEARNING_LOCALES` but missing from
+  `REALTIME_TRANSCRIPTION_LANGUAGE_HINTS` (chat.py) — real locale drift. Left as
+  a noted finding in Lingual's ARCHITECTURE.md (not folded into L1, which keys
+  off the authoritative main.py tables).
 
 ## Decision log
 - 2026-06-13: persistence via a versioned `<root>/.harness.json`, not an env
