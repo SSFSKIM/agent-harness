@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-13
 owner: claude
 base_commit: 808e41891df3f3d9c917beae915b0e140b532333
@@ -81,7 +81,7 @@ Generated ≥2 viable approaches and chose — own reasoning, not a human dialog
 - [x] M3 `plugin/skills/execplan/SKILL.md` `## Create` prescribes the
   scope-check, the front-loading fill (Approach + Assumptions), and a
   creation-time self-review step. Verify by reading the file.
-- [ ] M4 `python3 plugin/scripts/check.py` is GREEN; this plan demonstrates the
+- [x] M4 `python3 plugin/scripts/check.py` is GREEN; this plan demonstrates the
   new Approach + Assumptions sections filled; completion gate (targeted →
   review-arch) SATISFIED.
 
@@ -97,6 +97,14 @@ Generated ≥2 viable approaches and chose — own reasoning, not a human dialog
   nothing to flag. Committing the implementation, then targeted persona review.
 
 ## Surprises & discoveries
+- The harness repo was checked out from `flexible-host-governance` to `master`
+  mid-session by an external actor (reflog HEAD@{0} `checkout: ... to master`,
+  likely a SessionStart hook). Caught it before editing because the same path
+  read differently across two reads (review_level present, then absent). Lesson:
+  on a multi-worktree repo, re-confirm the branch before every edit/commit.
+- `review_level` lives only on this branch, not master — so this change is
+  branch-coupled until `flexible-host-governance` merges. Stacking here (vs a
+  master-based tier-neutral version) was the human's integration call.
 
 ## Decision log
 - 2026-06-13: Chose Approach B (self-gate sections in the living plan) over a
@@ -112,5 +120,27 @@ Generated ≥2 viable approaches and chose — own reasoning, not a human dialog
   Imported only the front-loading *discipline*, as self-gates / one document.
 
 ## Feedback (from completion gate)
+- review-arch (codex gpt-5.5, effort high), diff 808e418..HEAD: **SATISFIED** —
+  no P1, no P2, no proposed rule additions. Consistent with the self-review and
+  the GREEN gate. (targeted budget: one persona, the architecture/design-taste
+  risk this diff touches.)
 
 ## Outcomes & retrospective
+- Shipped: front-loading discipline (self-generated Approach alternatives,
+  self-interrogated Assumptions, a scope-check, a creation-time self-review) is
+  now structural in ExecPlan Create — sections in the template + steps in the
+  skill — in both the instance (`docs/PLANS.md`) and host-template copies, plus
+  the machine-shared execplan skill. Imported as **self-gates**: the agent
+  reasons with itself; the human stays on Taste/Style/judgment (PRODUCT_SENSE.md).
+- Dogfood result: this plan is the first artifact written under the new format
+  (Approach + Assumptions filled). The new creation-time self-review found
+  nothing to fix — the right outcome for a small, single-subsystem plan, and a
+  live demonstration that the gate is cheap when the plan is already good.
+- What we deliberately did NOT import from superpowers: human approval gates,
+  uniform per-project ceremony, and the two-document (spec + plan) split — each
+  conflicts with the harness's autonomy + risk-budgeted-ceremony + single-living-
+  ExecPlan model. Only the discipline crossed over, reshaped into self-gates.
+- Forward: the sections are tier-proportional ("review_level: none → one line").
+  Watch that they don't ossify into ceremony on trivial plans; if a `none`-tier
+  plan ever feels heavier for them, tighten the wording. When
+  `flexible-host-governance` merges to master, this change rides along.
