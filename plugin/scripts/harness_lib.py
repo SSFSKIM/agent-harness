@@ -7,6 +7,7 @@ Pure stdlib. Portable: never hardcodes an absolute path.
 import datetime
 import json
 import os
+import shlex
 from pathlib import Path
 
 HEADLESS_ENV = "HARNESS_HEADLESS"
@@ -147,11 +148,30 @@ def gate_config(root):
     `lint_cmd`/`test_cmd` run on every commit — see SECURITY.md T9.
     """
     try:
-        data = json.loads((Path(root) / ".harness.json").read_text(
-            encoding="utf-8", errors="replace"))
-    except (OSError, ValueError):
+        # strict UTF-8: a non-UTF8 byte must fail open to {}, not be silently
+        # repaired into executable config (review-reliability).
+        raw = (Path(root) / ".harness.json").read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def gate_command(cfg, key, env_name):
+    """Resolve a host gate-step command to an argv list, or None if unset.
+
+    The ONE place command/env/config for a gate step is resolved (kept here in
+    the cross-cutting resolver, not in check.py — ARCHITECTURE layer law). The
+    unversioned env var (ad-hoc) wins over the versioned `.harness.json` value.
+    Raises ValueError if a command IS set but does not shell-parse — the caller
+    fails the gate rather than silently skipping enforcement the host asked for
+    (a present-but-broken wire must be loud; only an ABSENT command is a no-op).
+    The argv list runs without a shell, so there is no shell-injection path.
+    """
+    val = os.environ.get(env_name) or cfg.get(key)
+    if not (isinstance(val, str) and val.strip()):
+        return None
+    return shlex.split(val)  # ValueError (unbalanced quote) propagates to caller
 
 
 def today():

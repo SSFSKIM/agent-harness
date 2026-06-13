@@ -2,8 +2,6 @@
 """The deterministic commit gate. Green = commit allowed; that is the whole
 contract (minimal blocking gates — everything else is fix-forward)."""
 import argparse
-import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -11,20 +9,15 @@ from pathlib import Path
 import harness_lib as hl
 
 
-def resolve_cmd(cfg, key, env_name):
-    """Argv for a host gate step, or None. The unversioned env var wins over the
-    versioned .harness.json value. A non-str / blank / unparseable value yields
-    None — fail-open like the rest of the harness (gate_config, exempt_roots): a
-    malformed command skips its step rather than crashing the gate, and the
-    absent step in the gate output is the visible signal. Returns a shlex-split
-    argv ready for subprocess (run without a shell, so no shell injection)."""
-    val = os.environ.get(env_name) or cfg.get(key)
-    if not (isinstance(val, str) and val.strip()):
-        return None
+def _host_step(cfg, key, env_name):
+    """(argv, error): resolve a host gate command via harness_lib. A present
+    but unparseable command yields an error string (fail closed — the gate goes
+    RED) rather than a silent skip; an absent command yields (None, None)."""
     try:
-        return shlex.split(val)
-    except ValueError:
-        return None
+        return hl.gate_command(cfg, key, env_name), None
+    except ValueError as e:
+        return None, (f"FAIL gate {key}: not a parseable command ({e}). "
+                      f"FIX: fix the quoting in .harness.json {key} (or remove it).")
 
 
 def main():
@@ -40,25 +33,37 @@ def main():
         ("docs", [sys.executable, str(here / "lint_docs.py")]),
         ("generated", [sys.executable, str(here / "gen_inventory.py"), "--check"]),
     ]
-    # Host-authored structural lint (the setter axis): a host wires its own
-    # app-code invariant checks here, with no harness-side hardcoded rule.
-    lint_cmd = resolve_cmd(cfg, "lint_cmd", "HARNESS_LINT_CMD")
-    if lint_cmd:
-        steps.append(("host-lint", lint_cmd))
-    test_cmd = resolve_cmd(cfg, "test_cmd", "HARNESS_TEST_CMD")
-    if test_cmd:  # hosts wire their real suite (env or .harness.json)
-        steps.append(("tests", test_cmd))
+    failed = []
+    # Host-authored structural lint (the setter axis) + the host test suite,
+    # wired via .harness.json/env (resolution lives in harness_lib). A
+    # present-but-broken command fails the gate; an absent one is a no-op.
+    lint_argv, err = _host_step(cfg, "lint_cmd", "HARNESS_LINT_CMD")
+    if err:
+        print(err); failed.append("host-lint")
+    elif lint_argv:
+        steps.append(("host-lint", lint_argv))
+    test_argv, err = _host_step(cfg, "test_cmd", "HARNESS_TEST_CMD")
+    if err:
+        print(err); failed.append("tests")
+    elif test_argv:  # hosts wire their real suite (env or .harness.json)
+        steps.append(("tests", test_argv))
     elif (root / "tests").is_dir():  # harness-init hosts may have no tests yet
         steps.append(("tests", [sys.executable, "-m", "unittest", "discover",
                                 "-s", str(root / "tests")]))
-    failed = []
     env = hl.project_env(root)
     for name, cmd in steps:
         print(f"== {name} ==")
-        if subprocess.run(cmd, cwd=root, env=env).returncode != 0:
+        try:
+            rc = subprocess.run(cmd, cwd=root, env=env).returncode
+        except OSError as e:  # missing/non-executable command must not crash the gate
+            print(f"FAIL gate {name}: cannot run ({e}). "
+                  f"FIX: ensure the command exists and is executable.")
+            rc = 1
+        if rc != 0:
             failed.append(name)
     if failed:
-        print(f"check: FAIL ({', '.join(failed)}) — fix per the FIX instructions above, then rerun.")
+        print(f"check: FAIL ({', '.join(sorted(set(failed)))}) — "
+              f"fix per the FIX instructions above, then rerun.")
         sys.exit(1)
     print("check: GREEN — commit allowed.")
 

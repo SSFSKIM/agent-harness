@@ -207,6 +207,25 @@ class TestLintDocs(unittest.TestCase):
         self.assertEqual(lint_docs._int_or("60", 30), 30)
         self.assertEqual(lint_docs._int_or(60, 30), 60)
 
+    def test_size_override_cannot_loosen_managed_doc(self):
+        # security T9: a host override may TIGHTEN a managed doc but never loosen
+        # it — SECURITY.md stays capped at the harness default despite a huge
+        # default_size_limit, while a non-managed doc IS loosened by the same.
+        (self.root / "docs" / "SECURITY.md").write_text(fm() + "x\n" * 500)
+        (self.root / "docs" / "notes.md").write_text(fm() + "x\n" * 500)
+        errs = []
+        lint_docs.check_sizes(self.root, errs, (), None, 9999)
+        self.assertTrue(any("D7" in e and "SECURITY.md" in e for e in errs), errs)
+        self.assertFalse(any("D7" in e and "notes.md" in e for e in errs), errs)
+
+    def test_stale_override_cannot_loosen_managed_doc(self):
+        import datetime
+        d45 = (datetime.date.today() - datetime.timedelta(days=45)).isoformat()
+        (self.root / "docs" / "SECURITY.md").write_text(fm(last_verified=d45) + "# x\n")
+        errs = []
+        lint_docs.check_frontmatter(self.root, errs, (), 9999)  # try to loosen
+        self.assertTrue(any("D4" in e and "SECURITY.md" in e for e in errs), errs)
+
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"

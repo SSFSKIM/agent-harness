@@ -25,6 +25,11 @@ MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of the
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
     "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
 )
+# Top-level docs/ whose D7 cap / D4 staleness a host override may only TIGHTEN,
+# never loosen — the persona-grounding/machine docs + the memory bootloader.
+# Same principle as MANAGED_DOCS being non-exemptable (SECURITY T8/T9): a host
+# cannot use .harness.json to un-govern the harness's own critical docs.
+PROTECTED = hl.MANAGED_DOCS + ("MEMORY.md",)
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
 LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
@@ -80,10 +85,13 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
         if "last_verified" in fm:
             try:
                 d = datetime.date.fromisoformat(lv)
-                stale = (hl.today() - d).days > stale_days
+                sd = stale_days
+                if p.parent == docs and p.name in PROTECTED:
+                    sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
+                stale = (hl.today() - d).days > sd
                 if stale and fm.get("status") not in ("archived", "completed"):
                     _fail(errors, "D4", _rel(p, root),
-                          f"stale: last_verified {lv} is over {stale_days} days old.",
+                          f"stale: last_verified {lv} is over {sd} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
             except ValueError:
                 _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv[:40]}`.",
@@ -126,6 +134,8 @@ def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT)
         if _exempt(p, docs, SIZE_EXEMPT + host):
             continue
         limit = limits.get(p.name, default_limit)
+        if p.parent == docs and p.name in PROTECTED:
+            limit = min(limit, SIZE_LIMITS.get(p.name, DEFAULT_LIMIT))  # tighten-only
         n = len(p.read_text(encoding="utf-8").splitlines())
         if n > limit:
             _fail(errors, "D7", _rel(p, root), f"{n} lines (max {limit}).",

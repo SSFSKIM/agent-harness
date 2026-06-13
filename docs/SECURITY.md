@@ -59,4 +59,9 @@ Grounding document for the review-security persona. Threats are numbered.
   unscoped Write, so a transcript injection defeating the T1 guard could write
   `.harness.json` (repo root) or a lint and thereby run code at the next commit.
   The Tier-0 framing depends on the T1 guard; path-scoping the imprint child's
-  writes (open tracker item) is what closes it.
+  writes (open tracker item) is what closes it. Threshold overrides
+  (`size_limits` / `default_size_limit` / `stale_days`) can only TIGHTEN the
+  harness's own managed docs (`hl.MANAGED_DOCS` + `MEMORY.md`), never loosen
+  them — `lint_docs.PROTECTED` clamps each to `min(override, harness default)`,
+  so `.harness.json` cannot let `SECURITY.md` or the memory bootloader rot or
+  bloat (mirrors T8's non-exemptable rule).

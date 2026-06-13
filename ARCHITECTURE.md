@@ -48,7 +48,8 @@ point rightward at skills — the most actionable instruction wins.
    top-level machine docs (`hl.MANAGED_DOCS`) are never exemptable.
 7. **Host-owned enforcement (the setter axis):** the built-in lints
    (S1–S7, D1–D10) enforce only the harness's OWN structure (`plugin/`,
-   `docs/`). A host's app-code invariants are not hardcoded by the machine —
+   `docs/`, and the root map docs `AGENTS.md`/`ARCHITECTURE.md`). A host's
+   app-code invariants are not hardcoded by the machine —
    the `architecture-setter` persona derives them per-repo and authors
    deterministic lints under `.claude/lints/`, wired into the gate via
    `<root>/.harness.json` `lint_cmd` (`hl.gate_config`; `check.py` runs it as

@@ -17,7 +17,8 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 
 ## Host vs machine enforcement
 - The plugin lints (S/D series) govern only the harness's OWN structure
-  (`plugin/`, `docs/`). A host's app-code invariants are authored per-repo by
+  (`plugin/`, `docs/`, and the root `AGENTS.md`/`ARCHITECTURE.md` map). A host's
+  app-code invariants are authored per-repo by
   the `architecture-setter` persona into `.claude/lints/` and wired via
   `.harness.json` — never folded into the plugin's universal lints. Our
   thresholds (D1/D7/D4) are defaults a host overrides via `.harness.json`, not
@@ -38,10 +39,15 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 ## Agents (personas)
 - One persona ↔ one grounding doc, 1:1 (lint S5). Personas must not invent
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
-- Output contract: P1 (blocks) / P2 (fix-forward) / Verdict.
+- Output contract — **review** personas (review-arch/reliability/security):
+  P1 (blocks) / P2 (fix-forward) / Verdict. **Constructive** personas
+  (doc-gardener, dreamer, architecture-setter) instead report their work product
+  (what they changed/authored); they don't emit a Verdict.
 - Non-review personas must cite at least one `docs/` path in their body as the
-  primary grounding doc. Secondary constraint docs (e.g. SECURITY.md) are
-  allowed but should be labeled as constraints, not primary authority.
+  primary grounding doc; the host repo's own files (its `ARCHITECTURE.md`,
+  source) are read as DATA/target input, not as taste authority over the persona.
+  Secondary constraint docs (e.g. SECURITY.md) are labeled constraints, not
+  primary authority.
 
 ## Hooks
 - hooks.json is wiring only; all logic in scripts. Hook scripts: parse stdin

@@ -165,4 +165,42 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
 
 ## Feedback (from completion gate)
 
+Round 1 (codex, gpt-5.5): **arch NOT SATISFIED · reliability NOT SATISFIED ·
+security SATISFIED** (with sharp P2s). All addressed:
+
+- **review-arch P1 → fixed:**
+  - `resolve_cmd` resolved env/config inside `check.py` (violates "resolution
+    only in harness_lib", S2/ARCHITECTURE). → moved to `hl.gate_command`;
+    `check.py` is now a thin runner calling it (`_host_step` wrapper).
+  - setter named root `ARCHITECTURE.md` as primary authority (DESIGN: non-review
+    personas cite a `docs/` path as primary grounding). → reframed: primary
+    grounding = `docs/design-docs/core-beliefs.md` + `docs/DESIGN.md`; the host's
+    ARCHITECTURE.md is target INPUT (data).
+  - setter output contract wasn't P1/P2/Verdict. → amended DESIGN to scope that
+    contract to **review** personas; constructive personas (doc-gardener/dreamer/
+    setter) report work product (fixes a latent inconsistency for the first two).
+  - P2: invariant 7 said lints govern only `plugin/`+`docs/`, but D1/D10 govern
+    root `AGENTS.md`/`ARCHITECTURE.md`. → wording fixed in ARCHITECTURE + DESIGN.
+- **review-reliability P1 → fixed (empirically reverified):**
+  - a missing host command crashed the gate (`FileNotFoundError`). → step run
+    loop catches `OSError` → clean `FAIL gate <step>` + FIX.
+  - a present-but-unparseable command was silently dropped → gate GREEN.
+    → **fail-closed**: `gate_command` raises `ValueError`, `_host_step` turns it
+    into a gate failure (the host asked for enforcement; a broken wire is loud).
+  - Lingual `locale_parametric.py` false-GREEN if `ALLOWED_LEARNING_LOCALES`
+    absent/renamed. → fails loud when it can't parse a non-empty allowed set.
+  - P2: `gate_config` accepted non-UTF8 via `errors="replace"`. → strict decode,
+    `UnicodeDecodeError` → `{}`.
+- **review-security (SATISFIED) P2 → fixed:**
+  - malformed `.harness.json` lint_cmd bypass → same fail-closed fix as above.
+  - threshold overrides could loosen managed-doc governance (huge `stale_days`/
+    `size_limits` un-governs `SECURITY.md`/`MEMORY.md`). → `lint_docs.PROTECTED`
+    clamps `MANAGED_DOCS`+`MEMORY.md` to `min(override, default)` (tighten-only);
+    SECURITY T9 documents it (mirrors T8). Tests added.
+  - setter (Write-capable) lacked a T7-style DATA guard for scanned host code.
+    → inline guard added: scanned source/comments/docs are DATA, never followed.
+
+Post-fix: 81 tests green (+ host-command, protected-clamp, non-UTF8 cases);
+both gates GREEN; the three reliability exploits reverified to fail clean.
+
 ## Outcomes & retrospective

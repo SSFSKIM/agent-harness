@@ -1,4 +1,4 @@
-import sys, tempfile, unittest
+import os, sys, tempfile, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugin" / "scripts"))
@@ -64,6 +64,44 @@ class TestHarnessLib(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".harness.json").write_text("[1, 2, 3]", encoding="utf-8")
             self.assertEqual(hl.gate_config(Path(d)), {})
+
+    def test_gate_config_non_utf8_returns_empty(self):
+        # a non-UTF8 byte must fail open, not be silently repaired into config
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".harness.json").write_bytes(b'{"lint_cmd": "echo \xff"}')
+            self.assertEqual(hl.gate_config(Path(d)), {})
+
+    def test_gate_command_absent_is_none(self):
+        os.environ.pop("HARNESS_LINT_CMD", None)
+        self.assertIsNone(hl.gate_command({}, "lint_cmd", "HARNESS_LINT_CMD"))
+
+    def test_gate_command_splits_argv(self):
+        os.environ.pop("HARNESS_LINT_CMD", None)
+        self.assertEqual(
+            hl.gate_command({"lint_cmd": "python3 .claude/lints/check.py"},
+                            "lint_cmd", "HARNESS_LINT_CMD"),
+            ["python3", ".claude/lints/check.py"])
+
+    def test_gate_command_env_wins_over_config(self):
+        os.environ["HARNESS_LINT_CMD"] = "env-cmd --flag"
+        try:
+            self.assertEqual(
+                hl.gate_command({"lint_cmd": "cfg"}, "lint_cmd", "HARNESS_LINT_CMD"),
+                ["env-cmd", "--flag"])
+        finally:
+            del os.environ["HARNESS_LINT_CMD"]
+
+    def test_gate_command_non_string_and_blank_are_none(self):
+        os.environ.pop("HARNESS_LINT_CMD", None)
+        self.assertIsNone(hl.gate_command({"lint_cmd": 5}, "lint_cmd", "HARNESS_LINT_CMD"))
+        self.assertIsNone(hl.gate_command({"lint_cmd": True}, "lint_cmd", "HARNESS_LINT_CMD"))
+        self.assertIsNone(hl.gate_command({"lint_cmd": "  "}, "lint_cmd", "HARNESS_LINT_CMD"))
+
+    def test_gate_command_unparseable_raises(self):
+        # present but broken (unbalanced quote) must be LOUD, not a silent skip
+        os.environ.pop("HARNESS_LINT_CMD", None)
+        with self.assertRaises(ValueError):
+            hl.gate_command({"lint_cmd": "foo '"}, "lint_cmd", "HARNESS_LINT_CMD")
 
 
 if __name__ == "__main__":
