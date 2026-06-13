@@ -18,14 +18,15 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 ## Host vs machine enforcement
 - The plugin lints (S/D series) govern only the harness's OWN structure
   (`plugin/`, `docs/`, and the root `AGENTS.md`/`ARCHITECTURE.md` map). A host's
-  app-code invariants are authored per-repo by
-  the `architecture-setter` persona into `.claude/lints/` and wired via
-  `.harness.json` — never folded into the plugin's universal lints. Our
-  thresholds (D1/D7/D4) are defaults a host overrides via `.harness.json`, not
-  mandates. Determinism is the cheap, reproducible floor; what stays per-repo is
-  WHAT to enforce and WHO authors it (ARCHITECTURE invariant 7). A universal
-  hardcoded rule applied to every host is the lint-layer form of the
-  monolithic-AGENTS.md anti-pattern.
+  app-code invariants are authored per-repo by the `architecture-setup` skill,
+  routed by FORM — `.claude/lints/` (wired via `.harness.json`) for mechanical
+  invariants, `.claude/skills/` guide-skills for methodology — never folded into
+  the plugin's universal lints. Our thresholds (D1/D7/D4) are defaults a host
+  overrides via `.harness.json`, not mandates. Determinism is the cheap,
+  reproducible floor; what stays per-repo is WHAT to enforce, in WHICH medium,
+  and WHO authors it (ARCHITECTURE invariant 7). A universal hardcoded rule
+  applied to every host is the lint-layer form of the monolithic-AGENTS.md
+  anti-pattern.
 
 ## Skills
 - A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
@@ -41,8 +42,14 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
 - Output contract — **review** personas (review-arch/reliability/security):
   P1 (blocks) / P2 (fix-forward) / Verdict. **Constructive** personas
-  (doc-gardener, dreamer, architecture-setter) instead report their work product
-  (what they changed/authored); they don't emit a Verdict.
+  (doc-gardener, dreamer) instead report their work product (what they
+  changed/authored); they don't emit a Verdict.
+- Construction that needs the repo's FULL context is a **skill**, not a persona
+  (e.g. `architecture-setup`): an isolated subagent can't read the codebase as
+  deeply, and a one-time setup action doesn't need the per-commit guarantee a
+  lint gives. Review wants isolation (independent judgment); setup wants the main
+  agent's hands. doc-gardener/dreamer remain personas for now (bounded
+  memory/docs scope) — revisit if they outgrow it.
 - Non-review personas must cite at least one `docs/` path in their body as the
   primary grounding doc; the host repo's own files (its `ARCHITECTURE.md`,
   source) are read as DATA/target input, not as taste authority over the persona.

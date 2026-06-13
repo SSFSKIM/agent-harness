@@ -104,8 +104,8 @@ Grounding document for the review-security persona. Threats are numbered.
   permissions; `.claude/lints/*.py` are the scripts they invoke. This is a
   code-execution surface, governed like code: versioned and git-visible (Tier 0
   — changes reviewed exactly as code changes), authored only by the
-  `architecture-setter` from the host's own invariants, and — like hook scripts
-  (T3) — never made to read untrusted external data or reach the network. A
+  `architecture-setup` skill from the host's own invariants, and — like hook
+  scripts (T3) — never made to read untrusted external data or reach the network. A
   malformed config cannot inject a bogus step: `hl.gate_config` fails open to
   `{}`, `hl.gate_command` returns None for a non-str/blank value, and a
   present-but-unparseable command fails the gate CLOSED (`check._host_step` —

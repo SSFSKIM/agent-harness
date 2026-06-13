@@ -20,7 +20,7 @@ F (broken). doc-gardener updates grades + history on each gardening pass.
 | imprint | B | B | - | - | B |
 | dreaming | B | - | B | B | - |
 | porting (harness-init) | - | B | B | - | - |
-| host-enforcement (setter) | C | B | B | C | - |
+| host-enforcement (setter) | C | B | B | - | - |
 | stop-tidy (gate) | - | B | - | - | C |
 
 `-` = not built / not applicable for this domain-layer.
@@ -44,11 +44,11 @@ Grade notes:
   hooks C: wired in hooks.json, not yet observed in a live plugin session.
 - host-enforcement scripts B: gate_config/gate_command/host-lint step +
   PROTECTED_PATHS clamp, 82 tests, survived a 3-round adversarial gate;
-  skills B: harness-init step 7 specified + exercised once on Lingual;
-  agents C: architecture-setter persona written + its METHOD demonstrated
-  inline on Lingual (L1 locale lint), but not yet dispatched live as an agent;
-  docs C: ARCHITECTURE inv7 + DESIGN rule + SECURITY T9, fresh, unproven in
-  daily use.
+  skills B: the `architecture-setup` skill (FORM-routed: lint for mechanical
+  invariants, guide-skill for methodology) + harness-init step 7; its METHOD was
+  exercised inline on Lingual (L1 locale lint). agents n/a: the setter was
+  converted agent → skill (2026-06-13 — setup needs the main agent's full repo
+  context). docs C: ARCHITECTURE inv7 + DESIGN rule + SECURITY T9, fresh.
 
 ## History
 - 2026-06-12: initial table (Phase 1).
@@ -58,3 +58,6 @@ Grade notes:
 - 2026-06-13: host-enforcement (setter) row added — `.harness.json` substrate
   (host-lint step + threshold overrides) + architecture-setter persona;
   demonstrated on Lingual (locale-parametric L1 lint). Passed a 3-round gate.
+- 2026-06-13: architecture-setter agent → `architecture-setup` skill; output
+  FORM-routed (lint for mechanical invariants, guide-skill for methodology).
+  Setup needs full repo context; review-arch stays a persona.

@@ -2,9 +2,10 @@
 """HOST LINT TEMPLATE — copy to `.claude/lints/<invariant>.py` and adapt.
 
 One host-authored lint = one architecture invariant, mechanically enforced on
-every commit (the architecture-setter wires it via `.harness.json` lint_cmd).
-This file is the HOST's, not the machine's — the harness ships the shape, the
-host owns the rule.
+every commit (the architecture-setup skill wires it via `.harness.json`
+lint_cmd, behind the aggregating `.claude/lints/check.py` runner). This file is
+the HOST's, not the machine's — the harness ships the shape, the host owns the
+rule.
 
 Contract (matches the harness's own lints): pure stdlib; decide from files
 only (no network, no untrusted input); print one line per violation as

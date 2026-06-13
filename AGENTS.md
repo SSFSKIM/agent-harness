@@ -62,11 +62,11 @@ Deep truth lives in `docs/` — follow the pointers.
 
 - The `harness-init` skill bootstraps this harness into another host repo:
   deterministic scaffold (`scaffold.py`) → write the map → migrate existing
-  docs → adapt seeds → mechanize the host's invariants (`architecture-setter`
-  persona authors host lints under `.claude/lints/`, wired via `.harness.json`)
-  → check GREEN. Templates live inside the skill. The harness enforces only its
-  own structure; a host's app-code rules are the host's, not hardcoded here
-  (ARCHITECTURE invariant 7).
+  docs → adapt seeds → mechanize the host's invariants (the `architecture-setup`
+  skill routes each by FORM — lints under `.claude/lints/` wired via
+  `.harness.json`, guide-skills under `.claude/skills/`) → check GREEN. Templates
+  live inside the skill. The harness enforces only its own structure; a host's
+  app-code rules are the host's, not hardcoded here (ARCHITECTURE invariant 7).
 
 ## Memory (read/write paths)
 
