@@ -156,6 +156,13 @@ def consolidate(conn, root, now, model=DEFAULT_MODEL, spawn=spawn_phase2,
         if not res["dirty"]:
             mdb.finish_phase2(conn, token, now, ok=True)
             return {"status": "clean", "selected": res["selected"]}
+        if not res["rows"] and not (Path(wdir) / "MEMORY.md").exists():
+            # fresh workspace with nothing selected and no existing handbook —
+            # don't spawn a model to consolidate zero memories. (An empty
+            # selection WITH an existing MEMORY.md still runs: that's forgetting.)
+            mw.reset_baseline(wdir)
+            mdb.finish_phase2(conn, token, now, ok=True)
+            return {"status": "empty", "selected": []}
         before = snapshot_outside_workspace(root)
         spawn(wdir, model)
         escaped = enforce_workspace_scope(root, before)

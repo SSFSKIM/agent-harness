@@ -75,3 +75,7 @@ Deep truth lives in `docs/` — follow the pointers.
 - Write: PreCompact/SessionEnd hooks enqueue imprint jobs; `/dream` (dreamer
   agent) consolidates; `garden` (doc-gardener agent) GCs docs entropy.
   Never bypass `docs/memory/` structure; lint enforces frontmatter and indexes.
+- Parallel pipeline (write-path-first): the `dream-rollouts` skill runs a
+  Codex-faithful two-phase synthesis (`dream_run.py`) that mines past session
+  transcripts into `.claude/harness/memories/MEMORY.md` — separate from
+  `docs/memory/`, gitignored runtime. See `docs/design-docs/dreaming-v2.md`.
