@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-13
 owner: harness
 base_commit: 35deac5df7fd5efd08d289ba865f95d29e360322
@@ -72,9 +72,10 @@ setup wants construction with full context. The asymmetry is intentional.
   branch): run the architecture-setup method, author one host guide-skill under
   `.claude/skills/` encoding a methodology invariant, `git add -f`, gate GREEN,
   commit. (The lint-FORM was proven by L1; this proves the skill-FORM.)
-- [ ] M4 Completion gate: self-review + review-arch + review-reliability until
-  SATISFIED. (review-security skipped — this diff touches skills/agents/docs, not
-  the live exec surface — hooks/`.harness.json`/`.harnessignore`.)
+- [x] M4 Completion gate: self-review + review-arch + review-reliability all
+  SATISFIED (review-security skipped — this diff touches skills/agents/docs, not
+  the live exec surface — hooks/`.harness.json`/`.harnessignore`). 4 P2s applied,
+  0 P1. review-arch ran on Claude (fallback) after codex stalled twice.
 
 ## Progress log
 - 2026-06-13: plan created from the user decision + fork synthesis (decompose,
@@ -94,6 +95,11 @@ setup wants construction with full context. The asymmetry is intentional.
   AGENTS.md mandatory-skill usage + the ARCHITECTURE Enforcement table. Lingual
   gate GREEN with both FORMs now live: L1 lint + the guide-skill. Resynced
   Lingual's harness doc + inventory for the agent→skill change.
+- 2026-06-13: M4 completion gate cleared. review-reliability (codex) + skill-reviewer
+  + review-arch all SATISFIED, 0 P1, 4 P2 all applied (host-lint.py stale
+  docstring; SKILL.md duplicate-trim + conditional `git add`; authoring.md
+  off-by-one path). review-arch ran on a Claude fallback after the codex reviewer
+  stalled twice on `git diff 35deac5`. Gate GREEN, 82 tests. Plan → completed/.
 
 ## Surprises & discoveries
 - **The cross-host coupling recurred exactly as predicted.** Adding the
@@ -124,5 +130,51 @@ setup wants construction with full context. The asymmetry is intentional.
   scoping — no change to hooks/`.harness.json`/`.harnessignore`.
 
 ## Feedback (from completion gate)
+- **review-reliability** (codex) → SATISFIED. One P2: `host-lint.py:5` docstring
+  still named the deleted `architecture-setter`. Fixed (→ "the architecture-setup
+  skill wires it via `.harness.json` lint_cmd, behind the aggregating
+  `.claude/lints/check.py` runner"). A `.py` file the markdown-only grep missed —
+  the reviewer caught it.
+- **skill-reviewer** → "well-formed, ship it." Polish applied: trimmed the
+  duplicated "why not skill-only" paragraph in SKILL.md; added the
+  point-`lint_cmd`-at-the-aggregating-runner warning to authoring.md. Skipped the
+  cosmetic "currently deferred" reword (accurate as-is).
+- **review-arch** → SATISFIED, 0 P1, 2 P2 (both fixed):
+  - `authoring.md` lint-skeleton pointer was `../harness-init/…` but the file
+    lives one dir deeper (`references/`), so it was off by one `../`. Fixed to
+    `../../harness-init/templates/host-lint.py` (SKILL.md's identical-looking
+    pointer is correct because it sits a level shallower).
+  - SKILL.md step 5 `git add -f .claude/lints/ .claude/skills/ .harness.json` was
+    unconditional → a guide-skill-only run would error on the missing
+    `.claude/lints/`/`.harness.json`. Made conditional: add only the subtree(s)
+    this run authored.
+- **Proposed rule (deferred, not applied):** review-arch suggested DESIGN.md §Skills
+  require a skill's grounding section to cite its `docs/` grounding path with the
+  same discipline S5 enforces on review agents (SKILL.md already does this, lines
+  74-76; it's just not a written/lintable rule). Net-new rule, single occurrence,
+  out of this plan's scope → recorded here per "feedback-twice → promote"; promote
+  if a second skill ungrounds.
 
 ## Outcomes & retrospective
+- **Shipped:** `architecture-setter` agent → `architecture-setup` skill,
+  output FORM-routed. Both FORMs are now proven on a live host (Lingual): the
+  `L1` locale **lint** (mechanical) and the `persistence-seam` **guide-skill**
+  (methodology). The deterministic floor is preserved; only the *authoring of the
+  rules* moved from a dispatched persona to a full-context skill.
+- **The gate earned its keep again** (5th consecutive plan with real findings):
+  three independent reviewers surfaced four P2s — a stale `.py` docstring two
+  searches missed, an off-by-one relative path, and an unconditional `git add`
+  footgun — none caught by self-review.
+- **Surprise — the codex reviewer was unreliable for this diff.** review-arch
+  stalled **twice** at the same step (the `git diff 35deac5` over a ~140-line
+  change): the first session was killed mid-grep before its verdict; the re-run
+  went silent for 15 min with a frozen output file. The earlier verdicts were
+  recoverable from `~/.codex/sessions/` rollout JSONL even though the
+  orchestration handles were severed by a compaction. Per CLAUDE.md, fell back to
+  a Claude review-arch agent — the completion-gate invariant is "a real
+  architecture verdict exists," not "codex produced it," so model-agnostic
+  fallback kept the gate honest. Worth noting: codex's background runner appears
+  to choke on large `git diff` payloads.
+- **Cross-host coupling recurred** (see Surprises) — adding/removing a plugin
+  component reddened Lingual's gate via D9 + inventory. The tracker row for a real
+  fix (a host-resync helper) is now confirmed three times over.

@@ -30,10 +30,10 @@ Enforcement comes in two media with different failure modes:
   belongs in, what to read before touching a risky seam, the safe build
   sequence).
 
-Do not collapse them. A mechanical invariant guided only by a skill erodes the
-moment a session skips or rationalizes that skill; a methodology frozen into a
-lint is brittle and over-specific. Most concerns are methodology (a skill); a few
-are true mechanical invariants (a lint).
+Do not collapse them: a lint a session can rationalize away is no floor, and a
+methodology frozen into a regex is brittle (see `references/forms.md` § Why not
+skill-only). Most concerns are methodology (a guide-skill); a few are true
+mechanical invariants (a lint).
 
 ## Method
 
@@ -64,10 +64,13 @@ are true mechanical invariants (a lint).
    guide-skills, which are judge/persona/fix-forward, and why) — the durable
    record of which medium holds each invariant.
 
-5. **Make it travel & verify.** `git add -f .claude/lints/ .claude/skills/
-   .harness.json` if the host blanket-ignores `.claude/`. Run the gate; then prove
-   each authored lint *bites* (introduce a deliberate violation → gate RED →
-   revert), and confirm each guide-skill triggers on its intended phrasing.
+5. **Make it travel & verify.** If the host blanket-ignores `.claude/`,
+   `git add -f` **only the subtree(s) this run authored** (`.claude/lints/` and/or
+   `.claude/skills/`, plus `.harness.json` only when you wired or changed a lint) —
+   force-adding an untouched tree stages noise or errors when it doesn't exist. Run
+   the gate; then prove each authored lint *bites* (introduce a deliberate
+   violation → gate RED → revert), and confirm each guide-skill triggers on its
+   intended phrasing.
 
 ## Grounding & guard
 

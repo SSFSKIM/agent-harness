@@ -2,7 +2,7 @@
 
 ## Lint (mechanical invariant)
 
-Start from `../harness-init/templates/host-lint.py`. Contract:
+Start from `../../harness-init/templates/host-lint.py`. Contract:
 - Pure stdlib; decide from files only (no network, no untrusted input).
 - Print one line per violation: `FAIL <rule-id> <path>: <problem> FIX:
   <imperative instruction>`. The FIX text is the product — write it for an agent
@@ -15,7 +15,9 @@ Start from `../harness-init/templates/host-lint.py`. Contract:
 Wire it: add a `.claude/lints/check.py` runner that runs every sibling
 `.claude/lints/*.py` and exits nonzero if any fails, then set
 `<root>/.harness.json` → `{"lint_cmd": "python3 .claude/lints/check.py"}`. The
-gate runs it as the `host-lint` step on every commit.
+gate runs it as the `host-lint` step on every commit. Point `lint_cmd` at the
+**aggregating runner**, never at an individual lint — wiring it to one lint
+silently drops every other invariant (a vacuous pass).
 
 ## Guide-skill (methodology)
 
