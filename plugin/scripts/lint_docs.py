@@ -20,6 +20,10 @@ INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/limitations")
 HOST_INDEXED_DIRS = ("design-docs", "memory/adr", "memory/knowledge",
                      "memory/openq", "memory/limitations")
+# Relaxed-mode content-governed roots. `generated/` is intentionally absent: it
+# is content-lint-exempt (FM_EXEMPT/SIZE_EXEMPT) and guarded from .harnessignore
+# un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it. Do not
+# "reconcile" the two tuples; the one-element divergence is by design.
 HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory")
 SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
 DEFAULT_LIMIT = 400

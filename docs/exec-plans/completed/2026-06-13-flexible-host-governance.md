@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-13
 owner: codex
 base_commit: f89b5a50c8ce268ece146a7c031182a2ea9f2cb8
@@ -56,4 +56,41 @@ can flag demonstrable bugs without inventing unwritten taste rules.
   docs remain blocking; host-owned business/product/research docs do not become
   commit blockers unless the host opts them into managed roots.
 ## Feedback (from completion gate)
+- Completion gate run during PR #1 review (`review_level: standard` + security,
+  because the diff touches the live exec surface `plugin/scripts/*`), diff
+  `master..HEAD`. Codex was rate-limited, so the standard+security pass was
+  performed by Claude (Opus 4.8) per the CLAUDE.md fallback, tracing the code
+  paths empirically (not just reading). **Verdict: SATISFIED.**
+- Highest-stakes check (poisoning vector): a hostile relaxed host (`.harness.json`
+  relaxing every key + `.harnessignore` listing the managed core) CANNOT
+  un-govern `docs/memory|design-docs|exec-plans/**` or the top-level machine
+  docs — `_managed_roots` is append-only, `_machine_doc` is mode-independent,
+  `exempt_roots` drops MANAGED_ROOTS/MANAGED_DOC entries (incl. normalized
+  `./memory`). Relaxed path crash-free. No P1.
+- P2 (fixed in this PR): `lint_docs.py` `HOST_MANAGED_ROOTS` vs `hl.MANAGED_ROOTS`
+  "generated" divergence → added a clarifying comment so a future edit won't
+  "reconcile" the deliberate one-element difference.
+- Rejected finding: a reported P2 about an `sd = min(sd, STALE_DAYS)` stale-days
+  clamp at `lint_docs.py:143` — that code does not exist; the real tighten-only
+  clamp is the *size* clamp at L~199 and is already clear. (Verify findings, do
+  not obey them.)
+- Pyright (not part of the gate): "harness_lib unresolved" is a runtime-sys.path
+  false positive; "append str to Literal list" in `_managed_roots` is narrow
+  type inference, not a runtime bug (the gate's 89 tests append and pass). Left
+  as-is — out of P2 scope, no runtime impact.
+- Proposed rule additions (deferred, non-blocking): (1) DESIGN.md note that a
+  bug-evidence P1 must cite a reproducing diff/test/runtime trace, not a
+  hypothetical; (2) a RELIABILITY rule that an advisory check must emit a visible
+  SKIP, never silently no-op.
+
 ## Outcomes & retrospective
+- Shipped tiered docs governance: machine-critical docs + managed roots
+  (`memory`/`design-docs`/`exec-plans`) stay strict in both modes; host-owned
+  business/product/research docs are flexible on ported hosts unless opted in
+  (`managed_doc_roots` / `doc_governance: strict`). Component inventory/coverage
+  is self-host strict, ported-host advisory. Review cost is risk-budgeted
+  (`review_level`), and personas may flag evidence-backed bugs beyond their
+  grounding doc. The self-host repo stays the strict reference implementation.
+- Gate closed at PR #1 review: SATISFIED, one P2 fixed, one reported P2 rejected
+  on verification, two proposed rule additions deferred. Bundled into PR #1 with
+  the front-loading self-gates plan and merged to master.
