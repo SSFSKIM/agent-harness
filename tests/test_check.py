@@ -18,16 +18,17 @@ class TestResolveCmd(unittest.TestCase):
     def test_absent_everywhere_is_none(self):
         self.assertIsNone(check.resolve_cmd({}, "lint_cmd", "HARNESS_LINT_CMD"))
 
-    def test_config_value_used_when_no_env(self):
+    def test_config_value_split_to_argv(self):
         self.assertEqual(
-            check.resolve_cmd({"lint_cmd": "make lint"}, "lint_cmd", "HARNESS_LINT_CMD"),
-            "make lint")
+            check.resolve_cmd({"lint_cmd": "python3 .claude/lints/check.py"},
+                              "lint_cmd", "HARNESS_LINT_CMD"),
+            ["python3", ".claude/lints/check.py"])
 
     def test_env_overrides_config(self):
-        os.environ["HARNESS_LINT_CMD"] = "env-cmd"
+        os.environ["HARNESS_LINT_CMD"] = "env-cmd --flag"
         self.assertEqual(
             check.resolve_cmd({"lint_cmd": "cfg-cmd"}, "lint_cmd", "HARNESS_LINT_CMD"),
-            "env-cmd")
+            ["env-cmd", "--flag"])
 
     def test_non_string_config_ignored(self):
         # JSON number/bool/list for lint_cmd is not a command — ignore, don't crash.
@@ -36,6 +37,12 @@ class TestResolveCmd(unittest.TestCase):
 
     def test_blank_string_ignored(self):
         self.assertIsNone(check.resolve_cmd({"lint_cmd": "   "}, "lint_cmd", "HARNESS_LINT_CMD"))
+
+    def test_unparseable_command_fails_open(self):
+        # an unbalanced quote must not crash the gate — fail open to None (the
+        # missing host-lint step is the visible signal, not a traceback).
+        self.assertIsNone(
+            check.resolve_cmd({"lint_cmd": "foo '"}, "lint_cmd", "HARNESS_LINT_CMD"))
 
 
 if __name__ == "__main__":

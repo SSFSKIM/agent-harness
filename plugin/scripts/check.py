@@ -12,11 +12,19 @@ import harness_lib as hl
 
 
 def resolve_cmd(cfg, key, env_name):
-    """Host check command for a gate step, or None. Unversioned env var wins
-    over the versioned .harness.json value; a non-str / blank value is ignored
-    (parse-don't-validate — a malformed config never injects a bogus step)."""
+    """Argv for a host gate step, or None. The unversioned env var wins over the
+    versioned .harness.json value. A non-str / blank / unparseable value yields
+    None — fail-open like the rest of the harness (gate_config, exempt_roots): a
+    malformed command skips its step rather than crashing the gate, and the
+    absent step in the gate output is the visible signal. Returns a shlex-split
+    argv ready for subprocess (run without a shell, so no shell injection)."""
     val = os.environ.get(env_name) or cfg.get(key)
-    return val if isinstance(val, str) and val.strip() else None
+    if not (isinstance(val, str) and val.strip()):
+        return None
+    try:
+        return shlex.split(val)
+    except ValueError:
+        return None
 
 
 def main():
@@ -36,10 +44,10 @@ def main():
     # app-code invariant checks here, with no harness-side hardcoded rule.
     lint_cmd = resolve_cmd(cfg, "lint_cmd", "HARNESS_LINT_CMD")
     if lint_cmd:
-        steps.append(("host-lint", shlex.split(lint_cmd)))
+        steps.append(("host-lint", lint_cmd))
     test_cmd = resolve_cmd(cfg, "test_cmd", "HARNESS_TEST_CMD")
     if test_cmd:  # hosts wire their real suite (env or .harness.json)
-        steps.append(("tests", shlex.split(test_cmd)))
+        steps.append(("tests", test_cmd))
     elif (root / "tests").is_dir():  # harness-init hosts may have no tests yet
         steps.append(("tests", [sys.executable, "-m", "unittest", "discover",
                                 "-s", str(root / "tests")]))

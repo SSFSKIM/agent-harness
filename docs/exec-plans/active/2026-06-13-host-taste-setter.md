@@ -152,6 +152,13 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
   resolver, S2); `check.py` and `lint_docs.py` each read it via the lib in
   their own `main()`, mirroring how `host = hl.exempt_roots(root)` is already
   threaded.
+- 2026-06-13 (self-review): `resolve_cmd` does the `shlex.split` itself and
+  returns argv-or-None, fail-open on an unparseable command (unbalanced quote)
+  — consistent with the harness's pervasive fail-open (gate_config/exempt_roots/
+  feeder), and it keeps a malformed `.harness.json` from crashing the gate. The
+  absent host-lint step is the visible signal. (Chose fail-open over fail-loud
+  for consistency; a present-but-broken wire skipping silently is the accepted
+  cost — the author sees `== host-lint ==` is missing when testing.)
 - 2026-06-13: LLM-judge (semantic FORM) deferred to v1.x — separate cost /
   flakiness / prompt-design judgment; the setter names semantic invariants but
   routes them to review/defer, not to a gate step, for now.
