@@ -9,9 +9,20 @@ Method and template live in `docs/PLANS.md` — read it first.
 ## Create
 1. Copy the template from docs/PLANS.md to
    `docs/exec-plans/active/YYYY-MM-DD-<slug>.md` (kebab-case slug).
-2. Fill Goal (observable definition of done), Context (links a novice needs),
-   Milestones (each independently verifiable).
-3. Record `base_commit: $(git rev-parse HEAD)` and `review_level:` in the plan
+2. **Scope check.** If the work spans independent subsystems, split into linked
+   ExecPlans (one per subsystem) before going further — see PLANS.md "When".
+3. Fill Goal (observable definition of done), Context (links a novice needs),
+   Approach (generate ≥2 alternatives yourself, then choose), Assumptions & open
+   questions (surface what you take as given; resolve ambiguities autonomously),
+   Milestones (each independently verifiable). These front-loading sections are
+   self-gates — your own reasoning, not a human dialogue; escalate only
+   Taste/Style/judgment (PRODUCT_SENSE.md).
+4. **Creation-time self-review** (before any implementation; fix inline):
+   placeholder scan (no TBD / "handle later"), internal consistency (Approach ↔
+   Goal ↔ Milestones agree), scope (still single-subsystem?), ambiguity (each
+   requirement reads one way). Catching a bad plan here is far cheaper than at
+   the completion gate.
+5. Record `base_commit: $(git rev-parse HEAD)` and `review_level:` in the plan
    frontmatter (`none`, `targeted`, `standard`, or `full`), run the gate
    (command in `docs/design-docs/agent-harness.md`), commit.
 
