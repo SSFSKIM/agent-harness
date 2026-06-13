@@ -68,6 +68,21 @@ class TestScopeCheck(_RepoCase):
         self._write_good_outputs()                            # writes inside the workspace
         self.assertEqual(dp2.enforce_workspace_scope(self.root, before), [])
 
+    def test_overcap_new_file_reverted_preexisting_kept(self):
+        orig = dp2.SNAPSHOT_FILE_CAP
+        dp2.SNAPSHOT_FILE_CAP = 8                              # tiny cap → small files are "over-cap"
+        try:
+            (self.root / "big_pre.bin").write_text("X" * 100, encoding="utf-8")  # pre-existing over-cap
+            before = dp2.snapshot_outside_workspace(self.root)
+            (self.root / "big_new.bin").write_text("Y" * 100, encoding="utf-8")  # NEW over-cap escape
+            escaped = dp2.enforce_workspace_scope(self.root, before)
+            self.assertIn("big_new.bin", escaped)
+            self.assertFalse((self.root / "big_new.bin").exists())   # new over-cap reverted (any size)
+            self.assertTrue((self.root / "big_pre.bin").exists())    # pre-existing untouched
+            self.assertNotIn("big_pre.bin", escaped)
+        finally:
+            dp2.SNAPSHOT_FILE_CAP = orig
+
 
 class TestConsolidate(_RepoCase):
     def _spy(self, agent):

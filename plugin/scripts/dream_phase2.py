@@ -84,38 +84,49 @@ def _git_visible_files(root):
     return out
 
 
+_OVERCAP = object()   # sentinel: file is git-visible but its content is over the cap
+_MISSING = object()   # sentinel: file was not git-visible at snapshot time
+
+
 def snapshot_outside_workspace(root):
-    """Byte content of every git-visible file ≤ cap. Files over the cap are out of
-    the check's documented bound (the escape surface is small text/config)."""
+    """Map every git-visible file (the workspace is gitignored ⇒ this is the set
+    OUTSIDE it) to its byte content, or `_OVERCAP` when it exceeds the cap. We
+    record the PRESENCE of over-cap files (not their content) so a NEW out-of-cap
+    file is still detected as created — only byte-restoring a pre-existing
+    over-cap file is out of bound (the escape surface is small text/config)."""
     snap = {}
     for rel in _git_visible_files(root):
         try:
             data = (Path(root) / rel).read_bytes()
         except OSError:
             continue
-        if len(data) <= SNAPSHOT_FILE_CAP:
-            snap[rel] = data
+        snap[rel] = data if len(data) <= SNAPSHOT_FILE_CAP else _OVERCAP
     return snap
 
 
 def enforce_workspace_scope(root, before):
-    """Revert any out-of-workspace write the agent made: for each git-visible file
-    whose bytes differ from `before`, restore the exact pre-content (or delete it
-    if the agent created it). Returns the list of escaped paths (empty = clean)."""
+    """Revert any out-of-workspace write the agent made and return the escaped
+    paths (empty = clean). Newly-created files are deleted (ANY size); files whose
+    snapshotted bytes changed/were deleted are restored exactly. A pre-existing
+    over-cap file that changed is flagged as escaped but not byte-restored (the
+    documented bound)."""
     after = snapshot_outside_workspace(root)
     escaped = []
     for rel in set(before) | set(after):
-        b, a = before.get(rel), after.get(rel)
-        if b == a:
+        b = before.get(rel, _MISSING)
+        a = after.get(rel, _MISSING)
+        if b is a or b == a:               # unchanged (incl. both _OVERCAP / both bytes-equal)
             continue
         escaped.append(rel)
         p = Path(root) / rel
-        if b is None:                      # agent created it → remove
+        if b is _MISSING:                  # agent created it (any size) → remove
             try:
                 p.unlink()
             except OSError:
                 pass
-        else:                              # agent modified/deleted it → restore
+        elif b is _OVERCAP:                # pre-existing over-cap changed → can't byte-restore
+            continue                       # detected (escaped) + run is rejected, but no content to restore
+        else:                              # had a ≤cap snapshot → restore exact pre-content
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(b)
     return sorted(escaped)
