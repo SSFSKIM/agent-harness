@@ -2,24 +2,28 @@
 
 <!-- FILL: one sentence — what this repo is and does. -->
 
-This file is a **map, not an encyclopedia** (max 120 lines, lint-enforced).
+This file is a **map, not an encyclopedia**. Keep it short; the default line
+cap is host-overridable when the map genuinely needs more room.
 Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** A context pack is normally injected at session start (feeder).
-   If missing, read `docs/memory/MEMORY.md` and follow its loading protocol.
+1. **Orient.** The automatic context feeder may be disabled. Read
+   `docs/memory/MEMORY.md` when you need continuity and follow its loading
+   protocol.
 2. **Plan.** Non-trivial work gets a plan the human can see; long-running work
-   gets a living ExecPlan in `docs/exec-plans/active/`.
+   gets a living ExecPlan in `docs/exec-plans/active/`. Small changes use a
+   throwaway in-conversation plan.
 3. **Implement.** Match existing style. New knowledge pages: placement table
    in [the harness page](docs/design-docs/agent-harness.md).
 4. **Validate.** The harness lint gate must be GREEN before every commit —
    exact command in [the harness page](docs/design-docs/agent-harness.md).
-5. **Review.** Declaring an ExecPlan complete triggers the completion gate:
-   self-review the diff first, then dispatch the review personas; iterate
-   until all are satisfied (execplan skill).
+5. **Review.** ExecPlans own their review budget (`review_level`). Always
+   self-review; dispatch review personas only at the risk level the plan calls
+   for (execplan skill).
 6. **Write back.** Update `docs/memory/progress/current.md` before ending a
-   long session; imprint hooks handle session digests automatically.
+   long session. The automatic memory loop may be disabled; follow the harness
+   page for the current mode.
 
 ## Map
 
@@ -50,5 +54,6 @@ Deep truth lives in `docs/` — follow the pointers.
 <!-- FILL: repo-local skills in .claude/skills/ that sessions MUST use and
 when — at minimum a `verify` skill encoding this repo's check order. -->
 
-Commands not listed in this file or in a mandatory skill are out of scope
-for routine work — do not run them ad hoc.
+Named commands and skills are the preferred routine path. Extra CLI exploration
+is allowed when it serves the task; if it repeats, promote it into docs, a
+skill, or the gate.

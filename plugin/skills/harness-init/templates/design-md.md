@@ -11,6 +11,14 @@ rule here or a lint (feedback twice → promote).
 
 - Lint/check failures must carry their own FIX instruction — error output is
   injected into agent context, so it doubles as the correction signal.
+- Review personas use this file as taste authority, not as blinders. They may
+  block on written rules or demonstrable bugs; unwritten preferences become
+  proposed rule additions.
+- Docs governance is tiered: machine-critical docs and harness-managed roots are
+  strict; host-owned project docs are flexible unless opted into
+  `.harness.json` `managed_doc_roots` or `doc_governance: strict`.
+- Plugin component inventory/coverage are advisory for external-plugin hosts
+  unless opted into `.harness.json` strictness.
 - <!-- FILL: this repo's component taste rules — naming, structure, file
   size, error-message style. Keep each rule enforceable on sight; promote
   the stable ones into lints wired into the gate. -->

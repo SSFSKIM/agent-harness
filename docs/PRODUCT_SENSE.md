@@ -12,8 +12,8 @@ harness where big-software work proceeds with minimum human-in-loop.
 1. Open a session and give a task.
 2. (Optional) Check direction at ExecPlan milestones.
 
-Everything else — planning, implementation, lints, persona review, doc
-gardening, imprinting, dreaming — runs inside the harness.
+Everything else — planning, implementation, lints, risk-budgeted persona
+review, doc gardening, imprinting, dreaming — runs inside the harness.
 
 ## Escalation rule (agent-initiated)
 Escalate to the human ONLY for judgment: product direction, taste tradeoffs
@@ -22,4 +22,5 @@ documented decision answers it, proceed without asking.
 
 ## Throughput beats ceremony
 Agent throughput exceeds human review capacity. Prefer short-lived changes,
-fix-forward, and mechanical gates over human approval steps.
+fix-forward, mechanical gates, and risk-budgeted review over human approval
+steps or agent ceremony.

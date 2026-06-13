@@ -12,8 +12,9 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 
 ## Run it
 
-- Load: `claude --plugin-dir ./plugin` from this repo's root. The
-  SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
+- Load: `claude --plugin-dir ./plugin` from this repo's root. The automatic
+  feeder/imprint memory loop is currently disabled; `docs/memory/` is
+  hand-maintained until redesign.
 - Gate: `python3 plugin/scripts/check.py` must be GREEN before every commit.
   The `harness-lint` skill interprets failures.
 - The gate is mechanical: scaffold installs `.git/hooks/pre-commit` running
@@ -27,6 +28,12 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
   under `.claude/skills/` for methodology; a host overrides threshold defaults in
   the same file. Self-host enforces only `plugin/`+`docs/` (S/D lints); see
   ARCHITECTURE.md invariant 7.
+- Docs governance is tiered: machine-critical docs and harness-managed roots are
+  strict; host-owned project docs are flexible unless listed in `.harness.json`
+  `managed_doc_roots` or the host sets `doc_governance: strict`.
+- Plugin component inventory and coverage are self-host strict but advisory for
+  external-plugin hosts unless the host opts into `.harness.json`
+  `component_inventory: strict` or `component_coverage: strict`.
 
 ## Components
 
@@ -60,10 +67,13 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Unresolved question | `docs/memory/openq/` |
 | Product behavior | `docs/product-specs/` |
 | External API facts | `docs/references/` |
+| Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
-Procedure for a new page: kebab-case filename → frontmatter (`status /
-last_verified / owner`) → write → register in that directory's `index.md` →
-cross-link → run the gate (the `docs-tree` skill owns this).
+Procedure for a new harness-managed page: kebab-case filename → frontmatter
+(`status / last_verified / owner`) → write → register in that directory's
+`index.md` → cross-link → run the gate (the `docs-tree` skill owns this).
+Host-owned project roots may use the structure that best fits the repo unless
+they are opted into managed governance.
 
 ## Memory loop — currently DISABLED (hand-maintained memory)
 
@@ -86,5 +96,6 @@ The automatic memory loop is **off**: the SessionStart/UserPromptSubmit
 
 `docs/RELIABILITY.md` and `docs/SECURITY.md` start as small seeds. When a
 review finding or a human correction surfaces a rule worth keeping, append it
-as the next numbered rule (feedback twice → promote). Review personas cite ALL
-numbered rules in their grounding doc — the doc grows, the personas keep up.
+as the next numbered rule (feedback twice → promote). Review personas cite
+relevant written rules for taste/contract findings, and may also block on
+demonstrable bugs with concrete evidence.

@@ -4,8 +4,9 @@ description: Use when setting up, installing, initializing, bootstrapping, or po
 ---
 # Harness init — bootstrap a host repo
 
-Port the harness (docs-as-memory + lints + personas + memory loop) into a
-host repo. The plugin stays where it lives; the host gains the convention.
+Port the harness (docs-as-memory substrate + lints + personas) into a host
+repo. The plugin stays where it lives; the host gains the minimum machine
+contract plus a project-specific docs shape chosen from the repo itself.
 Resolve `PLUGIN` once: this SKILL.md sits at `<plugin>/skills/harness-init/`,
 so PLUGIN is two directories up.
 
@@ -42,29 +43,36 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
     over-specificity portability must avoid — graft additively, govern new docs
     going forward, declare the rest legacy.
 
-## 4. Migrate existing docs
+## 4. Shape and migrate existing docs
 
-Follow `references/migration.md`: triage every existing doc into the tree
-(`git mv`, frontmatter backfill, index registration, link fixes). Never
-delete content — obsolete pages get `status: archived`. Big repos migrate in
-waves: gate first, remaining docs as tech-debt rows.
+Follow `references/migration.md`, but do not force every host into the same
+knowledge taxonomy. The scaffold creates the minimum machine-critical docs and
+harness-managed roots (`design-docs/`, `exec-plans/`, `memory/`). For
+project-specific docs, infer the repo's natural shape: a fundraising repo may
+need `docs/business/`, a growth repo may need `docs/marketing/`, a school repo
+may need `docs/curriculum/`. Create or keep those roots when they make the
+agent more capable.
 
-**Declare the wave boundary in `docs/.harnessignore`** (scaffold seeded it
-empty). List the host's pre-existing `docs/` subtrees that won't follow the
-convention yet — docs-relative prefixes, dir entries end `/` (e.g.
-`business/`, `school-integration/`), bare filenames match one file. The
-content lints (D3/D5/D6/D7) skip them, so the gate reaches GREEN without
-force-renaming human-curated business/spec/research trees. The file is the
-migration backlog: migrate a wave, delete its line. Harness-managed trees
-(`memory/`, `design-docs/`, …) and top-level machine docs (`SECURITY.md`,
-`DESIGN.md`, …) cannot be exempted — the harness always governs its own tree.
+Never delete content — obsolete pages get `status: archived` when migrated.
+Big repos migrate in waves: gate first, remaining docs as tech-debt rows.
+Project-specific roots are host-owned by default: the gate does not block on
+their frontmatter, filename, line count, or index registration unless the host
+opts that root into `.harness.json` `managed_doc_roots` or sets
+`doc_governance: strict`.
+
+`docs/.harnessignore` remains a strict-mode migration tool. Use it when a host
+has opted into global docs governance but still needs a declared legacy wave.
+Harness-managed trees (`memory/`, `design-docs/`, `exec-plans/`) and top-level
+machine docs (`SECURITY.md`, `DESIGN.md`, …) cannot be exempted — the harness
+always governs its own execution surface.
 
 ## 5. Adapt the seeds (judgment — confirm with the human)
 
 `docs/design-docs/core-beliefs.md` ships harness defaults; rules like "no
 hand-written code" are policy, not mechanics. Confirm which rules the host
-adopts, prune or amend, then treat survivors as law. RELIABILITY/SECURITY
-seeds grow later via feedback-twice→promote.
+adopts, prune or amend, then treat survivors as operating defaults. Promote to
+blocking lint only when the rule is mechanical, repeated, and costly if missed.
+RELIABILITY/SECURITY seeds grow later via feedback-twice→promote.
 
 ## 6. Instance skills & app verification (judgment)
 
@@ -98,6 +106,10 @@ mechanize each into its right FORM:
   legitimately exceed a harness default (e.g. a 295-line AGENTS.md), set
   `.harness.json` `size_limits` / `default_size_limit` / `stale_days` instead of
   fighting D1/D7/D4.
+- Plugin component inventory/coverage are advisory for external-plugin hosts by
+  default so plugin updates do not retroactively break host commits. If this
+  host wants them blocking, set `.harness.json` `component_inventory: strict`
+  and/or `component_coverage: strict`.
 - `.harness.json` + `.claude/lints/` are executable config that run on every
   commit (SECURITY.md T9) — `git add -f` them (and any authored
   `.claude/skills/`) if the host blanket-ignores `.claude/`, and review changes
@@ -122,5 +134,5 @@ wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
   ships with FILL markers).
 - Commit the scaffold + migration as its own commit before substantive work.
 - Hand off: the next session starts in the host root with
-  `claude --plugin-dir "$PLUGIN"` — the feeder activates once
-  `docs/memory/MEMORY.md` exists.
+  `claude --plugin-dir "$PLUGIN"` — `docs/memory/MEMORY.md` is the continuity
+  entrypoint while the automatic feeder is disabled.

@@ -7,15 +7,15 @@ owner: harness
 
 This repo is operated by the `agent-harness` Claude Code plugin: docs-as-memory
 knowledge system, taste lints whose FAIL messages carry FIX instructions,
-review personas grounded 1:1 in docs, and a memory loop (feeder / imprint /
-dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
+review personas grounded 1:1 in docs, and a dormant memory loop (feeder /
+imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 
 ## Run it
 
 - Load: `claude --plugin-dir <plugin>` from this repo's root — the plugin's
   location on this machine is recorded in `.git/hooks/pre-commit` (its
-  check.py path reveals the plugin dir). The SessionStart feeder activates
-  once `docs/memory/MEMORY.md` exists.
+  check.py path reveals the plugin dir). The automatic feeder/imprint memory
+  loop ships disabled; `docs/memory/` is hand-maintained until redesign.
 - Gate: run `.git/hooks/pre-commit` — scaffold installs it with this
   machine's exact `check.py` invocation (no placeholders to resolve; rerun
   scaffold.py after moving the repo or plugin and the hook is rewritten).
@@ -31,6 +31,12 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   methodology. Override a harness threshold default for this repo in the same
   file (`size_limits` / `default_size_limit` / `stale_days`). See ARCHITECTURE.md
   invariant 7; the rules are this repo's, not the machine's.
+- Docs governance is tiered: machine-critical docs and harness-managed roots are
+  strict; host-owned project docs are flexible unless listed in `.harness.json`
+  `managed_doc_roots` or the host sets `doc_governance: strict`.
+- Plugin component inventory and coverage are self-host strict but advisory for
+  external-plugin hosts unless the host opts into `.harness.json`
+  `component_inventory: strict` or `component_coverage: strict`.
 
 ## Components
 
@@ -53,14 +59,17 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 | Unresolved question | `docs/memory/openq/` |
 | Product behavior | `docs/product-specs/` |
 | External API facts | `docs/references/` |
+| Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
-Procedure for a new page: kebab-case filename → frontmatter (`status /
-last_verified / owner`) → write → register in that directory's `index.md` →
-cross-link → run the gate (the `docs-tree` skill owns this).
+Procedure for a new harness-managed page: kebab-case filename → frontmatter
+(`status / last_verified / owner`) → write → register in that directory's
+`index.md` → cross-link → run the gate (the `docs-tree` skill owns this).
+Host-owned project roots may use the structure that best fits the repo unless
+they are opted into managed governance.
 
-Pre-existing docs that don't follow the convention yet are declared in
-`docs/.harnessignore` (a migration backlog the content lints skip). Migrate a
-subtree, then delete its line; harness-managed trees can't be listed there.
+`docs/.harnessignore` is a strict-mode migration backlog. Use it only when this
+repo opts into global docs governance but still needs declared legacy subtrees.
+Harness-managed trees can't be listed there.
 
 ## Memory loop — currently DISABLED (hand-maintained memory)
 
@@ -80,5 +89,6 @@ frontmatter, naming, and index registration.
 
 `docs/RELIABILITY.md` and `docs/SECURITY.md` start as small seeds. When a
 review finding or a human correction surfaces a rule worth keeping, append it
-as the next numbered rule (feedback twice → promote). Review personas cite ALL
-numbered rules in their grounding doc — the doc grows, the personas keep up.
+as the next numbered rule (feedback twice → promote). Review personas cite
+relevant written rules for taste/contract findings, and may also block on
+demonstrable bugs with concrete evidence.

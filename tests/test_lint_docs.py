@@ -1,4 +1,4 @@
-import sys, tempfile, unittest
+import json, sys, tempfile, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugin" / "scripts"))
@@ -8,16 +8,30 @@ from fixtures import fm, make_repo, make_plugin
 
 def run_all(root, plugin=None):
     host = lint_docs.hl.exempt_roots(root)  # mirror main()'s host-aware path
+    cfg = lint_docs.hl.gate_config(root)
+    limits = dict(lint_docs.SIZE_LIMITS)
+    ov = cfg.get("size_limits")
+    if isinstance(ov, dict):
+        for k, v in ov.items():
+            if isinstance(k, str):
+                limits[k] = lint_docs._int_or(v, limits.get(k, lint_docs.DEFAULT_LIMIT))
+    default_limit = lint_docs._int_or(cfg.get("default_size_limit"),
+                                      lint_docs.DEFAULT_LIMIT)
+    stale_days = lint_docs._int_or(cfg.get("stale_days"), lint_docs.STALE_DAYS)
     errors = []
-    lint_docs.check_entrypoints(root, errors)
-    lint_docs.check_frontmatter(root, errors, host)
-    lint_docs.check_links(root, errors, host)
-    lint_docs.check_naming(root, errors, host)
-    lint_docs.check_sizes(root, errors, host)
-    lint_docs.check_indexes(root, errors)
+    lint_docs.check_entrypoints(root, errors, limits)
+    lint_docs.check_frontmatter(root, errors, host, stale_days, cfg)
+    lint_docs.check_links(root, errors, host, cfg)
+    lint_docs.check_naming(root, errors, host, cfg)
+    lint_docs.check_sizes(root, errors, host, limits, default_limit, cfg)
+    lint_docs.check_indexes(root, errors, cfg)
     if plugin is not None:
-        lint_docs.check_coverage(root, errors, plugin)
+        lint_docs.check_coverage(root, errors, plugin, cfg)
     return errors
+
+
+def write_cfg(root, **cfg):
+    (root / ".harness.json").write_text(json.dumps(cfg), encoding="utf-8")
 
 
 class TestLintDocs(unittest.TestCase):
@@ -106,6 +120,7 @@ class TestLintDocs(unittest.TestCase):
             "\n".join(lines) + "\n", encoding="utf-8")
 
     def test_harnessignore_exempts_legacy_subtree(self):
+        write_cfg(self.root, doc_governance="strict")
         biz = self.root / "docs" / "business"
         biz.mkdir()
         (biz / "VC_Report (시장).md").write_text("# no fm, bad name\n" + "x\n" * 500)
@@ -115,13 +130,14 @@ class TestLintDocs(unittest.TestCase):
         self.assertFalse(any(r in e for e in errs for r in ("D3", "D6", "D7")), errs)
 
     def test_harnessignore_exempts_single_file(self):
+        write_cfg(self.root, doc_governance="strict")
         (self.root / "docs" / "README.md").write_text("# legacy root doc, no fm\n")
         self._legacy("README.md")
         self.assertFalse(any("D3" in e for e in run_all(self.root)))
 
-    def test_harnessignore_does_not_exempt_unlisted_doc(self):
-        d = self.root / "docs" / "notes"
-        d.mkdir()
+    def test_harnessignore_does_not_exempt_unlisted_managed_doc(self):
+        d = self.root / "docs" / "memory" / "knowledge"
+        d.mkdir(parents=True)
         (d / "loose.md").write_text("# no frontmatter\n")
         self._legacy("business/")  # declares a DIFFERENT root
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
@@ -135,6 +151,7 @@ class TestLintDocs(unittest.TestCase):
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_slashless_entry_is_segment_matched(self):
+        write_cfg(self.root, doc_governance="strict")
         # `business` (no slash) exempts the business/ tree but NOT a sibling
         # `business-plan.md` — segment boundary, not bare substring (arch P1).
         biz = self.root / "docs" / "business"
@@ -145,6 +162,24 @@ class TestLintDocs(unittest.TestCase):
         errs = run_all(self.root)
         self.assertFalse(any("business/in-tree.md" in e for e in errs), errs)
         self.assertTrue(any("business-plan.md" in e and "D3" in e for e in errs), errs)
+
+    def test_project_specific_docs_are_flexible_by_default_on_ported_hosts(self):
+        biz = self.root / "docs" / "business"
+        biz.mkdir()
+        (biz / "VC_Report (시장).md").write_text(
+            "# project-owned doc, no harness frontmatter\n" + "x\n" * 500)
+        errs = run_all(self.root)
+        self.assertFalse(any("business" in e and r in e
+                             for e in errs for r in ("D3", "D6", "D7")), errs)
+
+    def test_host_can_opt_project_specific_root_into_governance(self):
+        write_cfg(self.root, managed_doc_roots=["business/"])
+        biz = self.root / "docs" / "business"
+        biz.mkdir()
+        (biz / "VC_Report (시장).md").write_text("# no fm, bad name\n")
+        errs = run_all(self.root)
+        self.assertTrue(any("business" in e and "D3" in e for e in errs), errs)
+        self.assertTrue(any("business" in e and "D6" in e for e in errs), errs)
 
     def test_harnessignore_partial_prefix_cannot_bypass_managed_guard(self):
         # `mem` must not reach `memory/…` (security P1 — the poisoning vector).
@@ -245,6 +280,23 @@ class TestLintDocs(unittest.TestCase):
         sp.mkdir(parents=True)
         (sp / "plan.md").write_text("mentions mystery here\n")
         self.assertTrue(any("D9" in e for e in run_all(self.root, plugin)))
+
+    def test_d9_skips_external_plugin_on_ported_host_by_default(self):
+        with tempfile.TemporaryDirectory() as d:
+            plugin = make_plugin(Path(d))
+            sk = plugin / "skills" / "mystery"
+            sk.mkdir()
+            (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
+            self.assertFalse(any("D9" in e for e in run_all(self.root, plugin)))
+
+    def test_d9_can_be_strict_on_ported_host_when_opted_in(self):
+        write_cfg(self.root, component_coverage="strict")
+        with tempfile.TemporaryDirectory() as d:
+            plugin = make_plugin(Path(d))
+            sk = plugin / "skills" / "mystery"
+            sk.mkdir()
+            (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
+            self.assertTrue(any("D9" in e for e in run_all(self.root, plugin)))
 
 
 if __name__ == "__main__":

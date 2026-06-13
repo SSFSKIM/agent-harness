@@ -35,19 +35,23 @@ point rightward at skills — the most actionable instruction wins.
    `HARNESS_HEADLESS=1`; every spawned `claude -p` child sets it. Without this:
    SessionStart → feeder spawns claude → its SessionStart → ∞.
 3. **Deterministic gate:** `check.py` = lint_structure + lint_docs +
-   gen_inventory --check + an optional host-lint step (invariant 7) + the test
-   step — a host test command from `.harness.json`/env, else unittest discovery
-   when a `tests/` dir exists (the host command replaces the default, it is not
-   additive). GREEN before every commit.
+   gen_inventory --check (strict for self-host; advisory for external-plugin
+   hosts unless `.harness.json` `component_inventory: strict`) + an optional
+   host-lint step (invariant 7) + the test step — a host test command from
+   `.harness.json`/env, else unittest discovery when a `tests/` dir exists (the
+   host command replaces the default, it is not additive). GREEN before every
+   commit.
 4. **Generated files** carry a GENERATED header; only scripts write them.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
    `.claude/harness/` — gitignored, never under `docs/`.
-6. **Govern-by-default, declared legacy:** the content lints (D3/D5/D6/D7)
-   hold every `docs/*.md` to the convention. A host adopting the harness over
-   a pre-existing `docs/` declares its unmigrated subtrees in
-   `docs/.harnessignore` (a shrinking migration backlog), matched on
-   path-segment boundaries; harness-managed trees (`hl.MANAGED_ROOTS`) and
-   top-level machine docs (`hl.MANAGED_DOCS`) are never exemptable.
+6. **Tiered docs governance:** machine-critical docs and harness-managed roots
+   (`design-docs`, `exec-plans`, `memory`) are strict by default. Host-owned
+   business/product/research docs under `docs/` are flexible unless the host
+   opts a root into `.harness.json` `managed_doc_roots` or sets
+   `doc_governance: strict`. `docs/.harnessignore` is now a strict-mode
+   migration tool, matched on path-segment boundaries; harness-managed roots
+   (`hl.MANAGED_ROOTS`) and top-level machine docs (`hl.MANAGED_DOCS`) are never
+   exemptable.
 7. **Host-owned enforcement (the setter axis):** the built-in lints
    (S1–S7, D1–D10) enforce only the harness's OWN structure (`plugin/`,
    `docs/`, and the root map docs `AGENTS.md`/`ARCHITECTURE.md`). A host's
@@ -62,8 +66,10 @@ point rightward at skills — the most actionable instruction wins.
    host's output (zero of either is valid). Harness
    threshold defaults (D1 120 / D7 400 / D4 30d / MEMORY 60) are per-repo
    overridable via the same file (`size_limits` / `default_size_limit` /
-   `stale_days`); absent → defaults unchanged. `lint_cmd`/`test_cmd` are
-   executable config that run every commit (SECURITY.md T9).
+   `stale_days`); component inventory/coverage can be made strict explicitly
+   (`component_inventory`, `component_coverage`). Absent → defaults unchanged.
+   `lint_cmd`/`test_cmd` are executable config that run every commit
+   (SECURITY.md T9).
 
 ## Data flows
 
@@ -87,9 +93,11 @@ point rightward at skills — the most actionable instruction wins.
 3. **CONSOLIDATE** *(manual; no automatic input while IMPRINT is off)* —
    `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
    knowledge/limitations/openq/adr directly → `check.py` green terminates.
-4. **REVIEW** — `execplan` completion gate → self-review → review-arch /
-   review-reliability (each grounded 1:1 in its doc) + review-security only when
-   the diff touches the live exec surface (hooks / `.harness.json` /
+4. **REVIEW** — `execplan` completion gate → self-review → spend the plan's
+   `review_level` budget (`none`, `targeted`, `standard`, `full`). Review
+   personas are grounded 1:1 in docs for taste/contract authority, but may flag
+   demonstrable bugs with concrete evidence. review-security is dispatched only
+   when the diff touches the live exec surface (hooks / `.harness.json` /
    `.harnessignore`; the rest of SECURITY.md is dormant with the disabled memory
    loop — deferred 2026-06-13) → iterate until satisfied.
 5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset

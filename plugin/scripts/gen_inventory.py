@@ -2,6 +2,8 @@
 """Generates docs/generated/component-inventory.md from plugin contents.
 
 Hand-editing is forbidden; `--check` (run by check.py) fails on drift.
+For ported hosts with an external plugin, the inventory is advisory by default
+so plugin updates do not retroactively redden the host gate.
 """
 import json
 import sys
@@ -45,11 +47,21 @@ def check(plugin, out):
     return out.exists() and out.read_text(encoding="utf-8") == build(plugin)
 
 
+def check_required(root, plugin, cfg=None):
+    cfg = cfg or {}
+    return hl.is_self_host(root, plugin) or cfg.get("component_inventory") == "strict"
+
+
 def main():
     root = hl.repo_root()
     plugin = hl.plugin_root()
+    cfg = hl.gate_config(root)
     out = out_path(root)
     if "--check" in sys.argv:
+        if not check_required(root, plugin, cfg):
+            print("gen_inventory: SKIP — external plugin inventory is advisory "
+                  "unless .harness.json component_inventory is strict.")
+            return
         if not check(plugin, out):
             print(f"FAIL GEN docs/generated/component-inventory.md: stale or hand-edited. "
                   f"FIX: run `python3 plugin/scripts/gen_inventory.py` and commit the result.")

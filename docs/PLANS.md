@@ -11,7 +11,15 @@ openai-agents-js `PLANS.md` spec: complex work rides a self-contained
 
 ## When
 ExecPlan if any: multi-session work, touches ≥3 components, changes
-architecture/memory semantics, or needs a completion gate. Otherwise throwaway.
+architecture/memory semantics, or needs a durable decision log. Otherwise
+throwaway. The plan owns its review budget; do not spend full-review ceremony on
+low-risk work.
+
+## Review budget
+- `none` — gate + self-review only. Small, low-risk, mechanically checked work.
+- `targeted` — gate + self-review + the persona(s) matching the risk touched.
+- `standard` — gate + self-review + review-arch and review-reliability.
+- `full` — gate + self-review + all relevant personas, including security.
 
 ## Template (copy into docs/exec-plans/active/YYYY-MM-DD-<slug>.md)
 
@@ -20,6 +28,7 @@ architecture/memory semantics, or needs a completion gate. Otherwise throwaway.
     last_verified: <today>
     owner: <who drives>
     base_commit: <git rev-parse HEAD at plan creation>
+    review_level: targeted
     ---
     # <Title>
     ## Goal
@@ -39,8 +48,8 @@ architecture/memory semantics, or needs a completion gate. Otherwise throwaway.
 ## Rules
 - Update Progress/Surprises/Decisions as you work, not after.
 - A novice agent must be able to execute from the plan alone.
-- Completion = gate passed (execplan skill) → move to completed/, fill
-  Outcomes & retrospective.
+- Completion = gate passed + the plan's review budget satisfied (execplan
+  skill) → move to completed/, fill Outcomes & retrospective.
 
 ## Quality rules (adopted 2026-06-12 from the upstream ExecPlan spec)
 - **Goal = demonstrably working behavior.** Phrase the definition of done as

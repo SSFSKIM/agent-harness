@@ -5,8 +5,10 @@ owner: harness
 ---
 # Core beliefs (golden rules)
 
-Agent-first operating principles. Every rule here is enforceable on sight;
-if you find yourself violating one, that is a P1.
+Agent-first operating principles. These are defaults for the self-hosting
+reference repo and seed material for hosts. A host adopts, amends, or rejects
+policy rules during `harness-init`; only mechanical, repeated, high-cost
+violations should become blocking lints.
 
 1. **No hand-written code.** Humans contribute prompts, reviews, and docs
    feedback — never code. All artifacts (code, docs, scripts, configs) are
@@ -15,8 +17,9 @@ if you find yourself violating one, that is a P1.
    invisible to agents. Encode decisions as versioned repo artifacts.
 3. **Map, not encyclopedia.** Entry points stay short and stable; depth lives
    behind pointers (progressive disclosure).
-4. **Taste is enforced mechanically, not described.** Boundaries via lints and
-   structural tests; every lint error carries its own FIX instruction.
+4. **Taste is enforced mechanically when it is truly mechanical.** Boundaries
+   that are always true and cheaply decidable belong in lints; project judgment
+   belongs in guide-skills, docs, or review feedback.
 5. **Prefer shared utilities over hand-rolled helpers** for invariants that
    must stay centralized (within this repo: harness_lib).
 6. **Parse, don't validate, at boundaries.** Hook stdin, queue entries, and
@@ -24,8 +27,8 @@ if you find yourself violating one, that is a P1.
 7. **Internalize dependencies.** Prefer boring tech and stdlib; reimplementing
    a small helper beats importing an opaque package.
 8. **Minimal blocking gates, fix-forward.** Only deterministic checks
-   (check.py) block commits. Agent throughput exceeds human attention; cheap
-   fixes beat long waits. Non-blocking findings go to tech-debt-tracker.md.
+   (check.py) block commits. Review cost is risk-budgeted; cheap fixes beat
+   long waits. Non-blocking findings go to tech-debt-tracker.md.
 9. **Struggling agent = harness gap.** Diagnose the missing tool/guardrail/doc,
    encode it, retry. Never just "try harder."
 10. **Feedback twice → promote to doc or lint.** The same human correction must

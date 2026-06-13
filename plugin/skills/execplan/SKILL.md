@@ -11,8 +11,9 @@ Method and template live in `docs/PLANS.md` — read it first.
    `docs/exec-plans/active/YYYY-MM-DD-<slug>.md` (kebab-case slug).
 2. Fill Goal (observable definition of done), Context (links a novice needs),
    Milestones (each independently verifiable).
-3. Record `base_commit: $(git rev-parse HEAD)` in the plan frontmatter, run
-   the gate (command in `docs/design-docs/agent-harness.md`), commit.
+3. Record `base_commit: $(git rev-parse HEAD)` and `review_level:` in the plan
+   frontmatter (`none`, `targeted`, `standard`, or `full`), run the gate
+   (command in `docs/design-docs/agent-harness.md`), commit.
 
 ## Maintain (as you work, not after)
 - Append to Progress log each working block; record Surprises & discoveries
@@ -23,12 +24,17 @@ Method and template live in `docs/PLANS.md` — read it first.
 2. **Self-review first**: read the full diff
    (`git diff <base_commit from plan frontmatter>..HEAD`) against the plan's
    Goal; fix what you would flag.
-3. Dispatch the review personas **in parallel** (Task tool): **review-arch** and
-   **review-reliability** always; add **review-security** only when the diff
-   touches the live exec surface — `hooks/`, `.harness.json` / `.claude/lints/`
-   (host commands that run on commit), or `docs/.harnessignore` (lint scoping).
-   (The rest of the threat model guards the disabled memory loop — SECURITY.md is
-   deferred; see its status note.) Each persona prompt:
+3. Spend the plan's review budget:
+   - `none`: no subagent review; self-review + GREEN gate is enough.
+   - `targeted`: dispatch only the persona(s) matching the risk touched
+     (architecture/design, reliability/runtime, or security live exec surface).
+   - `standard`: dispatch **review-arch** and **review-reliability** in parallel.
+   - `full`: dispatch every relevant persona; include **review-security** when
+     the diff touches the live exec surface — `hooks/`, `.harness.json` /
+     `.claude/lints/` (host commands that run on commit), or
+     `docs/.harnessignore` (lint scoping). The rest of the threat model guards
+     the disabled memory loop — SECURITY.md is deferred; see its status note.
+   Each persona prompt:
    "Review the diff for ExecPlan <slug>. Run `git diff <base_commit>..HEAD`
    (substitute the actual SHA from the plan's frontmatter) to see it. Read
    your grounding doc first. Output P1/P2 findings with file:line and a

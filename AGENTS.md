@@ -6,20 +6,19 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** A context pack is normally injected at session start (feeder).
-   If missing, read `docs/memory/MEMORY.md` and follow its loading protocol.
+1. **Orient.** The automatic context feeder is disabled. Read
+   `docs/memory/MEMORY.md` when you need continuity and follow its loading
+   protocol.
 2. **Plan.** Non-trivial work gets a living ExecPlan in `docs/exec-plans/active/`
-   (method: `docs/PLANS.md`; procedure: `execplan` skill). Small changes need
-   only a throwaway in-conversation plan.
+   (method: `docs/PLANS.md`; procedure: `execplan` skill). Small changes use a
+   throwaway in-conversation plan; do not add ceremony when the risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
    style. New knowledge pages: the `docs-tree` skill decides where they live.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
-5. **Review.** Declaring an ExecPlan complete triggers the completion gate:
-   self-review the diff first, then dispatch review-arch + review-reliability in
-   parallel (review-security only when the diff touches the live exec surface —
-   hooks / `.harness.json` / `.harnessignore`; the rest of the threat model is
-   dormant with the disabled memory loop); iterate until satisfied (`execplan`).
+5. **Review.** ExecPlans own their review budget (`review_level`). Always
+   self-review; dispatch review personas only at the risk level the plan calls
+   for (`execplan`). Security review is reserved for the live exec surface.
 
 ## Map
 
@@ -46,7 +45,7 @@ Deep truth lives in `docs/` — follow the pointers.
 
 - **No hand-written code.** Humans steer via prompts, reviews, docs feedback only.
 - **Minimal blocking gates.** Only `check.py` blocks a commit; everything else
-  is fix-forward via `tech-debt-tracker.md` or ExecPlan feedback.
+  is risk-budgeted or fix-forward via `tech-debt-tracker.md` / ExecPlan feedback.
 - **Escalate only on judgment.** Mechanical answers (lint, tests, documented
   decisions) → proceed. Taste / product tradeoffs → ask the human.
 - **Struggling = harness gap.** If you fight the repo, diagnose what is missing
@@ -55,8 +54,9 @@ Deep truth lives in `docs/` — follow the pointers.
   rule or a lint.
 - **Not in the repo = does not exist.** Decisions made in chat must end up in
   `docs/` or `docs/memory/` (imprint hooks do this; verify when in doubt).
-- **Negative space.** Commands/scripts not named in this map or a skill are
-  out of scope for routine work — do not run them ad hoc.
+- **Preferred paths, not negative space.** Named commands and skills are the
+  routine path. Extra CLI exploration is allowed when it serves the task; if it
+  repeats, promote it into docs, a skill, or the gate.
 
 ## Porting
 
@@ -70,8 +70,6 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Memory (read/write paths)
 
-- Read: feeder injects a compiled context pack at SessionStart + a targeted
-  addendum on the session's first prompt.
-- Write: PreCompact/SessionEnd hooks enqueue imprint jobs; `/dream` (dreamer
-  agent) consolidates; `garden` (doc-gardener agent) GCs docs entropy.
-  Never bypass `docs/memory/` structure; lint enforces frontmatter and indexes.
+- The automatic feeder/imprint memory loop is disabled pending redesign.
+  Maintain `docs/memory/` by hand for now; `/dream` and `garden` remain manual
+  tools. Never bypass `docs/memory/` structure.
