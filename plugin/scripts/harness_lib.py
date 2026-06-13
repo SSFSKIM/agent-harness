@@ -7,6 +7,7 @@ Pure stdlib. Portable: never hardcodes an absolute path.
 import datetime
 import json
 import os
+import re
 import shlex
 from pathlib import Path
 
@@ -54,6 +55,23 @@ def state_dir(root):
     d = Path(root) / ".claude" / "harness"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def claude_home():
+    """Claude Code's user dir (`~/.claude`), where per-project session
+    transcripts live. CLAUDE_HOME overrides it (tests / non-default installs)."""
+    env = os.environ.get("CLAUDE_HOME")
+    return Path(env) if env else Path.home() / ".claude"
+
+
+def project_transcripts_dir(root):
+    """`<claude_home>/projects/<slug>/` for a repo root — where that repo's past
+    Claude Code session transcript `.jsonl` files (one per session) live. Claude
+    encodes the project path as the dir name by replacing every non-alphanumeric
+    char with `-` (e.g. `/repo/My Code` → `-repo-My-Code`); the dreaming
+    pipeline mines these as rollouts."""
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(root).resolve()))
+    return claude_home() / "projects" / slug
 
 
 def read_frontmatter(path):

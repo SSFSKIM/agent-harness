@@ -13,7 +13,7 @@ ALLOWED_IMPORTS = {
     "argparse", "ast", "datetime", "difflib", "errno", "hashlib", "json",
     "os", "pathlib", "re", "shlex", "shutil", "sqlite3", "subprocess", "sys",
     "tempfile", "textwrap", "time", "unittest", "harness_lib",
-    "imprint_guard", "memories_db",
+    "imprint_guard", "memories_db", "dream_discover",
 }
 ALLOWED_EVENTS = {"SessionStart", "UserPromptSubmit", "PreCompact", "SessionEnd",
                   "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"}
