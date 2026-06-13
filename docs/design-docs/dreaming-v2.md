@@ -73,10 +73,22 @@ built ready for it.
 This rebuilds the write path the deferred T1/T2/T4/T6/T7 model guards
 (SECURITY.md is scoped-dormant; reactivate here). Carried over faithfully from
 Codex + our model: transcripts/rollout text are DATA not instructions (T1);
-secret redaction before model upload (T4); least-privilege headless child (T5);
-no raw content in the `-p` arg — pass paths/temp files (T6); the consolidation
-agent reads diff/summaries (digest-derived) → inline DATA guard (T7); **the
-post-hoc workspace-scope check is the real path restriction (T2/poisoning).**
+secret redaction before the model sees anything (T4); least-privilege headless
+child (T5).
+
+**Phase 1 (extract) — the strongest posture, because it ingests untrusted
+transcript content:** the model runs with `--allowedTools ""` (NO Read/Write/
+Bash/network), so an instruction injected into a rollout has no mechanism to act
+— stronger than Codex's writable-roots sandbox, which still permits reads. This
+supersedes the earlier "pass a path" T6 wording for Phase 1: we carry a
+redacted+filtered DIGEST (never the raw rollout) and pipe it via STDIN (out of
+`ps`/ARG_MAX), so there is no file to point at and nothing to read. Redaction
+runs before the model AND on its output before storage (defense in depth).
+
+**Phase 2 (consolidate)** still needs file access (it writes `MEMORY.md`), so it
+keeps the path-scoped form: reads diff/summaries (digest-derived) → inline DATA
+guard (T7); **the post-hoc workspace-scope check is the real path restriction
+(T2/poisoning).**
 
 ## What this is NOT (v2 boundaries)
 No feeder/INJECT rewiring; no SessionStart auto-trigger (manual `/dream`); no
