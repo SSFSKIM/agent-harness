@@ -31,9 +31,11 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   methodology. Override a harness threshold default for this repo in the same
   file (`size_limits` / `default_size_limit` / `stale_days`). See ARCHITECTURE.md
   invariant 7; the rules are this repo's, not the machine's.
-- Docs governance is tiered: machine-critical docs and harness-managed roots are
-  strict; host-owned project docs are flexible unless listed in `.harness.json`
-  `managed_doc_roots` or the host sets `doc_governance: strict`.
+- Docs governance is tiered: machine-critical docs and harness-managed roots
+  (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
+  host-owned business/marketing/research docs are flexible unless listed in
+  `.harness.json` `managed_doc_roots` or the host sets
+  `doc_governance: strict`.
 - Plugin component inventory and coverage are self-host strict but advisory for
   external-plugin hosts unless the host opts into `.harness.json`
   `component_inventory: strict` or `component_coverage: strict`.
@@ -57,7 +59,7 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 | Decision + why | `docs/memory/adr/` |
 | Known landmine | `docs/memory/limitations/` |
 | Unresolved question | `docs/memory/openq/` |
-| Product behavior | `docs/product-specs/` |
+| Product behavior | `docs/product-specs/` (harness-managed by default) |
 | External API facts | `docs/references/` |
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 

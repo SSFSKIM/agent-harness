@@ -28,12 +28,13 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   applied to every host is the lint-layer form of the monolithic-AGENTS.md
   anti-pattern.
 - Docs governance is tiered, not global. Machine-critical docs and
-  harness-managed roots (`design-docs`, `exec-plans`, `memory`) stay strict by
-  default because the machine reads them. Host-owned business/product/research
-  docs under `docs/` are flexible by default; `harness-init` should shape them
-  into natural project-specific roots and only opt a root into blocking
-  governance (`.harness.json` `managed_doc_roots` or `doc_governance: strict`)
-  when the host actually wants that contract.
+  harness-managed roots (`design-docs`, `exec-plans`, `memory`,
+  `product-specs`) stay strict by default because the machine reads them or the
+  agent needs them to understand product intent. Host-owned
+  business/marketing/research docs under `docs/` are flexible by default;
+  `harness-init` should shape them into natural project-specific roots and only
+  opt a root into blocking governance (`.harness.json` `managed_doc_roots` or
+  `doc_governance: strict`) when the host actually wants that contract.
 - Plugin component drift is self-host strict and ported-host advisory by
   default. A host that wants plugin inventory or component mention coverage to
   block commits opts in with `.harness.json` `component_inventory: strict` or

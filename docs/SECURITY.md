@@ -51,16 +51,17 @@ Grounding document for the review-security persona. Threats are numbered.
   nothing else. It grants no capability. Matching is on path-segment boundaries
   (a partial prefix like `mem` can never reach `memory/…`), and it cannot exempt
   a harness-managed tree (`hl.MANAGED_ROOTS`:
-  memory/design-docs/exec-plans/generated) **nor a top-level machine doc**
-  (`hl.MANAGED_DOCS`: PLANS/DESIGN/SECURITY/RELIABILITY/QUALITY_SCORE/
-  PRODUCT_SENSE — the persona-grounding + execplan docs the gate rides on).
-  Host-owned business/product/research docs are flexible by default, so they do
-  not need `.harnessignore` merely to exist. D8 index-registration remains for
-  harness-managed indexed memory/design roots; the feeder reads only structured,
-  indexed memory. So `.harnessignore` cannot un-govern or poison the
-  memory/design tree. It is versioned config (Tier 0): changes are git-visible
-  and reviewed like any committed file — a framing that depends on the T1
-  imprint guard holding (a headless child must not write it; see tracker).
+  memory/design-docs/exec-plans/product-specs/generated) **nor a top-level
+  machine doc** (`hl.MANAGED_DOCS`: PLANS/DESIGN/SECURITY/RELIABILITY/
+  QUALITY_SCORE/PRODUCT_SENSE — the persona-grounding + execplan docs the gate
+  rides on). Host-owned business/marketing/research docs are flexible by
+  default, so they do not need `.harnessignore` merely to exist. D8
+  index-registration remains for harness-managed indexed memory/design/product
+  roots; the feeder reads only structured, indexed memory. So `.harnessignore`
+  cannot un-govern or poison the memory/design/product tree. It is versioned
+  config (Tier 0): changes are git-visible and reviewed like any committed file
+  — a framing that depends on the T1 imprint guard holding (a headless child
+  must not write it; see tracker).
 - **T9 — `.harness.json` + `.claude/lints/` are Tier-0 executable config.**
   The gate config's `lint_cmd`/`test_cmd` are shell commands `check.py` (and so
   the scaffold-installed `.git/hooks/pre-commit`) runs on every commit with user

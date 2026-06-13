@@ -97,10 +97,11 @@ def iter_md(base):
 
 
 # Doc trees the harness always governs — never exemptable via .harnessignore,
-# so a host can't un-govern (and silently poison) the memory/design tree.
+# so a host can't un-govern (and silently poison) the memory/design/product tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
 # (the persona grounding + execplan docs that the review gate itself rides on).
-MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory")
+MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
+                 "product-specs")
 MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")
 
@@ -114,9 +115,9 @@ def exempt_roots(root):
     and neither touches a sibling `business-plan.md`). `#` comments and blanks
     ignored. Absent/unreadable → (). The list is a migration backlog for hosts
     that opt into `doc_governance: strict`; relaxed hosts usually do not need
-    it because project-specific docs are host-owned by default. Entries naming
-    a MANAGED_ROOT subtree or a MANAGED_DOC are dropped: the harness governs its
-    own tree regardless of what a host writes here.
+    it because additional project-specific docs are host-owned by default.
+    Entries naming a MANAGED_ROOT subtree or a MANAGED_DOC are dropped: the
+    harness governs its own tree regardless of what a host writes here.
     """
     try:
         # errors="replace" is the load-bearing guard against non-UTF8 bytes;

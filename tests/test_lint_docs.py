@@ -99,6 +99,21 @@ class TestLintDocs(unittest.TestCase):
         (self.root / "docs" / "product-specs").mkdir()
         self.assertFalse(any("D8" in e for e in run_all(self.root)))
 
+    def test_product_specs_governed_by_default_on_ported_hosts(self):
+        prod = self.root / "docs" / "product-specs"
+        prod.mkdir()
+        (prod / "Feature Brief.md").write_text("# product intent without convention\n")
+        errs = run_all(self.root)
+        self.assertTrue(any("product-specs" in e and "D3" in e for e in errs), errs)
+        self.assertTrue(any("product-specs" in e and "D6" in e for e in errs), errs)
+
+    def test_product_specs_needs_index_when_pages_exist(self):
+        prod = self.root / "docs" / "product-specs"
+        prod.mkdir()
+        (prod / "feature-brief.md").write_text(fm() + "# product intent\n")
+        errs = run_all(self.root)
+        self.assertTrue(any("product-specs" in e and "D8" in e for e in errs), errs)
+
     def test_d9_undocumented_component(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"
@@ -149,6 +164,14 @@ class TestLintDocs(unittest.TestCase):
         (bad / "loose.md").write_text("# no frontmatter\n")
         self._legacy("memory/")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
+
+    def test_harnessignore_cannot_exempt_product_specs(self):
+        prod = self.root / "docs" / "product-specs"
+        prod.mkdir()
+        (prod / "loose.md").write_text("# no frontmatter\n")
+        self._legacy("product-specs/")
+        self.assertTrue(any("product-specs" in e and "D3" in e
+                            for e in run_all(self.root)))
 
     def test_harnessignore_slashless_entry_is_segment_matched(self):
         write_cfg(self.root, doc_governance="strict")

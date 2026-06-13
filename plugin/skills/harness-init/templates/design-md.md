@@ -14,8 +14,9 @@ rule here or a lint (feedback twice → promote).
 - Review personas use this file as taste authority, not as blinders. They may
   block on written rules or demonstrable bugs; unwritten preferences become
   proposed rule additions.
-- Docs governance is tiered: machine-critical docs and harness-managed roots are
-  strict; host-owned project docs are flexible unless opted into
+- Docs governance is tiered: machine-critical docs and harness-managed roots
+  (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
+  host-owned business/marketing/research docs are flexible unless opted into
   `.harness.json` `managed_doc_roots` or `doc_governance: strict`.
 - Plugin component inventory/coverage are advisory for external-plugin hosts
   unless opted into `.harness.json` strictness.

@@ -28,8 +28,8 @@ can flag demonstrable bugs without inventing unwritten taste rules.
   harness-managed roots are strict by default; host-specific docs under `docs/`
   are flexible unless opted into governance.
 - [x] M2 Update `harness-init` and docs-tree guidance so agents create
-  project-specific docs structure during porting instead of forcing every host
-  into the same product-specs/references shape.
+  additional project-specific docs structure during porting instead of forcing
+  every host artifact into the same references/product-adjacent shape.
 - [x] M3 Add ExecPlan `review_level` semantics and make the completion gate
   risk-budgeted (`none`, `targeted`, `standard`, `full`).
 - [x] M4 Narrow review-persona "ONLY authority" language to taste authority;
@@ -53,8 +53,11 @@ can flag demonstrable bugs without inventing unwritten taste rules.
 - 2026-06-13: Keep self-host strict. The self-host repo is the reference
   implementation, so strict D-lints still catch drift here.
 - 2026-06-13: Ported hosts default to flexible project docs. Machine-critical
-  docs remain blocking; host-owned business/product/research docs do not become
-  commit blockers unless the host opts them into managed roots.
+  docs remain blocking; host-owned business/marketing/research docs do not
+  become commit blockers unless the host opts them into managed roots.
+- 2026-06-14 follow-up: `docs/product-specs/` moved back into the default
+  governed surface. Product intent is machine-critical enough for harness
+  decisions; `docs/references/` remains host-owned/advisory by default.
 ## Feedback (from completion gate)
 - Completion gate run during PR #1 review (`review_level: standard` + security,
   because the diff touches the live exec surface `plugin/scripts/*`), diff
@@ -86,7 +89,7 @@ can flag demonstrable bugs without inventing unwritten taste rules.
 ## Outcomes & retrospective
 - Shipped tiered docs governance: machine-critical docs + managed roots
   (`memory`/`design-docs`/`exec-plans`) stay strict in both modes; host-owned
-  business/product/research docs are flexible on ported hosts unless opted in
+  business/marketing/research docs are flexible on ported hosts unless opted in
   (`managed_doc_roots` / `doc_governance: strict`). Component inventory/coverage
   is self-host strict, ported-host advisory. Review cost is risk-budgeted
   (`review_level`), and personas may flag evidence-backed bugs beyond their
@@ -94,3 +97,6 @@ can flag demonstrable bugs without inventing unwritten taste rules.
 - Gate closed at PR #1 review: SATISFIED, one P2 fixed, one reported P2 rejected
   on verification, two proposed rule additions deferred. Bundled into PR #1 with
   the front-loading self-gates plan and merged to master.
+- Follow-up: the flexible bucket is now narrower than the original PR shipped:
+  `docs/product-specs/` is governed by default; extra host roots remain
+  situational and opt-in.

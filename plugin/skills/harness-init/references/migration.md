@@ -17,7 +17,7 @@ universal taxonomy.
 | Known issues, quirks, gotchas | `docs/memory/limitations/` |
 | Roadmaps, TODO lists | `docs/exec-plans/active/` (living plans) or tech-debt-tracker rows |
 | External API / service notes | `docs/references/` (llms.txt-style digests) |
-| Product / feature specs | `docs/product-specs/` |
+| Product / feature specs | `docs/product-specs/` (harness-managed by default) |
 | Historical / superseded docs | Keep in place or move alongside successors; set `status: archived` (D4-exempt) |
 | Host-specific bodies of knowledge | Create/keep the natural root (`docs/business/`, `docs/marketing/`, `docs/curriculum/`, etc.); opt into blocking governance only when useful |
 

@@ -45,10 +45,11 @@ point rightward at skills — the most actionable instruction wins.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
    `.claude/harness/` — gitignored, never under `docs/`.
 6. **Tiered docs governance:** machine-critical docs and harness-managed roots
-   (`design-docs`, `exec-plans`, `memory`) are strict by default. Host-owned
-   business/product/research docs under `docs/` are flexible unless the host
-   opts a root into `.harness.json` `managed_doc_roots` or sets
-   `doc_governance: strict`. `docs/.harnessignore` is now a strict-mode
+   (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict by
+   default. Host-owned business/marketing/research docs under `docs/` are
+   flexible unless the host opts a root into `.harness.json`
+   `managed_doc_roots` or sets `doc_governance: strict`. `docs/.harnessignore`
+   is now a strict-mode
    migration tool, matched on path-segment boundaries; harness-managed roots
    (`hl.MANAGED_ROOTS`) and top-level machine docs (`hl.MANAGED_DOCS`) are never
    exemptable.

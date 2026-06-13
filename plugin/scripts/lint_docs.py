@@ -3,8 +3,9 @@
 
 Every FAIL message includes a FIX instruction: lint output is injected into
 agent context, so errors double as corrective signals (core-beliefs).
-Self-host is strict; ported hosts keep machine-critical docs strict while
-project-specific docs stay host-owned unless opted into governance.
+Self-host is strict; ported hosts keep machine-critical docs and
+product-specs strict while additional project-specific docs stay host-owned
+unless opted into governance.
 Exit 0 = green; exit 1 = at least one FAIL.
 """
 import datetime
@@ -18,13 +19,13 @@ FM_REQUIRED = ("status", "last_verified", "owner")
 INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/adr", "memory/knowledge", "memory/openq",
                 "memory/limitations")
-HOST_INDEXED_DIRS = ("design-docs", "memory/adr", "memory/knowledge",
-                     "memory/openq", "memory/limitations")
+HOST_INDEXED_DIRS = ("design-docs", "product-specs", "memory/adr",
+                     "memory/knowledge", "memory/openq", "memory/limitations")
 # Relaxed-mode content-governed roots. `generated/` is intentionally absent: it
 # is content-lint-exempt (FM_EXEMPT/SIZE_EXEMPT) and guarded from .harnessignore
 # un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it. Do not
 # "reconcile" the two tuples; the one-element divergence is by design.
-HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory")
+HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
 SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
 DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
@@ -71,9 +72,10 @@ def _strict_doc_governance(root, cfg=None, plugin=None):
 def _managed_roots(cfg=None):
     """Docs-relative roots governed in relaxed host mode.
 
-    The harness owns the minimum substrate by default. Host/project-specific
-    roots (for example `business/` or `marketing/`) become governed only when
-    the host opts them in through `.harness.json` `managed_doc_roots`.
+    The harness owns the minimum substrate by default. Additional
+    host/project-specific roots (for example `business/` or `marketing/`)
+    become governed only when the host opts them in through `.harness.json`
+    `managed_doc_roots`.
     """
     cfg = cfg or {}
     roots = list(HOST_MANAGED_ROOTS)

@@ -15,7 +15,7 @@ description: Use when adding or relocating knowledge — decides where a page be
 | Decision + why | `docs/memory/adr/` |
 | Known landmine | `docs/memory/limitations/` |
 | Unresolved question | `docs/memory/openq/` |
-| Product behavior | `docs/product-specs/` or the host's natural product root |
+| Product behavior | `docs/product-specs/` (harness-managed by default) |
 | External API facts | `docs/references/` (llms.txt style) |
 | Host-specific business/marketing/curriculum/etc. knowledge | Create or use a natural `docs/<domain>/` root; opt it into governance only when useful |
 

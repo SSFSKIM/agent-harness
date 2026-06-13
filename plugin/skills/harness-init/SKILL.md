@@ -47,11 +47,11 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
 
 Follow `references/migration.md`, but do not force every host into the same
 knowledge taxonomy. The scaffold creates the minimum machine-critical docs and
-harness-managed roots (`design-docs/`, `exec-plans/`, `memory/`). For
-project-specific docs, infer the repo's natural shape: a fundraising repo may
-need `docs/business/`, a growth repo may need `docs/marketing/`, a school repo
-may need `docs/curriculum/`. Create or keep those roots when they make the
-agent more capable.
+harness-managed roots (`design-docs/`, `exec-plans/`, `memory/`,
+`product-specs/`). For additional project-specific docs, infer the repo's
+natural shape: a fundraising repo may need `docs/business/`, a growth repo may
+need `docs/marketing/`, a school repo may need `docs/curriculum/`. Create or
+keep those roots when they make the agent more capable.
 
 Never delete content — obsolete pages get `status: archived` when migrated.
 Big repos migrate in waves: gate first, remaining docs as tech-debt rows.

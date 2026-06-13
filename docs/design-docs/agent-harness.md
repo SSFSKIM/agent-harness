@@ -28,9 +28,11 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
   under `.claude/skills/` for methodology; a host overrides threshold defaults in
   the same file. Self-host enforces only `plugin/`+`docs/` (S/D lints); see
   ARCHITECTURE.md invariant 7.
-- Docs governance is tiered: machine-critical docs and harness-managed roots are
-  strict; host-owned project docs are flexible unless listed in `.harness.json`
-  `managed_doc_roots` or the host sets `doc_governance: strict`.
+- Docs governance is tiered: machine-critical docs and harness-managed roots
+  (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
+  host-owned business/marketing/research docs are flexible unless listed in
+  `.harness.json` `managed_doc_roots` or the host sets
+  `doc_governance: strict`.
 - Plugin component inventory and coverage are self-host strict but advisory for
   external-plugin hosts unless the host opts into `.harness.json`
   `component_inventory: strict` or `component_coverage: strict`.
@@ -65,7 +67,7 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Decision + why | `docs/memory/adr/` |
 | Known landmine | `docs/memory/limitations/` |
 | Unresolved question | `docs/memory/openq/` |
-| Product behavior | `docs/product-specs/` |
+| Product behavior | `docs/product-specs/` (harness-managed by default) |
 | External API facts | `docs/references/` |
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 

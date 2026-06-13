@@ -78,6 +78,12 @@ owner: dreamer
   replaced with preferred-path + promote-if-repeated guidance. Gate GREEN
   (89 tests). Formal subagent review not dispatched in this environment because
   subagent tools require explicit user authorization.
+- 2026-06-14 follow-up: `docs/product-specs/` is back in the default governed
+  surface. Product intent is machine-critical enough for harness decisions, so
+  ported hosts keep machine-critical docs + product specs + harness-managed
+  roots strict by default. Additional host-owned roots such as
+  business/marketing/research/curriculum stay flexible unless opted in;
+  `docs/references/` remains host-owned/advisory by default.
 - Next: (a) memory-loop redesign (openq) — the deferred sophistication;
   (b) optionally migrate a wave of Lingual's declared legacy trees;
   (c) complete review/close `flexible-host-governance` if subagent dispatch is
