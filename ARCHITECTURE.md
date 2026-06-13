@@ -35,8 +35,10 @@ point rightward at skills — the most actionable instruction wins.
    `HARNESS_HEADLESS=1`; every spawned `claude -p` child sets it. Without this:
    SessionStart → feeder spawns claude → its SessionStart → ∞.
 3. **Deterministic gate:** `check.py` = lint_structure + lint_docs +
-   gen_inventory --check + unittest, plus an optional host-lint step and a
-   host-supplied test command (invariant 7). GREEN before every commit.
+   gen_inventory --check + an optional host-lint step (invariant 7) + the test
+   step — a host test command from `.harness.json`/env, else unittest discovery
+   when a `tests/` dir exists (the host command replaces the default, it is not
+   additive). GREEN before every commit.
 4. **Generated files** carry a GENERATED header; only scripts write them.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
    `.claude/harness/` — gitignored, never under `docs/`.

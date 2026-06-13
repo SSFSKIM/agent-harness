@@ -54,14 +54,19 @@ Grounding document for the review-security persona. Threats are numbered.
   `architecture-setter` from the host's own invariants, and — like hook scripts
   (T3) — never made to read untrusted external data or reach the network. A
   malformed config cannot inject a bogus step: `hl.gate_config` fails open to
-  `{}` and `check.resolve_cmd` ignores non-str/blank values
-  (parse-don't-validate). Residual risk, shared with T8: the imprint child has
+  `{}`, `hl.gate_command` returns None for a non-str/blank value, and a
+  present-but-unparseable command fails the gate CLOSED (`check._host_step` —
+  a host that asked for enforcement never silently loses it). Residual risk,
+  shared with T8: the imprint child has
   unscoped Write, so a transcript injection defeating the T1 guard could write
   `.harness.json` (repo root) or a lint and thereby run code at the next commit.
   The Tier-0 framing depends on the T1 guard; path-scoping the imprint child's
   writes (open tracker item) is what closes it. Threshold overrides
   (`size_limits` / `default_size_limit` / `stale_days`) can only TIGHTEN the
-  harness's own managed docs (`hl.MANAGED_DOCS` + `MEMORY.md`), never loosen
-  them — `lint_docs.PROTECTED` clamps each to `min(override, harness default)`,
-  so `.harness.json` cannot let `SECURITY.md` or the memory bootloader rot or
-  bloat (mirrors T8's non-exemptable rule).
+  harness's own critical docs, never loosen them: `lint_docs.PROTECTED_PATHS`
+  (the `MANAGED_DOCS` at `docs/<name>` plus the bootloader
+  `docs/memory/MEMORY.md`) clamps each to `min(override, harness default)`. Size
+  (D7) is clamped for all of them; staleness (D4) is clamped for the MANAGED_DOCS
+  (the bootloader is D4-exempt by design — `check_frontmatter` skips
+  `MEMORY.md`). So `.harness.json` cannot let `SECURITY.md` go stale/bloat or the
+  memory bootloader bloat (mirrors T8's non-exemptable rule).

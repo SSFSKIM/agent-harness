@@ -203,4 +203,25 @@ security SATISFIED** (with sharp P2s). All addressed:
 Post-fix: 81 tests green (+ host-command, protected-clamp, non-UTF8 cases);
 both gates GREEN; the three reliability exploits reverified to fail clean.
 
+Round 2 (codex): **arch SATISFIED · reliability SATISFIED · security NOT
+SATISFIED** — the round-1 PROTECTED clamp was itself buggy. Fixes:
+
+- **review-security (NOT SATISFIED) → fixed:** the clamp keyed on
+  `p.parent == docs` + bare name, but the real bootloader is `docs/memory/
+  MEMORY.md` (parent `docs/memory`), so it was **never protected** — T9 claimed a
+  guarantee the code didn't deliver. Reworked to `PROTECTED_PATHS` (repo-relative
+  paths: `docs/<MANAGED_DOC>` + `docs/memory/MEMORY.md`); empirically verified a
+  `size_limits:{MEMORY.md:9999}` override no longer loosens the bootloader. T9
+  reworded: size clamped for all; D4 staleness clamped for MANAGED_DOCS only (the
+  bootloader is D4-exempt — `check_frontmatter` skips MEMORY.md). +MEMORY fixture.
+- **review-arch P2 → fixed:** invariant 3 wording implied the host test command
+  was additive to unittest; reworded to "replaces the default". dreamer.md
+  relabeled SECURITY.md as a constraint (not co-authority), per the sharpened
+  DESIGN rule.
+- **review-reliability P2 → fixed:** stale `check.resolve_cmd` name in SECURITY
+  T9 → `hl.gate_command`/`check._host_step`; `check_sizes` now `_int_or`-coerces
+  its limit args so a direct fixture call with a bad-typed limit can't TypeError.
+
+Post-fix: 82 tests green; both gates GREEN; MEMORY.md clamp reverified.
+
 ## Outcomes & retrospective

@@ -25,11 +25,13 @@ MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of the
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
     "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
 )
-# Top-level docs/ whose D7 cap / D4 staleness a host override may only TIGHTEN,
-# never loosen — the persona-grounding/machine docs + the memory bootloader.
-# Same principle as MANAGED_DOCS being non-exemptable (SECURITY T8/T9): a host
-# cannot use .harness.json to un-govern the harness's own critical docs.
-PROTECTED = hl.MANAGED_DOCS + ("MEMORY.md",)
+# Harness docs whose D7 cap / D4 staleness a host override may only TIGHTEN,
+# never loosen (SECURITY T8/T9 — a host can't .harness.json its own critical
+# docs into rot/bloat). Keyed by repo-relative PATH, not bare name: the memory
+# bootloader lives at docs/memory/MEMORY.md (not docs/ top level), and keying by
+# name would also wrongly protect a host's unrelated docs/x/SECURITY.md.
+PROTECTED_PATHS = frozenset(
+    ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
 LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
@@ -86,7 +88,7 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
             try:
                 d = datetime.date.fromisoformat(lv)
                 sd = stale_days
-                if p.parent == docs and p.name in PROTECTED:
+                if p.relative_to(root).as_posix() in PROTECTED_PATHS:
                     sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
                 stale = (hl.today() - d).days > sd
                 if stale and fm.get("status") not in ("archived", "completed"):
@@ -129,12 +131,13 @@ def check_naming(root, errors, host=()):
 
 def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT):
     limits = limits or SIZE_LIMITS
+    default_limit = _int_or(default_limit, DEFAULT_LIMIT)  # robust to direct calls
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, SIZE_EXEMPT + host):
             continue
-        limit = limits.get(p.name, default_limit)
-        if p.parent == docs and p.name in PROTECTED:
+        limit = _int_or(limits.get(p.name, default_limit), default_limit)
+        if p.relative_to(root).as_posix() in PROTECTED_PATHS:
             limit = min(limit, SIZE_LIMITS.get(p.name, DEFAULT_LIMIT))  # tighten-only
         n = len(p.read_text(encoding="utf-8").splitlines())
         if n > limit:

@@ -226,6 +226,16 @@ class TestLintDocs(unittest.TestCase):
         lint_docs.check_frontmatter(self.root, errs, (), 9999)  # try to loosen
         self.assertTrue(any("D4" in e and "SECURITY.md" in e for e in errs), errs)
 
+    def test_size_override_cannot_loosen_memory_bootloader(self):
+        # the bootloader lives at docs/memory/MEMORY.md (not docs/ top level) —
+        # the clamp must reach it by path, not just top-level name (security r2).
+        mem = self.root / "docs" / "memory"
+        mem.mkdir(parents=True)
+        (mem / "MEMORY.md").write_text("x\n" * 200)  # > the 60-line bootloader cap
+        errs = []
+        lint_docs.check_sizes(self.root, errs, (), {"MEMORY.md": 9999}, 9999)
+        self.assertTrue(any("D7" in e and "MEMORY.md" in e for e in errs), errs)
+
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"
