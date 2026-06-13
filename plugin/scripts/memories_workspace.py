@@ -158,6 +158,18 @@ def write_diff_file(wdir, changes, unified, max_bytes=DIFF_MAX_BYTES):
     (Path(wdir) / WORKSPACE_DIFF_FILE).write_text(body, encoding="utf-8")
 
 
+def discard_workspace_changes(wdir):
+    """Roll the workspace back to its last baseline (discard the agent's writes).
+    Used when a Phase-2 run fails or a scope escape is detected, so a bad/poisoned
+    consolidation leaves no residue. `reset --hard` restores tracked files to the
+    baseline commit; `clean -fd` removes agent-created files; the diff artifact
+    (gitignored) is removed explicitly."""
+    wdir = Path(wdir)
+    _git(wdir, ["reset", "--hard", "-q", "HEAD"], check=False)
+    _git(wdir, ["clean", "-fdq"], check=False)
+    _remove_diff_file(wdir)
+
+
 def reset_baseline(wdir):
     """Mark the current workspace state as the new baseline (Codex
     `reset_memory_workspace_baseline`): drop the diff artifact, then commit. We
