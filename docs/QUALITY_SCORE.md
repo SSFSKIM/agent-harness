@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-13
 owner: doc-gardener
 ---
 # QUALITY_SCORE.md — domain × layer grades
@@ -20,6 +20,7 @@ F (broken). doc-gardener updates grades + history on each gardening pass.
 | imprint | B | B | - | - | B |
 | dreaming | B | - | B | B | - |
 | porting (harness-init) | - | B | B | - | - |
+| host-enforcement (setter) | C | B | B | C | - |
 | stop-tidy (gate) | - | B | - | - | C |
 
 `-` = not built / not applicable for this domain-layer.
@@ -41,9 +42,19 @@ Grade notes:
   live self-host run confirmed idempotency (21 SKIP / 1 CREATE).
 - stop-tidy scripts B: 5 unit tests (block-once, fail-open, headless guard);
   hooks C: wired in hooks.json, not yet observed in a live plugin session.
+- host-enforcement scripts B: gate_config/gate_command/host-lint step +
+  PROTECTED_PATHS clamp, 82 tests, survived a 3-round adversarial gate;
+  skills B: harness-init step 7 specified + exercised once on Lingual;
+  agents C: architecture-setter persona written + its METHOD demonstrated
+  inline on Lingual (L1 locale lint), but not yet dispatched live as an agent;
+  docs C: ARCHITECTURE inv7 + DESIGN rule + SECURITY T9, fresh, unproven in
+  daily use.
 
 ## History
 - 2026-06-12: initial table (Phase 1).
 - 2026-06-12: memory loop + review gate graded after §7 validation (Phase 3-6).
 - 2026-06-12: portability hardening — porting + stop-tidy rows added; S7/D10
   lints and pre-commit hook land in existing domains' scripts.
+- 2026-06-13: host-enforcement (setter) row added — `.harness.json` substrate
+  (host-lint step + threshold overrides) + architecture-setter persona;
+  demonstrated on Lingual (locale-parametric L1 lint). Passed a 3-round gate.

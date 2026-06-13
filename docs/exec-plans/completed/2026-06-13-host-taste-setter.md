@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-13
 owner: harness
 base_commit: 4a2f29f29618144ef1f740f0b3a53e116be63abf
@@ -95,7 +95,7 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
   (`harness-init` branch, main untouched): author one genuine invariant lint
   (lead candidate: locale-parametric), wire `.harness.json`, prove gate GREEN +
   violation→RED, commit to the branch.
-- [ ] M6 Completion gate: self-review the full diff, then arch / reliability /
+- [x] M6 Completion gate: self-review the full diff, then arch / reliability /
   security review (codex per CLAUDE.md) until all SATISFIED.
 
 ## Progress log
@@ -224,4 +224,49 @@ SATISFIED** — the round-1 PROTECTED clamp was itself buggy. Fixes:
 
 Post-fix: 82 tests green; both gates GREEN; MEMORY.md clamp reverified.
 
+Round 3 (codex, security re-confirm): **SATISFIED, no findings.** All three
+lenses SATISFIED → gate passed.
+
 ## Outcomes & retrospective
+Shipped the **setter axis**: a host mechanizes its OWN architecture invariants
+into the deterministic gate with the harness hardcoding zero rules. Substrate =
+`harness_lib.gate_config` (optional `.harness.json`) + `gate_command` + the
+`check.py` `host-lint` step + per-repo threshold overrides (D1/D7/D4 become
+defaults, not mandates, clamped so they can only tighten the harness's own
+managed docs). Role = the new `architecture-setter` persona (constructive
+counterpart to review-arch): derive invariants → classify FORM (deterministic
+lint / judge-deferred / persona / fix-forward) → author host lints under
+`.claude/lints/` → wire `.harness.json` → record the invariant→FORM map. Proven
+end-to-end on the live Lingual host (L1 locale-parametric lint: GREEN now,
+RED on a violation, revert GREEN). 82 tests. Resolves the G3/threshold tracker
+row; LLM-judge (the semantic FORM) deferred to v1.x.
+
+Retrospective:
+- **The completion gate paid off a 4th consecutive time — and caught a
+  self-referential bug.** My round-1 security fix (the PROTECTED clamp) *claimed*
+  in SECURITY T9 to protect the memory bootloader but keyed on `parent == docs`,
+  so it never reached `docs/memory/MEMORY.md` — the doc asserted a guarantee the
+  code didn't deliver. Self-review + 81 green tests missed it (the tests used a
+  top-level `SECURITY.md` fixture, blind to the bootloader's real path). Only an
+  adversarial reviewer checking the *exact protected path* surfaced it. Same
+  fixture-blindness lesson as host-legacy-docs: test at the boundary (the real
+  path), not the convenient center.
+- **fail-open vs fail-closed is per-seam, not global.** I defaulted to fail-open
+  for consistency; two reviewers independently converged that a *present-but-
+  broken* enforcement wire must fail LOUD (the host declared intent to enforce).
+  Config-absent → skip; config-present-but-broken → block. The harness's
+  fail-open philosophy is right for *defaults*, wrong for *declared enforcement*.
+- **The setter's judgment IS the product.** The iconic demo lint only worked
+  because the persona's FORM-triage rejected the naive "ban hardcoded locale
+  strings" (15+ false positives on legit defaults) for the completeness check
+  (`ALLOWED ⊆ PROMPT_CONFIG`, zero FP) — same invariant, opposite lint quality.
+  A blind lint-generator would have shipped the bad one.
+- **Layer-law caught the cross-cutting drift:** review-arch flagged that command
+  resolution had leaked into check.py; moving it to `harness_lib.gate_command`
+  kept the single-resolver invariant (S2) intact. The lint (S2 token-scan)
+  couldn't see env resolution — the persona, grounded in the prose invariant,
+  could. Deterministic + judgment layers are complementary, exactly the thesis.
+
+Follow-on (not this plan): dispatch the architecture-setter as a live agent on
+the next host (it's only been run inline); the D9/inventory cross-host coupling
+tracker row; the imprint-write-scoping item that hardens T9's Tier-0 framing.
