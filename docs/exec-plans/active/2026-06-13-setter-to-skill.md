@@ -68,7 +68,7 @@ setup wants construction with full context. The asymmetry is intentional.
   constructive-personas note), SECURITY T9, AGENTS porting line, agent-harness.md
   (template + self-host components table), QUALITY_SCORE host-enforcement row;
   regenerate the component inventory. Gate GREEN.
-- [ ] M3 Demonstrate the skill-FORM on the live Lingual host (`harness-init`
+- [x] M3 Demonstrate the skill-FORM on the live Lingual host (`harness-init`
   branch): run the architecture-setup method, author one host guide-skill under
   `.claude/skills/` encoding a methodology invariant, `git add -f`, gate GREEN,
   commit. (The lint-FORM was proven by L1; this proves the skill-FORM.)
@@ -87,8 +87,27 @@ setup wants construction with full context. The asymmetry is intentional.
   persona" rule), SECURITY T9, AGENTS porting, both agent-harness.md, QUALITY_
   SCORE updated; inventory regen. Gate GREEN, 82 tests. Plugin has zero live
   refs to the old agent (only historical plan/tracker/quality-score records).
+- 2026-06-13: M3 done on the live Lingual host (`harness-init` @ 582416f). Ran
+  the architecture-setup method inline (= how the skill runs: main agent, full
+  repo context) → authored `.claude/skills/persistence-seam/` encoding the safe
+  procedure for the Firestore↔PG dual-write seam (invariant 1), wired into
+  AGENTS.md mandatory-skill usage + the ARCHITECTURE Enforcement table. Lingual
+  gate GREEN with both FORMs now live: L1 lint + the guide-skill. Resynced
+  Lingual's harness doc + inventory for the agent→skill change.
 
 ## Surprises & discoveries
+- **The cross-host coupling recurred exactly as predicted.** Adding the
+  `architecture-setup` skill + removing the `architecture-setter` agent reddened
+  Lingual's gate (D9: the new skill wasn't in Lingual's docs; GEN: stale
+  inventory). Same tracker row from host-taste-setter M5 — every plugin component
+  change forces a host doc + inventory resync. Fixed Lingual; the recurrence
+  confirms the row is worth a real fix, not just a note.
+- M3 chose invariant 1 (the dual-write seam) for the guide-skill because it is
+  textbook methodology: "check the LIVE flags (`gcloud`...), don't 'finish the
+  migration' by retiring the rollback bridge" — judgment a lint cannot make. The
+  three families have non-uniform states (analytics PG-sole fail-closed,
+  relational dual-write bridge, memberships Firestore-authoritative), which is
+  exactly the kind of context a guide-skill carries and a regex can't.
 
 ## Decision log
 - 2026-06-13: agent → skill because setup needs the main agent's full repo
