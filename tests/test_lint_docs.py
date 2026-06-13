@@ -167,6 +167,46 @@ class TestLintDocs(unittest.TestCase):
         self._legacy("./memory", "memory//knowledge", "business/")
         self.assertEqual(lint_docs.hl.exempt_roots(self.root), ("business",))
 
+    def test_d1_threshold_overridable_per_repo(self):
+        # our 120-line default is a default, not a mandate: a host whose map
+        # legitimately runs long raises the cap via .harness.json size_limits.
+        (self.root / "AGENTS.md").write_text("x\n" * 200)
+        errs = []
+        lint_docs.check_entrypoints(self.root, errs)
+        self.assertTrue(any("D1" in e for e in errs))            # default 120 → fail
+        errs = []
+        lint_docs.check_entrypoints(self.root, errs, {"AGENTS.md": 300})
+        self.assertFalse(any("D1" in e for e in errs))           # override 300 → pass
+
+    def test_d7_default_size_overridable_per_repo(self):
+        big = self.root / "docs" / "design-docs" / "big.md"
+        big.write_text(fm() + "x\n" * 500)
+        errs = []
+        lint_docs.check_sizes(self.root, errs)
+        self.assertTrue(any("D7" in e for e in errs))            # default 400 → fail
+        errs = []
+        lint_docs.check_sizes(self.root, errs, (), None, 600)
+        self.assertFalse(any("D7" in e for e in errs))           # default_limit 600 → pass
+
+    def test_d4_stale_window_overridable_per_repo(self):
+        import datetime
+        d45 = (datetime.date.today() - datetime.timedelta(days=45)).isoformat()
+        p = self.root / "docs" / "design-docs" / "core-beliefs.md"
+        p.write_text(fm(last_verified=d45) + "# x\n")
+        errs = []
+        lint_docs.check_frontmatter(self.root, errs)
+        self.assertTrue(any("D4" in e for e in errs))            # 30-day default → stale
+        errs = []
+        lint_docs.check_frontmatter(self.root, errs, (), 60)
+        self.assertFalse(any("D4" in e for e in errs))           # 60-day window → fresh
+
+    def test_int_or_rejects_bool_and_nonint(self):
+        # a malformed override (JSON `true`, a string) falls back to the default,
+        # never crashing or silently coercing — parse-don't-validate at the seam.
+        self.assertEqual(lint_docs._int_or(True, 30), 30)
+        self.assertEqual(lint_docs._int_or("60", 30), 30)
+        self.assertEqual(lint_docs._int_or(60, 30), 60)
+
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)
         sk = plugin / "skills" / "mystery"

@@ -22,8 +22,14 @@ dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   Must be GREEN before every commit; the `harness-lint` skill interprets
   failures. `--no-verify` only for emergencies — fix forward right after.
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
-  `HARNESS_TEST_CMD="pytest -q"`); default is unittest discovery when a
-  `tests/` directory exists, skipped otherwise.
+  `HARNESS_TEST_CMD="pytest -q"`) or `.harness.json` `test_cmd`; default is
+  unittest discovery when a `tests/` directory exists, skipped otherwise.
+- Host enforcement: this repo's own architecture invariants are mechanized as
+  host lints under `.claude/lints/`, wired into the gate via `.harness.json`
+  `lint_cmd` — the `architecture-setter` persona authors them (harness-init
+  step 7). Override a harness threshold default for this repo in the same file
+  (`size_limits` / `default_size_limit` / `stale_days`). See ARCHITECTURE.md
+  invariant 7; the rules are this repo's, not the machine's.
 
 ## Components
 

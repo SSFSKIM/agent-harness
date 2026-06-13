@@ -42,6 +42,29 @@ class TestHarnessLib(unittest.TestCase):
             self.assertTrue(sd.is_dir())
             self.assertEqual(sd, Path(d) / ".claude" / "harness")
 
+    def test_gate_config_absent_returns_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(hl.gate_config(Path(d)), {})
+
+    def test_gate_config_parses_valid_object(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".harness.json").write_text(
+                '{"lint_cmd": "make lint", "stale_days": 60}', encoding="utf-8")
+            cfg = hl.gate_config(Path(d))
+            self.assertEqual(cfg["lint_cmd"], "make lint")
+            self.assertEqual(cfg["stale_days"], 60)
+
+    def test_gate_config_malformed_returns_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".harness.json").write_text("not json{{{", encoding="utf-8")
+            self.assertEqual(hl.gate_config(Path(d)), {})
+
+    def test_gate_config_non_object_returns_empty(self):
+        # a top-level array/scalar is not a config object — fail open to {}
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / ".harness.json").write_text("[1, 2, 3]", encoding="utf-8")
+            self.assertEqual(hl.gate_config(Path(d)), {})
+
 
 if __name__ == "__main__":
     unittest.main()

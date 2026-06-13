@@ -15,6 +15,17 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
 - Lint failures: `FAIL <rule> <path>: <problem> FIX: <instruction>` — the FIX
   text is the product; write it for an agent that will act on it verbatim.
 
+## Host vs machine enforcement
+- The plugin lints (S/D series) govern only the harness's OWN structure
+  (`plugin/`, `docs/`). A host's app-code invariants are authored per-repo by
+  the `architecture-setter` persona into `.claude/lints/` and wired via
+  `.harness.json` — never folded into the plugin's universal lints. Our
+  thresholds (D1/D7/D4) are defaults a host overrides via `.harness.json`, not
+  mandates. Determinism is the cheap, reproducible floor; what stays per-repo is
+  WHAT to enforce and WHO authors it (ARCHITECTURE invariant 7). A universal
+  hardcoded rule applied to every host is the lint-layer form of the
+  monolithic-AGENTS.md anti-pattern.
+
 ## Skills
 - A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
   belongs in docs/, not in SKILL.md (skills point, docs explain).

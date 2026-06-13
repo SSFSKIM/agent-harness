@@ -11,20 +11,34 @@ from pathlib import Path
 import harness_lib as hl
 
 
+def resolve_cmd(cfg, key, env_name):
+    """Host check command for a gate step, or None. Unversioned env var wins
+    over the versioned .harness.json value; a non-str / blank value is ignored
+    (parse-don't-validate — a malformed config never injects a bogus step)."""
+    val = os.environ.get(env_name) or cfg.get(key)
+    return val if isinstance(val, str) and val.strip() else None
+
+
 def main():
     ap = argparse.ArgumentParser(description="Run the commit gate.")
     ap.add_argument("--root", default=None,
                     help="repo root to check (default: detected via harness_lib)")
     args = ap.parse_args()
     root = Path(args.root).resolve() if args.root else hl.repo_root()
+    cfg = hl.gate_config(root)  # optional per-repo .harness.json
     here = Path(__file__).resolve().parent
     steps = [
         ("structure", [sys.executable, str(here / "lint_structure.py")]),
         ("docs", [sys.executable, str(here / "lint_docs.py")]),
         ("generated", [sys.executable, str(here / "gen_inventory.py"), "--check"]),
     ]
-    test_cmd = os.environ.get("HARNESS_TEST_CMD")  # hosts wire their real suite here
-    if test_cmd:
+    # Host-authored structural lint (the setter axis): a host wires its own
+    # app-code invariant checks here, with no harness-side hardcoded rule.
+    lint_cmd = resolve_cmd(cfg, "lint_cmd", "HARNESS_LINT_CMD")
+    if lint_cmd:
+        steps.append(("host-lint", shlex.split(lint_cmd)))
+    test_cmd = resolve_cmd(cfg, "test_cmd", "HARNESS_TEST_CMD")
+    if test_cmd:  # hosts wire their real suite (env or .harness.json)
         steps.append(("tests", shlex.split(test_cmd)))
     elif (root / "tests").is_dir():  # harness-init hosts may have no tests yet
         steps.append(("tests", [sys.executable, "-m", "unittest", "discover",

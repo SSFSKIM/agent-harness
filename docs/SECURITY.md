@@ -45,3 +45,18 @@ Grounding document for the review-security persona. Threats are numbered.
   poison the memory/design tree. It is versioned config (Tier 0): changes are
   git-visible and reviewed like any committed file — a framing that depends on
   the T1 imprint guard holding (a headless child must not write it; see tracker).
+- **T9 — `.harness.json` + `.claude/lints/` are Tier-0 executable config.**
+  The gate config's `lint_cmd`/`test_cmd` are shell commands `check.py` (and so
+  the scaffold-installed `.git/hooks/pre-commit`) runs on every commit with user
+  permissions; `.claude/lints/*.py` are the scripts they invoke. This is a
+  code-execution surface, governed like code: versioned and git-visible (Tier 0
+  — changes reviewed exactly as code changes), authored only by the
+  `architecture-setter` from the host's own invariants, and — like hook scripts
+  (T3) — never made to read untrusted external data or reach the network. A
+  malformed config cannot inject a bogus step: `hl.gate_config` fails open to
+  `{}` and `check.resolve_cmd` ignores non-str/blank values
+  (parse-don't-validate). Residual risk, shared with T8: the imprint child has
+  unscoped Write, so a transcript injection defeating the T1 guard could write
+  `.harness.json` (repo root) or a lint and thereby run code at the next commit.
+  The Tier-0 framing depends on the T1 guard; path-scoping the imprint child's
+  writes (open tracker item) is what closes it.

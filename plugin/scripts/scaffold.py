@@ -164,7 +164,7 @@ def main():
     root = Path(args.root).resolve() if args.root else hl.repo_root()
     scaffold(root, hl.plugin_root(), print)
     print(f"scaffold: done — fill the FILL markers, then run check.py "
-          f"against {root} (harness-init skill, steps 3-7).")
+          f"against {root} (harness-init skill, steps 3-9).")
 
 
 if __name__ == "__main__":

@@ -82,7 +82,29 @@ The machine's skills are generic; the host's own procedures live in
   drop instance skills silently — `git add -f .claude/skills/<name>` to track
   them, matching how the host already tracks any existing instance assets.
 
-## 7. Verify GREEN
+## 7. Mechanize host invariants (the setter — judgment)
+
+Docs *map* the architecture; this step *enforces* it. Dispatch the
+`architecture-setter` persona (Task tool) to derive THIS repo's layer law and
+invariants and mechanize the ones worth enforcing into the gate:
+
+- The setter classifies each invariant by FORM — deterministic lint
+  (always-true, mechanically checkable, costly if missed), LLM-judge (semantic;
+  deferred — recorded as a `review-*`/`openq` concern, never faked with a
+  brittle lint), persona review, or fix-forward — and authors the deterministic
+  ones as host lints under `.claude/lints/` (template:
+  `templates/host-lint.py`), wired via `<root>/.harness.json` `lint_cmd`. The
+  harness hardcodes no app-code rule; the lint set is this repo's output. Zero
+  lints is a valid answer for a low-risk repo.
+- Threshold defaults are overridable, not mandates: if the host's map or pages
+  legitimately exceed a harness default (e.g. a 295-line AGENTS.md), set
+  `.harness.json` `size_limits` / `default_size_limit` / `stale_days` instead of
+  fighting D1/D7/D4.
+- `.harness.json` + `.claude/lints/` are executable config that run on every
+  commit (SECURITY.md T9) — `git add -f` them if the host blanket-ignores
+  `.claude/`, and review changes to them as code.
+
+## 8. Verify GREEN
 
     python3 "$PLUGIN/scripts/check.py" --root <host-repo-root>
 
@@ -95,7 +117,7 @@ Tests: with no `tests/` dir the step is skipped; a host with its own suite
 wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 -q" python3 ... check.py`) — the default only understands unittest discovery.
 
-## 8. Write back, commit, hand off
+## 9. Write back, commit, hand off
 
 - Fill `docs/memory/progress/current.md` with the host's real state (it
   ships with FILL markers).

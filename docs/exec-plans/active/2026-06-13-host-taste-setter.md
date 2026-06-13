@@ -65,22 +65,22 @@ resolver — S2), `plugin/scripts/check.py` (the gate), `plugin/scripts/lint_doc
 its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow).
 
 ## Milestones
-- [ ] M1 (PoC — proves the unknown) `harness_lib.gate_config(root)` parses an
+- [x] M1 (PoC — proves the unknown) `harness_lib.gate_config(root)` parses an
   optional `<root>/.harness.json` (parse-don't-validate: any error → `{}`,
   fail-open like `exempt_roots`). `check.py` adds a `host-lint` step from
   `HARNESS_LINT_CMD` (env) **or** `gate_config(root)["lint_cmd"]`. Toy proof: a
   `.harness.json` whose `lint_cmd` is a one-line always-fail script makes the
   gate exit 1; remove it → exit 0. Unit tests (valid / absent / malformed JSON
   / non-dict / wrong-typed `lint_cmd`).
-- [ ] M2 `check.py` reads `test_cmd` from config too (env still wins) — closes
+- [x] M2 `check.py` reads `test_cmd` from config too (env still wins) — closes
   the latent gap where `HARNESS_TEST_CMD` set only in a shell never reaches the
   pre-commit hook. Tests: config `test_cmd` runs; env overrides config.
-- [ ] M3 `lint_docs.py` D1/D4/D7 read overrides from `gate_config`
+- [x] M3 `lint_docs.py` D1/D4/D7 read overrides from `gate_config`
   (`size_limits` dict merged over `SIZE_LIMITS`, `default_size_limit`,
   `stale_days`); defaults unchanged when absent; wrong-typed overrides ignored.
   Tests: a 200-line AGENTS.md passes under an override and FAILs without it; a
   bad-typed override falls back to the default.
-- [ ] M4 The role + wiring. New `architecture-setter` persona
+- [x] M4 The role + wiring. New `architecture-setter` persona
   (`plugin/agents/architecture-setter.md`, Write-capable, grounded in the
   host's ARCHITECTURE.md + core-beliefs #4) that derives the host layer law +
   invariants, classifies each by FORM, authors deterministic lints under
@@ -100,6 +100,20 @@ its constructive counterpart), `plugin/skills/harness-init/SKILL.md` (port flow)
 
 ## Progress log
 - 2026-06-13: plan created from the blog re-audit + user course-correction.
+- 2026-06-13: M1-M3 done. `gate_config` (fail-open `{}`); `check.py`
+  `host-lint`/`tests` steps via `resolve_cmd` (env > config); D1/D4/D7
+  thresholds overridable (`_int_or` guard drops bool/non-int). 75 tests (+13).
+  End-to-end PoC on the real self-host gate: a `.harness.json` `lint_cmd`
+  appears as a `host-lint` step and its exit-1 turns the gate RED; malformed
+  config falls open to GREEN.
+- 2026-06-13: M4 done. `architecture-setter` agent (constructive counterpart to
+  review-arch: derive invariants → classify FORM → author host lints → wire
+  `.harness.json` → record in ARCHITECTURE.md), `host-lint.py` template,
+  harness-init step 7 (verify→8/writeback→9; scaffold message bumped),
+  ARCHITECTURE invariant 7 + gate-invariant clause, DESIGN host-vs-machine
+  rule, SECURITY T9 (`.harness.json` Tier-0 exec config), agent-harness.md
+  pointers (template + self-host) + AGENTS porting line, inventory regen,
+  tracker G3/threshold row resolved. Gate GREEN, 75 tests.
 
 ## Surprises & discoveries
 

@@ -47,20 +47,22 @@ def _exempt(p, docs, parts):
     return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in parts)
 
 
-def check_entrypoints(root, errors):
+def check_entrypoints(root, errors, limits=None):
+    limits = limits or SIZE_LIMITS
+    cap = limits.get("AGENTS.md", SIZE_LIMITS["AGENTS.md"])
     agents = root / "AGENTS.md"
     if not agents.exists():
         _fail(errors, "D1", "AGENTS.md", "missing.",
               "Create AGENTS.md: a ~100-line map (operating model + docs/ pointers).")
         return
     n = len(agents.read_text(encoding="utf-8").splitlines())
-    if n > SIZE_LIMITS["AGENTS.md"]:
+    if n > cap:
         _fail(errors, "D1", "AGENTS.md",
-              f"{n} lines (max {SIZE_LIMITS['AGENTS.md']}).",
+              f"{n} lines (max {cap}).",
               "AGENTS.md is a map, not an encyclopedia: move detail into docs/ and link it.")
 
 
-def check_frontmatter(root, errors, host=()):
+def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, FM_EXEMPT + host) or p.name == "MEMORY.md":
@@ -78,10 +80,10 @@ def check_frontmatter(root, errors, host=()):
         if "last_verified" in fm:
             try:
                 d = datetime.date.fromisoformat(lv)
-                stale = (hl.today() - d).days > STALE_DAYS
+                stale = (hl.today() - d).days > stale_days
                 if stale and fm.get("status") not in ("archived", "completed"):
                     _fail(errors, "D4", _rel(p, root),
-                          f"stale: last_verified {lv} is over {STALE_DAYS} days old.",
+                          f"stale: last_verified {lv} is over {stale_days} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
             except ValueError:
                 _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv[:40]}`.",
@@ -117,12 +119,13 @@ def check_naming(root, errors, host=()):
                   "Rename to lowercase-kebab-case.md (top-level docs/ taste docs may be UPPERCASE.md).")
 
 
-def check_sizes(root, errors, host=()):
+def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT):
+    limits = limits or SIZE_LIMITS
     docs = root / "docs"
     for p in hl.iter_md(docs):
         if _exempt(p, docs, SIZE_EXEMPT + host):
             continue
-        limit = SIZE_LIMITS.get(p.name, DEFAULT_LIMIT)
+        limit = limits.get(p.name, default_limit)
         n = len(p.read_text(encoding="utf-8").splitlines())
         if n > limit:
             _fail(errors, "D7", _rel(p, root), f"{n} lines (max {limit}).",
@@ -175,16 +178,30 @@ def check_machine_refs(root, errors):
                   "Seed it: run scaffold.py (harness-init skill), or create the page from its template in the skill's templates/.")
 
 
+def _int_or(value, default):
+    # bool is an int subclass — exclude it so `true` in JSON can't pass as 1.
+    return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
 def main():
     root = hl.repo_root()
     host = hl.exempt_roots(root)  # host-declared legacy doc roots (docs/.harnessignore)
+    cfg = hl.gate_config(root)  # per-repo threshold overrides (.harness.json)
+    limits = dict(SIZE_LIMITS)
+    ov = cfg.get("size_limits")
+    if isinstance(ov, dict):
+        for k, v in ov.items():
+            if isinstance(k, str):
+                limits[k] = _int_or(v, limits.get(k, DEFAULT_LIMIT))
+    default_limit = _int_or(cfg.get("default_size_limit"), DEFAULT_LIMIT)
+    stale_days = _int_or(cfg.get("stale_days"), STALE_DAYS)
     errors = []
-    check_entrypoints(root, errors)
+    check_entrypoints(root, errors, limits)
     check_machine_refs(root, errors)
-    check_frontmatter(root, errors, host)
+    check_frontmatter(root, errors, host, stale_days)
     check_links(root, errors, host)
     check_naming(root, errors, host)
-    check_sizes(root, errors, host)
+    check_sizes(root, errors, host, limits, default_limit)
     check_indexes(root, errors)
     check_coverage(root, errors, hl.plugin_root())
     for e in errors:

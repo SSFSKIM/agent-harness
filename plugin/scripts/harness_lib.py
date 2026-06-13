@@ -5,6 +5,7 @@ The ONLY module allowed to resolve paths, environment, and frontmatter
 Pure stdlib. Portable: never hardcodes an absolute path.
 """
 import datetime
+import json
 import os
 from pathlib import Path
 
@@ -122,6 +123,35 @@ def exempt_roots(root):
             continue
         out.append(norm)
     return tuple(out)
+
+
+def gate_config(root):
+    """Optional per-repo gate config: `<root>/.harness.json`.
+
+    The ONE place a host overrides harness defaults or wires its own checks
+    into the deterministic gate WITHOUT editing plugin source — so the rules a
+    host enforces are the host's, not ours hardcoded. Keys, all optional:
+      - `lint_cmd` / `test_cmd` (str) — host check commands the gate runs as
+        steps (a host-authored structural lint; the real test suite).
+      - `size_limits` (dict name→int) — merged over D1/D7 line caps.
+      - `default_size_limit` (int) — D7 default cap.
+      - `stale_days` (int) — D4 staleness window.
+
+    Parse-don't-validate (core-belief #6): any read/parse error, or a non-object
+    top level, returns `{}` — fail-open to harness defaults, exactly like
+    `exempt_roots`. Consumers type-guard each key they read; a malformed value
+    never crashes the gate. The unversioned env vars HARNESS_LINT_CMD /
+    HARNESS_TEST_CMD take precedence over this file as an ad-hoc override — but
+    this committed file is the persistent form the `.git/hooks/pre-commit` gate
+    actually sees (the hook injects no env). It is executable config (Tier 0):
+    `lint_cmd`/`test_cmd` run on every commit — see SECURITY.md T9.
+    """
+    try:
+        data = json.loads((Path(root) / ".harness.json").read_text(
+            encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def today():

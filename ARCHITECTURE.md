@@ -35,7 +35,8 @@ point rightward at skills — the most actionable instruction wins.
    `HARNESS_HEADLESS=1`; every spawned `claude -p` child sets it. Without this:
    SessionStart → feeder spawns claude → its SessionStart → ∞.
 3. **Deterministic gate:** `check.py` = lint_structure + lint_docs +
-   gen_inventory --check + unittest. GREEN before every commit.
+   gen_inventory --check + unittest, plus an optional host-lint step and a
+   host-supplied test command (invariant 7). GREEN before every commit.
 4. **Generated files** carry a GENERATED header; only scripts write them.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
    `.claude/harness/` — gitignored, never under `docs/`.
@@ -45,6 +46,19 @@ point rightward at skills — the most actionable instruction wins.
    `docs/.harnessignore` (a shrinking migration backlog), matched on
    path-segment boundaries; harness-managed trees (`hl.MANAGED_ROOTS`) and
    top-level machine docs (`hl.MANAGED_DOCS`) are never exemptable.
+7. **Host-owned enforcement (the setter axis):** the built-in lints
+   (S1–S7, D1–D10) enforce only the harness's OWN structure (`plugin/`,
+   `docs/`). A host's app-code invariants are not hardcoded by the machine —
+   the `architecture-setter` persona derives them per-repo and authors
+   deterministic lints under `.claude/lints/`, wired into the gate via
+   `<root>/.harness.json` `lint_cmd` (`hl.gate_config`; `check.py` runs it as
+   the `host-lint` step). The harness ships the substrate (the gate step, the
+   `FAIL … FIX:` contract, the override knobs) and the authoring role — never
+   the rules; the lint set is the host's output (zero is valid). Harness
+   threshold defaults (D1 120 / D7 400 / D4 30d / MEMORY 60) are per-repo
+   overridable via the same file (`size_limits` / `default_size_limit` /
+   `stale_days`); absent → defaults unchanged. `lint_cmd`/`test_cmd` are
+   executable config that run every commit (SECURITY.md T9).
 
 ## Data flows
 
