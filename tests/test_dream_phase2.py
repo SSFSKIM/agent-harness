@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -83,10 +84,16 @@ class TestScopeCheck(_RepoCase):
         self.assertFalse((self.root / "secret.env").exists())                       # reverted
         self.assertFalse((self.root / ".git" / "hooks" / "pre-commit").exists())
 
+    def _outside_dir(self):
+        # an isolated location OUTSIDE the repo (not the shared system temp)
+        t = tempfile.TemporaryDirectory()
+        self.addCleanup(t.cleanup)
+        return Path(t.name)
+
     def test_symlink_swap_does_not_write_through(self):
         # codex P1: replacing a file with a symlink must restore the original file,
         # never write the saved bytes THROUGH the link into an outside target.
-        outside = self.root.parent / "outside_target.txt"
+        outside = self._outside_dir() / "outside_target.txt"
         outside.write_text("ORIGINAL_OUTSIDE", encoding="utf-8")
         before = dp2.snapshot_outside_workspace(self.root)
         (self.root / "src" / "app.py").unlink()
@@ -95,6 +102,21 @@ class TestScopeCheck(_RepoCase):
         self.assertFalse((self.root / "src" / "app.py").is_symlink())   # link removed
         self.assertEqual((self.root / "src" / "app.py").read_text(), "print('original')\n")
         self.assertEqual(outside.read_text(), "ORIGINAL_OUTSIDE")   # NOT written through
+
+    def test_parent_dir_symlink_swap_does_not_write_through(self):
+        # codex P1 (2nd pass): agent turns a parent DIR into a symlink to outside;
+        # restoring src/app.py must NOT write through to outside/app.py.
+        outside = self._outside_dir() / "outside_dir"
+        outside.mkdir()
+        (outside / "app.py").write_text("OUTSIDE_ORIGINAL", encoding="utf-8")
+        before = dp2.snapshot_outside_workspace(self.root)
+        shutil.rmtree(self.root / "src")
+        os.symlink(outside, self.root / "src")                  # src → symlink to outside
+        dp2.enforce_workspace_scope(self.root, before)
+        self.assertFalse((self.root / "src").is_symlink())      # symlink removed
+        self.assertTrue((self.root / "src").is_dir())           # real dir restored
+        self.assertEqual((self.root / "src" / "app.py").read_text(), "print('original')\n")
+        self.assertEqual((outside / "app.py").read_text(), "OUTSIDE_ORIGINAL")  # not written through
 
     def test_overcap_new_file_reverted_preexisting_kept(self):
         orig = dp2.SNAPSHOT_FILE_CAP

@@ -134,48 +134,81 @@ def snapshot_outside_workspace(root):
     return snap
 
 
-def _restore(root, rel, before_entry):
-    """Undo the agent's change to one path: recreate the exact pre-entry (or
-    remove it if it was created). Never follows symlinks. An over-cap file we
-    can't byte-restore is best-effort `git checkout` (tracked); else left in place
-    (no data loss) — the run is rejected regardless."""
+def _strip_symlinked_parents(root, rel):
+    """Remove any symlinked directory in rel's parent chain. The agent must not
+    turn an in-repo dir into a symlink; if it did, a later write/restore at `rel`
+    would go THROUGH the link to an outside target. Unlinking the first symlinked
+    ancestor (and stopping — everything below it is gone) guarantees subsequent
+    `mkdir(parents=True)` rebuilds real directories."""
+    cur = Path(root)
+    for part in Path(rel).parts[:-1]:
+        cur = cur / part
+        if cur.is_symlink():
+            try:
+                cur.unlink()
+            except OSError:
+                pass
+            return
+
+
+def _remove_current(root, rel):
+    """Delete whatever the agent left at `rel` (after clearing symlinked parents),
+    never following links."""
+    _strip_symlinked_parents(root, rel)
     p = Path(root) / rel
-    if before_entry is not None and before_entry[0] == "over":
-        _git_root(root, ["checkout", "--", rel])    # tracked → restored; else no-op
-        return
-    try:                                             # remove whatever is there now
+    try:
         if p.is_symlink() or p.is_file():
             p.unlink()
         elif p.is_dir():
             shutil.rmtree(p)
     except OSError:
         pass
-    if before_entry is None:                         # agent created it → stays gone
-        return
-    kind = before_entry[0]
+
+
+def _recreate(root, rel, entry):
+    """Recreate a snapshotted file/symlink entry into a symlink-free parent chain."""
+    _strip_symlinked_parents(root, rel)
+    p = Path(root) / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if kind == "file":
-            p.write_bytes(before_entry[1])
-        elif kind == "link":
-            os.symlink(before_entry[1], p)
-        # 'other' (fifo/socket/dir-placeholder) — presence-only; not recreated
+        if p.is_symlink() or p.exists():
+            _remove_current(root, rel)               # never write through a leftover
+        if entry[0] == "file":
+            p.write_bytes(entry[1])
+        elif entry[0] == "link":
+            os.symlink(entry[1], p)
+        # 'other' (fifo/socket) — presence-only; not recreated
     except OSError:
         pass
 
 
 def enforce_workspace_scope(root, before):
     """Restore any out-of-workspace change the agent made; return the escaped
-    paths (empty = clean). Compares the symlink-safe entry tuples, so a created
-    file (any size), a content/symlink/over-cap change, or a deletion all count."""
+    paths (empty = clean). Two passes so a dir→symlink swap can't make a restore
+    write through a symlinked parent: (A) deepest-first, remove every current
+    agent write (stripping symlinked parents); (B) shallowest-first, recreate the
+    snapshotted file/symlink entries into the now-clean tree. Over-cap files
+    (content not held) are best-effort `git checkout`-restored (tracked) — an
+    untracked over-cap change is flagged + the run rejected, but left in place (no
+    data loss). Compares symlink-safe entry tuples, so create/modify/delete/swap/
+    over-cap all count."""
     after = snapshot_outside_workspace(root)
-    escaped = []
-    for rel in set(before) | set(after):
-        if before.get(rel) == after.get(rel):        # tuple equality = unchanged
-            continue
-        escaped.append(rel)
-        _restore(root, rel, before.get(rel))
-    return sorted(escaped)
+    changed = [rel for rel in set(before) | set(after)
+               if before.get(rel) != after.get(rel)]
+    overcap = {rel for rel in changed
+               if (before.get(rel) or ("",))[0] == "over"}
+    normal = [rel for rel in changed if rel not in overcap]
+    depth = lambda r: r.count(os.sep)
+    for rel in sorted(normal, key=depth, reverse=True):      # Pass A: neutralize
+        _remove_current(root, rel)
+    for rel in sorted(normal, key=depth):                    # Pass B: restore
+        b = before.get(rel)
+        if b is not None and b[0] in ("file", "link"):
+            _recreate(root, rel, b)
+    for rel in sorted(overcap):                              # over-cap: best-effort git
+        _strip_symlinked_parents(root, rel)
+        _git_root(root, ["checkout", "--", rel])
+    return sorted(changed)
 
 
 def validate_outputs(wdir):
