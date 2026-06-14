@@ -103,6 +103,28 @@ class TestHarnessLib(unittest.TestCase):
         with self.assertRaises(ValueError):
             hl.gate_command({"lint_cmd": "foo '"}, "lint_cmd", "HARNESS_LINT_CMD")
 
+    def test_within_repo_no_symlink_allows_plain_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "docs").mkdir()
+            (root / "docs" / "x.md").write_text("hi")
+            self.assertEqual(hl.within_repo_no_symlink(root, "docs/x.md"),
+                             root / "docs" / "x.md")
+
+    def test_within_repo_no_symlink_refuses_symlinked_component(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as out:
+            root = Path(d)
+            decoy = Path(out) / "evil.md"
+            decoy.write_text("outside")
+            os.symlink(decoy, root / "x.md")             # the target itself is a symlink
+            self.assertIsNone(hl.within_repo_no_symlink(root, "x.md"))
+
+    def test_within_repo_no_symlink_refuses_dotdot_escape(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"
+            root.mkdir()
+            self.assertIsNone(hl.within_repo_no_symlink(root, "../escape.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

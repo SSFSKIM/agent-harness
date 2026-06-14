@@ -99,6 +99,33 @@ def iter_md(base):
     return sorted(p for p in base.rglob("*.md"))
 
 
+def within_repo_no_symlink(root, rel):
+    """The deterministic-writer guard. Return `root/rel` iff NO path component
+    (root → target) is a symlink AND the target resolves inside the repo — so a
+    symlinked allowlist root or file can't redirect a write outside its intended
+    place. Else None.
+
+    Shared by every deterministic doc writer (the dreaming router's append
+    applicator, the docs-sync edit/delete applicator): these scripts ARE the only
+    writers, so this is where "containment by construction" actually holds — path
+    resolution lives here in the cross-cutting module (the S2 home), not duplicated
+    per writer.
+    """
+    root = Path(root)
+    cur = root
+    for part in Path(rel).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            return None
+    target = root / rel
+    try:
+        if not target.resolve().is_relative_to(root.resolve()):
+            return None
+    except (OSError, ValueError):
+        return None
+    return target
+
+
 # Doc trees the harness always governs — never exemptable via .harnessignore,
 # so a host can't un-govern (and silently poison) the memory/design tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs

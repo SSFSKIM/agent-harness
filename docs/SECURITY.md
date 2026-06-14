@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-13
+last_verified: 2026-06-14
 owner: review-security
 ---
 # SECURITY.md
@@ -48,8 +48,10 @@ Grounding document for the review-security persona. Threats are numbered.
     allowlist (a tech-debt-tracker row / a design-doc `## Decision log` or `## Open
     decisions` line / a `docs/journal/` entry); an out-of-allowlist target is demoted
     to a journal `[held]` note. Every write target is verified to have **no symlinked
-    path component and to resolve inside the repo** (`dream_router._within_repo_no_symlink`),
-    so a symlinked allowlist root/file cannot redirect a write outside. **Residual:**
+    path component and to resolve inside the repo** (the shared
+    `harness_lib.within_repo_no_symlink` guard — also used by the docs-sync edit/delete
+    applicator), so a symlinked allowlist root/file cannot redirect a write outside.
+    **Residual:**
     an injected claim could append a *misleading but bounded* entry to a docs home or
     the journal — git-visible, deduped, revertible; never a path escape or an
     arbitrary write.

@@ -137,25 +137,10 @@ def _read(path):
     return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
 
 
-def _within_repo_no_symlink(root, rel):
-    """The write guard. Return `root/rel` iff NO path component (root → target) is
-    a symlink AND the target resolves inside the repo — so a symlinked allowlist
-    root or file can't redirect a deterministic write outside its intended place.
-    Else None. (Matches the sandbox path's symlink rigor — the applicator is the
-    only writer, so this is where "containment by construction" actually holds.)"""
-    root = Path(root)
-    cur = root
-    for part in Path(rel).parts:
-        cur = cur / part
-        if cur.is_symlink():
-            return None
-    target = root / rel
-    try:
-        if not target.resolve().is_relative_to(root.resolve()):
-            return None
-    except (OSError, ValueError):
-        return None
-    return target
+# The symlink-safe within-repo write guard now lives in harness_lib (shared with
+# the docs-sync applicator — one writer-guard, one test surface). Aliased here so
+# the existing call sites + the SECURITY-doc symbol still resolve.
+_within_repo_no_symlink = hl.within_repo_no_symlink
 
 
 def _safe_design_target(root, target):
