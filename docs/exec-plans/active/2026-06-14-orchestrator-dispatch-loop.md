@@ -140,12 +140,26 @@ reconcile 주체:
 - [x] (2026-06-14) M4 — `main(argv, board=None)` CLI(--team/--*-state/--concurrency/
   --mock/--codex/--queue-dir/--workspace-root/--tools/--install-skills) + 요약 출력.
   `python -m director.orchestrator --mock` 가 데모 보드 2 티켓을 end-to-end 처리, exit 0.
-- [ ] M5 — 라이브 contract pin(board GraphQL 우선; 실 codex 2-워커는 quota 판단). (다음.)
+- [x] (2026-06-14) M5a — board GraphQL 라이브 pin. 실 Linear(team "Lingu")에서 내 board
+  메서드 4종 검증: `workflow_states` 가 MCP `list_issue_statuses` 와 7개 상태·id·type
+  정확히 일치; throwaway LIN-6(Todo) 생성 → `list_ready_issues` 가 LIN-6 을 올바른
+  state_id 로 반환 → `update_issue_state`(Todo→In Progress) success → `comment_issue`
+  success. MCP get_issue/list_comments 로 독립 교차검증(stateHistory Todo→In Progress,
+  코멘트 실재). 첫 시도에 wire 정확(라이브 버그 0). LIN-6 정리(Canceled).
+- [~] M5b — 실 codex 2-워커 동시 dispatch 라이브 런: **옵션/연기**. 핵심 리스크(루프·
+  concurrency·reconcile)는 실 mock 워커 e2e 로 이미 증명, board wire 는 M5a 로 고정.
+  순수 codex-app-server 계약은 Phase 1·2 라이브에서 이미 고정. 남은 미검증분은 "실
+  codex 가 dynamicTools/approval 을 물고 board 로 reconcile 되는 다중 동시" 통합뿐 —
+  quota 대비 한계효용이 낮아 사용자 요청 시 실행. (사람 판단 대상.)
 
 ## Surprises & discoveries
 - (2026-06-14) M2 락 검증: `_APPEND_LOCK` 을 `nullcontext` 로 무력화하면 60 동시
   same-id append 가 4줄(중복)로 남음 → read-before-append race 가 실재하고 락이 정확히
   그걸 닫음. 음성 테스트를 flaky 하게 박제하는 대신 양성 테스트 + 이 1회 수동 확인으로 남김.
+- (2026-06-14) M5a 발견: team "Lingu" 의 Todo 에 실제 티켓 5건 존재 → 만약 `--team` 으로
+  실 codex 런을 돌리면 ready=5 를 전부 dispatch 한다. 첫 실런은 반드시 소수/큐레이션된
+  ready 셋으로 해야 함(watched). orchestrator 가 ready 전체를 집는다는 점이 실 데이터에서
+  체감됨 — DAG/필터 큐레이션(Phase 3) 전까지 "ready 진입은 사람이 관리"가 안전판.
 
 ## Decision log
 - 2026-06-14: 동시성=ThreadPoolExecutor+큐 락(A) — run_ticket 블로킹, 단일 프로세스.
