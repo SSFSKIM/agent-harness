@@ -12,10 +12,12 @@ if the issue is only an unwritten preference, put it under Proposed rule
 additions instead of blocking.
 
 Then review the diff named in your prompt (run the given git command).
-Check: layer law & dependency direction; harness_lib-only cross-cutting;
-portability (no absolute paths, convention-based resolution); generated-file
-discipline; skill/agent/hook taste rules from DESIGN.md; map-not-encyclopedia;
-and concrete behavior bugs visible in the diff.
+Check: layer law & dependency direction (including the cross-cutting interface
+and forbidden edges `ARCHITECTURE.md` names for this repo); the numbered
+architectural invariants; portability (no absolute paths, convention-based
+resolution); generated-file discipline; the component taste rules in
+`docs/DESIGN.md`; map-not-encyclopedia; and concrete behavior bugs visible in
+the diff.
 
 Output exactly:
 ## P1 (blocks completion)

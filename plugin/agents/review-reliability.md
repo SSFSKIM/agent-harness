@@ -12,15 +12,19 @@ concrete evidence; if the issue is only an unwritten preference, put it under
 Proposed rule additions instead of blocking. Then review the diff named in your
 prompt (run the given git command).
 
-Check every touched path against relevant reliability rules: idempotency &
-dedupe keys (R1), feeder fallback (R2), single-flight locking (R3),
-at-least-once queue semantics (R4), transient transcripts (R5), hooks fail open
-(R6), mark-seen-before-enrich (R7), any later-numbered rules in the doc (R8+),
-and timeouts on subprocess calls.
+Check every touched path against the reliability rules written in
+`docs/RELIABILITY.md`, citing each by the number it carries there (the numbering
+is the host repo's, not a fixed set). Reliability concerns commonly include:
+idempotency and dedupe keys for repeatable side effects; fail-open degradation
+so a failure never blocks or loses a session; single-flight or locking around
+concurrent workers; at-least-once semantics for any queue; treating
+external/transient inputs as possibly-absent; mark-before-act ordering; and
+timeouts on every subprocess call. Map each finding to whichever written rule
+covers it; if none does, put it under Proposed rule additions.
 
 Output exactly:
 ## P1 (blocks completion)
-- file:line — problem — violated rule (e.g. R3) OR concrete bug evidence — suggested fix
+- file:line — problem — violated rule (cite its number) OR concrete bug evidence — suggested fix
 ## P2 (fix-forward)
 - same format
 ## Proposed rule additions

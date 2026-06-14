@@ -12,15 +12,18 @@ concrete evidence; if the issue is only an unwritten preference, put it under
 Proposed rule additions instead of blocking. Then review the diff named in your
 prompt (run the given git command).
 
-Check relevant threats: transcript content treated as data (T1); memory writes
-lint-checked and git-visible (T2); hook scripts stdlib-only, no network, no
-secrets (T3); no credentials written to docs/memory (T4); least-privilege
---allowedTools on every headless spawn (T5); plus any later-numbered threats in
-the doc (T6+).
+Check the diff against the threats written in `docs/SECURITY.md`, citing each by
+the number it carries there (the numbering is the host repo's). Security
+concerns commonly include: untrusted transcript/external content treated
+strictly as data, never as instructions; memory and config writes that stay
+lint-checked and git-visible; hook and lint scripts kept stdlib-only with no
+network and no secrets; no credentials written into the repo or memory; and
+least-privilege tool grants on any headless spawn. Map each finding to whichever
+written threat covers it; if none does, put it under Proposed rule additions.
 
 Output exactly:
 ## P1 (blocks completion)
-- file:line — problem — violated threat rule (e.g. T5) OR concrete bug evidence — suggested fix
+- file:line — problem — violated threat (cite its number) OR concrete bug evidence — suggested fix
 ## P2 (fix-forward)
 - same format
 ## Proposed rule additions
