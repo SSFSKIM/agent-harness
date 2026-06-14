@@ -121,7 +121,12 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   `director/director_min.py`(main-세션 responder: pending/answer/auto_respond) +
   `tests/test_director_run.py`. 증거: 3 tests OK + CLI smoke `python -m director.run
   --ticket … --mock` → `{status: completed, turn_id: turn_mock_1}`. mock 으로 Phase 1
-  전구간(워커→approval→큐→Director answer→resume) 증명. **M5(Linear) 만 남음.**
+  전구간(워커→approval→큐→Director answer→resume) 증명.
+- [x] (2026-06-14) M5 코드 완료: `director/board/linear.py`(read_issue/normalize/
+  load_api_key, raw Authorization 키, stdlib urllib, http_post 주입) + `run.py --linear`
+  배선 + `tests/test_director_linear.py`(mock GraphQL). 증거: 5 tests OK. **LIVE 검증
+  (실 codex app-server + 실 Linear 이슈)만 보류 — 자격증명/네트워크 필요. Phase 1 코드
+  완료(112 tests GREEN), completion gate 는 live 검증 후.**
 
 ## Surprises & discoveries
 

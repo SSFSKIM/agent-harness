@@ -59,14 +59,22 @@ def _command(args) -> list[str]:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="director.run")
-    ap.add_argument("--ticket", required=True, help="path to a stub ticket JSON")
+    ap.add_argument("--ticket", help="path to a stub ticket JSON")
+    ap.add_argument("--linear", help="Linear issue id/identifier to read as the ticket")
     ap.add_argument("--mock", action="store_true", help="use the bundled fake app-server")
     ap.add_argument("--mock-scenario", default="plain", choices=["plain", "approval"])
     ap.add_argument("--codex", default="codex app-server", help="real worker command")
     ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
     args = ap.parse_args(argv)
 
-    ticket = load_ticket(args.ticket)
+    if args.linear:
+        from director.board.linear import read_issue
+        issue = read_issue(args.linear)
+        ticket = {"id": issue["identifier"], "prompt": issue["prompt"]}
+    elif args.ticket:
+        ticket = load_ticket(args.ticket)
+    else:
+        ap.error("one of --ticket or --linear is required")
     result = run_ticket(ticket, command=_command(args), queue_base=args.queue_dir)
     print(json.dumps({"ticket": ticket["id"], **result}))
     return 0 if result.get("status") == "completed" else 1
