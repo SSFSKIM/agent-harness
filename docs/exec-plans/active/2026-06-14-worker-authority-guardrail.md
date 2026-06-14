@@ -88,8 +88,14 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
   expect: commentCreate success=True, delete 로컬 거부, 서버가 query-mutation 거부, GREEN.
 
 ## Progress log
-- [ ] (2026-06-14) plan created; base_commit 9464e4d; review_level targeted (review-security,
-      live exec surface). 다음: M1.
+- [x] (2026-06-14) plan created; base_commit 9464e4d; review_level targeted (review-security,
+      live exec surface).
+- [x] (2026-06-14) M1 done. `director/worker/authority.py`: `_strip`(주석/문자열 blank) +
+      `classify_operation`(paren-0 에서만 brace 깊이 셈 → object-value 중괄호가 selection
+      set 으로 오인되지 않음; alias/directive/spread 처리; 다중 op 합집합) + `authorize`
+      (read→allow, allowlisted-mutation→allow, 그 외/subscription/parse-fail→deny). 8-mutation
+      기본 allowlist. `tests/test_director_authority.py` 27 PASS(classify·evasion 배터리·
+      authorize·기본 allowlist). 다음: M2(executor 결선 + SECURITY T10).
 
 ## Surprises & discoveries
 
