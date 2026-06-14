@@ -56,6 +56,29 @@ class RunEndToEndTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             run.load_ticket(bad)
 
+    def test_install_workspace_skills(self):
+        ws = self.tmp / "wsskills"
+        run.install_workspace_skills(ws)
+        self.assertTrue((ws / ".codex" / "skills" / "linear" / "SKILL.md").exists())
+        self.assertTrue((ws / ".codex" / "skills" / "commit" / "SKILL.md").exists())
+        run.install_workspace_skills(ws)  # idempotent re-run
+
+    def test_run_ticket_threads_tools_and_executor(self):
+        seen = []
+
+        def texec(name, args):
+            seen.append(name)
+            return {"success": True, "output": "ok"}
+
+        ticket = run.load_ticket(self._ticket_path())
+        res = run.run_ticket(ticket, command=[sys.executable, MOCK, "tool"],
+                             queue_base=self.qbase, workspace_root=self.tmp / "wsr2",
+                             tools=[{"name": "linear_graphql", "description": "d",
+                                     "inputSchema": {"type": "object"}}],
+                             tool_executor=texec)
+        self.assertEqual(res["status"], "completed")
+        self.assertEqual(seen, ["linear_graphql"])
+
 
 if __name__ == "__main__":
     unittest.main()

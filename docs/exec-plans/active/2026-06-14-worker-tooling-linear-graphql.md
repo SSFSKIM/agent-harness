@@ -97,7 +97,11 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
   (tool-call 이 tool_executor 로 (name,args) 전달·turn completed).
 - [x] (2026-06-14) W2 완료: `director/worker/tools.py` — linear_graphql_spec() +
   make_linear_tool_executor(board.linear 재사용, top-level errors→success=false, http_post
-  주입) + `tests/test_director_tools.py`. 증거: 6 tests OK. W3–W4 미착수.
+  주입) + `tests/test_director_tools.py`. 증거: 6 tests OK.
+- [x] (2026-06-14) W3 완료: Symphony `.codex/skills`(commit/push/pull/land/linear/debug,
+  Apache-2.0 + ATTRIBUTION)를 `director/workspace_skills/` 로 vendor + `run.py
+  install_workspace_skills`(idempotent) + `--tools linear`/`--install-skills` 배선 + tests.
+  증거: 5 run tests OK + CLI smoke 가 워크스페이스 `.codex/skills/` 6개 설치. **W4(live) 만 남음.**
 
 ## Surprises & discoveries
 
