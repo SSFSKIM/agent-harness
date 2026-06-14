@@ -1,6 +1,6 @@
 ---
-status: active
-last_verified: 2026-06-14
+status: completed
+last_verified: 2026-06-15
 owner: harness
 base_commit: 46ad95e
 ---
@@ -130,7 +130,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   Add one tracker row: existing `docs/memory` hosts migrate on demand (the Scope
   decision). Pure-doc milestone — completion gate covers it.
 
-- [ ] **M6 — Completion gate.** Self-review the full diff
+- [x] **M6 — Completion gate.** Self-review the full diff
   (`git diff 46ad95e..HEAD`) against the Goal. Dispatch review personas **as Opus
   4.8 high subagents (NOT codex — standing user override)**: review-arch +
   review-reliability always; **add review-security** (the diff edits `scaffold.py`,
@@ -183,6 +183,13 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   `dream_run`'s stale docstring + a `docs_sync` comment example. Added the
   migrate-on-demand tracker row; marked the Major debt row fixed. Gate GREEN;
   fresh-host proof GREEN.
+- 2026-06-15: **M6 done — plan complete.** 3 Opus review subagents + docs-sync pass.
+  review-security + review-reliability SATISFIED (0 P1); review-arch found 2 P1s
+  (ARCHITECTURE.md + AGENTS.md still described the deleted loop as live — the M5 sweep
+  missed the two top-level maps), FIXED + re-reviewed → SATISFIED. P2s fixed (R1 clause,
+  owner: dreamer, .pyc) or tracker-rowed; 13 imprint/feeder debt rows marked superseded.
+  Gate GREEN (206 tests); fresh-host scaffold→gate GREEN. Lineage
+  46ad95e → bd4d3eb → e03d350 → cfe84a6 → 60e51f0 → 6b676e1 → a4e8ed5.
 
 ## Surprises & discoveries
 - 2026-06-14 (M2): the stale `memory/*` lint constants are already INERT on a
@@ -243,5 +250,68 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   is reached only when `dream_run` runs in a repo that never ran `harness-init`.
 
 ## Feedback (from completion gate)
+- 2026-06-15 (M6): self-review clean (net −217 lines, dead-code deletion dominates;
+  6 template renames are pure relocation). Three review personas dispatched as **Opus
+  4.8 subagents** (per the standing user override — NOT codex) + the docs-sync
+  currency pass.
+- **review-security: SATISFIED (0 P1).** Verified every reworded SECURITY clause
+  (T1/T2/T4/T5/T7/T8/T9) is factually true against live code; confirmed the
+  `MANAGED_ROOTS` `memory`→`journal` change PRESERVES the non-exemptable
+  anti-poisoning guarantee at the new memory home (`docs/journal/` stays D3-governed,
+  un-`.harnessignore`-able); confirmed the deleted imprint child's old residual risk
+  was correctly retired (router agent is read-only; sandbox writes reverted). 1 P2
+  (stale `owner: dreamer` journal seed) — FIXED.
+- **review-reliability: SATISFIED (0 P1).** Verified all 3 relocated `load_templates()`
+  resolve and the reframed R1–R4/R7 are factually true against the live
+  `dream_*`/`memories_db` code. 2 P2s: R1's "or index entry" clause described a
+  router write path that doesn't exist (FIXED → "journal provenance line"); stale
+  `.pyc` for deleted modules (FIXED → cleaned).
+- **review-arch: NOT SATISFIED → (after fix) SATISFIED.** Found 2 real P1s the M5
+  sweep MISSED — `ARCHITECTURE.md` (Data flows INJECT/IMPRINT/CONSOLIDATE + failure
+  headlines still presented the deleted feeder/imprint/dreamer as the live pipeline)
+  and the self-host root `AGENTS.md:9` (step 1 still said "feeder, currently off",
+  contradicting its own Memory section). Both FIXED (memory-as-docs Data flows;
+  pull-not-feeder step 1) + re-reviewed → **SATISFIED**, both P1s confirmed resolved,
+  no regression.
+- **docs-sync pass:** flagged 4 semantic items — AGENTS.md:91 (fixed), the tracker
+  (13 imprint/feeder debt rows for now-deleted scripts marked `superseded`), and the
+  exempt `superpowers/` v1 article (tracker-rowed, left as historical per review-arch).
+- **P2s → tracker (not blocking):** 3 follow-up rows added — the v1 teaching article's
+  dead file pointers; an `owner`-resolves-to-live-persona lint + a deleted-name drift
+  check (would have gate-caught the ARCHITECTURE/AGENTS miss); the dreaming
+  write-path no-scheduler liveness note. Plus the pre-existing redact_secrets P2 +
+  prune-dead P3 remain open.
 
 ## Outcomes & retrospective
+- 2026-06-15: **Goal met.** A fresh `harness-init`/`scaffold.py` port is now born
+  memory-as-docs — it seeds `docs/journal/` + the existing design-docs/exec-plans/
+  references homes with AGENTS.md as the sole map, and has **no `docs/memory/` tree
+  and no `MEMORY.md`**. Proven end-to-end and reproducibly: `scaffold.py --root
+  <fresh tmp>` → no `docs/memory`, has `docs/journal`, and `check.py --root <tmp>`
+  GREEN — a new port is born into the current architecture AND lint-clean (the thing
+  the self-host-only migration structurally couldn't prove). Self-host gate stayed
+  GREEN at every milestone (206 tests).
+- **What shipped:** the 6 dreaming templates relocated to `dream-rollouts/`; the old
+  read/write loop HARD-DELETED (`feeder_*`, `imprint_*`, the `dream` skill, the
+  `dreamer` agent + their tests — 11 files, ~470 lines); `scaffold.py` seeds
+  memory-as-docs; `lint_docs` stripped of the docs/memory/MEMORY.md constants;
+  `harness_lib.MANAGED_ROOTS` `memory`→`journal` (the anti-poisoning guarantee
+  follows the memory to its new home); the host-facing templates + the self-host
+  living grounding docs (ARCHITECTURE / AGENTS / SECURITY / RELIABILITY / DESIGN /
+  QUALITY_SCORE) rewritten to memory-as-docs; 13 false-debt tracker rows closed.
+- **Decisions that held:** hard-delete (not neutralize) — git preserves history, dead
+  code is pure debt; plugin-going-forward-only — existing `docs/memory` hosts migrate
+  on demand (tracker-rowed), keeping this plan bounded; `MANAGED_ROOTS` memory→journal
+  rather than just-drop, so the security guard tracks the live memory home.
+- **Lessons.** (1) The docs/memory coupling ran deeper than the obvious scaffold/lint
+  surface — it reached `harness_lib.MANAGED_ROOTS` (a security guard) and five
+  `.harnessignore` tests that used `memory/` as their canonical managed-tree example;
+  one (the dot-slash test) would have silently INVERTED if `memory` were merely
+  dropped. (2) The milestones were genuinely independent because the stale memory
+  constants were already INERT on a memory-as-docs host (`check_indexes` skips absent
+  dirs), so each milestone stayed gate-GREEN alone. (3) **The adversarial review
+  earned its keep again:** my M5 "swept the living grounding docs" claim was wrong —
+  I missed the two most authoritative maps (`ARCHITECTURE.md`, `AGENTS.md`), and only
+  review-arch + docs-sync caught it. The proposed `owner`-resolves lint + deleted-name
+  drift check (now tracker-rowed) would convert that class of miss from a reviewer
+  catch to a gate catch.
