@@ -18,8 +18,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 import time
 from pathlib import Path
+
+# Serializes append_request's read-dedupe + write so N concurrent workers
+# (orchestrator threads) can't interleave a JSON line or both win the dedupe race.
+# Single-process scope — cross-process hardening (O_APPEND/flock) is Phase 4.
+_APPEND_LOCK = threading.Lock()
 
 # Normalized request kinds (Codex method -> kind mapping lives in the worker seam).
 REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation")
@@ -74,13 +80,17 @@ def append_request(req: dict, base: Path | str | None = None) -> bool:
     root = _root(base)
     _ensure(root)
     rid = req["request_id"]
-    if any(r.get("request_id") == rid for r in read_requests(base)):
-        return False
-    line = json.dumps(req, ensure_ascii=False, sort_keys=True)
-    with open(_requests_path(root), "a", encoding="utf-8") as f:
-        f.write(line + "\n")
-        f.flush()
-        os.fsync(f.fileno())
+    # Hold the lock across dedupe-read + append (not across wait_for_answer, which
+    # is a separate call) so concurrent appends neither interleave a line nor both
+    # pass the dedupe check for the same request_id.
+    with _APPEND_LOCK:
+        if any(r.get("request_id") == rid for r in read_requests(base)):
+            return False
+        line = json.dumps(req, ensure_ascii=False, sort_keys=True)
+        with open(_requests_path(root), "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+            os.fsync(f.fileno())
     return True
 
 

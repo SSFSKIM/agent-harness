@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -7,6 +8,16 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.board.linear as linear  # noqa: E402
 import director.run as run  # noqa: E402
+
+
+def _capturing_post(captured, response):
+    """A fake http_post that records the decoded GraphQL body and returns `response`."""
+    def post(url, data, headers):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["body"] = json.loads(data.decode("utf-8"))
+        return response
+    return post
 
 _ISSUE = {"id": "uuid-1", "identifier": "ABC-123", "title": "Add a health check",
           "description": "Return 200 OK at /health.", "state": {"name": "Todo"}}
@@ -61,6 +72,65 @@ class LinearAdapterTest(unittest.TestCase):
                 rc = run.main(["--linear", "ABC-9", "--mock",
                                "--mock-scenario", "plain", "--queue-dir", q])
         self.assertEqual(rc, 0)
+
+
+class LinearWriteMethodsTest(unittest.TestCase):
+    def test_workflow_states_maps_name_to_id_and_type(self):
+        cap = {}
+        resp = {"data": {"team": {"states": {"nodes": [
+            {"id": "s1", "name": "Todo", "type": "unstarted"},
+            {"id": "s2", "name": "Done", "type": "completed"}]}}}}
+        states = linear.workflow_states("team-1", api_key="k",
+                                        http_post=_capturing_post(cap, resp))
+        self.assertEqual(states["Todo"], {"id": "s1", "type": "unstarted"})
+        self.assertEqual(states["Done"]["id"], "s2")
+        self.assertEqual(cap["body"]["variables"], {"id": "team-1"})
+        self.assertIn("team(id:", cap["body"]["query"].replace(" ", ""))
+
+    def test_list_ready_issues_normalizes_with_state_id(self):
+        cap = {}
+        resp = {"data": {"issues": {"nodes": [
+            {"id": "u1", "identifier": "ABC-1", "title": "T1", "description": "d1",
+             "state": {"id": "s1", "name": "Todo"}}]}}}
+        out = linear.list_ready_issues("team-1", "s1", api_key="k",
+                                       http_post=_capturing_post(cap, resp))
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["id"], "u1")
+        self.assertEqual(out[0]["identifier"], "ABC-1")
+        self.assertEqual(out[0]["state_id"], "s1")
+        self.assertIn("T1", out[0]["prompt"])
+        self.assertEqual(cap["body"]["variables"], {"team": "team-1", "state": "s1"})
+
+    def test_update_issue_state_returns_success(self):
+        cap = {}
+        resp = {"data": {"issueUpdate": {"success": True}}}
+        ok = linear.update_issue_state("u1", "s2", api_key="k",
+                                       http_post=_capturing_post(cap, resp))
+        self.assertTrue(ok)
+        self.assertEqual(cap["body"]["variables"], {"id": "u1", "state": "s2"})
+        self.assertIn("issueUpdate", cap["body"]["query"])
+
+    def test_comment_issue_returns_success_and_sends_body(self):
+        cap = {}
+        resp = {"data": {"commentCreate": {"success": True}}}
+        ok = linear.comment_issue("u1", "✅ done", api_key="k",
+                                  http_post=_capturing_post(cap, resp))
+        self.assertTrue(ok)
+        self.assertEqual(cap["body"]["variables"], {"id": "u1", "body": "✅ done"})
+
+    def test_write_methods_raise_on_graphql_errors(self):
+        def post(url, data, headers):
+            return {"errors": [{"message": "nope"}]}
+        with self.assertRaises(RuntimeError):
+            linear.update_issue_state("u1", "s2", api_key="k", http_post=post)
+
+    def test_linear_board_binds_key_and_delegates(self):
+        cap = {}
+        resp = {"data": {"issues": {"nodes": []}}}
+        board = linear.LinearBoard(api_key="bound", http_post=_capturing_post(cap, resp))
+        out = board.list_ready_issues("team-1", "s1")
+        self.assertEqual(out, [])
+        self.assertEqual(cap["headers"]["Authorization"], "bound")
 
 
 if __name__ == "__main__":

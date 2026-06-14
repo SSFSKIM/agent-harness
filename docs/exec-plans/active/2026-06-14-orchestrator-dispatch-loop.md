@@ -125,9 +125,19 @@ reconcile 주체:
   부담 시 1 티켓으로 축소. (Phase 1·2 의 mock-first + 라이브 1회 패턴.)
 
 ## Progress log
-- [ ] (2026-06-14) plan 작성 + 생성시 self-review. (다음: M1.)
+- [x] (2026-06-14) plan 작성 + 생성시 self-review.
+- [x] (2026-06-14) M1 — board/linear.py 에 `_post` 헬퍼 + `workflow_states`/
+  `list_ready_issues`/`update_issue_state`/`comment_issue` + `LinearBoard` 어댑터;
+  read_issue 를 `_post` 로 리팩터. test_director_linear.py +6 테스트(11 통과).
+- [x] (2026-06-14) M2 — queue `append_request` 를 모듈 `_APPEND_LOCK` 으로 직렬화;
+  동시성 회귀테스트 2건(distinct 40→무손상, same-id 40→1). 락 무력화 시 60 동시 same-id
+  가 4줄로 깨짐을 확인해 테스트 유효성 입증. tech-debt line 47 → fixed.
+- [ ] M3 — orchestrator 엔진(run_once/dispatch/reconcile). (다음.)
 
 ## Surprises & discoveries
+- (2026-06-14) M2 락 검증: `_APPEND_LOCK` 을 `nullcontext` 로 무력화하면 60 동시
+  same-id append 가 4줄(중복)로 남음 → read-before-append race 가 실재하고 락이 정확히
+  그걸 닫음. 음성 테스트를 flaky 하게 박제하는 대신 양성 테스트 + 이 1회 수동 확인으로 남김.
 
 ## Decision log
 - 2026-06-14: 동시성=ThreadPoolExecutor+큐 락(A) — run_ticket 블로킹, 단일 프로세스.
