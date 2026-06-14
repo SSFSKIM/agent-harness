@@ -76,14 +76,19 @@ def reconcile(board, ticket: dict, result: dict, attempts: int,
     errs: list[str] = []
 
     def set_state(state_id):
+        # A board write has THREE outcomes: success, raise, or return False (the
+        # GraphQL call returned success:false). False is a failed write, recorded
+        # so the summary never claims a state moved when it didn't.
         try:
-            board.update_issue_state(tid, state_id)
+            if not board.update_issue_state(tid, state_id):
+                errs.append(f"set_state({state_id}) returned False")
         except Exception as exc:
             errs.append(f"set_state: {exc}")
 
     def comment(body):
         try:
-            board.comment_issue(tid, body)
+            if not board.comment_issue(tid, body):
+                errs.append("comment returned False")
         except Exception as exc:
             errs.append(f"comment: {exc}")
 
@@ -122,6 +127,7 @@ def run_once(board, command: list[str], *, team: str, states: dict,
     ready = board.list_ready_issues(team, states["ready"])
     results: dict = {}
     attempts: dict = {}
+    in_flight: set = set()  # ticket ids claimed/dispatched this pass (incl. pending retry)
     pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
     futures: dict = {}
 
@@ -133,20 +139,31 @@ def run_once(board, command: list[str], *, team: str, states: dict,
             timeout_s=timeout_s)
         futures[fut] = ticket
 
+    def claim_failed(ticket, reason):
+        tid = ticket["id"]
+        results[tid] = {"ticket": ticket.get("identifier") or tid,
+                        "status": "claim_failed", "final_state": "ready",
+                        "attempts": 0, "error": reason}
+
     try:
         for ticket in ready:
             tid = ticket["id"]
+            if tid in in_flight or tid in results:
+                continue  # duplicate ready entry this pass — claim/dispatch exactly once
             # claim = mark-before-act: transition to `started` BEFORE spawning, so a
             # crash leaves the ticket visibly in-progress (not silently re-run) and
-            # the board shows progress to the watched Director (D-9).
+            # the board shows progress to the watched Director (D-9). A write that
+            # raises OR returns False is a failed claim — we never dispatch unclaimed.
             try:
-                board.update_issue_state(tid, states["started"])
+                claimed = board.update_issue_state(tid, states["started"])
             except Exception as exc:
-                results[tid] = {"ticket": ticket.get("identifier") or tid,
-                                "status": "claim_failed", "final_state": "ready",
-                                "attempts": 0, "error": str(exc)}
+                claim_failed(ticket, f"claim raised: {exc}")
+                continue
+            if not claimed:
+                claim_failed(ticket, "board rejected claim (update_issue_state returned False)")
                 continue
             attempts[tid] = 1
+            in_flight.add(tid)
             submit(ticket)
 
         while futures:
@@ -158,8 +175,9 @@ def run_once(board, command: list[str], *, team: str, states: dict,
                                     attempts[tid], states, retry_budget)
                 if outcome.get("retry"):
                     attempts[tid] += 1
-                    submit(ticket)
+                    submit(ticket)  # stays in_flight across the retry
                 else:
+                    in_flight.discard(tid)
                     results[tid] = outcome["summary"]
     finally:
         pool.shutdown(wait=True)

@@ -166,6 +166,64 @@ class RunOnceErrorPathsTest(unittest.TestCase):
         self.assertEqual(res[0]["status"], "completed")
         self.assertIn("reconcile_error", res[0])
 
+    def test_claim_returning_false_skips_dispatch(self):
+        # A board that returns False (not raises) on the claim write must not dispatch.
+        class RejectClaim(orch.MockBoard):
+            def update_issue_state(self, issue_id, state_id):
+                if state_id == "st_prog":
+                    return False
+                return super().update_issue_state(issue_id, state_id)
+
+        board = RejectClaim([{"id": "u1", "identifier": "D-1", "title": "t",
+                              "description": "d", "prompt": "p", "state_id": "st_todo"}])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch") as disp:
+            res = orch.run_once(board, command=["x"], team="T", states=states)
+        disp.assert_not_called()
+        self.assertEqual(res[0]["status"], "claim_failed")
+        self.assertIn("False", res[0]["error"])
+
+    def test_reconcile_false_write_recorded_as_error(self):
+        # update_issue_state returning False (GraphQL success:false) on the done
+        # transition must surface as reconcile_error, not a silent "done".
+        class RejectDone(orch.MockBoard):
+            def update_issue_state(self, issue_id, state_id):
+                if state_id == "st_done":
+                    return False
+                return super().update_issue_state(issue_id, state_id)
+
+        board = RejectDone([{"id": "u1", "identifier": "D-1", "title": "t",
+                             "description": "d", "prompt": "p", "state_id": "st_todo"}])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        lambda ticket, **kw: {"status": "completed", "turn_id": "t"}):
+            res = orch.run_once(board, command=["x"], team="T", states=states)
+        self.assertEqual(res[0]["status"], "completed")
+        self.assertIn("reconcile_error", res[0])
+        self.assertIn("False", res[0]["reconcile_error"])
+
+    def test_duplicate_ready_entry_dispatched_once(self):
+        # A duplicate id in the ready set (e.g. a future Phase-3 DAG union) is
+        # claimed/dispatched exactly once.
+        class DupBoard(orch.MockBoard):
+            def list_ready_issues(self, team, ready_state_id):
+                one = super().list_ready_issues(team, ready_state_id)
+                return one + one  # same issue twice
+
+        board = DupBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                           "description": "d", "prompt": "p", "state_id": "st_todo"}])
+        states = orch.resolve_states(board, "T")
+        calls = {"n": 0}
+
+        def fake(ticket, **kw):
+            calls["n"] += 1
+            return {"status": "completed", "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.dispatch", fake):
+            res = orch.run_once(board, command=["x"], team="T", states=states)
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(len(res), 1)
+
 
 class MainCliTest(unittest.TestCase):
     def test_main_mock_runs_and_reconciles(self):

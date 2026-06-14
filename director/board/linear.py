@@ -1,11 +1,15 @@
-"""Linear tracker adapter (Phase 1, M5) — read one issue as a worker ticket.
+"""Linear tracker adapter (board substrate = Linear, decision D-3).
 
-Phase 1 only READS (board substrate = Linear, decision D-3); ticket WRITES (state
-transitions, comments) are the worker's job in later phases. Auth is Linear's
-personal API key in the raw `Authorization` header (no "Bearer"), per the Symphony
-reference adapter. The key lives in repo-root `.env` (LINEAR_API_KEY, gitignored —
-decision D-6). HTTP uses stdlib urllib (internalize dependencies) and is injectable
-so tests run without network (mock-first, plan Approach A).
+Reads (Phase 1): one issue as a worker ticket. Writes (orchestrator, D-11): the
+Director's own board-write authority — `list_ready_issues` (poll), `update_issue_state`
+(claim + reconcile), `comment_issue` (outcome). This is separate from the worker's
+`linear_graphql` tool (Phase 2): reconcile must work even when a worker has crashed,
+so the Director writes under its own key. Auth is Linear's personal API key in the
+raw `Authorization` header (no "Bearer"), per the Symphony reference adapter; the key
+lives in repo-root `.env` (LINEAR_API_KEY, gitignored — decision D-6). HTTP uses
+stdlib urllib (internalize dependencies) and is injectable so tests run without
+network (mock-first). `LinearBoard` binds auth+endpoint into the object the
+orchestrator depends on (swappable with a test/`--mock` board).
 """
 from __future__ import annotations
 
