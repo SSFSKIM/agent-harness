@@ -94,7 +94,10 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
 - [x] (2026-06-14) W1 완료: app_server 에 tool_executor + thread_start(tools=)→dynamicTools +
   `item/tool/call`→tool_executor 라우팅(approval seam 과 분리) + normalize_tool_result
   ({success,output,contentItems}) + mock 'tool' 시나리오. 증거: 5 app_server tests OK
-  (tool-call 이 tool_executor 로 (name,args) 전달·turn completed). W2–W4 미착수.
+  (tool-call 이 tool_executor 로 (name,args) 전달·turn completed).
+- [x] (2026-06-14) W2 완료: `director/worker/tools.py` — linear_graphql_spec() +
+  make_linear_tool_executor(board.linear 재사용, top-level errors→success=false, http_post
+  주입) + `tests/test_director_tools.py`. 증거: 6 tests OK. W3–W4 미착수.
 
 ## Surprises & discoveries
 
