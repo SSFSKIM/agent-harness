@@ -101,7 +101,19 @@ eligibility 진실원:
   **acceptance**: B 의 blocker 가 A 로 읽히고 A 를 done 으로 옮기면 B 가 eligible.
 
 ## Progress log
-- [ ] (2026-06-14) plan 작성 + 생성시 self-review. (다음: M1.)
+- [x] (2026-06-14) plan 작성 + 생성시 self-review.
+- [x] (2026-06-14) M1 — board/linear.py `list_ready_issues` 쿼리에 inverseRelations +
+  `_parse_blockers`(type=="blocks" 만, blocker id+state_type); MockBoard 가 issue.blockers
+  를 받아 state_type 해소. test_director_linear +1(12 통과).
+- [x] (2026-06-14) M2 — `eligible_tickets`(순수 필터) + `_dispatch_wave`(run_once 본문
+  추출, dict 반환) + 얇은 `run_once`(poll→eligible→wave). 단일 패스도 blocked 미dispatch.
+  test +7(eligibility 6 + run_once-skip-blocked).
+- [x] (2026-06-14) M3 — `run_until_drained` 연속 wave 루프(pending=ready-results, eligible
+  없으면 stuck/drained, bound). test +6: 체인 순서·drained, 다이아몬드 병렬, 실패-blocker
+  →stuck=[B], 사이클→stuck(행 없음), 워커-생성 픽업, max_passes bound.
+- [x] (2026-06-14) M4 — CLI `--once`/`--max-passes`/`--done-types`, 기본 연속.
+  test +2(--once 단일 패스 B 막힘, 연속 체인 A→B 둘 다 Done). 164 테스트 GREEN.
+- [ ] M5 — 라이브 blocker pin(실 Linear inverseRelations wire). (다음.)
 
 ## Surprises & discoveries
 

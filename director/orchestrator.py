@@ -114,20 +114,27 @@ def reconcile(board, ticket: dict, result: dict, attempts: int,
     return {"summary": summary}
 
 
-def run_once(board, command: list[str], *, team: str, states: dict,
-             concurrency: int = 3, queue_base=None,
-             workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
-             tools=None, tool_executor=None, install_skills: bool = False,
-             read_timeout_s: float = 30.0, timeout_s: float = 300.0) -> list[dict]:
-    """One poll→dispatch→reconcile pass. Polls ready tickets, claims each (mark
-    before act), dispatches up to `concurrency` workers, and reconciles each as it
-    finishes (re-dispatching a failure within budget). Returns a per-ticket summary
-    list. The shared Director queue (queue_base) carries approvals to the watched
-    responder — this function never answers them."""
-    ready = board.list_ready_issues(team, states["ready"])
+def eligible_tickets(tickets: list[dict], *, done_types=("completed",)) -> list[dict]:
+    """The DAG-eligible subset: a ticket whose every blocked_by blocker is in a
+    done state-type. A ticket with no blockers is always eligible. Pure function —
+    blockers come from the board read (list_ready_issues -> ticket['blockers'])."""
+    done = set(done_types)
+    return [t for t in tickets
+            if all(b.get("state_type") in done for b in t.get("blockers", []))]
+
+
+def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: dict,
+                   concurrency: int = 3, queue_base=None,
+                   workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
+                   tools=None, tool_executor=None, install_skills: bool = False,
+                   read_timeout_s: float = 30.0, timeout_s: float = 300.0) -> dict:
+    """Claim, dispatch (bounded concurrency), and fully drain a given (already
+    eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
+    only once every ticket has reached a terminal summary (incl. retries), so the
+    continuous loop never has cross-wave in-flight tickets to re-dispatch."""
     results: dict = {}
     attempts: dict = {}
-    in_flight: set = set()  # ticket ids claimed/dispatched this pass (incl. pending retry)
+    in_flight: set = set()  # ticket ids claimed/dispatched this wave (incl. pending retry)
     pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
     futures: dict = {}
 
@@ -146,10 +153,10 @@ def run_once(board, command: list[str], *, team: str, states: dict,
                         "attempts": 0, "error": reason}
 
     try:
-        for ticket in ready:
+        for ticket in tickets:
             tid = ticket["id"]
             if tid in in_flight or tid in results:
-                continue  # duplicate ready entry this pass — claim/dispatch exactly once
+                continue  # duplicate ready entry this wave — claim/dispatch exactly once
             # claim = mark-before-act: transition to `started` BEFORE spawning, so a
             # crash leaves the ticket visibly in-progress (not silently re-run) and
             # the board shows progress to the watched Director (D-9). A write that
@@ -181,7 +188,64 @@ def run_once(board, command: list[str], *, team: str, states: dict,
                     results[tid] = outcome["summary"]
     finally:
         pool.shutdown(wait=True)
-    return list(results.values())
+    return results
+
+
+def run_once(board, command: list[str], *, team: str, states: dict,
+             done_types=("completed",), **wave_kwargs) -> list[dict]:
+    """One poll→filter→dispatch→reconcile pass. Polls ready tickets, keeps only the
+    DAG-eligible ones (blockers all done), then dispatches+drains that wave. Returns
+    a per-ticket summary list. The shared Director queue carries approvals to the
+    watched responder — this function never answers them."""
+    ready = board.list_ready_issues(team, states["ready"])
+    eligible = eligible_tickets(ready, done_types=done_types)
+    return list(_dispatch_wave(board, eligible, command=command, states=states,
+                               **wave_kwargs).values())
+
+
+def run_until_drained(board, command: list[str], *, team: str, states: dict,
+                      done_types=("completed",), max_passes: int = 50,
+                      max_dispatched: int = 200, **wave_kwargs) -> dict:
+    """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
+
+    Board-as-truth: a completed ticket leaves the `ready` state (reconciled to done),
+    so its dependents become eligible on the next poll — no in-memory completion
+    ledger. `results` only remembers terminal tickets of THIS run so a claim-failed
+    ticket (which stays in `ready`) isn't retried forever. Terminates on:
+      - "drained"       — nothing left to do (no pending tickets)
+      - "stuck"         — pending tickets remain but none eligible (a failed blocker
+                          keeps dependents blocked, or a dependency cycle)
+      - "max_passes" / "max_dispatched" — safety bounds against runaway / cycles
+    Returns {summaries, passes, stopped_reason, stuck}."""
+    results: dict = {}
+    dispatched_count = 0
+    passes = 0
+    stopped_reason = "drained"
+    stuck: list = []
+    while True:
+        if passes >= max_passes:
+            stopped_reason = "max_passes"
+            break
+        passes += 1
+        ready = board.list_ready_issues(team, states["ready"])
+        pending = [t for t in ready if t["id"] not in results]  # not yet terminal this run
+        eligible = eligible_tickets(pending, done_types=done_types)
+        if not eligible:
+            # No progress possible: every pending ticket (if any) is blocked — a
+            # failed blocker or a cycle. Report rather than spin (R7).
+            if pending:
+                stopped_reason = "stuck"
+                stuck = [t.get("identifier") or t["id"] for t in pending]
+            break
+        if dispatched_count + len(eligible) > max_dispatched:
+            stopped_reason = "max_dispatched"
+            break
+        wave = _dispatch_wave(board, eligible, command=command, states=states,
+                              **wave_kwargs)
+        dispatched_count += len(wave)
+        results.update(wave)
+    return {"summaries": list(results.values()), "passes": passes,
+            "stopped_reason": stopped_reason, "stuck": stuck}
 
 
 class MockBoard:
@@ -212,7 +276,23 @@ class MockBoard:
         return self._states
 
     def list_ready_issues(self, team, ready_state_id):
-        return [dict(i) for i in self._issues.values() if i["state_id"] == ready_state_id]
+        out = []
+        for i in self._issues.values():
+            if i["state_id"] != ready_state_id:
+                continue
+            t = dict(i)
+            # resolve each blocker id to its current {id, state_type} (DAG truth)
+            t["blockers"] = [{"id": bid, "state_type": self._state_type(bid)}
+                             for bid in i.get("blockers", [])]
+            out.append(t)
+        return out
+
+    def _state_type(self, issue_id):
+        iss = self._issues.get(issue_id)
+        if not iss:
+            return None
+        sid = iss["state_id"]
+        return next((v["type"] for v in self._states.values() if v["id"] == sid), None)
 
     def update_issue_state(self, issue_id, state_id):
         if issue_id in self._fail:
@@ -258,12 +338,19 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--workspace-root", default=None)
     ap.add_argument("--tools", choices=["none", "linear"], default="none")
     ap.add_argument("--install-skills", action="store_true")
+    ap.add_argument("--once", action="store_true",
+                    help="single pass (no re-poll); default is the DAG-aware continuous loop")
+    ap.add_argument("--max-passes", type=int, default=50,
+                    help="continuous loop safety bound on re-poll passes")
+    ap.add_argument("--done-types", default="completed",
+                    help="comma-separated blocker state-types that count as done (unblock)")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)
     states = resolve_states(board, args.team, {
         "ready": args.ready_state, "started": args.started_state,
         "done": args.done_state, "failed": args.failed_state})
+    done_types = tuple(s.strip() for s in args.done_types.split(",") if s.strip())
 
     tools = tool_executor = None
     if args.tools == "linear":
@@ -273,14 +360,23 @@ def main(argv=None, *, board=None) -> int:
 
     kwargs = {"team": args.team, "states": states, "concurrency": args.concurrency,
               "queue_base": args.queue_dir, "tools": tools, "tool_executor": tool_executor,
-              "install_skills": args.install_skills}
+              "install_skills": args.install_skills, "done_types": done_types}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)
-    summaries = run_once(board, _command(args), **kwargs)
 
-    for s in summaries:
+    if args.once:
+        summaries = run_once(board, _command(args), **kwargs)
+        for s in summaries:
+            print(json.dumps(s, ensure_ascii=False))
+        return 0 if all(s["status"] != "claim_failed" for s in summaries) else 1
+
+    result = run_until_drained(board, _command(args), max_passes=args.max_passes, **kwargs)
+    for s in result["summaries"]:
         print(json.dumps(s, ensure_ascii=False))
-    return 0 if all(s["status"] != "claim_failed" for s in summaries) else 1
+    print(json.dumps({"stopped_reason": result["stopped_reason"],
+                      "passes": result["passes"], "stuck": result["stuck"]},
+                     ensure_ascii=False))
+    return 0 if result["stopped_reason"] == "drained" else 1
 
 
 if __name__ == "__main__":

@@ -42,7 +42,10 @@ query DirectorTeamStates($id: String!) {
 _READY_ISSUES = """
 query DirectorReadyIssues($team: ID!, $state: ID!) {
   issues(filter: { team: { id: { eq: $team } }, state: { id: { eq: $state } } }) {
-    nodes { id identifier title description state { id name } }
+    nodes {
+      id identifier title description state { id name }
+      inverseRelations { nodes { type issue { id state { id name type } } } }
+    }
   }
 }
 """.strip()
@@ -134,12 +137,28 @@ def workflow_states(team_id: str, *, api_key: str | None = None,
     return {n["name"]: {"id": n["id"], "type": n.get("type")} for n in nodes}
 
 
+def _parse_blockers(issue: dict) -> list[dict]:
+    """Issues that block `issue`, as [{id, state_type}]. Linear models 'X blocked by
+    Y' as X.inverseRelations containing {type:"blocks", issue:Y} (Y is the blocker).
+    We fetch all inverseRelations and keep type=="blocks" (no connection filter arg)."""
+    rels = ((issue.get("inverseRelations") or {}).get("nodes")) or []
+    blockers = []
+    for r in rels:
+        if r.get("type") != "blocks":
+            continue
+        blk = r.get("issue") or {}
+        bid = blk.get("id")
+        if bid:
+            blockers.append({"id": bid, "state_type": (blk.get("state") or {}).get("type")})
+    return blockers
+
+
 def list_ready_issues(team_id: str, ready_state_id: str, *, api_key: str | None = None,
                       endpoint: str = DEFAULT_ENDPOINT,
                       http_post: Callable[[str, bytes, dict], dict] = urllib_post) -> list[dict]:
     """Issues in one team currently in the given (ready) workflow state, each
-    normalized to a ticket dict with its current `state_id`. Flat state filter —
-    DAG/blocked_by is not consulted (Phase 3)."""
+    normalized to a ticket dict with its current `state_id` and `blockers`
+    ([{id, state_type}] — the DAG predecessors; the orchestrator computes eligibility)."""
     data = _post(_READY_ISSUES, {"team": team_id, "state": ready_state_id},
                  api_key=api_key, endpoint=endpoint, http_post=http_post)
     nodes = ((data.get("issues") or {}).get("nodes")) or []
@@ -147,6 +166,7 @@ def list_ready_issues(team_id: str, ready_state_id: str, *, api_key: str | None 
     for issue in nodes:
         ticket = normalize_issue(issue)
         ticket["state_id"] = (issue.get("state") or {}).get("id")
+        ticket["blockers"] = _parse_blockers(issue)
         out.append(ticket)
     return out
 

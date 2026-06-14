@@ -101,6 +101,22 @@ class LinearWriteMethodsTest(unittest.TestCase):
         self.assertIn("T1", out[0]["prompt"])
         self.assertEqual(cap["body"]["variables"], {"team": "team-1", "state": "s1"})
 
+    def test_list_ready_issues_parses_blockers(self):
+        cap = {}
+        resp = {"data": {"issues": {"nodes": [
+            {"id": "u2", "identifier": "ABC-2", "title": "T2", "description": "d2",
+             "state": {"id": "s1", "name": "Todo"},
+             "inverseRelations": {"nodes": [
+                 {"type": "blocks",
+                  "issue": {"id": "u1", "state": {"id": "s0", "name": "Todo",
+                                                  "type": "unstarted"}}},
+                 {"type": "related",  # must be ignored — not a blocker
+                  "issue": {"id": "u9", "state": {"type": "completed"}}}]}}]}}}
+        out = linear.list_ready_issues("team-1", "s1", api_key="k",
+                                       http_post=_capturing_post(cap, resp))
+        self.assertEqual(out[0]["blockers"], [{"id": "u1", "state_type": "unstarted"}])
+        self.assertIn("inverseRelations", cap["body"]["query"])
+
     def test_update_issue_state_returns_success(self):
         cap = {}
         resp = {"data": {"issueUpdate": {"success": True}}}

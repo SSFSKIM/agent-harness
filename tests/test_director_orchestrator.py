@@ -39,6 +39,55 @@ class ResolveStatesTest(unittest.TestCase):
             orch.resolve_states(orch.MockBoard.demo(), "T", {"failed": "Blocked"})
 
 
+class EligibilityTest(unittest.TestCase):
+    def _t(self, tid, blockers):
+        return {"id": tid, "identifier": tid, "blockers": blockers}
+
+    def test_no_blockers_eligible(self):
+        out = orch.eligible_tickets([self._t("a", [])])
+        self.assertEqual([t["id"] for t in out], ["a"])
+
+    def test_blocker_not_done_ineligible(self):
+        out = orch.eligible_tickets([self._t("b", [{"id": "a", "state_type": "unstarted"}])])
+        self.assertEqual(out, [])
+
+    def test_blocker_completed_eligible(self):
+        out = orch.eligible_tickets([self._t("b", [{"id": "a", "state_type": "completed"}])])
+        self.assertEqual([t["id"] for t in out], ["b"])
+
+    def test_canceled_blocker_ineligible_by_default(self):
+        out = orch.eligible_tickets([self._t("b", [{"id": "a", "state_type": "canceled"}])])
+        self.assertEqual(out, [])  # default done_types = {completed}
+
+    def test_done_types_configurable(self):
+        out = orch.eligible_tickets([self._t("b", [{"id": "a", "state_type": "canceled"}])],
+                                    done_types=("completed", "canceled"))
+        self.assertEqual([t["id"] for t in out], ["b"])
+
+    def test_all_blockers_must_be_done(self):
+        out = orch.eligible_tickets([self._t("c", [{"id": "a", "state_type": "completed"},
+                                                   {"id": "b", "state_type": "unstarted"}])])
+        self.assertEqual(out, [])
+
+    def test_run_once_skips_blocked_ticket(self):
+        board = orch.MockBoard([
+            {"id": "a", "identifier": "A", "title": "t", "description": "d",
+             "prompt": "pa", "state_id": "st_todo"},
+            {"id": "b", "identifier": "B", "title": "t", "description": "d",
+             "prompt": "pb", "state_id": "st_todo", "blockers": ["a"]}])
+        states = orch.resolve_states(board, "T")
+        seen = []
+
+        def fake(ticket, **kw):
+            seen.append(ticket["id"])
+            return {"status": "completed", "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.dispatch", fake):
+            res = orch.run_once(board, command=["x"], team="T", states=states)
+        self.assertEqual(seen, ["a"])  # B is blocked by A (still Todo) — not dispatched
+        self.assertEqual([r["ticket"] for r in res], ["A"])
+
+
 class RunOnceEndToEndTest(unittest.TestCase):
     """The headline integration: a real mock app-server worker per ticket, a watched
     auto_respond answering approvals, the board moved Todo→In Progress→Done."""
@@ -225,6 +274,98 @@ class RunOnceErrorPathsTest(unittest.TestCase):
         self.assertEqual(len(res), 1)
 
 
+def _issue(tid, blockers=None, state="st_todo"):
+    d = {"id": tid, "identifier": tid.upper(), "title": "t", "description": "d",
+         "prompt": f"p-{tid}", "state_id": state}
+    if blockers:
+        d["blockers"] = blockers
+    return d
+
+
+def _completing_dispatch(order):
+    def fake(ticket, **kw):
+        order.append(ticket["id"])
+        return {"status": "completed", "turn_id": "t"}
+    return fake
+
+
+class RunUntilDrainedTest(unittest.TestCase):
+    def test_chain_drains_in_order(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"]), _issue("c", ["b"])])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                         concurrency=2)
+        self.assertEqual(order, ["a", "b", "c"])  # each only after its blocker done
+        self.assertEqual(out["stopped_reason"], "drained")
+        self.assertEqual(len(out["summaries"]), 3)
+        self.assertEqual(board.state_name("c"), "Done")
+
+    def test_diamond_dispatches_middle_in_parallel(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"]), _issue("c", ["a"]),
+                                _issue("d", ["b", "c"])])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                         concurrency=2)
+        self.assertEqual(order[0], "a")
+        self.assertEqual(set(order[1:3]), {"b", "c"})  # b,c same wave (both unblocked by a)
+        self.assertEqual(order[3], "d")
+        self.assertEqual(out["stopped_reason"], "drained")
+
+    def test_failed_blocker_leaves_dependent_stuck(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        lambda ticket, **kw: {"status": "failed", "turn_id": None}):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states)
+        self.assertEqual(out["stopped_reason"], "stuck")
+        self.assertEqual(out["stuck"], ["B"])  # B blocked by failed A, never dispatched
+
+    def test_cycle_terminates_stuck_without_hang(self):
+        board = orch.MockBoard([_issue("a", ["b"]), _issue("b", ["a"])])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states)
+        self.assertEqual(order, [])  # neither ever eligible
+        self.assertEqual(out["stopped_reason"], "stuck")
+        self.assertEqual(set(out["stuck"]), {"A", "B"})
+
+    def test_worker_created_ticket_picked_up(self):
+        class GrowingBoard(orch.MockBoard):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self._polls = 0
+
+            def list_ready_issues(self, team, ready_state_id):
+                self._polls += 1
+                if self._polls == 2:  # a worker "created" D after the first pass
+                    self._issues["d"] = _issue("d")
+                return super().list_ready_issues(team, ready_state_id)
+
+        board = GrowingBoard([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states)
+        self.assertIn("d", order)  # the mid-run ticket was dispatched
+        self.assertEqual(out["stopped_reason"], "drained")
+
+    def test_max_passes_bound_terminates(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"]), _issue("c", ["b"])])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                         max_passes=2)
+        self.assertEqual(out["stopped_reason"], "max_passes")
+        self.assertEqual(out["passes"], 2)
+        self.assertEqual(order, ["a", "b"])  # c never reached
+
+
 class MainCliTest(unittest.TestCase):
     def test_main_mock_runs_and_reconciles(self):
         board = orch.MockBoard.demo()
@@ -235,6 +376,24 @@ class MainCliTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("u1"), "Done")
         self.assertEqual(board.state_name("u2"), "Done")
+
+    def test_main_once_skips_blocked(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain", "--once",
+                            "--queue-dir", q, "--workspace-root", ws], board=board)
+        self.assertEqual(rc, 0)
+        self.assertEqual(board.state_name("a"), "Done")
+        self.assertEqual(board.state_name("b"), "Todo")  # single pass: B stays blocked
+
+    def test_main_continuous_drains_chain(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
+                            "--queue-dir", q, "--workspace-root", ws], board=board)
+        self.assertEqual(rc, 0)
+        self.assertEqual(board.state_name("a"), "Done")
+        self.assertEqual(board.state_name("b"), "Done")  # continuous: A unblocks B
 
 
 if __name__ == "__main__":
