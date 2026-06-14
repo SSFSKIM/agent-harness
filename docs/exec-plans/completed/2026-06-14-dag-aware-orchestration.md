@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: 64ab600a5dceb2d0501889d7406938444991357d
@@ -132,4 +132,43 @@ eligibility 진실원:
 
 ## Feedback (from completion gate)
 
+- review_level standard. codex auth 불가(로그아웃) → CLAUDE.md 폴백으로 Claude 리뷰어
+  2 lens. **reliability lens: SATISFIED**(무한루프·busy-spin 없음 전 경로 trace, stuck/cycle
+  정확, wave barrier `pool.shutdown(wait=True)` finally·누수 없음, results-dedup, board-는-
+  main-스레드 불변식 모두 확인). **arch lens: NEEDS-WORK** → 수정:
+  - **P1-E** — stuck 보고가 진단 없음(특히 blocker state_type=None 이면 왜 막혔는지 불명).
+    **수정**: stuck 이 각 pending 티켓을 unmet blockers `[{id, state_type}]` 와 함께 보고
+    (None/실패/사이클 blocker 가 보임). spec 에러-경계 진단 요구 충족.
+  - **P2-B** — `dispatched_count += len(wave)` 가 claim_failed 를 dispatch 로 셈 →
+    max_dispatched 조기 발동. **수정**: status != claim_failed 만 카운트.
+  - **reliability P2** — 루프 내 bare `list_ready_issues` 가 일시적 poll 에러에 전체
+    런을 크래시. **수정**: catch → `stopped_reason="poll_failed"` + `error` 필드, 크래시
+    없이 종료.
+  - **P2-F** — max_dispatched CLI 미노출. **수정**: `--max-dispatched` 추가·전달.
+- 수정 커밋 996a923 + 테스트 2건(poll-failure, max_dispatched bound) + stuck 테스트 2건
+  shape 갱신. 확인 리뷰(Claude): 4건 전부 CLOSED, regression 없음, 종료 보장 유지.
+  **Verdict: SATISFIED.**
+- tracker 기록(accepted tradeoff): inverseRelations no-filter over-fetch(P2-E), poll
+  broad-except(의도적). linear_graphql 권한 경계(P4)는 기존 line 49 유지.
+
 ## Outcomes & retrospective
+
+- **무엇이 생겼나.** 오케스트레이터가 DAG-aware·연속이 됐다: `eligible_tickets`(blocked_by
+  필터), `_dispatch_wave`(wave 추출), `run_until_drained`(re-poll wave 루프 — board-as-truth,
+  stuck/cycle 검출, poll-failure·max_passes·max_dispatched bound), board `inverseRelations`
+  blocker 읽기, CLI `--once`/`--max-passes`/`--max-dispatched`/`--done-types`. 166 테스트
+  GREEN(+18). A→B→C 를 넣으면 blocker 가 풀릴 때마다 자동으로 다음을 dispatch 하고,
+  사이클/실패는 행 안 걸리고 stuck 으로 보고한다 — "사람이 ready 큐레이션" crutch 가 사라졌다.
+- **라이브.** M5 로 Linear `inverseRelations` wire + eligibility 전이를 실 Linear 에서 핀
+  (LIN-7/8), MCP 교차검증, 첫 시도 정확(라이브 버그 0 — schema-first 누적).
+- **핵심 배움 1 — DAG 는 연속 루프를 강제한다.** blocked_by 존중 = re-poll 필요(완료가
+  의존을 unblock). 직전 단계에서 "watched 라" 미룬 연속 루프가 여기서 필연으로 돌아왔다.
+- **핵심 배움 2 — board-as-truth 가 설계를 접는다.** 메모리 완료장부 없이 board 상태가
+  eligibility 를 정의 → 워커-생성/외부변경/실패가 전부 같은 메커니즘으로 처리. 종료도
+  공짜(완료=ready 이탈, 실패=non-done→의존 stuck).
+- **핵심 배움 3 — 진단은 기능이다.** 리뷰가 "stuck 인데 왜 막혔는지 없음"을 짚었다.
+  watched 시스템에서 "왜"가 없으면 사람이 개입을 못 한다 → stuck 이 unmet blockers 를
+  보고하도록. 관찰가능성도 요구사항이다.
+- **남은 것.** Phase 3b(dev-stage taxonomy — typed 티켓이 이 DAG 를 흐름, `eligible_tickets`
+  순수 함수에 type 라우팅 한 겹); Phase 4(자율 Director + linear_graphql 가드레일);
+  streaming dispatch(throughput, non-goal); inverseRelations over-fetch(tracker).
