@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: ef5c0e641abf4bd7fdcb9bbae6f4975aecfe31a4
@@ -169,4 +169,46 @@ reconcile 주체:
 
 ## Feedback (from completion gate)
 
+- review_level standard. 두 codex 리뷰어(arch lens a8e9d5c9, reliability lens
+  a8e52e9a, gpt-5.5/high)가 **독립적으로 같은 P1 에 수렴**: board 쓰기 메서드의 boolean
+  반환을 claim/reconcile 이 무시. 발견:
+  - **P1 claim** — `update_issue_state` 가 `False`(GraphQL success:false) 를 돌려도
+    예외만 잡아 dispatch 진행 → unclaimed 티켓 실행(mark-before-act 위반). **수정**:
+    `claimed` False 면 claim_failed, dispatch 안 함.
+  - **P1 reconcile** — `update_issue_state`/`comment_issue` 의 `False` 무시 → 실패한
+    done/comment 쓰기가 silent `done` 으로 보고. **수정**: set_state/comment 가 `False`
+    를 `reconcile_error` 로 기록.
+  - **P1 in-flight dedupe**(arch) — spec R2 가 약속한 in-flight 셋이 코드에 없음.
+    중복 ready id 가 두 번 claim/dispatch(Phase 3 DAG-union 에서 악화). **수정**:
+    `in_flight` 셋으로 패스 내 1회 보장.
+  - **P2 docstring**(arch) — board/linear.py 모듈 docstring 이 "writes 는 워커의 후속
+    Phase 일"이라 D-11 모순. **수정**: Director 쓰기 권한 반영.
+- reliability lens 가 **로드-베어링 불변식 2개를 명시 확인**: (1) futures/attempts/results
+  는 main 스레드만 변경(워커 스레드는 dispatch→run_ticket, 큐만 접근), (2) `_APPEND_LOCK`
+  이 dedupe race 를 닫고 `wait_for_answer` 전에 풀려 데드락 없음. retry 산술도 bounded 확인.
+- 수정 커밋 c0bee45 + 회귀테스트 3건(claim-False, reconcile-False, duplicate-ready).
+  codex 가 usage limit 에 걸려(CLAUDE.md 폴백) 확인 리뷰는 Claude code-reviewer 로 수행
+  → 4건 전부 CLOSED, fix-introduced regression 없음, 테스트가 각 fix 의 sentinel 임 확인.
+  **Verdict: SATISFIED.**
+
 ## Outcomes & retrospective
+
+- **무엇이 생겼나.** thin·watched 오케스트레이터가 완성됐다: `director/orchestrator.py`
+  (`run_once` poll→claim→ThreadPoolExecutor(N) dispatch→reconcile→retry-once, `MockBoard`,
+  CLI), `director/board/linear.py` 의 Director-side 쓰기 4종 + `LinearBoard`, 동시성-안전
+  큐(`_APPEND_LOCK`). 148 테스트 GREEN(+22). 단일 명령 `python -m director.orchestrator`
+  가 ready 티켓을 다중 워커로 돌려 board 로 reconcile 한다 — 하네스가 처음으로 "작업을
+  스스로 찾아 워커를 띄우는 시스템"이 됐다.
+- **라이브.** M5a 로 board GraphQL 4종을 실 Linear(Lingu)에서 핀, MCP 로 교차검증, wire
+  첫 시도에 정확(라이브 버그 0 — Phase 1·2 의 schema-first 습관이 누적 효과). M5b(실 codex
+  2-워커)는 핵심 리스크가 mock 으로 이미 증명돼 옵션으로 연기.
+- **핵심 배움 1 — 깨끗한 동시성 불변식.** 워커 스레드는 큐만, board 는 main 스레드만
+  건드린다. 그래서 board 어댑터는 thread-safe 일 필요가 없고 전체 동시성 표면이 락 하나로
+  수렴한다. 이 불변식을 리뷰어에게 명시해 검증받은 게 주효했다.
+- **핵심 배움 2 — board 쓰기의 tri-state.** "예외 아니면 성공"이 아니라 success/raise/
+  `False` 3상태였고, 두 리뷰어가 독립적으로 같은 곳을 짚었다. 다중 lens 의 수렴이 진짜
+  결함의 신호였다 — adversarial 리뷰의 값어치.
+- **남은 것.** M5b(옵션, 실 codex 동시 런); Phase 3(티켓 DAG + dev-stage taxonomy —
+  `in_flight`/claim 토대가 여기로 확장); Phase 4(자율 Director + `linear_graphql` 권한
+  경계 가드레일 — tracker line 49, unwatched dispatch 전 필수); 큐의 크로스-프로세스
+  강화(O_APPEND/flock — 멀티-프로세스 오케스트레이터 시).
