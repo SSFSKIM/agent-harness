@@ -63,8 +63,13 @@ def run(conn, root, now, *, phase1_model=None, phase2_model=None,
               "phase2": p2_result}
     if _has_docs_library(root):
         dropped = mdb.dropped_thread_ids(conn, router.MAX_UNUSED_DAYS, now)
-        result["forgetting"] = ds.forgetting_pass(
-            root, dropped, spawn=forget_spawn or ds.spawn_audit)
+        try:
+            result["forgetting"] = ds.forgetting_pass(
+                root, dropped, spawn=forget_spawn or ds.spawn_audit)
+        except Exception as e:                    # best-effort cleanup — a forgetting
+            # failure (e.g. audit spawn nonzero/timeout) must never wedge or crash the
+            # dream run; the locks are already released, so surface it and move on.
+            result["forgetting"] = {"error": f"forgetting pass failed: {e}"}
     return result
 
 

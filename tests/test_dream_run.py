@@ -111,6 +111,26 @@ class TestRunWiring(unittest.TestCase):
         self.assertEqual(res["phase2"]["status"], "empty")
         self.assertEqual(called, [])                        # no model spawned
 
+    def test_self_host_forgetting_failure_degrades_not_crashes(self):
+        # self-host path (docs/design-docs/ present): a forgetting-pass failure must
+        # degrade to a recorded error, never raise/wedge the run. Also exercises the
+        # self-host branch of run() (router consolidate + forgetting) that the other
+        # wiring tests, which use a bare host, never reach.
+        (self.root / "docs" / "design-docs").mkdir(parents=True)
+        for f in hl.project_transcripts_dir(self.root).glob("*.jsonl"):
+            f.unlink()                                       # 0 inputs → consolidate no-ops
+        orig = dr.ds.forgetting_pass
+
+        def boom(*a, **k):
+            raise RuntimeError("audit spawn exit 1")
+        dr.ds.forgetting_pass = boom
+        try:
+            res = dr.run(self.conn, self.root, NOW, phase1_spawn=lambda p, m: "{}")
+        finally:
+            dr.ds.forgetting_pass = orig
+        self.assertEqual(res["phase2"]["status"], "empty")   # self-host router path taken
+        self.assertIn("audit spawn exit 1", res["forgetting"]["error"])  # degraded
+
 
 if __name__ == "__main__":
     unittest.main()
