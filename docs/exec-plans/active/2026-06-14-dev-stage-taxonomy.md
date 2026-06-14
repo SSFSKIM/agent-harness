@@ -95,9 +95,15 @@ type 표현:
 - [x] (2026-06-14) M3 — `dispatch` 가 run_ticket 직전 `compose_worker_prompt` 로 prompt
   교체. test +3: spec 티켓→product-design 템플릿, untyped→raw, planning→design→spec→impl
   파이프라인이 의존순 dispatch + 각자 제 type 템플릿. 180 테스트 GREEN.
-- [ ] M4 — 라이브 라벨 pin(실 Linear labels wire). (다음.)
+- [x] (2026-06-14) M4 — 라이브 라벨 pin. 실 Linear 에 throwaway LIN-9(label "Feature")
+  생성 → 내 `list_ready_issues` 가 `labels{nodes{name}}` wire 를 정확히 읽음(labels==
+  ["Feature"]), `ticket_type` 이 비-stage 라벨에 None, 합성 라벨 "spec" 에 "spec"+
+  product-design 템플릿. wire 첫 시도 정확. LIN-9 정리(Canceled).
 
 ## Surprises & discoveries
+- (2026-06-14) M4: 라벨 wire `labels{nodes{name}}` 가 추정대로 첫 시도에 맞음. 라이브 pin 은
+  비-stage 라벨(Feature)로 wire 만 검증 — type 판별은 순수라 stage 라벨 영구 생성 불필요
+  (footprint 최소). Phase 1~3a 에 이어 라이브 wire 버그 0.
 
 ## Decision log
 - 2026-06-14: type=Linear 라벨, dispatch 에서 prompt 합성, worker-driven 분해(RV1).
