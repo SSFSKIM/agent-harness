@@ -156,7 +156,7 @@ class AppServerClient:
 
     def thread_start(self, model: str | None = None,
                      approval_policy: str = "untrusted",
-                     sandbox: str = "workspaceWrite") -> str:
+                     sandbox: str = "workspace-write") -> str:  # SandboxMode enum (hyphenated)
         params = {"cwd": self.cwd, "approvalPolicy": approval_policy, "sandbox": sandbox}
         if model:
             params["model"] = model

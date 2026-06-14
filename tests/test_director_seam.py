@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.queue as dq  # noqa: E402
 import director.worker.app_server as appsrv  # noqa: E402
+import director.worker.approval as appr  # noqa: E402
 from director.worker.approval import make_seam  # noqa: E402
 
 MOCK = str(Path(appsrv.__file__).resolve().parent / "_mock_app_server.py")
@@ -66,6 +67,15 @@ class SeamTest(unittest.TestCase):
         out = {}
         _worker("approval", seam, out)  # synchronous; no Director ever answers
         self.assertEqual(out["res"]["status"], "completed")
+
+    def test_to_result_shapes_match_codex_contract(self):
+        # locked against the generated app-server schema + live Codex validation:
+        # approval result is an object {"decision": <enum>}, not a bare string.
+        self.assertEqual(appr._to_result("commandApproval", {"decision": "accept"}),
+                         {"decision": "accept"})
+        self.assertEqual(appr._to_result("fileChange", None), {"decision": "decline"})  # R7
+        self.assertEqual(appr._to_result("userInput", {"answers": [{"q": "a"}]}),
+                         [{"q": "a"}])
 
 
 if __name__ == "__main__":

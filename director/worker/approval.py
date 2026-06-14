@@ -47,11 +47,17 @@ def _payload(kind: str, params: dict) -> dict:
 
 
 def _to_result(kind: str, answer: dict | None):
-    """Map the Director's answer to the Codex result shape (or the safe default)."""
-    if answer is None:                              # R7: no answer in time
-        return "decline" if kind in _APPROVAL_KINDS else {}
+    """Map the Director's answer to the Codex result shape (or the safe default).
+
+    Approval responses are an OBJECT {"decision": <enum>} — confirmed against the
+    Codex app-server generated schema (CommandExecutionRequestApprovalResponse /
+    FileChangeRequestApprovalResponse). decision ∈ accept|acceptForSession|decline.
+    Input responses carry the answers payload. A missing answer declines (R7)."""
     if kind in _APPROVAL_KINDS:
-        return answer.get("decision", "decline")    # "accept"|"decline"|"acceptForSession"|"cancel"
+        decision = "decline" if answer is None else answer.get("decision", "decline")
+        return {"decision": decision}
+    if answer is None:
+        return {}
     return answer.get("answers", {})
 
 

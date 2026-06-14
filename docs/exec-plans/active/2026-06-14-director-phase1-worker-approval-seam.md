@@ -127,6 +127,11 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   배선 + `tests/test_director_linear.py`(mock GraphQL). 증거: 5 tests OK. **LIVE 검증
   (실 codex app-server + 실 Linear 이슈)만 보류 — 자격증명/네트워크 필요. Phase 1 코드
   완료(112 tests GREEN), completion gate 는 live 검증 후.**
+- [x] (2026-06-14) LIVE 검증 PASS(실 codex app-server 0.139.0): ① plain turn
+  handshake→turn/completed; ② seam — 실 commandApproval→Director 큐→`{"decision":"accept"}`
+  →명령 실행(proof.txt)→**동일 turn completed**, deserialize/reject 에러 없음. M2 sandbox +
+  M3 응답 shape 2버그 수정 + `_to_result` 계약 단위테스트 추가. Linear LIVE 만 보류(이슈 id
+  미제공). **Phase 1 = 코드 + mock + codex-live 검증 완료.**
 
 ## Surprises & discoveries
 
@@ -135,6 +140,12 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 - client stdout: `select` + 버퍼드 `readline` 혼용 시 readline 이 다음 줄까지 파이썬
   버퍼로 당겨와 select 가 빈 fd 로 보고 → turn/completed 누락·timeout. raw fd 를
   binary/unbuffered(os.read)로 직접 framing 해 해결. 증거: M2 2 tests 0.14s OK.
+- live codex 컨트랙트(실 `codex app-server` 0.139.0)가 mock 이 못 잡은 2버그 노출·수정:
+  (1) thread/start `sandbox` 는 SandboxMode enum 의 hyphen 형 `workspace-write`(camel
+  `workspaceWrite` 거부). (2) command/file approval 응답은 bare `"accept"` 가 아니라 객체
+  `{"decision":"accept"}`(CommandExecutionRequestApprovalResponse). 둘 다
+  `codex app-server generate-json-schema` 로 확정 후 수정. 증거: 실 approval→큐→accept→
+  proof.txt 생성·동일 turn completed, codex stderr 에 deserialize/reject 없음.
 
 ## Decision log
 
@@ -146,6 +157,10 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   이벤트가 실제로 발생해야 seam 을 검증 가능.
 - 2026-06-14: 테스트는 flat `tests/test_director_*.py`(tests/ 패키지 아님 → discover 수집,
   dotted 호출 불가). director/ 는 테스트에서 repo-root 를 sys.path 에 넣어 import(기존 패턴).
+- 2026-06-14: codex 컨트랙트의 정본은 `codex app-server generate-json-schema`(web 문서보다
+  우선) — approvalPolicy enum `untrusted|on-failure|on-request|never`, SandboxMode
+  `workspace-write`, approval 응답 `{"decision": <enum>}`. live 검증 전 web 문서만 믿었으면
+  틀렸을 값들.
 
 ## Feedback (from completion gate)
 
