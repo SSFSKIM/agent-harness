@@ -69,12 +69,14 @@ point rightward at skills — the most actionable instruction wins.
 
 > **The automatic memory loop (INJECT/IMPRINT/CONSOLIDATE) is currently
 > DISABLED.** Its hooks (SessionStart, UserPromptSubmit, PreCompact,
-> SessionEnd) are unwired from `hooks.json` pending a more sophisticated
-> redesign — see `docs/memory/openq/memory-loop-redesign.md`. The scripts
-> (`feeder_*`, `imprint_*`) and the `dream`/`garden` skills are RETAINED
-> (dormant, re-enable by restoring the hook entries). The active runtime is
-> REVIEW (#4) + TIDY (#5) + the deterministic gate. The `docs/memory/` tree
-> itself stays fully governed by the lints — it is hand-maintained for now.
+> SessionEnd) are unwired from `hooks.json`. The redesign has now landed as the
+> **memory-as-docs** pivot (`docs/design-docs/memory-architecture.md`): the write
+> path is the dreaming `dream-rollouts` router (Phase 1 extract → Phase 2 routes
+> distilled claims into the docs tree + `docs/journal/`), so the old `imprint`/
+> `dream`/`garden` loop is being retired onto that engine (M5). The read path
+> (feeder INJECT) remains an open question (relevance/cost — see
+> `memory-architecture.md` Open decisions). The active runtime is REVIEW (#4) +
+> TIDY (#5) + the deterministic gate.
 
 1. **INJECT** *(disabled — hook unwired)* — SessionStart hook →
    `feeder_sessionstart.py` → headless Sonnet(1M) reads `docs/memory/` +

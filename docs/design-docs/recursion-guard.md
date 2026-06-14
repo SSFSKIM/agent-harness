@@ -1,7 +1,7 @@
 ---
 status: stable
-last_verified: 2026-06-12
-owner: imprint-job
+last_verified: 2026-06-14
+owner: harness
 ---
 # Recursion guard — HARNESS_HEADLESS
 
@@ -23,4 +23,4 @@ Omitting it means the child runs hooks, causing recursion or doubled side-effect
 
 ## Source
 `plugin/scripts/harness_lib.py` — `is_headless()` and `headless_env()`.
-Confirmed in session `archive/sessions/2026-06-12-e2e-test-session-end.md`.
+Confirmed in session `docs/journal/archive/sessions/2026-06-12-e2e-test-session-end.md`.

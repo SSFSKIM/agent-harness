@@ -48,13 +48,16 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   claims → a `Major` tracker row (durable debt) + a journal `[held]` line
   (episodic), status `routed`; `check.py` GREEN (158 tests). Reuses the Phase 1
   engine + sqlite store unchanged.
-- [ ] M3 Migrate + retire `docs/memory/`. Move existing content to its docs homes
-  per the confirmed collapse: knowledge/adr/openq → design-docs (body / Decision
-  log / Open-decisions); limitations → tech-debt-tracker + RELIABILITY; progress →
-  exec-plans/tracker; archive/sessions → journal; MEMORY.md bootloader role →
-  AGENTS.md (M4). Then delete the layer. Touches
-  persistent state → idempotence: gate on a pre-move inventory; re-runnable as a
-  no-op once the tree is empty.
+- [x] M3 Migrate + retire `docs/memory/`. DONE — `knowledge/recursion-guard.md`
+  → `docs/design-docs/` (registered); `archive/sessions/*` → `docs/journal/archive/`;
+  `limitations/progress-staleness` → a tracker row (the durable rule);
+  `openq/memory-loop-redesign` → resolved by this pivot, its still-open READ-PATH
+  question moved to `memory-architecture.md` Open decisions; `openq/tracker-fixed-
+  traceability` + `progress/current.md` dropped (already a tracker row / the
+  completed ExecPlans ARE that history). `docs/journal/2026-06.md` records the
+  migration provenance. `docs/memory/` now holds only `MEMORY.md` (the bootloader,
+  M4). Gate GREEN. Residual dangling `memory-loop-redesign` refs in `agent-harness.md`
+  + `SECURITY.md` are cleared by their M4/M5 rewrites.
 - [ ] M4 Rewire read-path bootloader + lint. Bootloader `docs/memory/MEMORY.md` →
   `AGENTS.md` (or a top-level `docs/MEMORY.md`); drop `memory` from
   `hl.MANAGED_ROOTS`; re-point D8 index + `lint_docs.PROTECTED_PATHS` bootloader.
@@ -81,6 +84,13 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
 - 2026-06-14: M2 done (`dream_router.py` + router templates + 18 tests + dream_run
   wiring + S1 allowlist). Live Sonnet PoC PASSED (one seeded real-session memory →
   1 Major tracker row + 1 journal `[held]`, status `routed`); gate GREEN.
+- 2026-06-14: M3 done. `docs/memory/` content migrated to docs homes (recursion-guard
+  → design-docs; sessions → journal/archive; limitations → tracker row; the
+  memory-loop-redesign open Q → memory-architecture Open decisions) and the layer
+  emptied to just `MEMORY.md`. Gate GREEN (158 tests). Finding: the lint does not
+  validate cross-doc links, so dangling refs to deleted pages don't fail the gate —
+  cleared by the swept living docs; the two in agent-harness.md/SECURITY.md ride
+  their M4/M5 rewrites.
 
 ## Surprises & discoveries
 - 2026-06-14 (M1): routing must be per-CLAIM, not per-insight. A Phase 1

@@ -11,3 +11,4 @@ Catalog of design documents. Add new pages here (lint D8 enforces).
 - core-beliefs.md — golden rules + agent-first operating principles
 - dreaming-v2.md — Codex-faithful 2-phase memory-synthesis pipeline (the write path)
 - memory-architecture.md — the docs tree is the one brain (memory = docs; dreaming authors into it; supersedes the flat store + the docs/memory layer)
+- recursion-guard.md — HARNESS_HEADLESS env guard: prevents infinite hook recursion when a hook spawns a headless claude child (migrated from docs/memory/knowledge)

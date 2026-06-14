@@ -119,7 +119,12 @@ with none → fall back to the self-contained store. This matches the existing
 `architecture-setup` / `harness-init` host-adaptation principle.
 
 ## Open decisions
-- (→ ExecPlan M3) migration order for the existing `docs/memory/*` content;
-- (→ ExecPlan M2) how the Phase 2 prompt is given the claim-atomization + routing
-  rule above so the episodic-vs-durable judgment is reliable — the hard part;
-  M1 fixed the rule, M2 proves a model can apply it.
+- **Read path (feeder INJECT).** The write path is built (the dreaming router);
+  the read path is not. When is injecting a compiled context pack on
+  SessionStart / first-prompt worth its headless-model cost vs. the agent just
+  reading the index? relevance targeting, caching, event-gating, or a cheaper
+  compile. (Migrated from the retired `memory-loop-redesign` open question; the
+  write / consolidate / trigger parts of that question are answered by this pivot.)
+- **Forgetting on the docs path.** M2 routes additively. When a session drops out
+  of selection, the journal provenance names what it authored, but the mechanism
+  to revisit and retract that content from its docs home is not yet built.
