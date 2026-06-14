@@ -15,10 +15,9 @@ import harness_lib as hl
 
 DIRS = (
     "docs/design-docs", "docs/exec-plans/active", "docs/exec-plans/completed",
-    "docs/generated", "docs/product-specs", "docs/references",
-    "docs/memory/adr", "docs/memory/archive/sessions", "docs/memory/knowledge",
-    "docs/memory/limitations", "docs/memory/openq", "docs/memory/progress",
-)
+    "docs/generated", "docs/journal", "docs/product-specs", "docs/references",
+)  # docs/journal = the residual ledger (memory-as-docs); the month file is
+   # created lazily on the first dream run (dream_router._ensure_journal).
 SEEDS = (  # (template, destination relative to host root)
     ("agents-md.md", "AGENTS.md"),
     ("claude-md.md", "CLAUDE.md"),
@@ -27,8 +26,6 @@ SEEDS = (  # (template, destination relative to host root)
     ("design-docs-index.md", "docs/design-docs/index.md"),
     ("reliability.md", "docs/RELIABILITY.md"),
     ("security.md", "docs/SECURITY.md"),
-    ("memory-bootloader.md", "docs/memory/MEMORY.md"),
-    ("progress-current.md", "docs/memory/progress/current.md"),
     ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
     ("harnessignore.txt", "docs/.harnessignore"),  # legacy-doc migration backlog
     # docs the machine reads (lint D10) — gate/personas break without them:
@@ -38,7 +35,6 @@ SEEDS = (  # (template, destination relative to host root)
     ("quality-score.md", "docs/QUALITY_SCORE.md"),
     ("product-sense.md", "docs/PRODUCT_SENSE.md"),
 )
-CATEGORY_INDEXES = ("adr", "knowledge", "openq", "limitations")
 TOP_INDEXES = ("product-specs", "references")  # docs/<cat>/index.md
 GITIGNORE_LINES = (".claude/harness/",)
 # Forms by which a host may already blanket-ignore all of .claude/ — then
@@ -84,10 +80,6 @@ def scaffold(root, plugin, log):
         (root / d).mkdir(parents=True, exist_ok=True)
     for template, dest in SEEDS:
         seed(templates, template, root / dest, dest, subs, log)
-    for cat in CATEGORY_INDEXES:
-        rel = f"docs/memory/{cat}/index.md"
-        seed(templates, "category-index.md", root / rel, rel,
-             {**subs, "CATEGORY": cat}, log)
     for cat in TOP_INDEXES:
         rel = f"docs/{cat}/index.md"
         seed(templates, "category-index.md", root / rel, rel,

@@ -23,16 +23,23 @@ class TestScaffold(unittest.TestCase):
 
     def test_tree_created(self):
         for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md",
-                    "docs/memory/MEMORY.md",
-                    "docs/memory/progress/current.md",
-                    "docs/memory/openq/index.md",
                     "docs/design-docs/agent-harness.md",
+                    "docs/design-docs/index.md",
+                    "docs/journal",                       # residual ledger home
                     "docs/exec-plans/tech-debt-tracker.md",
                     "docs/generated/component-inventory.md",
+                    "docs/RELIABILITY.md", "docs/SECURITY.md",
                     "docs/PLANS.md", "docs/DESIGN.md", "docs/QUALITY_SCORE.md",
                     "docs/PRODUCT_SENSE.md", "docs/product-specs/index.md",
                     "docs/references/index.md"):
             self.assertTrue((self.root / rel).exists(), rel)
+
+    def test_memory_as_docs_no_legacy_memory_layer(self):
+        # The memory-as-docs pivot: a fresh port has NO docs/memory tree and NO
+        # MEMORY.md bootloader anywhere — AGENTS.md is the sole map; episodic
+        # memory lands in docs/journal/ (created lazily by the first dream run).
+        self.assertFalse((self.root / "docs" / "memory").exists())
+        self.assertFalse(any(self.root.rglob("MEMORY.md")))
 
     def test_harnessignore_seeded_empty(self):
         f = self.root / "docs" / ".harnessignore"

@@ -83,7 +83,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   (dream_phase1,dream_phase2,dream_router)]"` exits 0 (no FileNotFoundError); gate
   GREEN.
 
-- [ ] **M2 — Scaffold seeds memory-as-docs.** In `scaffold.py`: remove the six
+- [x] **M2 — Scaffold seeds memory-as-docs.** In `scaffold.py`: remove the six
   `docs/memory/*` entries from `DIRS` (`:19-20`) and add `docs/journal`; remove the
   `("memory-bootloader.md", "docs/memory/MEMORY.md")` and
   `("progress-current.md", "docs/memory/progress/current.md")` entries from `SEEDS`
@@ -154,8 +154,23 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   the retired `dreamer`/`dream` in self-host living docs (DESIGN.md, QUALITY_SCORE.md,
   core-beliefs.md, SECURITY.md, agent-harness prose, memory-architecture L100) are
   gate-safe and folded into M5's doc sweep.
+- 2026-06-14: **M2 done.** `scaffold.py` no longer seeds `docs/memory/*` (DIRS +
+  the two bootloader/progress SEEDS + the category-index loop removed); seeds
+  `docs/journal/` instead. Deleted the now-unused `memory-bootloader.md` +
+  `progress-current.md` templates. `test_scaffold.py` rewritten to the new seed set
+  + a `test_memory_as_docs_no_legacy_memory_layer` asserting no `docs/memory` and no
+  `MEMORY.md` anywhere. Acceptance MET end-to-end: `scaffold.py --root <fresh tmp>`
+  → no `docs/memory`, no `MEMORY.md`, has `docs/journal`, and `check.py --root <tmp>`
+  GREEN — a NEW port is born memory-as-docs AND lint-clean. Self-host gate GREEN (11
+  scaffold tests).
 
 ## Surprises & discoveries
+- 2026-06-14 (M2): the stale `memory/*` lint constants are already INERT on a
+  memory-as-docs host — `check_indexes` skips non-existent/empty dirs
+  (`lint_docs.py:154`) and the `MEMORY.md` size/protected entries only fire when
+  that file exists. So M2 reaches a GREEN fresh-host gate WITHOUT M4; M4 is pure
+  dead-constant cleanup, not a prerequisite. Confirms the milestones are
+  independent (each gate-GREEN on its own).
 
 ## Decision log
 - 2026-06-14 (user): **hard-delete** the old loop (feeder_* + imprint_* + the
