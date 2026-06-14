@@ -15,6 +15,14 @@ and the live source at `/Users/new/Documents/GitHub/codex_somersault`
 transcript `.jsonl`). "Dreaming" = a background 2-phase synthesis that turns
 rollouts into curated, progressively-disclosed memory.
 
+> **Output target superseded (2026-06-14) — see `memory-architecture.md`.** The
+> Phase 1 EXTRACTION engine, curation store, and no-op gate below all stand. What
+> changes is the Phase 2 OUTPUT: instead of a flat `MEMORY.md` in a self-contained
+> `.claude/harness/memories/` store, dreaming becomes a router that authors
+> distilled insights into the `docs/` tree (the one brain), leaving only an
+> episodic ledger as residual. Read THIS doc for the engine; read
+> `memory-architecture.md` for where the output now goes.
+
 ## Scope (user decision 2026-06-13)
 - **sqlite usage table** (fork 1 = b): a real `stage1_outputs` + `jobs` store
   with the `usage_count`/`last_usage` curation columns, closest to Codex.
