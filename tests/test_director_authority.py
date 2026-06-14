@@ -76,6 +76,23 @@ class EvasionTest(unittest.TestCase):
         op = auth.classify_operation("mutation { ...Frag }")
         self.assertFalse(op["parse_ok"])  # cannot resolve the real mutation field -> deny
 
+    def test_inline_fragment_at_mutation_root_is_unresolved(self):
+        # `... on Type { issueDelete }` hits the same `...` branch -> fail-closed
+        op = auth.classify_operation('mutation { ... on Mutation { issueDelete(id: "x") { id } } }')
+        self.assertFalse(op["parse_ok"])
+        self.assertFalse(auth.authorize('mutation { ... on Mutation { issueDelete(id: "x") { id } } }')["allowed"])
+
+    def test_unterminated_string_fails_closed(self):
+        # braces here are balanced, so only the _strip unterminated-string signal
+        # catches it — without that signal this would (wrongly) classify as an
+        # allowed read. The deny must not depend on incidental brace imbalance.
+        doc = 'query { issues { id } } "dangling'
+        self.assertFalse(auth.classify_operation(doc)["parse_ok"])
+        self.assertFalse(auth.authorize(doc)["allowed"])
+
+    def test_unterminated_block_string_fails_closed(self):
+        self.assertFalse(auth.classify_operation('mutation { commentCreate(input: { body: """oops }) { id } }')["parse_ok"])
+
     def test_inner_field_named_mutation_not_an_operation(self):
         op = auth.classify_operation("query { mutation { id } }")
         self.assertEqual(op["kind"], "query")

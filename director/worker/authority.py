@@ -45,10 +45,14 @@ _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 _OP_KEYWORDS = {"query", "mutation", "subscription", "fragment"}
 
 
-def _strip(query: str) -> str:
+def _strip(query: str) -> tuple[str, bool]:
     """Blank out line comments and string literals (what the GraphQL lexer ignores),
-    so braces/keywords inside them never affect classification."""
+    so braces/keywords inside them never affect classification. Returns
+    (stripped, ok); ok is False if a string literal is left unterminated — a
+    malformed document the classifier must fail closed on directly, rather than
+    relying on the truncation happening to unbalance the braces."""
     out: list[str] = []
+    ok = True
     i, n = 0, len(query)
     while i < n:
         c = query[i]
@@ -57,6 +61,7 @@ def _strip(query: str) -> str:
                 i += 1
             continue
         if c == '"':
+            closed = False
             if query[i:i + 3] == '"""':               # block string
                 i += 3
                 while i < n:
@@ -65,22 +70,27 @@ def _strip(query: str) -> str:
                         continue
                     if query[i:i + 3] == '"""':
                         i += 3
+                        closed = True
                         break
                     i += 1
-                out.append(" ")
-                continue
-            i += 1                                     # regular string
-            while i < n and query[i] != '"':
-                if query[i] == "\\":
-                    i += 2
-                    continue
+            else:                                      # regular string
                 i += 1
-            i += 1
+                while i < n:
+                    if query[i] == '"':
+                        i += 1
+                        closed = True
+                        break
+                    if query[i] == "\\":
+                        i += 2
+                        continue
+                    i += 1
+            if not closed:
+                ok = False
             out.append(" ")
             continue
         out.append(c)
         i += 1
-    return "".join(out)
+    return "".join(out), ok
 
 
 def _is_name(tok: str) -> bool:
@@ -97,11 +107,11 @@ def classify_operation(query: str) -> dict:
     document is unbalanced or a mutation root cannot be resolved (fragment spread
     / inline fragment) — both deny, fail-closed.
     """
-    tokens = _TOKEN.findall(_strip(query))
+    stripped, parse_ok = _strip(query)   # parse_ok starts False on an unterminated string
+    tokens = _TOKEN.findall(stripped)
     paren = brace = 0
     current_op: str | None = None     # op type of the definition currently entered
     has_mut = has_query = has_sub = False
-    parse_ok = True
     fields: set[str] = set()
 
     i, n = 0, len(tokens)

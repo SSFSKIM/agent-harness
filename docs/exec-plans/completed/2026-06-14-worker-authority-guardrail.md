@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: 9464e4d3d47e2d0ed1ea3064cfbbc55f6844c209
@@ -110,6 +110,10 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
       (mutation field 가 query 로 실행 안 됨 — D-23 가정 live 확인; cleanup 이 같은 id 를
       삭제할 수 있었던 것 자체가 query 가 삭제 안 했다는 증거), ⑤ unguarded 로 LIN-10 정리.
       일회성 스크립트 미커밋·삭제. 게이트 GREEN. 모든 milestone 완료 → 완료 게이트로.
+- [x] (2026-06-14) 완료 게이트: self-review(diff vs Goal) + review-security(Claude fallback,
+      codex companion auth 여전히 실패) → SATISFIED, P1 없음. P2-A(inline-fragment 테스트),
+      P2-B(`_strip` 미종료 문자열 explicit fail-closed) fix-forward + 테스트 추가(GREEN, 216).
+      spec stable, plan → completed/.
 
 ## Surprises & discoveries
 
@@ -121,5 +125,37 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
   이라 mock 으로 완전 커버 — 실 삭제 금지.
 
 ## Feedback (from completion gate)
+review-security(targeted). codex(`/codex:rescue --model gpt-5.5 --effort high`) 재시도
+했으나 companion access token refresh 실패(여전히 logged-out/다른 계정) → CLAUDE.md fallback
+대로 Claude reviewer(`feature-dev:code-reviewer`)에 review-security 프레이밍으로 위임.
+**Verdict: SATISFIED, P1 없음.** 적대적 bypass 헌트(alias·chained alias·주석/문자열 은닉
+키워드·block-string 이스케이프·fragment spread·다중 op 합집합·object-value 중괄호·
+mutation-under-query·BOM·양쪽 결선)에서 우회 없음 — 분류기-서버 정렬 논거 유효.
+- **P2-A (fixed-forward)** — inline fragment(`... on T { issueDelete }`) at mutation root 에
+  대한 명시적 테스트 부재(코드는 `...` 브랜치로 이미 deny). → `test_inline_fragment_at_
+  mutation_root_is_unresolved` 추가.
+- **P2-B (fixed-forward)** — `_strip` 가 미종료 문자열을 silent truncate; deny 가 우연한
+  brace 불균형에 의존(no bypass 확인됨, but 보안 경계가 coincidence 에 기대면 안 됨). →
+  `_strip` 가 `(stripped, ok)` 반환, 미종료 문자열이면 `ok=False` → `parse_ok=False` 직접
+  deny. discriminating 테스트(`query { issues } "dangling`, 중괄호 균형) 추가 — 이 신호가
+  없으면 allowed-read 로 오분류됨을 증명. tech-debt-tracker 에 남길 잔여 debt 없음.
 
 ## Outcomes & retrospective
+**달성.** 워커 `linear_graphql` 가 mutation root-field allowlist(default-deny)로 묶임:
+reads 무제한, allowlisted forward-only mutation 만 통과, 파괴적/미지 mutation 은 Linear POST
+전에 로컬 거부. 서버 parser 와 정렬된 최소 GraphQL 분류기(주석/문자열 strip → operation type
+→ root fields, paren-0 에서만 brace 셈). guard 기본 on → run.py·orchestrator.py 자동 상속.
+SECURITY.md T10. 실 Linear live-pin 5/5(allowlisted mutation 실동작 + 로컬 deny + 서버가
+query-mutation 거부). gate GREEN(216 tests), 적대적 security review SATISFIED.
+
+**핵심 통찰.** 보안 논거의 단순화: Linear 는 operation 키워드가 문자 그대로 `mutation` 일
+때만 mutation field 를 실행한다 → 분류기는 적을 outsmart 할 필요 없이 "서버와 같은 문서를
+본다"만 보장하면 됨(strip = GraphQL lexer 가 무시하는 것). bypass 헌트가 이 정렬을
+재확인했다. P2-B 가 그 원칙의 작은 누수(우연한 brace 불균형 의존)를 explicit 신호로 메움.
+
+**남은 것(Phase 4 다음 슬라이스).** 이 가드레일은 un-watched dispatch 의 하드 선행조건을
+해소 — 이제 자율 Director 본체로: ① **taste-vs-handle escalation policy**(Director 가
+워커 질문을 분류해 비-taste 는 직접 답, taste 만 사람에게 — 이 슬라이스의 default-deny 를
+escalate-to-Director 로 승급하는 seam 도 여기), ② loop/scheduled oversee + board reporting,
+③ PR-merge 관리. D-24 의 escalate-to-Director, argument-level policy, per-worker dynamic
+scope 는 후속 정제(spec Open Questions/Non-goals).
