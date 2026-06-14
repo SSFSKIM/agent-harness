@@ -6,8 +6,8 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** A context pack is normally injected at session start (feeder,
-   currently off). If absent: read the active plans in `docs/exec-plans/active/`,
+1. **Orient.** Pull the context this task needs from `docs/` (no feeder injects a
+   pack — see Memory below): read the active plans in `docs/exec-plans/active/`,
    scan `docs/design-docs/index.md`, and skim the latest `docs/journal/` month.
 2. **Plan.** Non-trivial work gets a living ExecPlan in `docs/exec-plans/active/`
    (method: `docs/PLANS.md`; procedure: `execplan` skill). Small changes need
@@ -39,7 +39,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/PLANS.md` | ExecPlan methodology |
 | `docs/PRODUCT_SENSE.md` | What we optimize: minimum human-in-loop |
 | `docs/QUALITY_SCORE.md` | Domain × layer grades, gap tracking over time |
-| `docs/RELIABILITY.md` | Hook/queue failure modes, idempotency rules |
+| `docs/RELIABILITY.md` | Hook + dreaming failure modes, idempotency rules |
 | `docs/SECURITY.md` | Threat model: transcripts, memory poisoning, hook perms |
 | `docs/journal/` | Episodic ledger — dream-run provenance + residual memory |
 | `plugin/` | The machine: skills, agents, hooks, scripts (portable) |
@@ -88,5 +88,7 @@ Deep truth lives in `docs/` — follow the pointers.
   `docs/journal/` (grep by keyword); how something works → `docs/design-docs/`.
   Unsure → `Grep`/`Glob` over `docs/`. (Indexes + frontmatter keep this cheap;
   at >~100 pages add a search tool — `memory-architecture.md`.)
-- The old `imprint`/`dream`/`garden` loop is dormant, being retired onto this
-  engine. Bare hosts (no docs library) use the sandbox-store fallback.
+- The old `feeder`/`imprint`/`dream` loop + the `dreamer` agent are **retired**
+  (deleted — `git log` preserves them); the `garden`/`doc-gardener` docs-GC is a
+  separate concern and stays live. Bare hosts (no docs library) use the
+  sandbox-store fallback.

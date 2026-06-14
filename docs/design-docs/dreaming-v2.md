@@ -21,7 +21,11 @@ rollouts into curated, progressively-disclosed memory.
 > `.claude/harness/memories/` store, dreaming becomes a router that authors
 > distilled insights into the `docs/` tree (the one brain), leaving only an
 > episodic ledger as residual. Read THIS doc for the engine; read
-> `memory-architecture.md` for where the output now goes.
+> `memory-architecture.md` for where the output now goes. The old feeder/imprint
+> loop this doc calls "parallel" — and the `docs/memory/` tree it stays out of —
+> were **retired/deleted** (2026-06-14, portable-propagation); treat every
+> `docs/memory/`, `feeder`, `imprint`, and "parallel, not a replacement" mention
+> below as historical design narrative, not current state.
 
 ## Scope (user decision 2026-06-13)
 - **sqlite usage table** (fork 1 = b): a real `stage1_outputs` + `jobs` store

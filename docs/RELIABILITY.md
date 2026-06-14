@@ -12,7 +12,7 @@ cite them in findings.
   duplication: Phase-1 outputs are PK-upserted per session in sqlite
   (`stage1_outputs`), and the Phase-2 router dedupes each routed claim (sqlite
   provenance + a content check) so re-routing is a no-op — never a duplicate
-  tracker row, design-doc Decision-log line, or index entry.
+  tracker row, design-doc Decision-log line, or journal provenance line.
 - **R2 — Dreaming degrades, never blocks.** The `dream-rollouts` pipeline is
   best-effort and out-of-band (manual, not a session hook): a model timeout/error
   records a `failed`/`skipped` status and writes nothing; the forgetting pass

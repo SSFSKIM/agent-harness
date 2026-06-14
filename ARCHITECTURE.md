@@ -33,7 +33,7 @@ point rightward at skills — the most actionable instruction wins.
 1. **Portability:** nothing in `plugin/` hardcodes an absolute path (lint S3).
 2. **Headless recursion guard:** every hook entry script exits immediately when
    `HARNESS_HEADLESS=1`; every spawned `claude -p` child sets it. Without this:
-   SessionStart → feeder spawns claude → its SessionStart → ∞.
+   a hook spawns a headless `claude -p` → the child's own hooks fire → ∞.
 3. **Deterministic gate:** `check.py` = lint_structure + lint_docs +
    gen_inventory --check + an optional host-lint step (invariant 7) + the test
    step — a host test command from `.harness.json`/env, else unittest discovery
@@ -60,47 +60,45 @@ point rightward at skills — the most actionable instruction wins.
    the substrate (the gate step, the `FAIL … FIX:` contract, the override knobs)
    and the authoring method — never the rules; the lint and skill sets are the
    host's output (zero of either is valid). Harness
-   threshold defaults (D1 120 / D7 400 / D4 30d / MEMORY 60) are per-repo
+   threshold defaults (D1 120 / D7 400 / D4 30d) are per-repo
    overridable via the same file (`size_limits` / `default_size_limit` /
    `stale_days`); absent → defaults unchanged. `lint_cmd`/`test_cmd` are
    executable config that run every commit (SECURITY.md T9).
 
 ## Data flows
 
-> **The automatic memory loop (INJECT/IMPRINT/CONSOLIDATE) is currently
-> DISABLED.** Its hooks (SessionStart, UserPromptSubmit, PreCompact,
-> SessionEnd) are unwired from `hooks.json`. The redesign has now landed as the
-> **memory-as-docs** pivot (`docs/design-docs/memory-architecture.md`): the write
-> path is the dreaming `dream-rollouts` router (Phase 1 extract → Phase 2 routes
-> distilled claims into the docs tree + `docs/journal/`), so the old `imprint`/
-> `dream`/`garden` loop is being retired onto that engine (M5). The read path
-> is now on-demand navigation (pull, not a feeder — see
-> `memory-architecture.md`). The active runtime is REVIEW (#4) +
-> TIDY (#5) + the deterministic gate.
+> **Memory is the docs tree (memory-as-docs).** There is no separate memory
+> layer and no automatic INJECT/IMPRINT loop: the old `feeder_*`/`imprint_*`
+> scripts + the `dream`/`dreamer` consolidation were retired (deleted —
+> `docs/design-docs/memory-architecture.md`). The WRITE path is the manual
+> `dream-rollouts` router; the READ path is on-demand navigation (pull, not a
+> feeder). The wired runtime is the MEMORY write (#1, manual) + REVIEW (#3) +
+> TIDY (#4, the only wired hook) + the deterministic gate.
 
-1. **INJECT** *(disabled — hook unwired)* — SessionStart hook →
-   `feeder_sessionstart.py` → headless Sonnet(1M) reads `docs/memory/` +
-   `docs/exec-plans/active/` → compiles a context pack → `additionalContext`.
-   First user prompt → `feeder_firstprompt.py` → task-targeted addendum.
-2. **IMPRINT** *(disabled — hooks unwired)* — PreCompact/SessionEnd →
-   `imprint_enqueue.py` (at-least-once queue) → `imprint_run.py` (single-flight
-   lock; dedupe via `imprint_guard`) → headless claude writes a session digest
-   + memory updates → lint_docs.
-3. **CONSOLIDATE** *(manual; no automatic input while IMPRINT is off)* —
-   `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
-   knowledge/limitations/openq/adr directly → `check.py` green terminates.
-4. **REVIEW** — `execplan` completion gate → self-review → review-arch /
-   review-reliability (each grounded 1:1 in its doc) + review-security only when
+1. **MEMORY — write (manual `dream-rollouts`)** — `dream_run.py` mines idle past
+   sessions: Phase 1 extracts a raw memory each (small model, no-op-preferred);
+   Phase 2, on a self-host repo, ROUTES each distilled claim into its docs home
+   via a READ-ONLY agent (proposes a JSON plan) + a deterministic applicator
+   (appends onto an allowlist: tracker row / design-doc `## Decision log` /
+   `## Open decisions` / `docs/journal/`); a bare host falls back to the sandbox
+   flat store (`dream_phase2`). Provenance → `docs/journal/`.
+2. **MEMORY — read (on-demand pull)** — a session navigates the docs tree
+   (AGENTS.md map + Grep/Glob) for the context a task needs; no SessionStart
+   feeder compiles or injects a pack.
+3. **REVIEW** — `execplan` completion gate → self-review → review-arch /
+   review-reliability (each grounded 1:1 in its doc) + review-security when
    the diff touches the live exec surface (hooks / `.harness.json` /
-   `.harnessignore`; the rest of SECURITY.md is dormant with the disabled memory
-   loop — deferred 2026-06-13) → iterate until satisfied.
-5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
+   `.harnessignore`) or the dreaming/docs-sync write path → iterate until
+   satisfied.
+4. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
    on the dirty tree; FAIL blocks once per state with FIX lines (R11).
    Commits are also gated mechanically by the scaffold-installed
    `.git/hooks/pre-commit` running `check.py`.
 
 ## Failure modes
 
-See `docs/RELIABILITY.md`. Headlines: imprint writes are idempotent (dedupe
-keys), feeder degrades to a deterministic minimal pack on timeout/error,
-imprint worker is single-flight via lock file with stale-lock recovery.
+See `docs/RELIABILITY.md`. Headlines: dreaming memory writes are idempotent
+(sqlite PK-upsert + router dedupe, R1), the `dream-rollouts` pipeline degrades to
+a recorded `failed`/`skipped` status and never blocks a session (R2), and dreaming
+is single-flight via a lock file with stale-lock recovery + the Phase-2 DB lock and
+6h cooldown (R3).

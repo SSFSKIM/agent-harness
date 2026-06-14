@@ -13,7 +13,7 @@ harness where big-software work proceeds with minimum human-in-loop.
 2. (Optional) Check direction at ExecPlan milestones.
 
 Everything else — planning, implementation, lints, persona review, doc
-gardening, imprinting, dreaming — runs inside the harness.
+gardening, dreaming — runs inside the harness.
 
 ## Escalation rule (agent-initiated)
 Escalate to the human ONLY for judgment: product direction, taste tradeoffs

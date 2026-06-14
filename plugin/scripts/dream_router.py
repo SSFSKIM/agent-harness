@@ -222,7 +222,7 @@ def _ensure_journal(root, now):
     safe.parent.mkdir(parents=True, exist_ok=True)
     if not safe.exists():
         safe.write_text(
-            f"---\nstatus: stable\nlast_verified: {_date(now)}\nowner: dreamer\n---\n"
+            f"---\nstatus: stable\nlast_verified: {_date(now)}\nowner: harness\n---\n"
             f"# Journal {_month(now)}\n\n"
             "Append-only episodic record — dream-run provenance + residual memory "
             "(what the docs tree cannot hold). Newest at the bottom.\n",
