@@ -45,7 +45,7 @@ OP_KINDS = ("tracker_row", "design_decision", "design_openq", "journal")
 # ---- prompt ----------------------------------------------------------------
 
 def load_templates():
-    d = hl.plugin_root() / "skills" / "dream" / "templates"
+    d = hl.plugin_root() / "skills" / "dream-rollouts" / "templates"
     return (d / "router_system.md").read_text(encoding="utf-8"), \
            (d / "router_input.md").read_text(encoding="utf-8")
 

@@ -62,7 +62,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
 `lint_docs.py` constants, `scaffold.py`, and the harness-init templates.
 
 ## Milestones
-- [ ] **M1 — Relocate the dreaming templates; retire the `dream` skill & `dreamer`
+- [x] **M1 — Relocate the dreaming templates; retire the `dream` skill & `dreamer`
   agent.** `git mv plugin/skills/dream/templates/{router_input,router_system,
   stage_one_input,stage_one_system,consolidation_input,consolidation_system}.md
   plugin/skills/dream-rollouts/templates/`, then repoint the three loaders so the
@@ -145,6 +145,15 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   Brainstormed boundary via blast-radius map + 2 user decisions (hard-delete;
   plugin-going-forward-only). Spec design reused from `memory-architecture.md` (no
   new design-doc per PLANS.md two-docs rule).
+- 2026-06-14: **M1 done.** `git mv` the 6 dreaming templates to
+  `dream-rollouts/templates/`; repointed `dream_phase1/phase2/router.load_templates`
+  to the new dir; deleted `plugin/skills/dream/` + `plugin/agents/dreamer.md`; pulled
+  their two rows from the `agent-harness.md` component table + regenerated the
+  inventory. Acceptance: all three `load_templates()` resolve (each returns its
+  2-tuple) — no engine logic touched. Gate GREEN. Residual stale *prose* mentions of
+  the retired `dreamer`/`dream` in self-host living docs (DESIGN.md, QUALITY_SCORE.md,
+  core-beliefs.md, SECURITY.md, agent-harness prose, memory-architecture L100) are
+  gate-safe and folded into M5's doc sweep.
 
 ## Surprises & discoveries
 

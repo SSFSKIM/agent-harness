@@ -34,13 +34,11 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 |---|---|---|
 | skill | `architecture-setup` | Use to set up/revise a repo's architecture & taste enforcement — derives invariants, routes |
 | skill | `docs-tree` | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, a |
-| skill | `dream` | Use periodically (or after several work sessions) to consolidate memory — dispatches the d |
 | skill | `execplan` | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory chan |
 | skill | `garden` | Use periodically (or when docs feel stale) to run the entropy GC — dispatches the doc-gard |
 | skill | `harness-init` | Use when setting up, installing, initializing, bootstrapping, or porting this harness into |
 | skill | `harness-lint` | Use to run the deterministic gate (taste lints + structure lints + generated-file check +  |
 | agent | `doc-gardener` | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden |
-| agent | `dreamer` | Memory consolidation persona (CONSOLIDATE). Dispatch via the dream skill to compress recen |
 | agent | `review-arch` | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the |
 | agent | `review-reliability` | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Gro |
 | agent | `review-security` | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Ground |

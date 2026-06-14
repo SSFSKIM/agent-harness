@@ -182,7 +182,7 @@ def is_noop(raw_memory, rollout_summary):
 
 
 def _templates_dir():
-    return hl.plugin_root() / "skills" / "dream" / "templates"
+    return hl.plugin_root() / "skills" / "dream-rollouts" / "templates"
 
 
 def load_templates():

@@ -42,7 +42,7 @@ SNAPSHOT_FILE_CAP = 4 * 1024 * 1024   # ≤ cap: snapshot bytes (exact restore);
 
 
 def load_templates():
-    d = hl.plugin_root() / "skills" / "dream" / "templates"
+    d = hl.plugin_root() / "skills" / "dream-rollouts" / "templates"
     return (d / "consolidation_system.md").read_text(encoding="utf-8"), \
            (d / "consolidation_input.md").read_text(encoding="utf-8")
 
