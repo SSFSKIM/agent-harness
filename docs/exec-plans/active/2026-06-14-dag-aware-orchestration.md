@@ -113,9 +113,16 @@ eligibility 진실원:
   →stuck=[B], 사이클→stuck(행 없음), 워커-생성 픽업, max_passes bound.
 - [x] (2026-06-14) M4 — CLI `--once`/`--max-passes`/`--done-types`, 기본 연속.
   test +2(--once 단일 패스 B 막힘, 연속 체인 A→B 둘 다 Done). 164 테스트 GREEN.
-- [ ] M5 — 라이브 blocker pin(실 Linear inverseRelations wire). (다음.)
+- [x] (2026-06-14) M5 — 라이브 blocker pin. 실 Linear(Lingu)에 throwaway LIN-7(A)·
+  LIN-8(B blocked_by A) 생성 → 내 `list_ready_issues` 가 B.blockers=[{A uuid, "unstarted"}]
+  를 정확히 파싱(inverseRelations type=="blocks" wire 확인), A=Todo 동안 `eligible_tickets`
+  가 A 만 eligible·B 미eligible → 내 `update_issue_state`(A→Done) 후 재읽기에서 B.blocker
+  가 "completed" 로 바뀌고 B eligible. 첫 시도에 wire 정확(라이브 버그 0). LIN-7·8 정리(Canceled).
 
 ## Surprises & discoveries
+- (2026-06-14) M5 라이브: Linear `inverseRelations` + IssueRelationType `"blocks"` 추정이
+  첫 시도에 맞음(B.inverseRelations 의 `issue` 가 blocker A). schema-first 누적 효과 —
+  Phase 1·2·orchestrator 에 이어 라이브 wire 버그 0.
 
 ## Decision log
 - 2026-06-14: wave(barrier) 모델 — 단순·정확, streaming 은 non-goal(perf).
