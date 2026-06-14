@@ -86,7 +86,16 @@ type 표현:
   **acceptance**: 티켓 labels 가 읽히고 ticket_type 이 라벨대로.
 
 ## Progress log
-- [ ] (2026-06-14) plan 작성 + 생성시 self-review. (다음: M1.)
+- [x] (2026-06-14) plan 작성 + 생성시 self-review.
+- [x] (2026-06-14) M1 — `director/taxonomy.py`: `TAXONOMY`(5 type, institution-as-data),
+  `ticket_type`(라벨→type, 우선순위), `compose_worker_prompt`(템플릿+원본/untyped raw).
+  test_director_taxonomy +10.
+- [x] (2026-06-14) M2 — `list_ready_issues` 쿼리에 `labels{nodes{name}}` + `_parse_labels`
+  → ticket["labels"]; MockBoard 가 labels 반환. test +1.
+- [x] (2026-06-14) M3 — `dispatch` 가 run_ticket 직전 `compose_worker_prompt` 로 prompt
+  교체. test +3: spec 티켓→product-design 템플릿, untyped→raw, planning→design→spec→impl
+  파이프라인이 의존순 dispatch + 각자 제 type 템플릿. 180 테스트 GREEN.
+- [ ] M4 — 라이브 라벨 pin(실 Linear labels wire). (다음.)
 
 ## Surprises & discoveries
 

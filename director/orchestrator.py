@@ -20,7 +20,7 @@ import sys
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from director import run
+from director import run, taxonomy
 from director.board import linear as board_linear
 
 # Default logical-state → Linear workflow-state-name mapping (overridable on the CLI).
@@ -57,9 +57,14 @@ def resolve_states(board, team: str, names: dict | None = None) -> dict:
 def dispatch(ticket: dict, **kwargs) -> dict:
     """Drive one worker through one ticket (wraps run.run_ticket), converting any
     crash into a {status: failed} result so one bad worker never sinks the pool.
-    A module-level function so tests can patch it deterministically."""
+    A module-level function so tests can patch it deterministically.
+
+    The worker's prompt is composed via the dev-stage taxonomy (Phase 3b): a typed
+    ticket (a Linear stage label) gets its stage-workflow template wrapped around the
+    task; an untyped ticket passes through unchanged."""
+    composed = {**ticket, "prompt": taxonomy.compose_worker_prompt(ticket)}
     try:
-        return run.run_ticket(ticket, **kwargs)
+        return run.run_ticket(composed, **kwargs)
     except Exception as exc:  # subprocess death, handshake error, etc.
         return {"status": "failed", "turn_id": None, "error": str(exc)}
 
@@ -302,6 +307,7 @@ class MockBoard:
             # resolve each blocker id to its current {id, state_type} (DAG truth)
             t["blockers"] = [{"id": bid, "state_type": self._state_type(bid)}
                              for bid in i.get("blockers", [])]
+            t["labels"] = list(i.get("labels", []))  # dev-stage type labels
             out.append(t)
         return out
 

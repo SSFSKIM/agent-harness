@@ -274,11 +274,13 @@ class RunOnceErrorPathsTest(unittest.TestCase):
         self.assertEqual(len(res), 1)
 
 
-def _issue(tid, blockers=None, state="st_todo"):
+def _issue(tid, blockers=None, state="st_todo", labels=None):
     d = {"id": tid, "identifier": tid.upper(), "title": "t", "description": "d",
          "prompt": f"p-{tid}", "state_id": state}
     if blockers:
         d["blockers"] = blockers
+    if labels:
+        d["labels"] = labels
     return d
 
 
@@ -388,6 +390,56 @@ class RunUntilDrainedTest(unittest.TestCase):
         self.assertEqual(out["stopped_reason"], "max_passes")
         self.assertEqual(out["passes"], 2)
         self.assertEqual(order, ["a", "b"])  # c never reached
+
+
+class TypeRoutingTest(unittest.TestCase):
+    """Phase 3b: dispatch composes the worker prompt from the ticket's dev-stage type."""
+
+    def test_dispatch_composes_typed_prompt(self):
+        captured = {}
+
+        def fake_run_ticket(ticket, **kw):
+            captured["prompt"] = ticket["prompt"]
+            return {"status": "completed", "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+            orch.dispatch(_issue("a", labels=["spec"]), command=["x"])
+        self.assertIn("product-design", captured["prompt"])  # spec template applied
+        self.assertIn("p-a", captured["prompt"])              # original task preserved
+
+    def test_dispatch_untyped_passes_raw_prompt(self):
+        captured = {}
+
+        def fake_run_ticket(ticket, **kw):
+            captured["prompt"] = ticket["prompt"]
+            return {"status": "completed", "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+            orch.dispatch(_issue("a"), command=["x"])  # no labels
+        self.assertEqual(captured["prompt"], "p-a")  # unchanged (backward compat)
+
+    def test_typed_pipeline_sequenced_with_per_type_prompts(self):
+        board = orch.MockBoard([
+            _issue("plan", labels=["planning"]),
+            _issue("design", ["plan"], labels=["design"]),
+            _issue("spec", ["design"], labels=["spec"]),
+            _issue("impl", ["spec"], labels=["impl"])])
+        states = orch.resolve_states(board, "T")
+        seen = []
+
+        def fake_run_ticket(ticket, **kw):
+            seen.append((ticket["id"], ticket["prompt"]))
+            return {"status": "completed", "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states)
+        self.assertEqual([s[0] for s in seen], ["plan", "design", "spec", "impl"])
+        prompts = dict(seen)
+        self.assertIn("Decompose", prompts["plan"])         # planning template
+        self.assertIn("design-docs", prompts["design"])     # design template
+        self.assertIn("product-design", prompts["spec"])    # spec template
+        self.assertIn("execplan", prompts["impl"])          # impl template
+        self.assertEqual(out["stopped_reason"], "drained")
 
 
 class MainCliTest(unittest.TestCase):

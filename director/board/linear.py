@@ -44,6 +44,7 @@ query DirectorReadyIssues($team: ID!, $state: ID!) {
   issues(filter: { team: { id: { eq: $team } }, state: { id: { eq: $state } } }) {
     nodes {
       id identifier title description state { id name }
+      labels { nodes { name } }
       inverseRelations { nodes { type issue { id state { id name type } } } }
     }
   }
@@ -153,12 +154,18 @@ def _parse_blockers(issue: dict) -> list[dict]:
     return blockers
 
 
+def _parse_labels(issue: dict) -> list[str]:
+    """An issue's label names — the orchestrator derives the dev-stage type from these."""
+    nodes = ((issue.get("labels") or {}).get("nodes")) or []
+    return [n["name"] for n in nodes if n.get("name")]
+
+
 def list_ready_issues(team_id: str, ready_state_id: str, *, api_key: str | None = None,
                       endpoint: str = DEFAULT_ENDPOINT,
                       http_post: Callable[[str, bytes, dict], dict] = urllib_post) -> list[dict]:
     """Issues in one team currently in the given (ready) workflow state, each
-    normalized to a ticket dict with its current `state_id` and `blockers`
-    ([{id, state_type}] — the DAG predecessors; the orchestrator computes eligibility)."""
+    normalized to a ticket dict with its current `state_id`, `blockers`
+    ([{id, state_type}] — DAG predecessors), and `labels` (names — the dev-stage type)."""
     data = _post(_READY_ISSUES, {"team": team_id, "state": ready_state_id},
                  api_key=api_key, endpoint=endpoint, http_post=http_post)
     nodes = ((data.get("issues") or {}).get("nodes")) or []
@@ -167,6 +174,7 @@ def list_ready_issues(team_id: str, ready_state_id: str, *, api_key: str | None 
         ticket = normalize_issue(issue)
         ticket["state_id"] = (issue.get("state") or {}).get("id")
         ticket["blockers"] = _parse_blockers(issue)
+        ticket["labels"] = _parse_labels(issue)
         out.append(ticket)
     return out
 
