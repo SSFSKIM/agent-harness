@@ -47,8 +47,9 @@ cite them in findings.
   `os.replace` write — a torn fingerprint must not re-block), so a session
   can always end even when the tree cannot be made green. Scope guards:
   harness-spawned headless recursion (HARNESS_HEADLESS) and an activation
-  sentinel (no-op unless `docs/memory/MEMORY.md` exists — a plugin loaded
-  into a non-harness repo must not judge it). Only lint FAILs block; the
+  sentinel (no-op unless `docs/design-docs/agent-harness.md` exists — a plugin
+  loaded into a non-harness repo must not judge it; repointed from the retired
+  `docs/memory/MEMORY.md` by the memory-as-docs pivot). Only lint FAILs block; the
   hook's own tooling crashes (child timeout/traceback) are logged and never
   block (R6). Runs only the deterministic lint subset with per-child
   timeouts that fit inside the hook's own budget. Untracked files are

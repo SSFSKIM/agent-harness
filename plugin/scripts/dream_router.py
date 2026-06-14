@@ -94,8 +94,9 @@ def parse_routing_plan(text):
     obj = json.loads(s[start:end + 1])
     if not isinstance(obj, dict) or not isinstance(obj.get("operations"), list):
         raise ValueError("router output lacks an `operations` list")
-    ops = [o for o in obj["operations"]
-           if isinstance(o, dict) and o.get("kind") in OP_KINDS]
+    # Keep every dict op — an unknown/typo'd `kind` is journaled (held), never
+    # silently dropped (else a model typo consumes a memory with no provenance).
+    ops = [o for o in obj["operations"] if isinstance(o, dict)]
     return ops[:MAX_PLAN_OPS]
 
 
@@ -136,16 +137,38 @@ def _read(path):
     return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
 
 
+def _within_repo_no_symlink(root, rel):
+    """The write guard. Return `root/rel` iff NO path component (root → target) is
+    a symlink AND the target resolves inside the repo — so a symlinked allowlist
+    root or file can't redirect a deterministic write outside its intended place.
+    Else None. (Matches the sandbox path's symlink rigor — the applicator is the
+    only writer, so this is where "containment by construction" actually holds.)"""
+    root = Path(root)
+    cur = root
+    for part in Path(rel).parts:
+        cur = cur / part
+        if cur.is_symlink():
+            return None
+    target = root / rel
+    try:
+        if not target.resolve().is_relative_to(root.resolve()):
+            return None
+    except (OSError, ValueError):
+        return None
+    return target
+
+
 def _safe_design_target(root, target):
     """A design-doc append target must be an EXISTING `.md` directly under
-    docs/design-docs/ (the allowlist). Returns the resolved path or None."""
+    docs/design-docs/ by LITERAL path (no symlink in its ancestry, resolves inside
+    the repo). Returns the path or None."""
     if not target:
         return None
-    p = (Path(root) / target).resolve()
-    base = (Path(root) / DESIGN_DIR).resolve()
-    if p.parent != base or p.suffix != ".md" or not p.is_file():
+    rel = os.path.normpath(target)
+    if os.path.dirname(rel) != DESIGN_DIR or not rel.endswith(".md"):
         return None
-    return p
+    p = _within_repo_no_symlink(root, rel)
+    return p if (p is not None and p.is_file()) else None
 
 
 def _append_under_heading(path, heading, line):
@@ -175,7 +198,9 @@ def _append_under_heading(path, heading, line):
 
 
 def _append_tracker_row(root, desc, severity, source, now):
-    path = Path(root) / TRACKER
+    path = _within_repo_no_symlink(root, TRACKER)
+    if path is None or not path.is_file():
+        return False
     sev = severity if severity in ("Minor", "Major", "Critical") else "Minor"
     row = f"| {_cell(desc)} | {sev} | {_date(now)} | {_cell(source, 60)} | open |"
     text = _read(path)
@@ -191,26 +216,34 @@ def journal_path(root, now):
 
 
 def _ensure_journal(root, now):
-    p = journal_path(root, now)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    if not p.exists():
-        p.write_text(
+    """The month file, guarded against a symlinked `docs/journal` redirect — None
+    if the journal path is unsafe (skip journaling rather than write through)."""
+    safe = _within_repo_no_symlink(root, f"{JOURNAL_DIR}/{_month(now)}.md")
+    if safe is None:
+        return None
+    safe.parent.mkdir(parents=True, exist_ok=True)
+    if not safe.exists():
+        safe.write_text(
             f"---\nstatus: stable\nlast_verified: {_date(now)}\nowner: dreamer\n---\n"
             f"# Journal {_month(now)}\n\n"
             "Append-only episodic record — dream-run provenance + residual memory "
             "(what the docs tree cannot hold). Newest at the bottom.\n",
             encoding="utf-8")
-    return p
+    return safe
 
 
 def append_journal_block(root, now, sessions, lines):
-    """Append one dated run-block listing every routed/held claim this run."""
+    """Append one dated run-block listing every routed/held claim this run.
+    Returns False (no write) if the journal path is unsafe."""
     p = _ensure_journal(root, now)
+    if p is None:
+        return False
     block = [f"## {_iso(now)} — dream run (sessions: {', '.join(sessions) or 'none'})"]
     block += [f"- {l}" for l in lines]
     text = p.read_text(encoding="utf-8")
     sep = "" if text.endswith("\n") else "\n"
     p.write_text(text + sep + "\n" + "\n".join(block) + "\n", encoding="utf-8")
+    return True
 
 
 def apply_plan(root, ops, rows, now):
@@ -245,9 +278,11 @@ def apply_plan(root, ops, rows, now):
                                               f"- {_oneline(op.get('question'))}")
                 applied["design_openq"] += int(wrote)
                 jlines.append(f"[routed] open-q \"{_short(op.get('question'))}\" -> {op.get('target')}")
-        else:  # journal — the conservative default (episodic / held / no home)
+        else:  # journal (held): the conservative default AND any unknown/typo'd kind
             applied["journal"] += 1
-            text = re.sub(r"^\[(?:held|routed)\]\s*", "", _oneline(op.get("text")),
+            raw = (op.get("text") or op.get("decision") or op.get("desc")
+                   or json.dumps(op, ensure_ascii=False))
+            text = re.sub(r"^\[(?:held|routed)\]\s*", "", _oneline(raw),
                           flags=re.IGNORECASE)
             jlines.append(f"[held] {text}")
     if jlines:

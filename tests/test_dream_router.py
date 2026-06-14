@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import unittest
 import tempfile
@@ -53,10 +54,13 @@ class TestParse(_Case):
             'Here is the plan:\n{"operations":[{"kind":"journal","text":"hi"}]}\n')
         self.assertEqual(ops, [{"kind": "journal", "text": "hi"}])
 
-    def test_filters_unknown_kinds(self):
+    def test_keeps_all_dict_ops_drops_non_dicts(self):
+        # unknown kinds are KEPT (journaled downstream, never silently dropped);
+        # only non-dict entries are discarded.
         ops = dr.parse_routing_plan(json.dumps(
-            {"operations": [{"kind": "bogus"}, {"kind": "journal", "text": "x"}]}))
-        self.assertEqual([o["kind"] for o in ops], ["journal"])
+            {"operations": [{"kind": "bogus"}, {"kind": "journal", "text": "x"},
+                            "notadict"]}))
+        self.assertEqual([o["kind"] for o in ops], ["bogus", "journal"])
 
     def test_empty_raises(self):
         with self.assertRaises(ValueError):
@@ -126,6 +130,27 @@ class TestApply(_Case):
         dr.apply_plan(self.root, ops, self._rows(), NOW)
         row = [l for l in self._tracker().splitlines() if "a / b / c" in l][0]
         self.assertEqual(row.count("|"), 6)            # 5 columns
+
+    def test_unknown_kind_is_journaled_not_dropped(self):
+        ops = dr.parse_routing_plan(json.dumps({"operations": [
+            {"kind": "design_decison", "decision": "typod kind", "source": "s"}]}))
+        self.assertEqual(len(ops), 1)                  # kept, not filtered out
+        summ = dr.apply_plan(self.root, ops, self._rows(), NOW)
+        self.assertIn("typod kind", self._journal())   # journaled as held
+        self.assertEqual(summ["applied"]["journal"], 1)
+
+    def test_symlinked_tracker_is_not_written_through(self):
+        with tempfile.TemporaryDirectory() as out:
+            decoy = Path(out) / "evil-tracker.md"
+            decoy.write_text("# outside\n", encoding="utf-8")
+            tracker = self.root / "docs/exec-plans/tech-debt-tracker.md"
+            tracker.unlink()
+            os.symlink(decoy, tracker)                 # allowlist file → outside
+            ops = [{"kind": "tracker_row", "desc": "pwn", "severity": "Minor",
+                    "source": "s"}]
+            summ = dr.apply_plan(self.root, ops, self._rows(), NOW)
+            self.assertEqual(summ["applied"]["tracker_row"], 0)   # refused
+            self.assertNotIn("pwn", decoy.read_text(encoding="utf-8"))
 
     def test_journal_strips_redundant_tag(self):
         ops = [{"kind": "journal", "text": "[held] already tagged note", "source": "s"}]

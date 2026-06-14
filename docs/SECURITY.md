@@ -47,9 +47,12 @@ Grounding document for the review-security persona. Threats are numbered.
     is the only writer and only APPENDS bounded, re-redacted content onto an
     allowlist (a tech-debt-tracker row / a design-doc `## Decision log` or `## Open
     decisions` line / a `docs/journal/` entry); an out-of-allowlist target is demoted
-    to a journal `[held]` note. **Residual:** an injected claim could append a
-    *misleading but bounded* entry to a docs home or the journal — git-visible,
-    deduped, revertible, never a path escape or an arbitrary write.
+    to a journal `[held]` note. Every write target is verified to have **no symlinked
+    path component and to resolve inside the repo** (`dream_router._within_repo_no_symlink`),
+    so a symlinked allowlist root/file cannot redirect a write outside. **Residual:**
+    an injected claim could append a *misleading but bounded* entry to a docs home or
+    the journal — git-visible, deduped, revertible; never a path escape or an
+    arbitrary write.
   - *Dreaming (sandbox fallback, bare host).* Where there is no docs library, Phase
     2 uses the flat-store sandbox: a headless `claude -p` with Write can write
     ANYWHERE (Claude Code has **no `writable_roots`**), so the path restriction is

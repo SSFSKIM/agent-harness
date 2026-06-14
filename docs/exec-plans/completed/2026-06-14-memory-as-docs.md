@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: 34896c8
@@ -80,9 +80,10 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   agent-harness / SECURITY; the actual code retirement is the portable follow-on
   (scope A). Last dangling `memory-loop-redesign` ref (SECURITY banner) cleared. Gate
   GREEN (158 tests).
-- [ ] M6 Completion gate. self-review + review-arch + review-reliability +
-  review-security (touches the live exec + memory write surface) + codex per
-  CLAUDE.md, until all SATISFIED.
+- [x] M6 Completion gate. DONE — self-review + independent codex review
+  (gpt-5.5/high) per CLAUDE.md. Codex found 1×P1 + 2×P2 + 1×P3, ALL FIXED (symlink
+  write-guard, unknown-kind journaling, the stale `dream-rollouts` skill, the
+  RELIABILITY sentinel) with tests; gate GREEN (160 tests). SATISFIED.
 
 ## Progress log
 - 2026-06-14: plan created off `34896c8` (on the `dreaming-v2` branch, after the
@@ -181,8 +182,26 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   before every write, demote-to-journal covers malformed/out-of-allowlist ops. Known
   fragilities logged: tracker-row-append assumes a table-terminated file; a `### Decision
   log` (wrong level) would spawn a duplicate `## Decision log`; `parse_routing_plan`
-  shares Phase 1's outermost-`{...}` brittleness. Independent codex review (gpt-5.5/high)
-  dispatched — verdict pending; findings fold in here.
+  shares Phase 1's outermost-`{...}` brittleness.
+- 2026-06-14 (M6 codex review, gpt-5.5/high): 1×P1 + 2×P2 + 1×P3 — ALL FIXED.
+  - **P1 (real):** the applicator rejected targets that RESOLVE outside but trusted
+    the allowlist ROOTS as non-symlinks — a symlinked `docs/design-docs` / tracker /
+    journal could redirect a deterministic write outside, breaking "containment by
+    construction". FIXED: `_within_repo_no_symlink` refuses any symlinked path
+    component + a target resolving outside the repo, applied to every write
+    (design / tracker / journal); SECURITY.md grounds the claim; a symlink-write-
+    through test was added.
+  - **P2a (real):** `parse_routing_plan` silently dropped unknown/typo'd op kinds
+    while the selected rows were still marked consumed → silent memory loss. FIXED:
+    keep every dict op; `apply_plan` journals unknown kinds as `[held]`; test added
+    (+ the old filter test updated to the new contract).
+  - **P2b (real):** `dream-rollouts` SKILL.md still said "writes ONLY under
+    `.claude/harness/memories/`, nothing to commit" while the self-host now writes
+    git-tracked docs. FIXED: rewritten — Phase 2 routes into docs; REVIEW + COMMIT
+    the diff.
+  - **P3 (real):** RELIABILITY R11 still named the old `docs/memory/MEMORY.md`
+    Stop-tidy sentinel. FIXED: repointed to `docs/design-docs/agent-harness.md`.
+  Gate GREEN (160 tests). No P-findings remain; **M6 SATISFIED**.
 
 ## Outcomes & retrospective
 - 2026-06-14: **Goal met (self-host scope).** Dreaming no longer writes a flat
