@@ -95,7 +95,14 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
       set 으로 오인되지 않음; alias/directive/spread 처리; 다중 op 합집합) + `authorize`
       (read→allow, allowlisted-mutation→allow, 그 외/subscription/parse-fail→deny). 8-mutation
       기본 allowlist. `tests/test_director_authority.py` 27 PASS(classify·evasion 배터리·
-      authorize·기본 allowlist). 다음: M2(executor 결선 + SECURITY T10).
+      authorize·기본 allowlist). 커밋 23e0c70.
+- [x] (2026-06-14) M2 done. `make_linear_tool_executor` 에 `allow_mutations=None, guard=True`
+      추가; query 검증 직후·POST 전에 `authority.authorize` → deny 면 "blocked by authority
+      guardrail: …" 반환(네트워크 안 감). `docs/SECURITY.md` T10 추가 + status 노트 live-surface
+      목록에 T10. `tests/test_director_tools.py` 보강(6 신규): destructive→POST 없이 거부,
+      allowed/read→POST, default-guard-on(run.py/orchestrator.py 경로), guard=False opt-out,
+      custom allowlist tighten. 기존 errors-test 는 allowlisted mutation 으로 수정(guard 통과 후
+      서버 errors 도달). 다음: M3(live wire-pin + 게이트).
 
 ## Surprises & discoveries
 

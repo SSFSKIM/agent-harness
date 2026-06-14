@@ -14,6 +14,7 @@ import json
 from typing import Callable
 
 from director.board import linear
+from director.worker import authority
 
 LINEAR_TOOL = "linear_graphql"
 
@@ -42,9 +43,17 @@ def linear_graphql_spec() -> dict:
 def make_linear_tool_executor(
         api_key: str | None = None,
         endpoint: str = linear.DEFAULT_ENDPOINT,
-        http_post: Callable[[str, bytes, dict], dict] = linear.urllib_post
+        http_post: Callable[[str, bytes, dict], dict] = linear.urllib_post,
+        allow_mutations: frozenset[str] | None = None,
+        guard: bool = True,
 ) -> Callable[[str, dict], dict]:
-    """A tool_executor `(name, arguments) -> {success, output}` handling linear_graphql."""
+    """A tool_executor `(name, arguments) -> {success, output}` handling linear_graphql.
+
+    The authority guardrail is ON by default (`guard=True`): reads pass, only
+    allowlisted forward-only mutations go out, destructive/unknown mutations are
+    refused locally before any POST (director.worker.authority; spec D-28). Pass
+    `guard=False` only for a trusted, explicit opt-out.
+    """
     key = api_key or linear.load_api_key()
 
     def execute(name: str, arguments: dict) -> dict:
@@ -55,6 +64,11 @@ def make_linear_tool_executor(
         query = (arguments or {}).get("query")
         if not isinstance(query, str) or not query.strip():
             return {"success": False, "output": "linear_graphql requires a non-empty 'query'"}
+        if guard:  # authority boundary — refuse before any network side effect
+            verdict = authority.authorize(query, allow_mutations=allow_mutations)
+            if not verdict["allowed"]:
+                return {"success": False, "output": "blocked by authority guardrail: "
+                        + verdict["reason"]}
         variables = (arguments or {}).get("variables") or {}
         body = json.dumps({"query": query, "variables": variables}).encode("utf-8")
         headers = {"Authorization": key, "Content-Type": "application/json"}

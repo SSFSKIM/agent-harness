@@ -12,7 +12,8 @@ Grounding document for the review-security persona. Threats are numbered.
 > loop** (feeder / imprint / dreaming), which is currently **DISABLED**, so those
 > threats are dormant alongside it. The live surface is small: **T3** (hook
 > execution), **T8** (lint-exemption scope), **T9** (`.harness.json` /
-> `.claude/lints` executable config). The full model is no longer an active,
+> `.claude/lints` executable config), **T10** (worker tool authority — the
+> Director's live exec surface). The full model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
 > exec surface (hooks · `.harness.json`/host-lint · `.harnessignore`); see the
@@ -91,3 +92,22 @@ Grounding document for the review-security persona. Threats are numbered.
   keys, component drift is self-host strict and ported-host advisory. So
   `.harness.json` cannot let `SECURITY.md` go stale (mirrors T8's
   non-exemptable rule).
+- **T10 — Worker tool authority.** A Codex worker drives Linear through the
+  `linear_graphql` dynamic tool (`director/worker/tools.py`) using the human's
+  `.env` key — an outward-facing, irreversible write surface, hence part of the
+  live exec surface. Without a boundary a buggy or transcript-injected (T1-class)
+  worker can delete/archive the board. Mitigation
+  (`director/worker/authority.py`): a default-deny **mutation root-field
+  allowlist**. Reads always pass — a `query` operation cannot execute a mutation
+  field server-side, so gating mutation operations' root fields is the complete
+  write boundary. The classifier is a minimal in-repo GraphQL lexer aligned with
+  the server's own parse (strips comments/strings, then reads the operation type
+  and root fields), so a hidden `mutation` keyword fools neither it nor Linear.
+  The default allowlist is exactly the forward-only mutations the worker's
+  installed `.codex/skills` + worker-driven decomposition use; destructive ops
+  (delete/archive/batch) are absent and refused locally before any POST. This is
+  the **hard prerequisite for un-watched (autonomous-Director) dispatch** — until
+  it exists the orchestrator must stay watched (tracker line 49). Residual: the
+  boundary is at mutation-name granularity, not argument-level; escalate-denied-
+  mutations-to-Director is deferred to the taste-vs-handle escalation slice
+  (`authorize`'s reason is the seam).
