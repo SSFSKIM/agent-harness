@@ -57,8 +57,10 @@ SAFE_FRONTMATTER = {
 SYMBOL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_./-]{0,79}$")
 ROOT_DOCS = ("AGENTS.md", "ARCHITECTURE.md")     # root map docs docs-sync maintains
 JOURNAL_DIR = "docs/journal"
-# A journal provenance line: `[routed] <type> "<snippet>" -> docs/X`
-ROUTED_RE = re.compile(r"\[routed\]\s+.*?\"([^\"]*)\".*?->\s*(\S+)")
+# A journal provenance line: `[routed] <type> "<snippet>" -> docs/X [@<linehash>]`.
+# The trailing `@<hash>` is present only when the router ACTUALLY appended a line
+# (not a dedupe); retract attribution requires it (group 3).
+ROUTED_RE = re.compile(r"\[routed\]\s+.*?\"([^\"]*)\".*?->\s*(\S+)(?:\s+@([0-9a-f]{16}))?")
 
 
 def _scripts_dir():
@@ -94,17 +96,6 @@ def _rename_count(text, old):
     return len(_boundary_re(old).findall(text))
 
 
-def _is_specific_symbol(tok):
-    """A rename target must be a SPECIFIC code symbol/path, not a plain prose word.
-    It must carry identifier structure (`_ . / -` or a digit) or mixed case, so a
-    common English word ('set', 'run', 'state') can never trigger a global prose
-    rewrite. (Renaming a real symbol like `feeder_sessionstart` / `docs/memory` /
-    `MAX_RETRIES` still qualifies; an ambiguous bare word falls to the report.)"""
-    return bool(isinstance(tok, str) and SYMBOL_RE.match(tok)) and (
-        any(c in tok for c in "_./-") or any(c.isdigit() for c in tok)
-        or tok != tok.lower())
-
-
 def _line_present(text, line):
     want = line.strip()
     return any(l.strip() == want for l in text.splitlines())
@@ -129,24 +120,19 @@ def _set_frontmatter(text, field, value):
     return out + "\n" if text.endswith("\n") else out
 
 
-# Strip the router's append framing (`- `, an optional `- <date>: `, or a `| `
-# table-cell lead) so attribution can anchor the snippet at the START of the line's
-# CONTENT — a substring-anywhere match would let a short routed phrase authorize
-# deleting an unrelated human line that merely contains it.
-_ROUTER_PREFIX = re.compile(r"^(?:[-*]\s+(?:\d{4}-\d{2}-\d{2}:\s+)?|\|\s*)")
-MIN_ATTRIB_SNIPPET = 8     # a trivially short snippet can't attribute a line
-
-
 def _attributable(root, target, line):
-    """True iff the line was machine-authored INTO `target` by the router — so
-    deleting it REVERSES a router append, never edits human prose. Requires a
-    journal `[routed] "snippet" -> target` whose snippet PREFIXES the line's content
-    (after stripping the router's `- `/`- <date>: `/`| ` framing). Prefix-anchored
-    (not substring-anywhere) so a short routed phrase can't authorize deleting an
-    unrelated human line that merely contains it. The journal tree is read through
-    the symlink-safe guard so a symlinked `docs/journal` can't manufacture provenance."""
+    """True iff `line` is EXACTLY a line the router appended into `target`, proven by
+    a journal `[routed] … -> target @<hash>` whose hash equals this line's content
+    hash. Exact-hash, NOT prefix/substring: the journal's human-readable snippet is a
+    truncated prefix of one field (it can't bound the whole line), so a prefix match
+    would also delete a human-appended caveat tail on a routed line. Hashing the whole
+    line means any human edit changes the bytes → attribution fails → the delete falls
+    to the report. The router records the hash ONLY for lines it actually wrote (never
+    a dedupe of pre-existing content), so provenance can't be manufactured for a human
+    line. The journal tree is read through the symlink-safe guard so a symlinked
+    `docs/journal` can't forge provenance."""
     rel = os.path.normpath(str(target))
-    core = _ROUTER_PREFIX.sub("", re.sub(r"\s+", " ", line).strip(), count=1)
+    want = hl.line_provenance_hash(line)
     base = hl.within_repo_no_symlink(root, JOURNAL_DIR)
     if base is None or not base.exists():
         return False
@@ -159,24 +145,24 @@ def _attributable(root, target, line):
             continue
         for jl in jtext.splitlines():
             m = ROUTED_RE.search(jl)
-            if not m:
-                continue
-            snippet = re.sub(r"\s+", " ", m.group(1)).strip()
-            if (os.path.normpath(m.group(2)) == rel
-                    and len(snippet) >= MIN_ATTRIB_SNIPPET
-                    and core.startswith(snippet)):
+            if (m and m.group(3) and m.group(3) == want
+                    and os.path.normpath(m.group(2)) == rel):
                 return True
     return False
 
 
 # ---- the deterministic risk re-validator (the safety crux) -----------------
 
-def classify(root, item):
+def classify(root, item, changed_symbols=None):
     """Re-validate one item's risk WITHOUT trusting its `risk` label. Returns
     ("mechanical", prepared_op) if the structured `change` matches a mechanical
     template exactly, else ("report", reason). This is the only place that decides
     what auto-applies — so a prose rewrite mislabeled `mechanical` cannot slip
-    through."""
+    through. `changed_symbols` is the change scope's changed∪removed symbol set; a
+    rename auto-applies ONLY if its `old` is in it (so a prose word the agent picks
+    can never become a global rewrite)."""
+    if not isinstance(item, dict):
+        return ("report", "plan item is not an object")
     change = item.get("change")
     if not isinstance(change, dict):
         return ("report", "no structured change — needs a human edit")
@@ -205,12 +191,17 @@ def classify(root, item):
 
     if op == "rename":
         old, new = change.get("old"), change.get("new")
-        # `old` must be a SPECIFIC code symbol (not a bare prose word — that would
-        # globally rewrite prose); `new` need only be symbol-SHAPED.
-        if not (_is_specific_symbol(old) and isinstance(new, str)
-                and SYMBOL_RE.match(new) and old != new):
-            return ("report", "rename `old` is not a specific code symbol "
-                              "(a bare prose word can't be a global rename)")
+        # `old`/`new` must be symbol-SHAPED (no whitespace, no regex/markdown specials
+        # — so the replacement can't author prose), AND `old` must be a symbol that
+        # ACTUALLY changed in this diff. Grounding `old` in the change scope (not a
+        # shape heuristic) is the load-bearing guard: a prose word like "The" or
+        # "self-contained" is never a changed code symbol, so it can never sweep prose.
+        if not (isinstance(old, str) and isinstance(new, str) and old != new
+                and SYMBOL_RE.match(old) and SYMBOL_RE.match(new)):
+            return ("report", "rename needs symbol-shaped old & new")
+        if not (changed_symbols and old in changed_symbols):
+            return ("report", "rename `old` is not a symbol that changed in this diff "
+                              "(a rename must be grounded in the change scope)")
         if _rename_count(text, old) == 0:
             return ("report", f"rename old {old!r} not found verbatim in target")
         return ("mechanical", {"op": "rename", "path": path, "old": old, "new": new})
@@ -230,24 +221,36 @@ def classify(root, item):
 
 # ---- the applicator (the only writer) --------------------------------------
 
+GATE_TIMEOUT = 600     # a hung check.py / generator must not block the gate forever
+
+
 def run_check(root):
-    """Re-run the deterministic gate against `root`. True iff GREEN. Injectable in
-    tests (the synthetic fixtures are not full harness repos)."""
-    proc = subprocess.run(
-        [sys.executable, str(_scripts_dir() / "check.py"), "--root", str(root)],
-        cwd=str(root), env=hl.project_env(root), capture_output=True, text=True)
+    """Re-run the deterministic gate against `root`. True iff GREEN (a timeout counts
+    as RED — a hung gate triggers the batch rollback, never an open-ended block).
+    Injectable in tests (the synthetic fixtures are not full harness repos)."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(_scripts_dir() / "check.py"), "--root", str(root)],
+            cwd=str(root), env=hl.project_env(root), capture_output=True, text=True,
+            timeout=GATE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False
     return proc.returncode == 0
 
 
 def run_generator(root, target):
-    """Re-run the registered generator that owns `target`. True iff it ran clean.
-    Content comes from the generator, not the agent."""
+    """Re-run the registered generator that owns `target`. True iff it ran clean (a
+    timeout counts as failure). Content comes from the generator, not the agent."""
     argv = GENERATED_TARGETS.get(target)
     if not argv:
         return False
-    proc = subprocess.run(
-        [sys.executable, str(_scripts_dir() / argv[0]), *argv[1:]],
-        cwd=str(root), env=hl.project_env(root), capture_output=True, text=True)
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(_scripts_dir() / argv[0]), *argv[1:]],
+            cwd=str(root), env=hl.project_env(root), capture_output=True, text=True,
+            timeout=GATE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False
     return proc.returncode == 0
 
 
@@ -302,14 +305,20 @@ def _applied_item(item, prep):
             "kind": item.get("kind"), "evidence": item.get("evidence")}
 
 
-def apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator):
+def apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator,
+               changed_symbols=None):
     """Apply a maintenance plan: auto-apply ONLY the mechanical kinds (re-validated
     deterministically), report everything else, then re-run the gate and roll the
-    whole batch back on red. Returns {applied, report, rolled_back}."""
+    whole batch back on red. `changed_symbols` (the diff's changed∪removed symbols)
+    grounds rename auto-apply. Returns {applied, report, rolled_back}."""
     root = Path(root)
     applied, report, touched = [], [], {}
     for item in plan if isinstance(plan, list) else []:
-        verdict, data = classify(root, item)
+        if not isinstance(item, dict):           # a non-object item can't be applied
+            report.append({"target": None, "kind": None, "evidence": None,
+                           "change": None, "reason": "plan item is not an object"})
+            continue
+        verdict, data = classify(root, item, changed_symbols=changed_symbols)
         if verdict != "mechanical":
             report.append(_report_item(item, data))
             continue
@@ -325,6 +334,8 @@ def apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator
         if _apply_one(data, root, run_generator):
             applied.append(_applied_item(item, data))
         else:
+            if data["op"] == "regenerate" and path in touched:
+                _restore({path: touched[path]})  # a generator that wrote then failed
             report.append(_report_item(item, "mechanical apply produced no change"))
     if applied and not run_check(root):
         _restore(touched)
@@ -417,7 +428,7 @@ def parse_diff_surface(diff_text):
 def _git_diff(root, base):
     proc = subprocess.run(
         ["git", "-C", str(root), "diff", "--no-color", "-U0", f"{base}...HEAD"],
-        capture_output=True, text=True)
+        capture_output=True, text=True, timeout=GATE_TIMEOUT)
     if proc.returncode != 0:
         raise RuntimeError(f"git diff failed: {proc.stderr.strip()[:200]}")
     return proc.stdout
@@ -468,21 +479,50 @@ def spawn_audit(prompt, model, cwd, timeout=AUDIT_TIMEOUT):
     return proc.stdout
 
 
+def _iter_top_objects(s):
+    """Yield each balanced top-level `{...}` substring (string/escape aware). Robust
+    to a prose preamble, trailing text, or several objects — a naive find('{')..
+    rfind('}') span breaks on any brace-bearing prose after the JSON."""
+    depth, start, instr, esc = 0, -1, False, False
+    for i, ch in enumerate(s):
+        if instr:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                instr = False
+            continue
+        if ch == '"':
+            instr = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0:
+                yield s[start:i + 1]
+
+
 def parse_maintenance_plan(text):
-    """Extract the outermost JSON object and return its `plan` list (dict items,
-    capped). Raises ValueError on empty/non-object/no-plan output. Unknown item
-    shapes are KEPT — M1's classify() routes anything non-mechanical to the report,
-    so a malformed item is surfaced, never silently dropped."""
+    """Return the `plan` list (dict items, capped) from the first balanced JSON object
+    that carries one. Robust to a prose preamble / trailing text / a second object /
+    a malformed sibling (each is skipped). Raises ValueError on empty input or when no
+    object has a `plan` list — the caller (run/forgetting_pass) DEGRADES that to an
+    empty apply + a report line, so a malformed audit never crashes the non-blocking
+    gate. Unknown item shapes inside a found plan are KEPT — classify() routes anything
+    non-mechanical to the report, so a malformed item is surfaced, never dropped."""
     if not text or not text.strip():
         raise ValueError("empty audit output")
-    s = text.strip()
-    start, end = s.find("{"), s.rfind("}")
-    if start == -1 or end <= start:
-        raise ValueError("no JSON object in audit output")
-    obj = json.loads(s[start:end + 1])
-    if not isinstance(obj, dict) or not isinstance(obj.get("plan"), list):
-        raise ValueError("audit output lacks a `plan` list")
-    return [it for it in obj["plan"] if isinstance(it, dict)][:MAX_PLAN_ITEMS]
+    for chunk in _iter_top_objects(text):
+        try:
+            obj = json.loads(chunk)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("plan"), list):
+            return [it for it in obj["plan"] if isinstance(it, dict)][:MAX_PLAN_ITEMS]
+    raise ValueError("no JSON object with a `plan` list in audit output")
 
 
 def audit(scope, root, spawn=spawn_audit, templates=None, model=AUDIT_MODEL,
@@ -574,9 +614,20 @@ def run(root, scope=None, base="main", spawn=spawn_audit, now=None,
         scope = build_change_scope(root, base)
     if _scope_is_empty(scope):
         return {"applied": [], "report": [], "rolled_back": False, "plan": []}
-    plan = audit(scope, root, spawn=spawn)
+    try:
+        plan = audit(scope, root, spawn=spawn)
+    except ValueError as e:                       # unparseable audit output → degrade
+        return {"applied": [], "rolled_back": False, "plan": [],
+                "report": [{"target": None, "kind": "audit-error", "evidence": None,
+                            "change": None,
+                            "reason": f"audit output unparseable, nothing applied: {e}"}]}
     now = now if now is not None else int(time.time())
-    result = apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator)
+    changed = {r.get("symbol") for r in scope.get("changed_symbols", [])
+               if isinstance(r, dict)} | {r.get("symbol") for r in scope.get("removed", [])
+                                          if isinstance(r, dict)}
+    changed.discard(None)
+    result = apply_plan(root, plan, now, run_check=run_check,
+                        run_generator=run_generator, changed_symbols=changed)
     result["plan"] = plan
     return result
 

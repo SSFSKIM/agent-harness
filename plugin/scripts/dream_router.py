@@ -132,6 +132,19 @@ def _short(s, cap=70):
     return _oneline(s, cap)
 
 
+def _routed(kind, snippet, target, written_line):
+    """One journal `[routed]` provenance line. When `written_line` is given (the
+    router ACTUALLY appended it, not a dedupe), append `@<hash>` of that exact line —
+    the docs-sync retract applicator deletes a line only if its content hashes to a
+    recorded value, so it can reverse a router append but never a human-edited line.
+    A dedupe (written_line=None) records NO hash, so already-present content (which
+    may be human-authored) is never made retract-attributable."""
+    prov = f"[routed] {kind} \"{snippet}\" -> {target}"
+    if written_line is not None:
+        prov += f" @{hl.line_provenance_hash(written_line)}"
+    return prov
+
+
 def _read(path):
     p = Path(path)
     return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
@@ -257,12 +270,14 @@ def apply_plan(root, ops, rows, now):
                 line = f"- {_date(now)}: {_oneline(op.get('decision'))} — {_oneline(op.get('why'))}"
                 wrote = _append_under_heading(tgt, "## Decision log", line)
                 applied["design_decision"] += int(wrote)
-                jlines.append(f"[routed] decision \"{_short(op.get('decision'))}\" -> {op.get('target')}")
+                jlines.append(_routed("decision", _short(op.get('decision')),
+                                      op.get('target'), line if wrote else None))
             else:
-                wrote = _append_under_heading(tgt, "## Open decisions",
-                                              f"- {_oneline(op.get('question'))}")
+                q_line = f"- {_oneline(op.get('question'))}"
+                wrote = _append_under_heading(tgt, "## Open decisions", q_line)
                 applied["design_openq"] += int(wrote)
-                jlines.append(f"[routed] open-q \"{_short(op.get('question'))}\" -> {op.get('target')}")
+                jlines.append(_routed("open-q", _short(op.get('question')),
+                                      op.get('target'), q_line if wrote else None))
         else:  # journal (held): the conservative default AND any unknown/typo'd kind
             applied["journal"] += 1
             raw = (op.get("text") or op.get("decision") or op.get("desc")

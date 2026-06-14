@@ -34,9 +34,13 @@ class _Case(unittest.TestCase):
     def _journal(self, body):
         (self.root / "docs" / "journal" / "2026-06.md").write_text(body, encoding="utf-8")
 
-    def _apply(self, plan, run_check=GREEN, run_generator=None):
+    def _apply(self, plan, run_check=GREEN, run_generator=None, changed_symbols=None):
         gen = run_generator or (lambda root, target: False)
-        return ds.apply_plan(self.root, plan, NOW, run_check=run_check, run_generator=gen)
+        return ds.apply_plan(self.root, plan, NOW, run_check=run_check,
+                             run_generator=gen, changed_symbols=changed_symbols)
+
+    def _hash(self, line):
+        return ds.hl.line_provenance_hash(line)
 
 
 # ---- mechanical kinds apply correctly --------------------------------------
@@ -49,7 +53,7 @@ class TestMechanical(_Case):
                  "evidence": "scripts/x.py:1 renamed", "risk": "mechanical",
                  "change": {"op": "rename", "old": "feeder_sessionstart",
                             "new": "feeder_start"}}]
-        res = self._apply(plan)
+        res = self._apply(plan, changed_symbols={"feeder_sessionstart"})
         self.assertEqual(len(res["applied"]), 1)
         foo = self._foo()
         self.assertIn("feeder_start hook compiles", foo)
@@ -88,10 +92,11 @@ class TestMechanical(_Case):
         self.assertIn("regenerated", out.read_text(encoding="utf-8"))
 
     def test_retract_deletes_attributable_line(self):
-        # mechanical-4: the journal proves the router authored this line into foo.md.
-        self._journal('## run\n- [routed] decision "routed claim about caching" '
-                      '-> docs/design-docs/foo.md\n')
+        # mechanical-4: the journal's @<hash> proves the router authored THIS exact
+        # line into foo.md, so deleting it reverses a router append.
         line = "- 2026-01-01: routed claim about caching — because."
+        self._journal('## run\n- [routed] decision "routed claim about caching" '
+                      '-> docs/design-docs/foo.md @' + self._hash(line) + '\n')
         plan = [{"target": "docs/design-docs/foo.md", "kind": "retract",
                  "change": {"op": "retract", "line": line}}]
         res = self._apply(plan)
@@ -112,12 +117,13 @@ class TestReportNotEdit(_Case):
         self.assertEqual(self._foo(), before)               # untouched
 
     def test_semantic_mislabeled_mechanical_is_downgraded(self):
-        # risk claims mechanical, but the rename's `old` is not in the doc → report.
+        # risk claims mechanical and `old` IS a changed symbol, but it is not in the
+        # doc → still report (the verbatim-presence check is the last gate).
         before = self._foo()
         plan = [{"target": "docs/design-docs/foo.md", "risk": "mechanical",
                  "change": {"op": "rename", "old": "not_present_symbol",
                             "new": "x"}}]
-        res = self._apply(plan)
+        res = self._apply(plan, changed_symbols={"not_present_symbol"})
         self.assertEqual(res["applied"], [])
         self.assertIn("not found verbatim", res["report"][0]["reason"])
         self.assertEqual(self._foo(), before)
@@ -125,9 +131,9 @@ class TestReportNotEdit(_Case):
     def test_rename_non_symbol_reports(self):
         plan = [{"target": "docs/design-docs/foo.md", "risk": "mechanical",
                  "change": {"op": "rename", "old": "the feeder", "new": "the pack"}}]
-        res = self._apply(plan)
+        res = self._apply(plan, changed_symbols={"the feeder"})
         self.assertEqual(res["applied"], [])
-        self.assertIn("specific code symbol", res["report"][0]["reason"])
+        self.assertIn("symbol-shaped", res["report"][0]["reason"])
 
     def test_frontmatter_field_out_of_allowlist_reports(self):
         before = self._foo()
@@ -187,7 +193,7 @@ class TestGuards(_Case):
         plan = [{"target": "docs/design-docs/foo.md",
                  "change": {"op": "rename", "old": "feeder_sessionstart",
                             "new": "feeder_start"}}]
-        res = self._apply(plan, run_check=RED)
+        res = self._apply(plan, run_check=RED, changed_symbols={"feeder_sessionstart"})
         self.assertTrue(res["rolled_back"])
         self.assertEqual(res["applied"], [])
         self.assertEqual(self._foo(), before)            # reverted to pre-edit bytes
@@ -204,7 +210,7 @@ class TestMixedPlan(_Case):
             {"target": "docs/design-docs/foo.md", "risk": "semantic",
              "change": {"op": "rewrite", "text": "free prose"}},
         ]
-        res = self._apply(plan)
+        res = self._apply(plan, changed_symbols={"feeder_sessionstart"})
         self.assertEqual(len(res["applied"]), 1)
         self.assertEqual(len(res["report"]), 1)
         self.assertIn("feeder_start", self._foo())
@@ -339,7 +345,8 @@ class TestAudit(_Case):
                    '"evidence":"m.py:1","change":{"op":"rename","old":"feeder_sessionstart",' \
                    '"new":"feeder_start"},"risk":"mechanical"}]}'
         plan = ds.audit({"changed_symbols": []}, self.root, spawn=stub, templates=STUB_TMPL)
-        res = ds.apply_plan(self.root, plan, NOW, run_check=GREEN)
+        res = ds.apply_plan(self.root, plan, NOW, run_check=GREEN,
+                            changed_symbols={"feeder_sessionstart"})
         self.assertEqual(len(res["applied"]), 1)
         self.assertIn("feeder_start hook compiles", self._foo())
 
@@ -380,10 +387,13 @@ class TestRun(_Case):
 # ---- M5 (v1.1): provenance-driven forgetting -------------------------------
 
 class TestForgetting(_Case):
-    def _journal_block(self, thread, snippet, target):
+    def _journal_block(self, thread, snippet, target, line=None):
+        prov = f'- [routed] decision "{snippet}" -> {target}'
+        if line is not None:                       # record the exact-line hash
+            prov += " @" + ds.hl.line_provenance_hash(line)
         (self.root / "docs" / "journal" / "2026-06.md").write_text(
             f"## 2026-06-14T00:00Z — dream run (sessions: {thread[:8]})\n"
-            f'- [routed] decision "{snippet}" -> {target}\n', encoding="utf-8")
+            + prov + "\n", encoding="utf-8")
 
     def test_provenance_scope_names_dropped_targets(self):
         self._journal_block("threadAAA000", "routed claim about caching",
@@ -402,9 +412,9 @@ class TestForgetting(_Case):
     def test_forgetting_pass_retracts_attributable_line(self):
         # the journal attributes foo.md's line to a now-dropped thread -> the agent
         # proposes a retract -> M1 DELETEs it (attributable via the same provenance).
-        self._journal_block("dropDROP000", "routed claim about caching",
-                            "docs/design-docs/foo.md")
         line = "- 2026-01-01: routed claim about caching — because."
+        self._journal_block("dropDROP000", "routed claim about caching",
+                            "docs/design-docs/foo.md", line=line)
         plan = _json.dumps({"plan": [{"target": "docs/design-docs/foo.md",
             "kind": "retract", "change": {"op": "retract", "line": line},
             "risk": "mechanical"}]})
@@ -430,36 +440,76 @@ class TestAdversarial(_Case):
     def _journal(self, body):
         (self.root / "docs" / "journal" / "2026-06.md").write_text(body, encoding="utf-8")
 
-    def test_retract_cannot_delete_human_line_via_substring(self):
-        # a short routed snippet must NOT authorize deleting an unrelated human line
-        # that merely contains it — attribution is prefix-anchored, not substring.
-        human = "- We will never use Postgres for the audit log; SQLite only."
+    def test_retract_human_tail_line_not_attributable(self):
+        # P1-B: a human appends a caveat to a routed line. The journal recorded the
+        # ORIGINAL line's @<hash>, so the edited (tailed) line hashes differently →
+        # attribution fails → the delete is reported, the human caveat is kept.
+        original = "- 2026-01-01: keep SQLite for the audit log — durability"
+        tailed = original + "; BUT we may revisit this, see incident #88"
         self.foo.write_text("---\nstatus: draft\n---\n# Foo\n\n## Decision log\n\n"
-                            + human + "\n", encoding="utf-8")
+                            + tailed + "\n", encoding="utf-8")
         self._journal('## r — dream run (sessions: s1aaaaaa)\n'
-                      '- [routed] decision "use Postgres" -> docs/design-docs/foo.md\n')
+                      '- [routed] decision "keep SQLite for the audit log" '
+                      '-> docs/design-docs/foo.md @' + self._hash(original) + '\n')
         res = self._apply([{"target": "docs/design-docs/foo.md", "kind": "retract",
-                            "change": {"op": "retract", "line": human}}])
+                            "change": {"op": "retract", "line": tailed}}])
         self.assertEqual(res["applied"], [])
-        self.assertIn("never use Postgres", self.foo.read_text())     # human line kept
+        self.assertIn("incident #88", self.foo.read_text())          # human caveat kept
 
-    def test_retract_prefix_anchored_attributable_line_still_applies(self):
-        # the legitimate case: the routed snippet PREFIXES the line's content.
+    def test_retract_exact_hash_attributable_line_applies(self):
+        # the legitimate case: the journal's @<hash> is of THIS exact line → reversible.
+        line = "- 2026-01-01: routed claim about caching — because."
         self._journal('## r — dream run (sessions: s1aaaaaa)\n'
                       '- [routed] decision "routed claim about caching" '
-                      '-> docs/design-docs/foo.md\n')
-        line = "- 2026-01-01: routed claim about caching — because."
+                      '-> docs/design-docs/foo.md @' + self._hash(line) + '\n')
         res = self._apply([{"target": "docs/design-docs/foo.md", "kind": "retract",
                             "change": {"op": "retract", "line": line}}])
         self.assertEqual(len(res["applied"]), 1)
 
-    def test_rename_of_bare_prose_word_rejected(self):
+    def test_retract_no_hash_provenance_reports(self):
+        # an old-format or dedupe [routed] line (no @<hash>) can't attribute a delete.
+        line = "- 2026-01-01: routed claim about caching — because."
+        self._journal('## r — dream run (sessions: s1aaaaaa)\n'
+                      '- [routed] decision "routed claim about caching" '
+                      '-> docs/design-docs/foo.md\n')
+        res = self._apply([{"target": "docs/design-docs/foo.md", "kind": "retract",
+                            "change": {"op": "retract", "line": line}}])
+        self.assertEqual(res["applied"], [])
+        self.assertIn("provenance", res["report"][0]["reason"])
+        self.assertIn("routed claim about caching", self._foo())     # kept
+
+    def test_rename_prose_with_structure_not_in_scope_rejected(self):
+        # P1-A: "self-contained" is symbol-SHAPED (a hyphen) but is NOT a changed code
+        # symbol — grounding in the change scope rejects it, so prose is never swept.
+        self.foo.write_text("---\nstatus: draft\n---\n# Foo\n\n"
+                            "The store is self-contained, fully self-contained.\n",
+                            encoding="utf-8")
         before = self._foo()
         res = self._apply([{"target": "docs/design-docs/foo.md", "risk": "mechanical",
-                            "change": {"op": "rename", "old": "set", "new": "map"}}])
+                            "change": {"op": "rename", "old": "self-contained",
+                                       "new": "BROKEN"}}],
+                          changed_symbols={"some_other_symbol"})
         self.assertEqual(res["applied"], [])
-        self.assertIn("specific code symbol", res["report"][0]["reason"])
+        self.assertIn("grounded in the change scope", res["report"][0]["reason"])
         self.assertEqual(self._foo(), before)                        # prose untouched
+
+    def test_rename_capitalized_word_not_in_scope_rejected(self):
+        # P1-A: a sentence-initial word ("The") is not a changed symbol → report.
+        before = self._foo()
+        res = self._apply([{"target": "docs/design-docs/foo.md", "risk": "mechanical",
+                            "change": {"op": "rename", "old": "The", "new": "X"}}],
+                          changed_symbols={"feeder_sessionstart"})
+        self.assertEqual(res["applied"], [])
+        self.assertEqual(self._foo(), before)
+
+    def test_rename_grounded_symbol_applies(self):
+        # the legitimate case: `old` IS a symbol that changed in the diff.
+        res = self._apply([{"target": "docs/design-docs/foo.md", "risk": "mechanical",
+                            "change": {"op": "rename", "old": "feeder_sessionstart",
+                                       "new": "feeder_start"}}],
+                          changed_symbols={"feeder_sessionstart"})
+        self.assertEqual(len(res["applied"]), 1)
+        self.assertIn("feeder_start hook compiles", self._foo())
 
     def test_regenerate_symlinked_target_refused(self):
         with tempfile.TemporaryDirectory() as out:
@@ -475,6 +525,64 @@ class TestAdversarial(_Case):
             self.assertEqual(res["applied"], [])
             self.assertIn("symlink guard", res["report"][0]["reason"])
             self.assertEqual(decoy.read_text(), "# outside\n")       # not regenerated
+
+
+# ---- M6 review hardening: input robustness (the gate must degrade, not crash) ---
+
+class TestRobustness(_Case):
+    def test_non_dict_plan_items_reported_not_crash(self):
+        # a malformed plan with bare-value items must not raise — each is reported.
+        res = self._apply(["notadict", None, 5,
+                           {"target": "docs/design-docs/foo.md",
+                            "change": {"op": "set_frontmatter", "field": "status",
+                                       "value": "stable"}}])
+        self.assertEqual(len(res["applied"]), 1)             # the one real item applied
+        self.assertEqual(len(res["report"]), 3)              # the 3 non-objects reported
+        self.assertTrue(all("not an object" in r["reason"] for r in res["report"]))
+
+    def test_parse_plan_robust_to_preamble_trailing_and_siblings(self):
+        # a preamble object, the real plan, then trailing brace-bearing prose.
+        out = ('{"note":"scanning"}\n'
+               '{"plan":[{"target":"docs/x.md","kind":"outdated"}]}\nDone. {trailing}')
+        self.assertEqual(ds.parse_maintenance_plan(out),
+                         [{"target": "docs/x.md", "kind": "outdated"}])
+
+    def test_run_degrades_on_unparseable_audit(self):
+        # the audit agent returns prose with no plan object → run() reports, never raises.
+        res = ds.run(self.root, scope={"changed_symbols": [{"symbol": "x"}]},
+                     spawn=lambda p, m, cwd, timeout: "Found nothing useful. {oops}",
+                     now=NOW, run_check=GREEN)
+        self.assertEqual(res["applied"], [])
+        self.assertEqual(res["plan"], [])
+        self.assertIn("unparseable", res["report"][0]["reason"])
+
+    def test_regenerate_writes_then_fails_restores_tree(self):
+        # a generator that writes its target then returns failure must NOT leave the
+        # tree dirty — the pre-edit snapshot is restored.
+        out = self.root / "docs" / "generated" / "component-inventory.md"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("# original inventory\n", encoding="utf-8")
+
+        def bad_gen(root, target):
+            out.write_text("# GARBAGE half-written\n", encoding="utf-8")
+            return False                                     # wrote, then failed
+        res = self._apply([{"target": "docs/generated/component-inventory.md",
+                            "change": {"op": "regenerate"}}], run_generator=bad_gen)
+        self.assertEqual(res["applied"], [])
+        self.assertFalse(res["rolled_back"])
+        self.assertEqual(out.read_text(), "# original inventory\n")   # restored
+
+    def test_run_check_timeout_counts_as_red(self):
+        import subprocess as _sp
+        real = _sp.run
+
+        def fake_run(*a, **k):
+            raise _sp.TimeoutExpired(cmd="check.py", timeout=1)
+        _sp.run = fake_run
+        try:
+            self.assertFalse(ds.run_check(self.root))        # timeout → RED, no raise
+        finally:
+            _sp.run = real
 
 
 if __name__ == "__main__":

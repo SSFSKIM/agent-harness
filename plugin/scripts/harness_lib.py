@@ -5,6 +5,7 @@ The ONLY module allowed to resolve paths, environment, and frontmatter
 Pure stdlib. Portable: never hardcodes an absolute path.
 """
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -124,6 +125,17 @@ def within_repo_no_symlink(root, rel):
     except (OSError, ValueError):
         return None
     return target
+
+
+def line_provenance_hash(line):
+    """A stable content hash of ONE doc line (whitespace-normalized). The dreaming
+    router records it when it APPENDS a line; the docs-sync retract applicator matches
+    a delete candidate's hash against it to prove the delete REVERSES a router append
+    EXACTLY — a human edit (even appending a caveat to a routed line) changes the
+    bytes, so the hash misses and the delete falls to the report instead. One
+    definition shared by both writers, so the two sides normalize identically."""
+    norm = re.sub(r"\s+", " ", str(line)).strip()
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
 
 
 # Doc trees the harness always governs — never exemptable via .harnessignore,

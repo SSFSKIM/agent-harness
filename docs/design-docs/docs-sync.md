@@ -45,14 +45,19 @@ agent's label) and auto-applies ONLY four mechanical kinds:
 1. regenerate a generator-owned section (e.g. the component inventory; drift-proof
    by construction — more such sections as generated-maximize lands);
 2. set a frontmatter field (`last_verified`);
-3. a verbatim symbol-rename swap — `old` must be a SPECIFIC code symbol/path (it
-   carries identifier structure `_ . / -` / a digit / mixed case, so a bare prose
-   word like "set" can never trigger a global prose rewrite), `new` is symbol-shaped,
-   and `old` is found at a token boundary (a literal replace, no prose authoring);
-4. a `retract` DELETE the engine can ATTRIBUTE — a journal `[routed] "snippet" ->
-   target` whose snippet PREFIXES the line's content (after stripping the router's
-   `- `/`- <date>: `/`| ` framing). Prefix-anchored, not substring-anywhere: a short
-   routed phrase can't authorize deleting an unrelated human line that contains it.
+3. a verbatim symbol-rename swap — `old` must be a symbol that ACTUALLY changed in
+   this diff (it is in the change scope's changed∪removed set, not merely "symbol-
+   shaped"), `new` is symbol-shaped, and the swap is a token-boundary literal replace.
+   Grounding `old` in the diff — not a prose-vs-symbol heuristic — is what stops a
+   word like "The" or "self-contained" from ever triggering a global prose rewrite
+   (a heuristic that admits mixed-case/hyphenated tokens leaks on English grammar);
+4. a `retract` DELETE the engine can ATTRIBUTE — a journal `[routed] … -> target
+   @<hash>` whose hash equals the line's content hash. Exact-hash, not prefix/
+   substring: the journal's human-readable snippet is a truncated prefix that can't
+   bound the whole line, so the router instead records `hl.line_provenance_hash` of
+   the line it ACTUALLY wrote (never a dedupe). A human edit — even appending a caveat
+   to a routed line — changes the bytes → attribution fails → the delete falls to the
+   report. The machine reverses only its own appends, never a human-edited line.
 
 Everything else — any free-prose rewrite, an unattributable "should be removed", a
 structural reshuffle — is forced to `semantic` and goes to the report. **The machine

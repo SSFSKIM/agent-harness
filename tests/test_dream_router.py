@@ -90,6 +90,29 @@ class TestApply(_Case):
         self.assertIn("use --no-renames — forgetting must stay a Delete", foo)
         self.assertLess(foo.index("use --no-renames"), foo.index("## Open decisions"))
 
+    def test_routed_decision_records_line_provenance_hash(self):
+        # the [routed] line carries @<hash> of the EXACT appended line, so the
+        # docs-sync retract applicator can reverse THIS append (and only this one).
+        ops = [{"kind": "design_decision", "target": "docs/design-docs/foo.md",
+                "decision": "use --no-renames", "why": "forgetting must stay a Delete",
+                "source": "s"}]
+        dr.apply_plan(self.root, ops, self._rows(), NOW)
+        line = f"- {dr._date(NOW)}: use --no-renames — forgetting must stay a Delete"
+        self.assertIn("@" + dr.hl.line_provenance_hash(line), self._journal())
+
+    def test_deduped_decision_records_no_provenance_hash(self):
+        # routing the SAME decision twice: the second append is a dedupe (no write),
+        # so its [routed] line carries NO @<hash> — already-present content (possibly
+        # human-edited) is never made retract-attributable.
+        ops = [{"kind": "design_decision", "target": "docs/design-docs/foo.md",
+                "decision": "use --no-renames", "why": "forgetting must stay a Delete",
+                "source": "s"}]
+        dr.apply_plan(self.root, ops, self._rows(), NOW)         # writes (hash)
+        dr.apply_plan(self.root, ops, self._rows(), NOW)         # dedupe (no hash)
+        routed = [l for l in self._journal().splitlines() if "[routed] decision" in l]
+        self.assertEqual(len(routed), 2)
+        self.assertEqual(len([l for l in routed if " @" in l]), 1)      # only the write
+
     def test_open_question_inserted(self):
         ops = [{"kind": "design_openq", "target": "docs/design-docs/foo.md",
                 "question": "should the ledger rotate weekly?", "source": "s"}]

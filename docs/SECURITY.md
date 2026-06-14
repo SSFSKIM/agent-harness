@@ -72,11 +72,13 @@ Grounding document for the review-security persona. Threats are numbered.
     JSON plan; `docs_sync.apply_plan` is the only writer and RE-VALIDATES each item's
     risk itself (never the agent's label), auto-applying ONLY four mechanical kinds.
     The two that touch existing prose are bounded so the machine never authors prose:
-    a **rename** requires `old` to be a SPECIFIC code symbol (a bare word can't sweep
-    prose) and does a token-boundary replace; a **retract** DELETEs a line only when a
-    journal `[routed]` snippet PREFIXES the line's content (prefix-anchored, not
-    substring — a short routed phrase can't delete an unrelated human line that merely
-    contains it). Every target (incl. the journal tree read for attribution and the
+    a **rename** auto-applies only when `old` is a symbol that ACTUALLY changed in the
+    diff (grounded in the change scope, not a prose-vs-symbol shape heuristic — so a
+    word like "The" or "self-contained" can never sweep prose) and does a token-boundary
+    replace; a **retract** DELETEs a line only when a journal `[routed] … @<hash>`
+    matches the line's content hash exactly (the router records the hash only for a line
+    it actually wrote, so a human edit — even appending a caveat — breaks attribution;
+    exact-hash, not prefix/substring). Every target (incl. the journal tree read for attribution and the
     regenerate target) passes `harness_lib.within_repo_no_symlink`; `check.py` re-runs
     after the batch with byte rollback on red. **Residual:** an applied mechanical edit
     is a git-visible, reviewed, revertible commit — never an arbitrary or prose write.
