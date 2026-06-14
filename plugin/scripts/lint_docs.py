@@ -19,7 +19,8 @@ INDEXED_DIRS = ("design-docs", "product-specs", "references",
 SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
 DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
-SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/")
+SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/",
+               "journal/")  # the journal is append-only — it grows by design
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
@@ -91,7 +92,8 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
                 if p.relative_to(root).as_posix() in PROTECTED_PATHS:
                     sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
                 stale = (hl.today() - d).days > sd
-                if stale and fm.get("status") not in ("archived", "completed"):
+                if stale and fm.get("status") not in ("archived", "completed") \
+                        and not _exempt(p, docs, ("journal/",)):  # append-only log
                     _fail(errors, "D4", _rel(p, root),
                           f"stale: last_verified {lv} is over {sd} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")

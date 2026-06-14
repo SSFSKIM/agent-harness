@@ -73,8 +73,9 @@ def main():
             return 0
         sys.stdin.read()  # drain the hook payload (content unused)
         root = hl.repo_root()
-        if not (root / "docs" / "memory" / "MEMORY.md").exists():
-            return 0  # not a harness host — activation sentinel (same as feeder)
+        if not (root / "docs" / "design-docs" / "agent-harness.md").exists():
+            return 0  # not a harness host — activation sentinel (the installed-
+            #            harness design doc; survives the memory-as-docs pivot)
         fp = fingerprint(root)
         if fp is None:
             return 0

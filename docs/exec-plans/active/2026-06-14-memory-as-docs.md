@@ -58,11 +58,16 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   migration provenance. `docs/memory/` now holds only `MEMORY.md` (the bootloader,
   M4). Gate GREEN. Residual dangling `memory-loop-redesign` refs in `agent-harness.md`
   + `SECURITY.md` are cleared by their M4/M5 rewrites.
-- [ ] M4 Rewire read-path bootloader + lint. Bootloader `docs/memory/MEMORY.md` →
-  `AGENTS.md` (or a top-level `docs/MEMORY.md`); drop `memory` from
-  `hl.MANAGED_ROOTS`; re-point D8 index + `lint_docs.PROTECTED_PATHS` bootloader.
-  Acceptance: `check.py` GREEN with zero `docs/memory/` references; the feeder
-  (when on) loads from the new bootloader.
+- [x] M4 Rewire bootloader + lint (self-host scope). DONE — bootloader role folded
+  into AGENTS.md (operating-model step 1: orient from active ExecPlans + design-docs
+  index + latest journal); self-host `docs/memory/MEMORY.md` + the empty tree
+  deleted. `tidy_stop` (the live Stop hook) sentinel repointed
+  `docs/memory/MEMORY.md` → `docs/design-docs/agent-harness.md` (else deleting the
+  bootloader silently disables the gate) + its test. Journal lint: `journal/` added
+  to SIZE_EXEMPT + D4-stale-exempt (append-only). `docs-tree` skill + `agent-harness.md`
+  taxonomy rewritten to the collapsed homes (now ONE taxonomy with the router). The
+  host-generic MANAGED_ROOTS / PROTECTED_PATHS / MEMORY.md lint handling is KEPT
+  (still valid for ported hosts — see the scope decision). Gate GREEN (158 tests).
 - [ ] M5 Security shift + loop convergence. Flip containment from sandbox-revert to
   a docs path-allowlist + lint + T1/T2 poisoning guards; rewrite SECURITY.md's
   `docs/memory`-specific T1/T2/T4/T6/T7 framings to the ledger + routed paths;
@@ -91,6 +96,11 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   validate cross-doc links, so dangling refs to deleted pages don't fail the gate —
   cleared by the swept living docs; the two in agent-harness.md/SECURITY.md ride
   their M4/M5 rewrites.
+- 2026-06-14: M4 done (self-host scope). Bootloader → AGENTS.md; MEMORY.md + tree
+  deleted; tidy_stop sentinel repointed to agent-harness.md (+ test); journal lint
+  exemptions; docs-tree + agent-harness taxonomy collapsed. Gate GREEN. The
+  agent-harness + AGENTS dangling memory-loop refs are cleared (the SECURITY one
+  rides M5).
 
 ## Surprises & discoveries
 - 2026-06-14 (M1): routing must be per-CLAIM, not per-insight. A Phase 1
@@ -105,6 +115,12 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   a journal `[held]` provenance note over re-routing it into the design-doc — dedupe
   is emergent from the read-only-with-Read posture, not just the applicator's
   substring check.
+- 2026-06-14 (M4): `docs/memory` is baked into the PORTABLE plugin layer, not just
+  self-host docs — `scaffold.py` seeds the tree + bootloader, `feeder_*`/`imprint_*`
+  embed its paths, `tidy_stop` (the live Stop hook) uses `docs/memory/MEMORY.md` as
+  its "is-a-harness-repo" sentinel, and ~5 tests encode it. Because `docs-tree` is a
+  shared skill, making the self-host coherent inevitably edits portable behavior.
+  Deleting the bootloader would have silently disabled the gate (the sentinel).
 
 ## Decision log
 - 2026-06-14: ledger = `docs/journal/YYYY-MM.md`, append-only monthly files. Why:
@@ -135,6 +151,13 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   episodic/provenance. Why: the harness thesis is docs-as-brain + progressive
   disclosure (matches the user's proven vault/LLM-wiki model); a separate memory
   layer was cargo-culted from systems without a docs library.
+- 2026-06-14 (M4, scope): the pivot is SELF-HOST scope; the portable harness keeps
+  `docs/memory` for now. Why: `docs-tree`/`scaffold`/`feeder`/`imprint` + their tests
+  bake in `docs/memory`, so full propagation (scaffold seeds → journal/design-docs,
+  retiring the dormant feeder/imprint, the bare-host default) is a separate body of
+  work with its own design — tracked as a follow-on ExecPlan (tracker row added). The
+  self-host's live surface (tidy_stop sentinel, bootloader, taxonomy) is fully cut
+  over; the host-generic MEMORY.md lint handling stays valid for ported hosts.
 - 2026-06-14: keep the PR2 dreaming ENGINE, change only the Phase 2 output target.
   Why: the extraction/curation/no-op machinery is sound; the defect was the flat
   parallel output, not the pipeline.

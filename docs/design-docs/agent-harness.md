@@ -49,38 +49,37 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 
 | Knowledge kind | Home |
 |---|---|
-| Design rationale / principle | `docs/design-docs/` |
+| Design rationale / principle / reusable how-it-works | `docs/design-docs/` |
 | Architectural invariant | `ARCHITECTURE.md` (short) or design-docs |
-| Component taste rule | `docs/DESIGN.md` |
+| Decision + why | a design-doc's `## Decision log` (or an ADR page) |
+| Unresolved question | a design-doc's `## Open decisions` |
+| Known landmine / limitation / debt | `docs/exec-plans/tech-debt-tracker.md` |
 | Failure mode / idempotency rule | `docs/RELIABILITY.md` |
 | Threat / mitigation | `docs/SECURITY.md` |
-| Reusable how-it-works | `docs/memory/knowledge/` |
-| Decision + why | `docs/memory/adr/` |
-| Known landmine | `docs/memory/limitations/` |
-| Unresolved question | `docs/memory/openq/` |
+| Component taste rule | `docs/DESIGN.md` |
 | Product behavior | `docs/product-specs/` |
-| External API facts | `docs/references/` |
+| External API digest | `docs/references/` (vendored) |
+| Episodic / provenance | `docs/journal/` (append-only) |
 
 Procedure for a new page: kebab-case filename → frontmatter (`status /
 last_verified / owner`) → write → register in that directory's `index.md` →
 cross-link → run the gate (the `docs-tree` skill owns this).
 
-## Memory loop — currently DISABLED (hand-maintained memory)
+## Memory — one brain = docs
 
-The automatic memory loop is **off**: the SessionStart/UserPromptSubmit
-(feeder) and PreCompact/SessionEnd (imprint) hooks are unwired from
-`hooks.json` pending a more sophisticated redesign (see
-`docs/memory/openq/memory-loop-redesign.md`). Until then `docs/memory/` is
-**maintained by hand** — write progress/ADRs/knowledge/limitations directly
-(lints still enforce frontmatter, naming, and index registration).
+`docs/` IS the long-term memory (`docs/design-docs/memory-architecture.md`).
+There is no separate memory layer; the placement table above is the one taxonomy
+both manual placement and the dreaming router use.
 
-- Retained but dormant (re-enable by restoring the hook entries):
-  - Read path: `feeder_sessionstart.py` (context pack) + `feeder_firstprompt.py`
-    (task-targeted addendum).
-  - Write path: `imprint_enqueue.py`/`imprint_run.py` (session digests + memory
-    updates). `/dream` (consolidate) and `garden` (entropy GC) skills still run
-    manually but have no automatic input while imprint is off.
-- Never bypass the `docs/memory/` structure even when editing by hand.
+- **Write (live):** the `dream-rollouts` skill (`dream_run.py`) mines past session
+  transcripts — Phase 1 extracts a raw memory each (small model, no-op-preferred),
+  Phase 2 ROUTES each distilled claim into its docs home via a read-only agent (it
+  proposes a routing plan) + a deterministic applicator (it appends onto an
+  allowlist). Episodic / provenance residue → `docs/journal/`.
+- **Read:** the feeder INJECT path is off; its relevance/cost is an open question.
+- Dormant, being retired onto the dreaming engine: `feeder_*`, `imprint_*`, and the
+  `dream`/`garden` skills (the old automatic memory loop). A bare host with no docs
+  library uses the sandbox-store fallback (`dream_phase2`).
 
 ## Growing the grounding docs
 

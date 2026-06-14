@@ -6,8 +6,9 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** A context pack is normally injected at session start (feeder).
-   If missing, read `docs/memory/MEMORY.md` and follow its loading protocol.
+1. **Orient.** A context pack is normally injected at session start (feeder,
+   currently off). If absent: read the active plans in `docs/exec-plans/active/`,
+   scan `docs/design-docs/index.md`, and skim the latest `docs/journal/` month.
 2. **Plan.** Non-trivial work gets a living ExecPlan in `docs/exec-plans/active/`
    (method: `docs/PLANS.md`; procedure: `execplan` skill). Small changes need
    only a throwaway in-conversation plan.
@@ -38,7 +39,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/QUALITY_SCORE.md` | Domain × layer grades, gap tracking over time |
 | `docs/RELIABILITY.md` | Hook/queue failure modes, idempotency rules |
 | `docs/SECURITY.md` | Threat model: transcripts, memory poisoning, hook perms |
-| `docs/memory/` | Structured long-term memory (`MEMORY.md` = bootloader) |
+| `docs/journal/` | Episodic ledger — dream-run provenance + residual memory |
 | `plugin/` | The machine: skills, agents, hooks, scripts (portable) |
 | `tests/` | unittest suite for plugin scripts |
 
@@ -54,7 +55,7 @@ Deep truth lives in `docs/` — follow the pointers.
 - **Feedback twice → promote.** Any human correction given twice becomes a doc
   rule or a lint.
 - **Not in the repo = does not exist.** Decisions made in chat must end up in
-  `docs/` or `docs/memory/` (imprint hooks do this; verify when in doubt).
+  `docs/` (the dreaming router files them into their docs home; verify in doubt).
 - **Negative space.** Commands/scripts not named in this map or a skill are
   out of scope for routine work — do not run them ad hoc.
 
@@ -68,14 +69,17 @@ Deep truth lives in `docs/` — follow the pointers.
   live inside the skill. The harness enforces only its own structure; a host's
   app-code rules are the host's, not hardcoded here (ARCHITECTURE invariant 7).
 
-## Memory (read/write paths)
+## Memory (one brain = docs)
 
-- Read: feeder injects a compiled context pack at SessionStart + a targeted
-  addendum on the session's first prompt.
-- Write: PreCompact/SessionEnd hooks enqueue imprint jobs; `/dream` (dreamer
-  agent) consolidates; `garden` (doc-gardener agent) GCs docs entropy.
-  Never bypass `docs/memory/` structure; lint enforces frontmatter and indexes.
-- Parallel pipeline (write-path-first): the `dream-rollouts` skill runs a
-  Codex-faithful two-phase synthesis (`dream_run.py`) that mines past session
-  transcripts into `.claude/harness/memories/MEMORY.md` — separate from
-  `docs/memory/`, gitignored runtime. See `docs/design-docs/dreaming-v2.md`.
+- The `docs/` tree IS the long-term memory (progressive disclosure: this map →
+  subtree indexes → leaf pages). No separate memory layer — see
+  `docs/design-docs/memory-architecture.md`.
+- **Write (live):** the `dream-rollouts` skill (`dream_run.py`) mines past
+  session transcripts — Phase 1 extracts, Phase 2 ROUTES each distilled claim
+  into its docs home (design-docs / tech-debt-tracker / `docs/journal/`). A
+  read-only agent proposes a routing plan; a deterministic applicator appends.
+  Episodic / provenance residue lands in `docs/journal/`.
+- **Read:** the feeder INJECT path is off; its relevance/cost is an open question
+  (`memory-architecture.md`). For now, orient from the map + active plans.
+- The old `imprint`/`dream`/`garden` loop is dormant, being retired onto this
+  engine. Bare hosts (no docs library) use the sandbox-store fallback.
