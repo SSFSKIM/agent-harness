@@ -210,5 +210,83 @@ class TestMixedPlan(_Case):
         self.assertIn("feeder_start", self._foo())
 
 
+# ---- M2: change-driven scope builder ---------------------------------------
+
+class TestParseDiffSurface(unittest.TestCase):
+    """Pure parser, no git — exact surface extraction with file:line evidence."""
+    def test_added_removed_and_files(self):
+        diff = (
+            "diff --git a/m.py b/m.py\n"
+            "--- a/m.py\n+++ b/m.py\n"
+            "@@ -4,1 +4,2 @@\n"
+            "-def old_fn(x):\n"
+            "+def new_fn(x):\n"
+            "+MAX_RETRIES = 3\n"
+            "diff --git a/cli.py b/cli.py\n"
+            "--- a/cli.py\n+++ b/cli.py\n"
+            "@@ -10,0 +11,1 @@\n"
+            '+    ap.add_argument("--verbose")\n')
+        scope = ds.parse_diff_surface(diff)
+        syms = {(s["symbol"], s["kind"], s["file"], s["line"]) for s in scope["changed_symbols"]}
+        self.assertIn(("new_fn", "function", "m.py", 4), syms)
+        self.assertIn(("MAX_RETRIES", "constant", "m.py", 5), syms)
+        self.assertIn(("verbose", "flag", "cli.py", 11), syms)
+        removed = {(s["symbol"], s["file"]) for s in scope["removed"]}
+        self.assertIn(("old_fn", "m.py"), removed)
+        self.assertEqual({f["path"] for f in scope["changed_files"]}, {"m.py", "cli.py"})
+
+    def test_modified_symbol_is_not_removed(self):
+        # def foo present on both sides → a change, never a removal.
+        diff = ("diff --git a/m.py b/m.py\n--- a/m.py\n+++ b/m.py\n"
+                "@@ -1,1 +1,1 @@\n-def foo(a):\n+def foo(a, b):\n")
+        scope = ds.parse_diff_surface(diff)
+        self.assertEqual(scope["removed"], [])
+        self.assertEqual(scope["changed_symbols"][0]["symbol"], "foo")
+
+    def test_deleted_and_added_file_status(self):
+        diff = ("diff --git a/gone.py b/gone.py\ndeleted file mode 100644\n"
+                "--- a/gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-def doomed():\n"
+                "diff --git a/new.py b/new.py\nnew file mode 100644\n"
+                "--- /dev/null\n+++ b/new.py\n@@ -0,0 +1,1 @@\n+def fresh():\n")
+        scope = ds.parse_diff_surface(diff)
+        status = {f["path"]: f["status"] for f in scope["changed_files"]}
+        self.assertEqual(status, {"gone.py": "deleted", "new.py": "added"})
+        self.assertIn("doomed", {s["symbol"] for s in scope["removed"]})
+        self.assertIn("fresh", {s["symbol"] for s in scope["changed_symbols"]})
+
+
+class TestBuildChangeScope(unittest.TestCase):
+    """End-to-end against a real temp git repo (per the ExecPlan)."""
+    def _git(self, *args):
+        import subprocess
+        subprocess.run(["git", "-C", str(self.root), *args], check=True,
+                       capture_output=True, text=True,
+                       env={**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self._git("init", "-q")
+        (self.root / "m.py").write_text("def old_fn(x):\n    return x\n", encoding="utf-8")
+        self._git("add", "-A"); self._git("commit", "-q", "-m", "base")
+        self.base = __import__("subprocess").run(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+
+    def test_known_diff_exact_surface(self):
+        (self.root / "m.py").write_text("def new_fn(x):\n    return x\n", encoding="utf-8")
+        self._git("add", "-A"); self._git("commit", "-q", "-m", "rename")
+        scope = ds.build_change_scope(self.root, base=self.base)
+        self.assertIn("new_fn", {s["symbol"] for s in scope["changed_symbols"]})
+        self.assertIn("old_fn", {s["symbol"] for s in scope["removed"]})
+        self.assertEqual(scope["changed_files"], [{"path": "m.py", "status": "modified"}])
+
+    def test_no_op_diff_empty_scope(self):
+        scope = ds.build_change_scope(self.root, base=self.base)   # base == HEAD
+        self.assertEqual(scope, {"changed_files": [], "changed_symbols": [], "removed": []})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -300,6 +300,99 @@ def apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator
     return {"applied": applied, "report": report, "rolled_back": False}
 
 
+# ---- M2: change-driven scope builder (pure git/text, no agent) -------------
+
+# The "public surface" docs describe: a change to one of these is what makes a
+# doc go stale. Deterministic regexes (no model) — the audit agent (M3) reasons
+# about the surface this names; this just locates it with file:line evidence.
+SURFACE = [
+    (re.compile(r"\bdef\s+([A-Za-z_]\w*)"), "function"),
+    (re.compile(r"\bclass\s+([A-Za-z_]\w*)"), "class"),
+    (re.compile(r"^([A-Z][A-Z0-9_]{2,})\s*[:=]"), "constant"),   # module-level CONST/default
+    (re.compile(r"--([a-z][a-z0-9-]+)"), "flag"),                # CLI flag
+]
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def _surface_tokens(content):
+    out = []
+    for rx, kind in SURFACE:
+        for m in rx.finditer(content):
+            out.append((m.group(1), kind))
+    return out
+
+
+def _dedupe(rows):
+    """Keep one row per (symbol, kind, file) — the first (lowest-line) sighting."""
+    seen, out = set(), []
+    for r in rows:
+        key = (r["symbol"], r["kind"], r["file"])
+        if key not in seen:
+            seen.add(key)
+            out.append(r)
+    return out
+
+
+def parse_diff_surface(diff_text):
+    """Parse `git diff --no-color -U0` output into the changed public surface.
+    Pure function (no git) so the extraction is unit-testable from text. Returns
+    {changed_files, changed_symbols, removed} — symbols carry file:line evidence;
+    `removed` is the NET-removed surface (a symbol still present on a `+` line is a
+    change, not a removal)."""
+    files, added, removed_raw = [], [], []
+    cur, a_raw, new_line, old_line, status = None, "", 0, 0, "modified"
+    for raw in diff_text.splitlines():
+        if raw.startswith("diff --git "):
+            cur, status = None, "modified"
+        elif raw.startswith("new file"):
+            status = "added"
+        elif raw.startswith("deleted file"):
+            status = "deleted"
+        elif raw.startswith("--- "):
+            a_raw = raw[4:].strip()
+        elif raw.startswith("+++ "):
+            b_raw = raw[4:].strip()
+            if a_raw == "/dev/null":
+                cur, status = b_raw[2:], "added"
+            elif b_raw == "/dev/null":
+                cur, status = a_raw[2:], "deleted"
+            else:
+                cur = b_raw[2:]
+            files.append({"path": cur, "status": status})
+        elif raw.startswith("@@"):
+            m = _HUNK_RE.match(raw)
+            if m:
+                old_line, new_line = int(m.group(1)), int(m.group(2))
+        elif cur and raw.startswith("+") and not raw.startswith("+++"):
+            for sym, kind in _surface_tokens(raw[1:]):
+                added.append({"symbol": sym, "kind": kind, "file": cur, "line": new_line})
+            new_line += 1
+        elif cur and raw.startswith("-") and not raw.startswith("---"):
+            for sym, kind in _surface_tokens(raw[1:]):
+                removed_raw.append({"symbol": sym, "kind": kind, "file": cur, "line": old_line})
+            old_line += 1
+    added = _dedupe(added)
+    added_keys = {(r["symbol"], r["kind"], r["file"]) for r in added}
+    removed = _dedupe([r for r in removed_raw
+                       if (r["symbol"], r["kind"], r["file"]) not in added_keys])
+    return {"changed_files": files, "changed_symbols": added, "removed": removed}
+
+
+def _git_diff(root, base):
+    proc = subprocess.run(
+        ["git", "-C", str(root), "diff", "--no-color", "-U0", f"{base}...HEAD"],
+        capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"git diff failed: {proc.stderr.strip()[:200]}")
+    return proc.stdout
+
+
+def build_change_scope(root, base="main", run_diff=_git_diff):
+    """The change-driven audit input: the public surface this branch changed vs
+    `base` (three-dot = since the merge-base). `run_diff` is injectable for tests."""
+    return parse_diff_surface(run_diff(root, base))
+
+
 def main():
     ap = argparse.ArgumentParser(description="Apply a docs-sync maintenance plan (JSON on stdin).")
     ap.add_argument("--root", default=None)
