@@ -344,5 +344,38 @@ class TestAudit(_Case):
         self.assertIn("feeder_start hook compiles", self._foo())
 
 
+# ---- M4: the completion-gate orchestration ---------------------------------
+
+class TestRun(_Case):
+    def _spawn(self, plan_json):
+        return lambda prompt, model, cwd, timeout: plan_json
+
+    def test_run_scope_to_apply(self):
+        plan = '{"plan":[{"target":"docs/design-docs/foo.md","kind":"outdated",' \
+               '"change":{"op":"rename","old":"feeder_sessionstart","new":"feeder_start"},' \
+               '"risk":"mechanical"}]}'
+        # audit() reads real templates from the plugin dir; spawn is stubbed.
+        res = ds.run(self.root, scope={"changed_symbols": [{"symbol": "feeder_sessionstart"}]},
+                     spawn=self._spawn(plan), now=NOW, run_check=GREEN)
+        self.assertEqual(len(res["applied"]), 1)
+        self.assertEqual(len(res["plan"]), 1)
+        self.assertIn("feeder_start hook compiles", self._foo())
+
+    def test_run_empty_scope_is_noop_and_never_spawns(self):
+        def boom(*a, **k):
+            raise AssertionError("audit agent must not run on an empty scope")
+        res = ds.run(self.root, scope={"changed_files": [], "changed_symbols": [],
+                                       "removed": []}, spawn=boom, now=NOW, run_check=GREEN)
+        self.assertEqual(res, {"applied": [], "report": [], "rolled_back": False, "plan": []})
+
+    def test_run_surfaces_semantic_without_blocking(self):
+        plan = '{"plan":[{"target":"docs/design-docs/foo.md","kind":"structural",' \
+               '"change":{"op":"rewrite","text":"reorganize"},"risk":"semantic"}]}'
+        res = ds.run(self.root, scope={"removed": [{"symbol": "x"}]},
+                     spawn=self._spawn(plan), now=NOW, run_check=GREEN)
+        self.assertEqual(res["applied"], [])
+        self.assertEqual(len(res["report"]), 1)        # surfaced, not applied, not blocked
+
+
 if __name__ == "__main__":
     unittest.main()

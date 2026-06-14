@@ -34,9 +34,17 @@ Method and template live in `docs/PLANS.md` — read it first.
    your grounding doc first. Output P1/P2 findings with file:line and a
    Verdict."
    (Task tool subagent_type is plugin-namespaced: `agent-harness:review-arch` etc.)
-4. Process findings: P1 → fix now, rerun gate from step 1.
+4. **docs-sync (doc currency).** Run the docs-sync pass over the diff —
+   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/docs_sync.py run --base <base_commit>`
+   (the `docs-sync` skill). A read-only audit agent finds the curated docs the diff
+   made stale; the deterministic applicator auto-applies only the mechanical fixes
+   (a renamed symbol a doc names, a regenerated section, a frontmatter field) —
+   review `git diff` and commit them — and REPORTS the semantic findings. docs-sync
+   NEVER hard-blocks (only check.py does): treat each semantic finding like a P2
+   (address now or tracker-row it).
+5. Process findings: P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
    `docs/exec-plans/tech-debt-tracker.md`.
-5. All verdicts SATISFIED → fill Outcomes & retrospective, set
+6. All verdicts SATISFIED → fill Outcomes & retrospective, set
    `status: completed`, `git mv` the file to `docs/exec-plans/completed/`,
    update `docs/QUALITY_SCORE.md` if grades changed, commit.

@@ -459,15 +459,47 @@ def audit(scope, root, spawn=spawn_audit, templates=None, model=AUDIT_MODEL,
     return parse_maintenance_plan(out)
 
 
+def _scope_is_empty(scope):
+    return not (scope.get("changed_symbols") or scope.get("removed")
+                or scope.get("changed_files"))
+
+
+# ---- M4: the completion-gate orchestration (scope -> audit -> apply) --------
+
+def run(root, scope=None, base="main", spawn=spawn_audit, now=None,
+        run_check=run_check, run_generator=run_generator):
+    """One docs-sync pass, wired into the completion gate. Build (or accept) the
+    change scope -> read-only audit -> deterministic apply. An empty scope is a
+    no-op (the audit agent is never spawned). Returns {applied, report,
+    rolled_back, plan}; `applied` are committed mechanical fixes, `report` is the
+    semantic findings surfaced for the review. NEVER hard-blocks (the caller
+    treats `report` like any P2 — only check.py blocks a commit)."""
+    if scope is None:
+        scope = build_change_scope(root, base)
+    if _scope_is_empty(scope):
+        return {"applied": [], "report": [], "rolled_back": False, "plan": []}
+    plan = audit(scope, root, spawn=spawn)
+    now = now if now is not None else int(time.time())
+    result = apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator)
+    result["plan"] = plan
+    return result
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Apply a docs-sync maintenance plan (JSON on stdin).")
+    ap = argparse.ArgumentParser(
+        description="docs-sync: keep curated docs current (run) / apply a plan (apply).")
+    ap.add_argument("mode", nargs="?", choices=("run", "apply"), default="apply")
     ap.add_argument("--root", default=None)
+    ap.add_argument("--base", default="main")
     args = ap.parse_args()
     root = Path(args.root).resolve() if args.root else hl.repo_root()
-    plan = json.loads(sys.stdin.read() or "[]")
-    if isinstance(plan, dict):
-        plan = plan.get("plan", [])
-    result = apply_plan(root, plan, int(time.time()))
+    if args.mode == "run":
+        result = run(root, base=args.base)
+    else:
+        plan = json.loads(sys.stdin.read() or "[]")
+        if isinstance(plan, dict):
+            plan = plan.get("plan", [])
+        result = apply_plan(root, plan, int(time.time()))
     json.dump(result, sys.stdout, indent=2, default=str)
     sys.stdout.write("\n")
 

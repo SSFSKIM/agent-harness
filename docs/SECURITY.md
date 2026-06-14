@@ -21,6 +21,9 @@ Grounding document for the review-security persona. Threats are numbered.
 >   a feeder — `memory-architecture.md`).
 > - So `review-security` **IS in scope** for any diff touching the dreaming write
 >   path (`plugin/scripts/dream_*.py`, `memories_*.py`, `skills/dream/templates/*`)
+>   or the docs-sync write path (`plugin/scripts/docs_sync.py`,
+>   `skills/docs-sync/templates/*` — the read-only audit agent + the deterministic
+>   edit/delete applicator; same containment-by-construction, see T2)
 >   plus the always-live exec surface — **T3** (hook execution), **T8**
 >   (lint-exemption scope), **T9** (`.harness.json` / `.claude/lints` executable
 >   config). Otherwise `review-security` stays non-mandatory (see the `execplan`
