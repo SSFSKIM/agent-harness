@@ -322,7 +322,10 @@ class RunUntilDrainedTest(unittest.TestCase):
                         lambda ticket, **kw: {"status": "failed", "turn_id": None}):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
         self.assertEqual(out["stopped_reason"], "stuck")
-        self.assertEqual(out["stuck"], ["B"])  # B blocked by failed A, never dispatched
+        # B blocked by failed A; stuck reports the unmet blocker (A now in 'started')
+        self.assertEqual([s["ticket"] for s in out["stuck"]], ["B"])
+        self.assertEqual(out["stuck"][0]["blocked_by"][0]["id"], "a")
+        self.assertEqual(out["stuck"][0]["blocked_by"][0]["state_type"], "started")
 
     def test_cycle_terminates_stuck_without_hang(self):
         board = orch.MockBoard([_issue("a", ["b"]), _issue("b", ["a"])])
@@ -332,7 +335,28 @@ class RunUntilDrainedTest(unittest.TestCase):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
         self.assertEqual(order, [])  # neither ever eligible
         self.assertEqual(out["stopped_reason"], "stuck")
-        self.assertEqual(set(out["stuck"]), {"A", "B"})
+        self.assertEqual({s["ticket"] for s in out["stuck"]}, {"A", "B"})
+
+    def test_poll_failure_terminates_cleanly(self):
+        class BadPoll(orch.MockBoard):
+            def list_ready_issues(self, team, ready_state_id):
+                raise RuntimeError("network down")
+
+        board = BadPoll([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        out = orch.run_until_drained(board, command=["x"], team="T", states=states)
+        self.assertEqual(out["stopped_reason"], "poll_failed")
+        self.assertIn("network down", out["error"])  # error surfaced, not a crash
+
+    def test_max_dispatched_bound_counts_only_real_dispatches(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"]), _issue("c", ["b"])])
+        states = orch.resolve_states(board, "T")
+        order = []
+        with mock.patch("director.orchestrator.dispatch", _completing_dispatch(order)):
+            out = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                         max_dispatched=2)
+        self.assertEqual(out["stopped_reason"], "max_dispatched")
+        self.assertEqual(order, ["a", "b"])  # 2 dispatched, then the bound stops C
 
     def test_worker_created_ticket_picked_up(self):
         class GrowingBoard(orch.MockBoard):

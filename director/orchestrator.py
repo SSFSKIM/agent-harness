@@ -222,30 +222,48 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
     passes = 0
     stopped_reason = "drained"
     stuck: list = []
+    poll_error = None
+    done = set(done_types)
     while True:
         if passes >= max_passes:
             stopped_reason = "max_passes"
             break
         passes += 1
-        ready = board.list_ready_issues(team, states["ready"])
+        try:
+            ready = board.list_ready_issues(team, states["ready"])
+        except Exception as exc:  # a transient poll failure ends the run cleanly, not a crash
+            stopped_reason = "poll_failed"
+            poll_error = str(exc)
+            break
         pending = [t for t in ready if t["id"] not in results]  # not yet terminal this run
         eligible = eligible_tickets(pending, done_types=done_types)
         if not eligible:
-            # No progress possible: every pending ticket (if any) is blocked — a
-            # failed blocker or a cycle. Report rather than spin (R7).
+            # No progress possible: every pending ticket (if any) is blocked — a failed
+            # blocker, a cycle, or an unreadable blocker state. Report each with its
+            # not-yet-done blockers (a None state_type shows up here) so the human sees
+            # WHY it stuck, rather than spinning (R7).
             if pending:
                 stopped_reason = "stuck"
-                stuck = [t.get("identifier") or t["id"] for t in pending]
+                stuck = [{"ticket": t.get("identifier") or t["id"],
+                          "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
+                                         for b in t.get("blockers", [])
+                                         if b.get("state_type") not in done]}
+                         for t in pending]
             break
         if dispatched_count + len(eligible) > max_dispatched:
             stopped_reason = "max_dispatched"
             break
         wave = _dispatch_wave(board, eligible, command=command, states=states,
                               **wave_kwargs)
-        dispatched_count += len(wave)
+        # count only tickets that actually dispatched — a claim failure is not a dispatch,
+        # so it must not consume the max_dispatched budget.
+        dispatched_count += sum(1 for v in wave.values() if v.get("status") != "claim_failed")
         results.update(wave)
-    return {"summaries": list(results.values()), "passes": passes,
-            "stopped_reason": stopped_reason, "stuck": stuck}
+    out = {"summaries": list(results.values()), "passes": passes,
+           "stopped_reason": stopped_reason, "stuck": stuck}
+    if poll_error:
+        out["error"] = poll_error
+    return out
 
 
 class MockBoard:
@@ -342,6 +360,8 @@ def main(argv=None, *, board=None) -> int:
                     help="single pass (no re-poll); default is the DAG-aware continuous loop")
     ap.add_argument("--max-passes", type=int, default=50,
                     help="continuous loop safety bound on re-poll passes")
+    ap.add_argument("--max-dispatched", type=int, default=200,
+                    help="continuous loop safety bound on total tickets dispatched")
     ap.add_argument("--done-types", default="completed",
                     help="comma-separated blocker state-types that count as done (unblock)")
     args = ap.parse_args(argv)
@@ -370,7 +390,8 @@ def main(argv=None, *, board=None) -> int:
             print(json.dumps(s, ensure_ascii=False))
         return 0 if all(s["status"] != "claim_failed" for s in summaries) else 1
 
-    result = run_until_drained(board, _command(args), max_passes=args.max_passes, **kwargs)
+    result = run_until_drained(board, _command(args), max_passes=args.max_passes,
+                               max_dispatched=args.max_dispatched, **kwargs)
     for s in result["summaries"]:
         print(json.dumps(s, ensure_ascii=False))
     print(json.dumps({"stopped_reason": result["stopped_reason"],
