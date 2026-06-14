@@ -101,9 +101,19 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
 - [x] (2026-06-14) W3 완료: Symphony `.codex/skills`(commit/push/pull/land/linear/debug,
   Apache-2.0 + ATTRIBUTION)를 `director/workspace_skills/` 로 vendor + `run.py
   install_workspace_skills`(idempotent) + `--tools linear`/`--install-skills` 배선 + tests.
-  증거: 5 run tests OK + CLI smoke 가 워크스페이스 `.codex/skills/` 6개 설치. **W4(live) 만 남음.**
+  증거: 5 run tests OK + CLI smoke 가 워크스페이스 `.codex/skills/` 6개 설치.
+- [x] (2026-06-14) W4 LIVE PASS: ① board/linear READ live(.env 키로 LIN-5 읽음 → Phase 1
+  의 gated live-Linear READ 항목도 해소, UUID 0d681179). ② 실 codex 워커가
+  `linear_graphql`(commentCreate)로 LIN-5 에 코멘트 작성(tool success=true, comment id
+  ade1e318) → Linear MCP 로 독립 확인(동일 코멘트) → 테스트 이슈 cancel. worker→linear_graphql
+  →실 Linear write 전구간 증명. **Phase 2 = 코드 + mock + codex/Linear live 완료.**
 
 ## Surprises & discoveries
+
+- W4 live 에서 contract 버그 0 — tool-call/dynamicTools 프로토콜을 `generate-json-schema`
+  로 미리 확정한 덕(Phase 1 의 "정본 schema 먼저" 교훈 적용). 워커는 명시적 프롬프트로
+  linear_graphql 1회 호출, .env 키와 OAuth Linear MCP 가 같은 lingual workspace 라 교차검증
+  성립(워커가 쓴 코멘트를 MCP 가 동일 id 로 확인).
 
 ## Decision log
 
