@@ -34,7 +34,7 @@ applicator pattern with a hybrid auto/report safety split.
   `evidence` (file:line proving the gap), `change` (the proposed edit), `risk`
   (`mechanical|semantic`). It WRITES NOTHING — it only proposes.
 - **applicator (extends `dream_router`)** — reuses the allowlist + the symlink-safe
-  within-repo write guard (`_within_repo_no_symlink`), now with EDIT/DELETE, not
+  within-repo write guard (`harness_lib.within_repo_no_symlink`), now with EDIT/DELETE, not
   just append.
 - **Docs Sync Report** — openai-style findings (doc-first / code-first / outdated /
   retract / structural / proposed edits / questions), evidence-backed.
@@ -45,10 +45,14 @@ agent's label) and auto-applies ONLY four mechanical kinds:
 1. regenerate a generator-owned section (e.g. the component inventory; drift-proof
    by construction — more such sections as generated-maximize lands);
 2. set a frontmatter field (`last_verified`);
-3. a verbatim symbol-rename swap — old and new both given AND the old string is
-   found exactly (a literal replace, no prose authoring);
-4. a `retract` DELETE the engine can ATTRIBUTE — i.e. locate exactly via journal
-   provenance.
+3. a verbatim symbol-rename swap — `old` must be a SPECIFIC code symbol/path (it
+   carries identifier structure `_ . / -` / a digit / mixed case, so a bare prose
+   word like "set" can never trigger a global prose rewrite), `new` is symbol-shaped,
+   and `old` is found at a token boundary (a literal replace, no prose authoring);
+4. a `retract` DELETE the engine can ATTRIBUTE — a journal `[routed] "snippet" ->
+   target` whose snippet PREFIXES the line's content (after stripping the router's
+   `- `/`- <date>: `/`| ` framing). Prefix-anchored, not substring-anywhere: a short
+   routed phrase can't authorize deleting an unrelated human line that contains it.
 
 Everything else — any free-prose rewrite, an unattributable "should be removed", a
 structural reshuffle — is forced to `semantic` and goes to the report. **The machine

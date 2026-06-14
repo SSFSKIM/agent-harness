@@ -127,7 +127,7 @@ class TestReportNotEdit(_Case):
                  "change": {"op": "rename", "old": "the feeder", "new": "the pack"}}]
         res = self._apply(plan)
         self.assertEqual(res["applied"], [])
-        self.assertIn("not plain symbols", res["report"][0]["reason"])
+        self.assertIn("specific code symbol", res["report"][0]["reason"])
 
     def test_frontmatter_field_out_of_allowlist_reports(self):
         before = self._foo()
@@ -422,6 +422,59 @@ class TestForgetting(_Case):
                                  run_check=GREEN)
         self.assertEqual(res["forgetting_targets"], 0)
         self.assertEqual(res["applied"], [])
+
+
+# ---- M6 review hardening: adversarial attempts on the safety crux -----------
+
+class TestAdversarial(_Case):
+    def _journal(self, body):
+        (self.root / "docs" / "journal" / "2026-06.md").write_text(body, encoding="utf-8")
+
+    def test_retract_cannot_delete_human_line_via_substring(self):
+        # a short routed snippet must NOT authorize deleting an unrelated human line
+        # that merely contains it — attribution is prefix-anchored, not substring.
+        human = "- We will never use Postgres for the audit log; SQLite only."
+        self.foo.write_text("---\nstatus: draft\n---\n# Foo\n\n## Decision log\n\n"
+                            + human + "\n", encoding="utf-8")
+        self._journal('## r — dream run (sessions: s1aaaaaa)\n'
+                      '- [routed] decision "use Postgres" -> docs/design-docs/foo.md\n')
+        res = self._apply([{"target": "docs/design-docs/foo.md", "kind": "retract",
+                            "change": {"op": "retract", "line": human}}])
+        self.assertEqual(res["applied"], [])
+        self.assertIn("never use Postgres", self.foo.read_text())     # human line kept
+
+    def test_retract_prefix_anchored_attributable_line_still_applies(self):
+        # the legitimate case: the routed snippet PREFIXES the line's content.
+        self._journal('## r — dream run (sessions: s1aaaaaa)\n'
+                      '- [routed] decision "routed claim about caching" '
+                      '-> docs/design-docs/foo.md\n')
+        line = "- 2026-01-01: routed claim about caching — because."
+        res = self._apply([{"target": "docs/design-docs/foo.md", "kind": "retract",
+                            "change": {"op": "retract", "line": line}}])
+        self.assertEqual(len(res["applied"]), 1)
+
+    def test_rename_of_bare_prose_word_rejected(self):
+        before = self._foo()
+        res = self._apply([{"target": "docs/design-docs/foo.md", "risk": "mechanical",
+                            "change": {"op": "rename", "old": "set", "new": "map"}}])
+        self.assertEqual(res["applied"], [])
+        self.assertIn("specific code symbol", res["report"][0]["reason"])
+        self.assertEqual(self._foo(), before)                        # prose untouched
+
+    def test_regenerate_symlinked_target_refused(self):
+        with tempfile.TemporaryDirectory() as out:
+            decoy = Path(out) / "evil.md"
+            decoy.write_text("# outside\n", encoding="utf-8")
+            gen = self.root / "docs" / "generated"
+            gen.mkdir(parents=True, exist_ok=True)
+            os.symlink(decoy, gen / "component-inventory.md")
+            res = ds.apply_plan(
+                self.root, [{"target": "docs/generated/component-inventory.md",
+                             "change": {"op": "regenerate"}}],
+                NOW, run_check=GREEN, run_generator=lambda r, t: True)
+            self.assertEqual(res["applied"], [])
+            self.assertIn("symlink guard", res["report"][0]["reason"])
+            self.assertEqual(decoy.read_text(), "# outside\n")       # not regenerated
 
 
 if __name__ == "__main__":

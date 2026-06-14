@@ -67,6 +67,19 @@ Grounding document for the review-security persona. Threats are numbered.
     `git checkout`-restored). Any escape hard-fails + rolls back. **Residual:** writes
     OUTSIDE the host repo (`~/.ssh`, `/tmp`) aren't reverted — bounded by no-network
     + no-Bash + the DATA guard.
+  - *docs-sync (EDIT/DELETE applicator) — same containment, two layers.* The audit
+    agent is READ-ONLY (`--allowedTools Read,Glob,Grep,LS`) so it can only PROPOSE a
+    JSON plan; `docs_sync.apply_plan` is the only writer and RE-VALIDATES each item's
+    risk itself (never the agent's label), auto-applying ONLY four mechanical kinds.
+    The two that touch existing prose are bounded so the machine never authors prose:
+    a **rename** requires `old` to be a SPECIFIC code symbol (a bare word can't sweep
+    prose) and does a token-boundary replace; a **retract** DELETEs a line only when a
+    journal `[routed]` snippet PREFIXES the line's content (prefix-anchored, not
+    substring — a short routed phrase can't delete an unrelated human line that merely
+    contains it). Every target (incl. the journal tree read for attribution and the
+    regenerate target) passes `harness_lib.within_repo_no_symlink`; `check.py` re-runs
+    after the batch with byte rollback on red. **Residual:** an applied mechanical edit
+    is a git-visible, reviewed, revertible commit — never an arbitrary or prose write.
 - **T3 — Hook execution surface.** Hook scripts run with user permissions:
   stdlib only (lint S1), no network calls, no secrets in code or docs.
 - **T4 — No secrets in memory.** Imprint/dream prompts forbid writing

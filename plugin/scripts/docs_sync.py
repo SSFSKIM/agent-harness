@@ -94,6 +94,17 @@ def _rename_count(text, old):
     return len(_boundary_re(old).findall(text))
 
 
+def _is_specific_symbol(tok):
+    """A rename target must be a SPECIFIC code symbol/path, not a plain prose word.
+    It must carry identifier structure (`_ . / -` or a digit) or mixed case, so a
+    common English word ('set', 'run', 'state') can never trigger a global prose
+    rewrite. (Renaming a real symbol like `feeder_sessionstart` / `docs/memory` /
+    `MAX_RETRIES` still qualifies; an ambiguous bare word falls to the report.)"""
+    return bool(isinstance(tok, str) and SYMBOL_RE.match(tok)) and (
+        any(c in tok for c in "_./-") or any(c.isdigit() for c in tok)
+        or tok != tok.lower())
+
+
 def _line_present(text, line):
     want = line.strip()
     return any(l.strip() == want for l in text.splitlines())
@@ -118,19 +129,30 @@ def _set_frontmatter(text, field, value):
     return out + "\n" if text.endswith("\n") else out
 
 
+# Strip the router's append framing (`- `, an optional `- <date>: `, or a `| `
+# table-cell lead) so attribution can anchor the snippet at the START of the line's
+# CONTENT — a substring-anywhere match would let a short routed phrase authorize
+# deleting an unrelated human line that merely contains it.
+_ROUTER_PREFIX = re.compile(r"^(?:[-*]\s+(?:\d{4}-\d{2}-\d{2}:\s+)?|\|\s*)")
+MIN_ATTRIB_SNIPPET = 8     # a trivially short snippet can't attribute a line
+
+
 def _attributable(root, target, line):
-    """True iff a journal `[routed] ... "snippet" -> target` line exists whose
-    snippet is contained in `line` — i.e. the content being deleted was machine-
-    authored INTO this target, so deleting it reverses a router append rather than
-    editing human prose. Ties the delete to the specific routed content, not just
-    the file (the router records a truncated snippet, which is a prefix of the line
-    it appended)."""
+    """True iff the line was machine-authored INTO `target` by the router — so
+    deleting it REVERSES a router append, never edits human prose. Requires a
+    journal `[routed] "snippet" -> target` whose snippet PREFIXES the line's content
+    (after stripping the router's `- `/`- <date>: `/`| ` framing). Prefix-anchored
+    (not substring-anywhere) so a short routed phrase can't authorize deleting an
+    unrelated human line that merely contains it. The journal tree is read through
+    the symlink-safe guard so a symlinked `docs/journal` can't manufacture provenance."""
     rel = os.path.normpath(str(target))
-    norm_line = re.sub(r"\s+", " ", line).strip()
-    base = Path(root) / JOURNAL_DIR
-    if not base.exists():
+    core = _ROUTER_PREFIX.sub("", re.sub(r"\s+", " ", line).strip(), count=1)
+    base = hl.within_repo_no_symlink(root, JOURNAL_DIR)
+    if base is None or not base.exists():
         return False
     for jf in sorted(base.rglob("*.md")):
+        if jf.is_symlink():
+            continue
         try:
             jtext = jf.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -140,7 +162,9 @@ def _attributable(root, target, line):
             if not m:
                 continue
             snippet = re.sub(r"\s+", " ", m.group(1)).strip()
-            if os.path.normpath(m.group(2)) == rel and snippet and snippet in norm_line:
+            if (os.path.normpath(m.group(2)) == rel
+                    and len(snippet) >= MIN_ATTRIB_SNIPPET
+                    and core.startswith(snippet)):
                 return True
     return False
 
@@ -181,9 +205,12 @@ def classify(root, item):
 
     if op == "rename":
         old, new = change.get("old"), change.get("new")
-        if not (isinstance(old, str) and isinstance(new, str)
-                and SYMBOL_RE.match(old) and SYMBOL_RE.match(new) and old != new):
-            return ("report", "rename old/new are not plain symbols")
+        # `old` must be a SPECIFIC code symbol (not a bare prose word — that would
+        # globally rewrite prose); `new` need only be symbol-SHAPED.
+        if not (_is_specific_symbol(old) and isinstance(new, str)
+                and SYMBOL_RE.match(new) and old != new):
+            return ("report", "rename `old` is not a specific code symbol "
+                              "(a bare prose word can't be a global rename)")
         if _rename_count(text, old) == 0:
             return ("report", f"rename old {old!r} not found verbatim in target")
         return ("mechanical", {"op": "rename", "path": path, "old": old, "new": new})
@@ -287,7 +314,13 @@ def apply_plan(root, plan, now, run_check=run_check, run_generator=run_generator
             report.append(_report_item(item, data))
             continue
         assert isinstance(data, dict)            # narrowed: mechanical => prepared op
-        path = (root / data["target"]) if data["op"] == "regenerate" else data["path"]
+        if data["op"] == "regenerate":
+            path = hl.within_repo_no_symlink(root, data["target"])
+            if path is None:                     # symlinked generated target → refuse
+                report.append(_report_item(item, "regenerate target failed the symlink guard"))
+                continue
+        else:
+            path = data["path"]
         _snapshot(touched, path)
         if _apply_one(data, root, run_generator):
             applied.append(_applied_item(item, data))
@@ -371,6 +404,9 @@ def parse_diff_surface(diff_text):
             for sym, kind in _surface_tokens(raw[1:]):
                 removed_raw.append({"symbol": sym, "kind": kind, "file": cur, "line": old_line})
             old_line += 1
+        elif cur and raw.startswith(" "):       # context line (only if not -U0) — keep counters honest
+            old_line += 1
+            new_line += 1
     added = _dedupe(added)
     added_keys = {(r["symbol"], r["kind"], r["file"]) for r in added}
     removed = _dedupe([r for r in removed_raw
