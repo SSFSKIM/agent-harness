@@ -63,8 +63,9 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 - Assumption: Linear 워크스페이스/project 존재 + `.env` 의 `LINEAR_API_KEY` 유효 →
   M5 는 거기에 gated. 없으면 M5 는 코드+단위테스트까지 하고 live 검증만 보류(문서화).
 - Open: `director/` 배치 → **해소: top-level host app-code 패키지**(ARCHITECTURE
-  invariant 7 — 장기실행 서비스는 plugin 기계가 아님). 테스트는 `tests/director/` 에
-  두고 check.py unittest discovery 로 게이트 연결.
+  invariant 7 — 장기실행 서비스는 plugin 기계가 아님). 테스트는 flat
+  `tests/test_director_*.py`(tests/ 는 패키지가 아니라 discover 가 수집 — dotted
+  `tests.x` 호출 불가) 로 두고 check.py 의 unittest discover 로 게이트 연결.
 - Open: mock 을 어디 두나 → **해소**: `director/worker/_mock_app_server.py`(테스트 fixture,
   실배포 경로 아님).
 - Open: Phase 1 sandbox/approval policy 기본값 → **해소**: thread/start 는
@@ -76,24 +77,24 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 - **M1 — Director 큐 라이브러리.** `director/queue/` 에 append-request / read-pending /
   write-answer / read-answer 를 atomic·idempotent 로 구현(harness_lib 의 atomic write
   패턴 재사용). 끝나면 큐 스키마(spec Design 의 request/answer JSON)가 코드로 존재.
-  run `python3 -m unittest tests.director.test_queue`; expect: 요청 1건 write→pending
+  run `python3 -m unittest discover -s tests -p 'test_director_queue.py'`; expect: 요청 1건 write→pending
   read→answer write→read 왕복 성공, 같은 request_id 중복 append 는 1건으로 dedupe.
 - **M2 — codex app-server client + mock.** `director/worker/app_server.py`(spawn,
   핸드셰이크, turn 스트림 read loop) + `director/worker/_mock_app_server.py`(평범한
   turn 을 내는 fake). 끝나면 client 가 mock 을 핸드셰이크→turn/completed 까지 몰 수 있음.
-  run `python3 -m unittest tests.director.test_app_server`; expect: thread id·turn id
+  run `python3 -m unittest discover -s tests -p 'test_director_app_server.py'`; expect: thread id·turn id
   추출되고 평범한 turn 이 completed. (real-codex contract-test 는 codex 있으면 추가 실행.)
 - **M3 — seam(novel core).** `director/worker/approval.py`: server-initiated 요청
   method→큐 kind 매핑, 큐에 1건 기록, answer poll(R7 timeout→decline), decision→codex
   result 변환, **같은 turn read loop 지속**. mock 이 mid-turn 에
   `item/commandExecution/requestApproval` 를 내도록 확장. 끝나면 seam 이 동작.
-  run `python3 -m unittest tests.director.test_seam`; expect: 큐에 요청 1건 → 테스트
+  run `python3 -m unittest discover -s tests -p 'test_director_seam.py'`; expect: 큐에 요청 1건 → 테스트
   responder 가 "accept" → mock 이 serverRequest/resolved+turn/completed →
   **approval 전후 turn id 동일**(assert). 이 milestone 이 Goal 의 핵심 증명.
 - **M4 — main-session responder + e2e(stub).** `director/director_min.py`(미답 요청을
   읽어 answer 쓰는 최소 responder = main 세션 대행) + `director/run.py`(stub 티켓 →
   격리 workspace → worker 구동). 끝나면 stub 티켓으로 end-to-end seam 성립.
-  run `python3 -m director.run --ticket tests/director/fixtures/stub.json`(mock 백엔드);
+  run `python3 -m director.run --ticket tests/fixtures_director/stub.json`(mock 백엔드);
   expect: 워커 멈춤 없이 요청→answer→resume→completed, 종료코드 0, transcript 에 동일
   turn id. `python3 plugin/scripts/check.py` GREEN.
 - **M5 — Linear adapter(read).** `director/board/linear.py`: `.env`(LINEAR_API_KEY)로
@@ -104,7 +105,10 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 
 ## Progress log
 
-- [x] (2026-06-14) Plan created from product-spec; base_commit fc8b3ea. M1–M5 미착수.
+- [x] (2026-06-14) Plan created from product-spec; base_commit fc8b3ea.
+- [x] (2026-06-14) M1 완료: `director/queue/`(append/read_pending/write_answer/read_answer/
+  wait_for_answer — idempotent dedupe + temp→rename atomic) + `tests/test_director_queue.py`.
+  증거: 5 tests OK, `check.py` GREEN(95→100 tests). M2–M5 미착수.
 
 ## Surprises & discoveries
 
@@ -116,6 +120,8 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   장기실행 서비스는 하네스 기계가 아니라 host 앱. 테스트는 tests/director/.
 - 2026-06-14: thread/start approvalPolicy=untrusted + sandbox=workspaceWrite — approval
   이벤트가 실제로 발생해야 seam 을 검증 가능.
+- 2026-06-14: 테스트는 flat `tests/test_director_*.py`(tests/ 패키지 아님 → discover 수집,
+  dotted 호출 불가). director/ 는 테스트에서 repo-root 를 sys.path 에 넣어 import(기존 패턴).
 
 ## Feedback (from completion gate)
 
