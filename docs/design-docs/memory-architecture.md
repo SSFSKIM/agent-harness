@@ -118,13 +118,21 @@ a hardcode: a host with a docs library (self-hosting) → author into it; a host
 with none → fall back to the self-contained store. This matches the existing
 `architecture-setup` / `harness-init` host-adaptation principle.
 
+## Read path — on-demand navigation, not a feeder (decided 2026-06-14)
+The read path is NOT a feeder that compiles + injects a context pack at
+SessionStart. It is on-demand NAVIGATION: the agent PULLS the context a task needs,
+when it needs it, from the docs tree (Read/Grep/Glob), using the AGENTS.md map +
+the taxonomy. Why: push pre-pays a heavy headless-model cost every session for
+usually-irrelevant context and violates the progressive-disclosure thesis; pull
+pays only for what the task uses and needs ~no runtime machinery (no feeder script,
+no SessionStart hook). The one cost pull carries — the agent must know WHERE to look
+and remember to look — is closed by a concise "Finding memory" affordance in
+AGENTS.md (where each kind lives + grep patterns) plus the lint-enforced findability
+(indexes, frontmatter, kebab names). **Scale gate:** below ~100 docs pages, index +
+grep suffice; above it, add an on-device search tool (BM25/vector, e.g. qmd) as the
+navigation aid. The dormant feeder scripts retire with the rest of the old loop.
+
 ## Open decisions
-- **Read path (feeder INJECT).** The write path is built (the dreaming router);
-  the read path is not. When is injecting a compiled context pack on
-  SessionStart / first-prompt worth its headless-model cost vs. the agent just
-  reading the index? relevance targeting, caching, event-gating, or a cheaper
-  compile. (Migrated from the retired `memory-loop-redesign` open question; the
-  write / consolidate / trigger parts of that question are answered by this pivot.)
 - **Forgetting on the docs path.** M2 routes additively. When a session drops out
   of selection, the journal provenance names what it authored, but the mechanism
   to revisit and retract that content from its docs home is not yet built.

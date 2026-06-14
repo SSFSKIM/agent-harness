@@ -76,7 +76,8 @@ both manual placement and the dreaming router use.
   Phase 2 ROUTES each distilled claim into its docs home via a read-only agent (it
   proposes a routing plan) + a deterministic applicator (it appends onto an
   allowlist). Episodic / provenance residue → `docs/journal/`.
-- **Read:** the feeder INJECT path is off; its relevance/cost is an open question.
+- **Read = on-demand navigation** (pull, not a feeder): the agent finds
+  task-relevant memory in docs via the map + Grep/Glob (`memory-architecture.md`).
 - Dormant, being retired onto the dreaming engine: `feeder_*`, `imprint_*`, and the
   `dream`/`garden` skills (the old automatic memory loop). A bare host with no docs
   library uses the sandbox-store fallback (`dream_phase2`).

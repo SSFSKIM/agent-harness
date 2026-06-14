@@ -74,8 +74,8 @@ point rightward at skills — the most actionable instruction wins.
 > path is the dreaming `dream-rollouts` router (Phase 1 extract → Phase 2 routes
 > distilled claims into the docs tree + `docs/journal/`), so the old `imprint`/
 > `dream`/`garden` loop is being retired onto that engine (M5). The read path
-> (feeder INJECT) remains an open question (relevance/cost — see
-> `memory-architecture.md` Open decisions). The active runtime is REVIEW (#4) +
+> is now on-demand navigation (pull, not a feeder — see
+> `memory-architecture.md`). The active runtime is REVIEW (#4) +
 > TIDY (#5) + the deterministic gate.
 
 1. **INJECT** *(disabled — hook unwired)* — SessionStart hook →

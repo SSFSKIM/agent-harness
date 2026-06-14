@@ -17,8 +17,8 @@ Grounding document for the review-security persona. Threats are numbered.
 >   T1, T2, T4, T6, T7** — see each `Dreaming:` clause below.
 > - The old `feeder`/`imprint`/`dream`/`garden` loop stays **dormant** (being
 >   retired onto the dreaming engine); **T5** and its `docs/memory/`-specific
->   framings stay dormant with it. The read path (feeder INJECT) relevance/cost is
->   an open question (`memory-architecture.md`).
+>   framings stay dormant with it. The read path is on-demand navigation (pull, not
+>   a feeder — `memory-architecture.md`).
 > - So `review-security` **IS in scope** for any diff touching the dreaming write
 >   path (`plugin/scripts/dream_*.py`, `memories_*.py`, `skills/dream/templates/*`)
 >   plus the always-live exec surface — **T3** (hook execution), **T8**

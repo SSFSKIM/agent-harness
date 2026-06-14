@@ -79,7 +79,12 @@ Deep truth lives in `docs/` — follow the pointers.
   into its docs home (design-docs / tech-debt-tracker / `docs/journal/`). A
   read-only agent proposes a routing plan; a deterministic applicator appends.
   Episodic / provenance residue lands in `docs/journal/`.
-- **Read:** the feeder INJECT path is off; its relevance/cost is an open question
-  (`memory-architecture.md`). For now, orient from the map + active plans.
+- **Read = on-demand navigation, not a feeder.** Pull the context a task needs,
+  when you need it. Finding memory: a past decision/rationale → the relevant
+  `docs/design-docs/*` (its `## Decision log`); a known issue/limit →
+  `docs/exec-plans/tech-debt-tracker.md`; what happened in prior sessions →
+  `docs/journal/` (grep by keyword); how something works → `docs/design-docs/`.
+  Unsure → `Grep`/`Glob` over `docs/`. (Indexes + frontmatter keep this cheap;
+  at >~100 pages add a search tool — `memory-architecture.md`.)
 - The old `imprint`/`dream`/`garden` loop is dormant, being retired onto this
   engine. Bare hosts (no docs library) use the sandbox-store fallback.
