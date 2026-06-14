@@ -175,5 +175,38 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   the dreaming loop was parallel to.
 
 ## Feedback (from completion gate)
+- 2026-06-14 (M6): self-review clean — applicator allowlist holds (`_safe_design_target`
+  rejects traversal / out-of-design-docs / resolved-symlink-escape; only direct
+  `docs/design-docs/*.md` files; tracker + journal are fixed paths), secrets re-redacted
+  before every write, demote-to-journal covers malformed/out-of-allowlist ops. Known
+  fragilities logged: tracker-row-append assumes a table-terminated file; a `### Decision
+  log` (wrong level) would spawn a duplicate `## Decision log`; `parse_routing_plan`
+  shares Phase 1's outermost-`{...}` brittleness. Independent codex review (gpt-5.5/high)
+  dispatched — verdict pending; findings fold in here.
 
 ## Outcomes & retrospective
+- 2026-06-14: **Goal met (self-host scope).** Dreaming no longer writes a flat
+  `MEMORY.md` into a gitignored sandbox — `dream-rollouts` now routes each distilled
+  claim into its docs home (tech-debt-tracker / design-doc Decision-log+Open-decisions /
+  `docs/journal/`), and the separate `docs/memory/` layer is gone (content migrated;
+  bootloader folded into AGENTS.md). The PR2 extraction engine + sqlite curation were
+  reused unchanged; only the Phase 2 OUTPUT contract changed. Verified end-to-end: a
+  live Sonnet router atomized one seeded real-session memory into a `Major` tracker row
+  + a journal `[held]` line, self-deduping against an existing design-doc; 158 tests
+  green; the gate stayed GREEN at every milestone.
+- **What shipped:** `dream_router.py` (read-only agent + deterministic allowlist
+  applicator) + router templates + 18 tests; the routing rule unified with the
+  `docs-tree` taxonomy (one list); `docs/memory/` migrated + retired; bootloader / lint
+  (`journal/` exemptions) / `tidy_stop` sentinel / SECURITY.md / AGENTS / ARCHITECTURE /
+  agent-harness rewired.
+- **Gaps / remaining:** (1) read path (feeder INJECT relevance/cost) still open; (2)
+  forgetting on the docs path not built — the router is additive, the journal records
+  provenance but retraction isn't wired; (3) **portable propagation** — scaffold seeds +
+  the dormant feeder/imprint still use `docs/memory` (tracked tracker row); (4) the M6
+  codex verdict is pending.
+- **Lessons:** the pivot reached far deeper than "self-host docs" — `docs/memory` was
+  baked into the portable plugin (the `tidy_stop` sentinel, scaffold seeds, feeder/imprint
+  prompts, ~5 tests), so scoping to the self-host first kept the change reviewable.
+  A read-only agent + a deterministic, allowlisted, append-only applicator is a cleaner
+  containment than the post-hoc sandbox revert — injection has no write mechanism at all
+  — and dedupe emerged for free from giving that agent Read over the real tree.
