@@ -12,13 +12,17 @@ Method and template live in `docs/PLANS.md` — read it first.
 2. **Scope check.** If the work spans independent subsystems, split into linked
    ExecPlans (one per subsystem) before going further — see PLANS.md "When".
 3. Fill Goal (observable definition of done), Context (links a novice needs; if
-   a product-spec exists for this work in docs/product-specs/, link it and do
-   not re-derive its requirements — see the entry decision in PLANS.md),
+   a product-spec exists for this work in docs/product-specs/, link it and build
+   from its design — don't re-derive the spec — see the entry decision in
+   PLANS.md),
    Approach (generate ≥2 alternatives yourself, then choose), Assumptions & open
    questions (surface what you take as given; resolve ambiguities autonomously),
-   Milestones (each independently verifiable). These front-loading sections are
-   self-gates — your own reasoning, not a human dialogue; escalate only
-   Taste/Style/judgment (PRODUCT_SENSE.md).
+   Milestones (narrative — scope, what newly exists, command, acceptance;
+   independently verifiable). These front-loading sections are self-gates —
+   your own reasoning, not a human dialogue; escalate only Taste/Style/judgment
+   (PRODUCT_SENSE.md). Flesh the skeleton out to PLANS.md depth — full file
+   paths, validation that proves behavior (not just "it compiles"), the *why* —
+   don't ship a skeleton.
 4. **Creation-time self-review** (before any implementation; fix inline):
    placeholder scan (no TBD / "handle later"), internal consistency (Approach ↔
    Goal ↔ Milestones agree), scope (still single-subsystem?), ambiguity (each

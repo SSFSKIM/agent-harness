@@ -19,7 +19,8 @@ fork (PRODUCT_SENSE.md), never "what next?".
   *how*: requirements outlive a single plan, fan out across linked plans, or are
   rich/contested enough to verify independently. Write a spec in
   `docs/product-specs/` (the `product-design` skill), then an ExecPlan that
-  references it. The spec owns "what/why"; the ExecPlan owns "how".
+  references it. The spec owns the design (what/why + how it is shaped:
+  components, contracts, behaviors); the ExecPlan owns the build (executing it).
 - **ExecPlan** — non-trivial work whose *what* is already clear enough.
   Front-load Approach/Assumptions inline (Template below); no separate spec.
 
@@ -59,8 +60,9 @@ independent verifiability and the plan stops fitting in one context.
     One paragraph. Definition of done, observable.
     ## Context
     Links to specs/ADRs/pages a novice needs. Self-contained. If a product-spec
-    exists for this work (docs/product-specs/), link it and do not re-derive its
-    requirements — the spec owns "what/why", this plan owns "how".
+    exists for this work (docs/product-specs/), link it and build from its
+    design — the spec owns the design, this plan owns the build (don't re-derive
+    the spec).
     ## Approach (self-generated alternatives)
     Generate ≥2 viable approaches yourself and choose — your own reasoning, not
     a human dialogue. (review_level: none → one line naming the choice + why.)
@@ -72,9 +74,16 @@ independent verifiability and the plan stops fitting in one context.
     - Open: <ambiguity> → resolved autonomously as <choice>; escalate ONLY a
       Taste/Style/product-judgment call (PRODUCT_SENSE.md), never "what next?"
     ## Milestones
-    - [ ] M1 ... (each independently verifiable)
+    Each milestone is a short narrative, not a bare checkbox: its scope, what
+    will exist at the end that did not before, the command to run, and the
+    acceptance to observe (goal → work → result → proof). Independently
+    verifiable, moves the Goal forward, never abbreviated for brevity.
+    - M1 — <scope>. At the end <what exists>; run <cmd>; expect <observable>.
     ## Progress log
-    - YYYY-MM-DD: ...
+    Granular steps with timestamps; at each stopping point reflect the true
+    state, splitting a partial task into done vs remaining.
+    - [x] (YYYY-MM-DD HH:MMZ) <step done>
+    - [ ] <step remaining> (done: X; remaining: Y)
     ## Surprises & discoveries
     ## Decision log
     - YYYY-MM-DD: <decision> — <why>
@@ -100,10 +109,19 @@ independent verifiability and the plan stops fitting in one context.
   behavior a human can verify (command → observable output), never as "code
   changed" or "struct added".
 - **Define every term of art** at first use in plain language, or don't use it.
-- **Prose first.** Narrative sentences carry the plan; checklists belong only
-  in Milestones and the Progress log.
+- **Prose first.** Narrative sentences carry the plan — milestones included;
+  checklists belong only in the Progress log.
 - **Unknowns get PoC milestones.** A milestone with significant unknowns is
   first a toy implementation validating feasibility, then the real thing.
 - **Resolve ambiguities autonomously.** Never stop to ask "what next?" — pick
   the reasonable path, record it in the Decision log, commit frequently.
   Escalate only true judgment calls (docs/PRODUCT_SENSE.md).
+- **Acceptance is provable behavior.** State the command and the output to
+  expect; a new test must fail before the change and pass after. Prove the
+  change beyond "it compiles".
+- **Idempotent and recoverable.** Write steps safe to re-run; for a risky,
+  destructive, or migration step, give a retry or rollback path.
+- **Full paths and the why.** Name files by full repo-relative path; embed the
+  non-obvious knowledge a novice needs rather than pointing outside the repo;
+  record the *why* for almost every change and keep short proof (a transcript or
+  diff) in Surprises/Outcomes.

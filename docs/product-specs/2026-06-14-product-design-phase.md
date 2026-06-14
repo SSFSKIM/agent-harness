@@ -45,6 +45,21 @@ ceremony — PRODUCT_SENSE.md). 작은 작업은 spec 이 필요 없다.
 - **R6 — governance 무변경.** spec 의 집(`product-specs/`)은 이미 governed(커밋
   `8432a8b`, poisoning-protected, 테스트 포함). 이 변경은 거기에 손대지 않는다.
 
+## 설계 (design)
+
+정책 문서라 design 은 경량 (template 의 "scale down for a policy doc" 적용 — 구성요소
+와 경계만, 코드/태스크 없음):
+- **entry decision** — PLANS.md 신규 섹션(상세 heuristic) + AGENTS.md step 2(매 세션
+  읽히는 포인터). soft heuristic 서술이지 strict gate 아님.
+- **product-design skill** — 절차 소유: explore → scope check → draft(Problem/
+  Requirements/Design/Non-goals/Acceptance) → 사람-터치 → self-review → write →
+  execplan handoff.
+- **spec↔ExecPlan 경계** — spec = design(what/why + shape: 구성요소·contract·behavior),
+  ExecPlan = build(execution). ExecPlan Context 가 spec 을 링크하고 design 에서
+  build 하며 재유도하지 않는다.
+- **에러/경계 케이스** — 미로드 세션: skill 절차가 파일로 보존돼 `.../SKILL.md` 직접
+  read 가능(기존 하네스 패턴). coverage lint: 신규 skill 은 docs 에 mention 필요.
+
 ## 비목표 (non-goals)
 
 - superpowers 식 phase 별 human approval gate. (자율 thesis 위반.)

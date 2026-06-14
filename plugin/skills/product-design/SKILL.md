@@ -8,9 +8,11 @@ The spec-first entry mode of the methodology. Read the **Entry decision** in
 `docs/PLANS.md` first — if the *what* is already clear enough, skip this and go
 straight to the `execplan` skill.
 
-The spec owns "what/why"; the ExecPlan that follows owns "how". The spec is a
-durable, separate artifact (`docs/product-specs/`), not a section inside a plan —
-that is what lets it outlive one plan and be referenced by several.
+The spec owns the **design** — what to build, why, and how it is shaped
+(components, contracts, behaviors). The ExecPlan that follows owns the **build** —
+executing it (order, progress, outcomes). The spec is a durable, separate
+artifact (`docs/product-specs/`), not a section inside a plan — that is what lets
+it outlive one plan and be referenced by several.
 
 ## Author the spec
 1. **Explore first.** Read the relevant code, docs, recent commits, and the
@@ -18,13 +20,21 @@ that is what lets it outlive one plan and be referenced by several.
    after.
 2. **Scope check.** If the work spans multiple independent products/subsystems
    (each shippable and verifiable alone), decompose into separate specs (one per
-   piece, this one as the parent index) before refining requirements — don't
-   spec a thing that should be several.
-3. Draft autonomously — this is your own reasoning, not a human dialogue. Fill:
+   piece, this one as the parent index) before refining — don't spec a thing
+   that should be several.
+3. Draft autonomously — your own reasoning, not a human dialogue. Be concrete:
+   name real components, interfaces, behaviors, and files — a requirement so
+   vague it could be built two ways is a spec failure. Scale each section to its
+   complexity. Fill:
    - **Problem** — what is unsatisfied today, in observable terms.
    - **Requirements** — R1..Rn, each independently verifiable ("a human can
-     check X"), not implementation steps. Keep the *how* out — that is the
-     ExecPlan's job.
+     check X"), not implementation steps.
+   - **Design** (for system/code features; scale down or skip for a pure
+     policy/methodology doc) — the components and their responsibilities, the
+     contracts/interfaces between them, key behaviors, and how errors, edge
+     cases, and integration points are handled. Name the files to create/modify
+     when in a codebase. Design-level, not code or task steps — those are the
+     ExecPlan's.
    - **Non-goals** — what this explicitly does not do (scope fence). **YAGNI —
      cut every requirement not needed now**; a smaller spec is a better spec.
    - **Acceptance criteria** — the demonstrable conditions for "spec satisfied".
@@ -33,10 +43,13 @@ that is what lets it outlive one plan and be referenced by several.
    fork (the kind PRODUCT_SENSE.md reserves for the human) — never "what next?".
    When you do escalate, ask one focused, preferably multiple-choice question.
    Record the resolution back into the spec.
-5. **Self-review before handoff** (fix inline): placeholder scan (no TBD / vague
-   requirement), internal consistency (no requirement contradicts another;
-   acceptance criteria match the requirements), scope (still one product?),
-   ambiguity (each requirement reads exactly one way). Catching a bad spec here
+5. **Self-review before handoff** (fix inline): completeness (no TBD / vague
+   requirement), coverage (error handling, edge cases, integration points
+   addressed), internal consistency (no requirement or design element
+   contradicts another; acceptance matches requirements), scope (still one
+   product?), ambiguity (each requirement reads exactly one way), YAGNI. Flag
+   only what would make someone build the wrong thing or write a flawed plan —
+   not "this section is less detailed than that one". Catching a bad spec here
    is far cheaper than after an ExecPlan is built on it.
 6. Write to `docs/product-specs/YYYY-MM-DD-<slug>.md` with frontmatter
    (`status / last_verified / owner`), register in `product-specs/index.md`, and
@@ -44,6 +57,7 @@ that is what lets it outlive one plan and be referenced by several.
 
 ## Hand off to ExecPlan
 7. Enter the `execplan` skill. The ExecPlan links this spec in its Context and
-   does **not** re-derive the requirements — its Approach/Assumptions/Milestones
-   cover only the "how". If the spec spans independent subsystems, the scope
-   check (PLANS.md) splits it into linked ExecPlans, all referencing this spec.
+   builds from its design — its Approach/Assumptions/Milestones cover execution
+   choices not already settled in the spec, and it does **not** re-derive the
+   spec. If the spec spans independent subsystems, the scope check (PLANS.md)
+   splits it into linked ExecPlans, all referencing this spec.
