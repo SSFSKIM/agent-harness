@@ -13,10 +13,8 @@ import harness_lib as hl
 
 STALE_DAYS = 30
 FM_REQUIRED = ("status", "last_verified", "owner")
-INDEXED_DIRS = ("design-docs", "product-specs", "references",
-                "memory/adr", "memory/knowledge", "memory/openq",
-                "memory/limitations")
-SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
+INDEXED_DIRS = ("design-docs", "product-specs", "references")
+SIZE_LIMITS = {"AGENTS.md": 120}
 DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
 SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/",
@@ -28,11 +26,9 @@ MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of the
 )
 # Harness docs whose D7 cap / D4 staleness a host override may only TIGHTEN,
 # never loosen (SECURITY T8/T9 — a host can't .harness.json its own critical
-# docs into rot/bloat). Keyed by repo-relative PATH, not bare name: the memory
-# bootloader lives at docs/memory/MEMORY.md (not docs/ top level), and keying by
-# name would also wrongly protect a host's unrelated docs/x/SECURITY.md.
-PROTECTED_PATHS = frozenset(
-    ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
+# docs into rot/bloat). Keyed by repo-relative PATH, not bare name: keying by
+# name would wrongly protect a host's unrelated docs/x/SECURITY.md.
+PROTECTED_PATHS = frozenset("docs/" + n for n in hl.MANAGED_DOCS)
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
 LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
@@ -73,7 +69,7 @@ def check_entrypoints(root, errors, limits=None):
 def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS):
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if _exempt(p, docs, FM_EXEMPT + host) or p.name == "MEMORY.md":
+        if _exempt(p, docs, FM_EXEMPT + host):
             continue
         fm = hl.read_frontmatter(p)
         if fm is None:
@@ -124,7 +120,7 @@ def check_naming(root, errors, host=()):
     for p in hl.iter_md(docs):
         if _exempt(p, docs, FM_EXEMPT + host):
             continue
-        ok = (KEBAB.match(p.name) or p.name == "MEMORY.md"
+        ok = (KEBAB.match(p.name)
               or (p.parent == docs and UPPER.match(p.name)))
         if not ok:
             _fail(errors, "D6", _rel(p, root), "filename is not kebab-case.",

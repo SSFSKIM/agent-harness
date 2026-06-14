@@ -139,10 +139,12 @@ def line_provenance_hash(line):
 
 
 # Doc trees the harness always governs — never exemptable via .harnessignore,
-# so a host can't un-govern (and silently poison) the memory/design tree.
-# MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
-# (the persona grounding + execplan docs that the review gate itself rides on).
-MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
+# so a host can't un-govern (and silently poison) the journal (memory) / design
+# tree. MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine
+# docs (the persona grounding + execplan docs that the review gate itself rides
+# on). `journal` is the memory-as-docs ledger — harness-written, D3-governed,
+# and must stay non-exemptable (its provenance/episodic lines are a write path).
+MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "journal",
                  "product-specs", "references")
 MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")

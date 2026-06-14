@@ -64,12 +64,6 @@ class TestLintDocs(unittest.TestCase):
         idx.write_text(fm() + "# Index\n- core-beliefs.md\n- Bad_Name.md\n")
         self.assertTrue(any("D6" in e for e in run_all(self.root)))
 
-    def test_d7_memory_bootloader_size(self):
-        mem = self.root / "docs" / "memory"
-        mem.mkdir(parents=True)
-        (mem / "MEMORY.md").write_text("x\n" * 61)
-        self.assertTrue(any("D7" in e and "MEMORY.md" in e for e in run_all(self.root)))
-
     def test_d8_unregistered_page(self):
         extra = self.root / "docs" / "design-docs" / "loose-page.md"
         extra.write_text(fm() + "# loose\n")
@@ -127,11 +121,11 @@ class TestLintDocs(unittest.TestCase):
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_cannot_exempt_managed_tree(self):
-        # a host listing the memory tree must not un-govern it (security)
-        bad = self.root / "docs" / "memory" / "knowledge"
+        # a host listing the journal (memory) tree must not un-govern it (security)
+        bad = self.root / "docs" / "journal" / "archive"
         bad.mkdir(parents=True)
         (bad / "loose.md").write_text("# no frontmatter\n")
-        self._legacy("memory/")
+        self._legacy("journal/")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_slashless_entry_is_segment_matched(self):
@@ -147,11 +141,11 @@ class TestLintDocs(unittest.TestCase):
         self.assertTrue(any("business-plan.md" in e and "D3" in e for e in errs), errs)
 
     def test_harnessignore_partial_prefix_cannot_bypass_managed_guard(self):
-        # `mem` must not reach `memory/…` (security P1 — the poisoning vector).
-        bad = self.root / "docs" / "memory" / "knowledge"
+        # `jour` must not reach `journal/…` (security P1 — the poisoning vector).
+        bad = self.root / "docs" / "journal" / "archive"
         bad.mkdir(parents=True)
         (bad / "poison.md").write_text("# no frontmatter\n")
-        self._legacy("mem")
+        self._legacy("jour")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_cannot_exempt_top_level_machine_doc(self):
@@ -162,9 +156,9 @@ class TestLintDocs(unittest.TestCase):
                             for e in run_all(self.root)))
 
     def test_harnessignore_drop_guard_normalizes_dotslash(self):
-        # `./memory` must be dropped by the guard itself (both layers agree),
+        # `./journal` must be dropped by the guard itself (both layers agree),
         # not merely rendered inert by _exempt.
-        self._legacy("./memory", "memory//knowledge", "business/")
+        self._legacy("./journal", "journal//archive", "business/")
         self.assertEqual(lint_docs.hl.exempt_roots(self.root), ("business",))
 
     def test_d1_threshold_overridable_per_repo(self):
@@ -225,16 +219,6 @@ class TestLintDocs(unittest.TestCase):
         errs = []
         lint_docs.check_frontmatter(self.root, errs, (), 9999)  # try to loosen
         self.assertTrue(any("D4" in e and "SECURITY.md" in e for e in errs), errs)
-
-    def test_size_override_cannot_loosen_memory_bootloader(self):
-        # the bootloader lives at docs/memory/MEMORY.md (not docs/ top level) —
-        # the clamp must reach it by path, not just top-level name (security r2).
-        mem = self.root / "docs" / "memory"
-        mem.mkdir(parents=True)
-        (mem / "MEMORY.md").write_text("x\n" * 200)  # > the 60-line bootloader cap
-        errs = []
-        lint_docs.check_sizes(self.root, errs, (), {"MEMORY.md": 9999}, 9999)
-        self.assertTrue(any("D7" in e and "MEMORY.md" in e for e in errs), errs)
 
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)

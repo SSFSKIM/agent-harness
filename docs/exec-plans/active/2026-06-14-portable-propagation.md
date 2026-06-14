@@ -108,7 +108,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   Acceptance: `grep -rn "feeder_\|imprint_" plugin/scripts plugin/hooks` returns
   only matches inside comments/docs (no live import/invoke); gate GREEN.
 
-- [ ] **M4 — Lint reconciliation.** In `lint_docs.py`: drop the four `memory/*`
+- [x] **M4 — Lint reconciliation.** In `lint_docs.py`: drop the four `memory/*`
   entries from `INDEXED_DIRS` (`:16-18`); drop `"MEMORY.md": 60` from `SIZE_LIMITS`
   (`:19`); drop `"docs/memory/MEMORY.md"` from `PROTECTED_PATHS` (`:34-35`); remove
   the three `p.name == "MEMORY.md"` special-cases (frontmatter-exempt `:76`,
@@ -177,8 +177,24 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   NOT in the set), but removed it as dead. The only OTHER remaining `feeder_/imprint_`
   references are the host-facing `agent-harness.md` TEMPLATE (unlinted plugin source
   → M5) and historical completed ExecPlans (immutable history).
+- 2026-06-14 (M4): the docs/memory coupling reached deeper than `lint_docs` — the
+  anti-poisoning guard `harness_lib.MANAGED_ROOTS` (the trees a host can't
+  `.harnessignore` away) listed `memory`. Five `test_lint_docs` cases used `memory/`
+  as the canonical "managed tree you can't un-govern" example, including the
+  dot-slash-normalization test whose assertion would have silently inverted (it'd
+  start *admitting* `./memory`). Repointed the guarantee to `journal` (see Decision
+  log) rather than just dropping it.
 
 ## Decision log
+- 2026-06-14 (M4): **`MANAGED_ROOTS`: replace `memory` with `journal`** — don't
+  just delete it. Why: the constant is a *security* guard (a host can't
+  `.harnessignore` a harness tree to slip un-governed/poisoned content past D3).
+  Post-pivot the harness memory home is `docs/journal/` (harness-written,
+  D3-governed provenance/episodic lines) — so the non-exemptable guarantee must
+  *follow the memory to its new home*, not evaporate. Tighten-only coverage for
+  protected docs was already held by `test_size_override_cannot_loosen_managed_doc`
+  (SECURITY.md), so the MEMORY.md-path variant was deleted as redundant, not
+  replaced.
 - 2026-06-14 (user): **hard-delete** the old loop (feeder_* + imprint_* + the
   `dream` skill + `dreamer` agent + their tests), not neutralize-in-place — why:
   `memory-architecture.md` already decided to retire it; the dreaming-v2 router
