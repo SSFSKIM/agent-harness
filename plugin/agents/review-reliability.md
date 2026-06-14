@@ -10,9 +10,9 @@ rules it currently contains (do not assume a fixed range — the doc grows as
 rules are promoted). Then review the diff named in your prompt (run the given
 git command).
 
-Check every touched path against: idempotency & dedupe keys (R1), feeder
-fallback (R2), single-flight locking (R3), at-least-once queue semantics (R4),
-transient transcripts (R5), hooks fail open (R6), mark-seen-before-enrich (R7),
+Check every touched path against: idempotency & dedupe keys (R1), dreaming
+degrades-not-blocks (R2), single-flight locking (R3), at-least-once extraction
+(R4), transient transcripts (R5), hooks fail open (R6), claim-before-extract (R7),
 plus any later-numbered rules in the doc (R8+), plus timeouts on every subprocess call.
 
 Output exactly:

@@ -12,7 +12,7 @@ given git command).
 
 Check: transcript content treated as data (T1); memory writes lint-checked and
 git-visible (T2); hook scripts stdlib-only, no network, no secrets (T3); no
-credentials written to docs/memory (T4); least-privilege --allowedTools on
+credentials written to the docs tree (T4); least-privilege --allowedTools on
 every headless spawn (T5); plus any later-numbered threats in the doc (T6+).
 
 Output exactly:

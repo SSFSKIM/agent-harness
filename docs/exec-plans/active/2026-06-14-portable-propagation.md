@@ -118,7 +118,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   Acceptance: gate GREEN; the Goal's fresh-temp-repo gate is still GREEN (a host
   with no `docs/memory` no longer trips a missing-index or missing-bootloader lint).
 
-- [ ] **M5 — Host-facing docs + templates rewrite.** Rewrite the stale portable
+- [x] **M5 — Host-facing docs + templates rewrite.** Rewrite the stale portable
   instructions to the memory-as-docs + on-demand-pull model:
   `plugin/skills/harness-init/SKILL.md` step 4 (migration mentions of `memory/`)
   and step 9 (drop "fill `docs/memory/progress/current.md`" and the two "feeder
@@ -163,6 +163,26 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   → no `docs/memory`, no `MEMORY.md`, has `docs/journal`, and `check.py --root <tmp>`
   GREEN — a NEW port is born memory-as-docs AND lint-clean. Self-host gate GREEN (11
   scaffold tests).
+- 2026-06-14: **M3 done.** Deleted the 5 dormant scripts (`feeder_sessionstart`,
+  `feeder_firstprompt`, `imprint_enqueue`, `imprint_guard`, `imprint_run`) + their 3
+  tests; dropped `imprint_guard` from `lint_structure.ALLOWED_IMPORTS`. No live
+  importer remained. Gate GREEN.
+- 2026-06-14: **M4 done.** `lint_docs` stripped of the memory/MEMORY.md constants;
+  `harness_lib.MANAGED_ROOTS` `memory`→`journal` (the non-exemptable guarantee
+  follows the memory home); 2 MEMORY.md size tests deleted (tighten-only already
+  covered), 3 managed-tree `.harnessignore` tests repointed memory→journal. 28
+  lint_docs tests pass; fresh-host gate GREEN.
+- 2026-06-14: **M5 done.** Rewrote the host-facing layer (5 templates +
+  `harness-init/SKILL.md`) to memory-as-docs + on-demand-pull. Swept the self-host
+  LIVING grounding docs that named the deleted loop — `DESIGN.md`,
+  `QUALITY_SCORE.md` (retired feeder/imprint/memory-store rows), self-host
+  `agent-harness.md`, and the bulk: `SECURITY.md` (banner dormant→retired, garden
+  unbundled, T1/T2/T4/T5/T7/T8/T9 reworded to the live dreaming write path,
+  gone-bootloader clauses) + `RELIABILITY.md` (R1–R4, R7 reframed from imprint/feeder
+  to the dreaming pipeline, principle preserved). Fixed 2 persona checklists +
+  `dream_run`'s stale docstring + a `docs_sync` comment example. Added the
+  migrate-on-demand tracker row; marked the Major debt row fixed. Gate GREEN;
+  fresh-host proof GREEN.
 
 ## Surprises & discoveries
 - 2026-06-14 (M2): the stale `memory/*` lint constants are already INERT on a

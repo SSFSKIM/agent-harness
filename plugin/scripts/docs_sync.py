@@ -88,7 +88,7 @@ def resolve_doc_target(root, target):
 
 def _boundary_re(tok):
     """Match `tok` only as a whole token (not inside a larger identifier/path), so
-    a rename of `docs/memory` can never corrupt `docs/memory-architecture`."""
+    a rename of `docs/design` can never corrupt `docs/design-docs`."""
     return re.compile(r"(?<![A-Za-z0-9_./-])" + re.escape(tok) + r"(?![A-Za-z0-9_./-])")
 
 

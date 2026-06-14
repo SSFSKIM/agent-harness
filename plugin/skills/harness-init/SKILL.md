@@ -56,7 +56,7 @@ convention yet — docs-relative prefixes, dir entries end `/` (e.g.
 content lints (D3/D5/D6/D7) skip them, so the gate reaches GREEN without
 force-renaming human-curated business/spec/research trees. The file is the
 migration backlog: migrate a wave, delete its line. Harness-managed trees
-(`memory/`, `design-docs/`, …) and top-level machine docs (`SECURITY.md`,
+(`design-docs/`, `journal/`, …) and top-level machine docs (`SECURITY.md`,
 `DESIGN.md`, …) cannot be exempted — the harness always governs its own tree.
 
 ## 5. Adapt the seeds (judgment — confirm with the human)
@@ -118,9 +118,11 @@ wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 
 ## 9. Write back, commit, hand off
 
-- Fill `docs/memory/progress/current.md` with the host's real state (it
-  ships with FILL markers).
+- Record the host's real current state where it belongs: the active ExecPlan
+  (`docs/exec-plans/active/`) for in-flight work, durable facts in their
+  design-docs home. There is no `progress/current.md` — orientation is the
+  AGENTS.md operating model (active plans + design-docs index + latest journal).
 - Commit the scaffold + migration as its own commit before substantive work.
 - Hand off: the next session starts in the host root with
-  `claude --plugin-dir "$PLUGIN"` — the feeder activates once
-  `docs/memory/MEMORY.md` exists.
+  `claude --plugin-dir "$PLUGIN"`; memory is read on demand from the docs tree
+  (pull, no SessionStart feeder).

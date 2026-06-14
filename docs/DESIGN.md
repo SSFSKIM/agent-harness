@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 owner: review-arch
 ---
 # DESIGN.md — taste for building harness components
@@ -29,11 +29,11 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   anti-pattern.
 
 ## Skills
-- A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
-  belongs in docs/, not in SKILL.md (skills point, docs explain).
+- A skill owns one procedure (create/maintain/gate/dream-rollouts/garden).
+  Knowledge belongs in docs/, not in SKILL.md (skills point, docs explain).
 - Frontmatter description states WHEN to use it, in trigger language.
 - Commit steps must narrow `git add` to the changed subtree (e.g.
-  `git add docs/memory/` for dream, `git add docs/` for garden) — never
+  `git add docs/` for dream-rollouts/garden) — never
   `git add -A`. The state dir `.claude/harness/` is gitignored, so the guard
   works today, but explicit scoping makes the invariant written and lint-able.
 
@@ -42,14 +42,15 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
 - Output contract — **review** personas (review-arch/reliability/security):
   P1 (blocks) / P2 (fix-forward) / Verdict. **Constructive** personas
-  (doc-gardener, dreamer) instead report their work product (what they
+  (doc-gardener) instead report their work product (what they
   changed/authored); they don't emit a Verdict.
 - Construction that needs the repo's FULL context is a **skill**, not a persona
   (e.g. `architecture-setup`): an isolated subagent can't read the codebase as
   deeply, and a one-time setup action doesn't need the per-commit guarantee a
   lint gives. Review wants isolation (independent judgment); setup wants the main
-  agent's hands. doc-gardener/dreamer remain personas for now (bounded
-  memory/docs scope) — revisit if they outgrow it.
+  agent's hands. doc-gardener remains a persona (bounded docs-GC scope) —
+  revisit if it outgrows it. (The `dreamer` consolidation persona was retired
+  with the old memory loop — the `dream-rollouts` router replaced it.)
 - Non-review personas must cite at least one `docs/` path in their body as the
   primary grounding doc; the host repo's own files (its `ARCHITECTURE.md`,
   source) are read as DATA/target input, not as taste authority over the persona.

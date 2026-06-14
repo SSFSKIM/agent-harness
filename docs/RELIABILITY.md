@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 owner: review-reliability
 ---
 # RELIABILITY.md
@@ -8,25 +8,33 @@ owner: review-reliability
 Grounding document for the review-reliability persona. Rules are numbered;
 cite them in findings.
 
-- **R1 — Idempotent imprinting.** Hooks can fire more than once for one event.
-  Every memory write-back is deduped by key `session_id:event[:bucket]`
-  (imprint_guard). pre_compact adds a 10-minute time bucket (multiple
-  compactions per session are legitimate).
-- **R2 — Feeder degrades, never blocks.** On timeout/error the SessionStart
-  feeder falls back to a deterministic minimal pack (MEMORY.md +
-  progress/current.md inline). A session must always start.
-- **R3 — Single-flight imprint worker.** Lock file in state dir; stale locks
-  (>1h) are broken. Concurrent claude -p storms are forbidden.
-- **R4 — At-least-once queue.** Enqueue appends; worker dedupes via processed
-  log. Crash between enqueue and process = retry next run, never loss → hence
-  R1 must hold.
+- **R1 — Idempotent memory writes.** A dream run is re-runnable without
+  duplication: Phase-1 outputs are PK-upserted per session in sqlite
+  (`stage1_outputs`), and the Phase-2 router dedupes each routed claim (sqlite
+  provenance + a content check) so re-routing is a no-op — never a duplicate
+  tracker row, design-doc Decision-log line, or index entry.
+- **R2 — Dreaming degrades, never blocks.** The `dream-rollouts` pipeline is
+  best-effort and out-of-band (manual, not a session hook): a model timeout/error
+  records a `failed`/`skipped` status and writes nothing; the forgetting pass
+  degrades to a recorded error. It can never wedge or crash a session — the read
+  path is on-demand pull, so there is no SessionStart feeder to fail.
+- **R3 — Single-flight dreaming.** `dream_run` holds a process lock (`dream.lock`,
+  stale-reclaimed) and Phase 2 additionally holds a global DB lock (`claim_phase2`)
+  + a 6h cooldown, so at most one dream runs at a time — concurrent `claude -p`
+  storms are forbidden; a rare lock race is short-circuited by the authoritative
+  DB lock.
+- **R4 — At-least-once extraction.** Rollouts are discovered + claimed (sqlite)
+  before extraction; a crash between claim and store leaves the rollout
+  re-claimable next run (lease expiry), so work is retried, never lost → hence
+  R1 (idempotent writes) must hold.
 - **R5 — Transcripts are transient.** transcript_path may be gone by the time
-  the worker runs; skip-and-mark, don't crash.
+  Phase-1 extraction runs; skip-and-mark, don't crash.
 - **R6 — Hooks fail open.** A hook script exception must never break the
   user's session: catch, log to `.claude/harness/`, exit 0.
-- **R7 — Mark-seen before enrich.** feeder_firstprompt marks the session seen
-  before spawning enrichment, so a failed enrichment cannot retry-storm on
-  every subsequent prompt.
+- **R7 — Claim before extract.** `dream_discover.claim_rollouts` marks a rollout
+  claimed (sqlite) before Phase-1 spawns extraction, so a failed or slow
+  extraction cannot retry-storm — the claim/lease gates the next attempt (the
+  mark-before-act principle generalized in R9).
 - **R8 — Per-entry exception isolation in queue workers.** Any loop that
   processes queue entries must catch per-entry exceptions (including
   `subprocess.TimeoutExpired`, `OSError`, `KeyError`, `ValueError`) and

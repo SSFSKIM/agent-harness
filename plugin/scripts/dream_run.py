@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Dreaming orchestrator: Phase 1 (extract) → Phase 2 (consolidate), single-flight.
+"""Dreaming orchestrator: Phase 1 (extract) → Phase 2 (route/consolidate), single-flight.
 
 Manual entry point for the Codex-faithful memory pipeline (the `dream-rollouts`
 skill). Phase 1 discovers + claims eligible idle past sessions and extracts a raw
-memory each (Haiku); Phase 2 consolidates the selected outputs into the workspace
-`MEMORY.md` + `memory_summary.md` (Sonnet, locked-down). At most one dream runs at
-a time, via a lock file with stale-lock recovery (the imprint worker's R3 pattern;
-Phase 2 also holds the global DB lock — defense in depth).
+memory each (Haiku). Phase 2 then, on a SELF-HOST repo (one with a docs library),
+ROUTES each distilled claim into its docs home via the read-only router
+(`dream_router`); on a BARE host it falls back to consolidating into a sandbox
+`MEMORY.md` + `memory_summary.md` (`dream_phase2`, Sonnet, locked-down). At most one
+dream runs at a time, via a lock file with stale-lock recovery (the same
+single-flight pattern as R3; Phase 2 also holds the global DB lock — defense in
+depth).
 
-Parallel to the docs/memory loop: writes ONLY under `.claude/harness/memories/`
-(gitignored runtime). The docs/memory `dream` skill is untouched.
+The bare-host fallback writes ONLY under `.claude/harness/memories/` (gitignored
+runtime); the self-host router writes git-tracked docs (see `dream_router`).
 """
 import json
 import os

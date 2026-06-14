@@ -1,19 +1,20 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-14
 owner: harness
 ---
 # agent-harness — the installed harness
 
 This repo is operated by the `agent-harness` Claude Code plugin: docs-as-memory
 knowledge system, taste lints whose FAIL messages carry FIX instructions,
-review personas grounded 1:1 in docs, and a memory loop (feeder / imprint /
-dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
+review personas grounded 1:1 in docs, and a dreaming memory loop that distills
+past sessions into the docs tree. **Self-host**: the machine itself lives in
+this repo at `plugin/`.
 
 ## Run it
 
-- Load: `claude --plugin-dir ./plugin` from this repo's root. The
-  SessionStart feeder activates once `docs/memory/MEMORY.md` exists.
+- Load: `claude --plugin-dir ./plugin` from this repo's root. Memory is read
+  on demand from the docs tree (pull, not a SessionStart feeder).
 - Gate: `python3 plugin/scripts/check.py` must be GREEN before every commit.
   The `harness-lint` skill interprets failures.
 - The gate is mechanical: scaffold installs `.git/hooks/pre-commit` running
@@ -76,9 +77,11 @@ both manual placement and the dreaming router use.
   allowlist). Episodic / provenance residue → `docs/journal/`.
 - **Read = on-demand navigation** (pull, not a feeder): the agent finds
   task-relevant memory in docs via the map + Grep/Glob (`memory-architecture.md`).
-- Dormant, being retired onto the dreaming engine: `feeder_*`, `imprint_*`, and the
-  `dream`/`garden` skills (the old automatic memory loop). A bare host with no docs
-  library uses the sandbox-store fallback (`dream_phase2`).
+- The old automatic memory loop — `feeder_*`, `imprint_*`, the `dream` skill +
+  `dreamer` agent — is **retired** (superseded by the dreaming router above; `git
+  log` preserves it). The `garden` skill + `doc-gardener` agent (docs entropy GC)
+  are a separate concern and stay live. A bare host with no docs library uses the
+  sandbox-store fallback (`dream_phase2`).
 
 ## Growing the grounding docs
 

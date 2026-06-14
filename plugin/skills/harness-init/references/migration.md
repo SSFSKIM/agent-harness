@@ -10,10 +10,10 @@ content or git history.
 |---|---|
 | README.md | Stays at root; link it from the AGENTS.md map. Extract durable knowledge into docs/ pages. |
 | CONTRIBUTING / style guides | `docs/design-docs/` (or fold into core-beliefs.md if short) |
-| ADRs (`adr/`, `docs/adr/`, RFCs) | `docs/memory/adr/` + register in its index.md |
+| ADRs (`adr/`, `docs/adr/`, RFCs) | a `docs/design-docs/` page + its `## Decision log` (one design-doc per subsystem; the decision rows live in it) |
 | Architecture overviews | `ARCHITECTURE.md` at root (codemap + invariants) or `docs/design-docs/` |
-| How-it-works guides, runbooks | `docs/memory/knowledge/` |
-| Known issues, quirks, gotchas | `docs/memory/limitations/` |
+| How-it-works guides, runbooks | `docs/design-docs/` + register in its index.md |
+| Known issues, quirks, gotchas | `docs/exec-plans/tech-debt-tracker.md` rows (or `RELIABILITY.md` for failure-mode rules) |
 | Roadmaps, TODO lists | `docs/exec-plans/active/` (living plans) or tech-debt-tracker rows |
 | External API / service notes | `docs/references/` (llms.txt-style digests) |
 | Product / feature specs | `docs/product-specs/` |
@@ -40,8 +40,8 @@ content or git history.
 ## AGENTS.md / CLAUDE.md merge
 
 - Existing AGENTS.md: keep it the single map. Add the harness rows
-  (agent-harness.md, docs/memory/, exec-plans/, RELIABILITY/SECURITY) and the
-  5-step operating model; cut detail until ≤120 lines — relocated detail goes
+  (agent-harness.md, docs/journal/, exec-plans/, RELIABILITY/SECURITY) and the
+  6-step operating model; cut detail until ≤120 lines — relocated detail goes
   to docs/ pages it links.
 - Existing CLAUDE.md with real content: move that content into AGENTS.md or
   the right docs/ page, then reduce CLAUDE.md to the 3-line pointer
