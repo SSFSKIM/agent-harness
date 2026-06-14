@@ -68,12 +68,18 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   taxonomy rewritten to the collapsed homes (now ONE taxonomy with the router). The
   host-generic MANAGED_ROOTS / PROTECTED_PATHS / MEMORY.md lint handling is KEPT
   (still valid for ported hosts — see the scope decision). Gate GREEN (158 tests).
-- [ ] M5 Security shift + loop convergence. Flip containment from sandbox-revert to
-  a docs path-allowlist + lint + T1/T2 poisoning guards; rewrite SECURITY.md's
-  `docs/memory`-specific T1/T2/T4/T6/T7 framings to the ledger + routed paths;
-  converge the old imprint/dreamer/gardener loop onto the dreaming engine (retire
-  the parallel loop — the dreaming-v2 M6 "parallel" decision is superseded).
-  review-security in scope.
+- [x] M5 Security shift + loop convergence. DONE (most of the "shift" was absorbed
+  by M2's read-only-agent + applicator = containment by construction). SECURITY.md
+  rewritten: status banner = the memory-as-docs router (primary) + the sandbox
+  fallback, reactivating T1/T2/T4/T6/T7; **T2** split into the router (no sandbox to
+  revert — the read-only agent can't write, the applicator only appends onto an
+  allowlist; residual = a bounded, git-visible, revertible misleading entry) + the
+  sandbox fallback (the post-hoc filesystem scope check); **T7** now covers the
+  router agent's DATA guard (`router_system.md`). The old feeder/imprint/dream/garden
+  loop is re-documented as dormant→retired across AGENTS / ARCHITECTURE /
+  agent-harness / SECURITY; the actual code retirement is the portable follow-on
+  (scope A). Last dangling `memory-loop-redesign` ref (SECURITY banner) cleared. Gate
+  GREEN (158 tests).
 - [ ] M6 Completion gate. self-review + review-arch + review-reliability +
   review-security (touches the live exec + memory write surface) + codex per
   CLAUDE.md, until all SATISFIED.
@@ -101,6 +107,9 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   exemptions; docs-tree + agent-harness taxonomy collapsed. Gate GREEN. The
   agent-harness + AGENTS dangling memory-loop refs are cleared (the SECURITY one
   rides M5).
+- 2026-06-14: M5 done. SECURITY.md rewritten (banner + T2 split router/sandbox + T7
+  router DATA guard); old loop re-documented dormant→retired; last dangling ref
+  cleared. Gate GREEN. Docs-only (containment already built in M2).
 
 ## Surprises & discoveries
 - 2026-06-14 (M1): routing must be per-CLAIM, not per-insight. A Phase 1
