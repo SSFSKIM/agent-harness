@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-14
 owner: harness
 ---
@@ -68,14 +68,16 @@ owner: harness
 | **spec** | `spec` | product design(the what) | plugin/skills/product-design/SKILL.md · docs/PLANS.md | product-spec(docs/product-specs/) | impl |
 | **impl** | `impl` | implementation(the build) | plugin/skills/execplan/SKILL.md · docs/PLANS.md · docs/DESIGN.md | exec-plan(docs/exec-plans/) + 코드 | (leaf; 큰 일은 impl 추가) |
 
-파이프라인: `planning → {research, design} → spec → impl`. 각 단계가 자기 자식을 만들어
+파이프라인: `planning → {research, design, spec} → spec → impl` — planning 은 다음 적절한
+단계를 고른다(간단한 목표면 곧장 spec, 복잡하면 design 경유). 각 단계가 자기 자식을 만들어
 DAG 를 키우고, 3a 가 blocker 가 풀릴 때마다 다음 단계를 dispatch 한다.
 
 ### 구성요소 / 파일
 
 - **신규 `director/taxonomy.py`** — institution-as-data:
   - `TAXONOMY: dict[str, dict]` — 위 표를 그대로. 각 엔트리 `{label, stage,
-    methodology_refs:[...], output, child_types:[...], child_label, template}`.
+    methodology_refs:[...], output, child_types:[...], template}`. (D-19 로 라벨명=type 이라
+    자식의 라벨 = `child_types` 그대로 — 별도 `child_label` 필드는 중복이라 두지 않는다.)
   - `ticket_type(ticket) -> str | None` — ticket["labels"] 중 TAXONOMY 라벨 하나를 type 으로
     (없으면 None).
   - `compose_worker_prompt(ticket) -> str` — type 있으면 `template.format(...) + "\n\nTASK:\n"

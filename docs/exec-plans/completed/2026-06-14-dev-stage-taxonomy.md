@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: 4f44b41aaca943e770f8726ee167cf46904e52d7
@@ -62,7 +62,8 @@ type 표현:
 ## Milestones
 
 - **M1 — taxonomy 레지스트리 + 순수 함수.** 신규 `director/taxonomy.py`: `TAXONOMY`(5 type,
-  각 `{label, stage, methodology_refs, output, child_types, child_label, template}`),
+  각 `{label, stage, methodology_refs, output, child_types, template}`; D-19 로 child 라벨=
+  child_types 라 별도 child_label 불필요),
   `ticket_type(ticket)`(라벨→type, 우선순위, 없으면 None), `compose_worker_prompt(ticket)`
   (type 면 템플릿+원본, 아니면 원본). **끝에 존재**: institution-as-data 레지스트리 + 순수
   라우팅. **run**: `python3 tests/test_director_taxonomy.py`. **acceptance**: 5 type 전부·
@@ -112,4 +113,46 @@ type 표현:
 
 ## Feedback (from completion gate)
 
+- review_level targeted(arch/design + spec-compliance, codex auth 다운 → Claude). **Verdict
+  SATISFIED**, P1 없음. 7개 methodology_ref 경로 전부 실재 확인, R1–R6 충족, .format 안전,
+  non-goal(D-22) 정직, Phase 4 확장성 양호. P2 처리:
+  - **P2-A** — spec/plan 이 registry 필드로 `child_label` 을 적었으나 코드엔 없음. D-19(라벨명
+    =type)로 child 라벨 = `child_types` 라 **중복** → spec/plan 에서 `child_label` 제거(코드에
+    죽은 중복 추가 대신). 정합화.
+  - **P2-B** — spec 의 파이프라인 다이어그램(`planning→{research,design}`)이 표/코드
+    (`planning→{research,design,spec}`)와 모순. 표 기준으로 다이어그램 수정(planning 은 간단
+    목표 시 spec 직행 가능), 테스트를 `assertEqual(set(...))` 로 못박음.
+  - **P2-C**(deferred) — planning 템플릿이 "언제 어느 child 단계를 고를지" 지침 없음.
+    D-22(템플릿 완성도 non-goal) 결. 아래 open question 으로 기록, Phase 4 가 다룸.
+  - **P2-D** — `dispatch` 의 `{**ticket,...}` shallow copy 가 blockers/labels 리스트를
+    공유(현재 mutate 없음). docstring 으로 의도(얕은 복사·callers 는 mutate 금지) 명시.
+- 수정 커밋(이 커밋): 테스트 tighten + dispatch docstring + spec/plan 정합화. 추가 라이브/
+  코드 회귀 없음. 별도 확인 리뷰 불필요(targeted, 수정이 spec-정합·docstring·테스트 한정).
+
+### Open questions (Phase 4)
+- planning 워커의 child-단계 선택 지침(planning→spec 직행 vs design 경유 판단 기준) — 템플릿
+  완성도(D-22 non-goal)로 미룸. 실런·자율 정책과 함께 Phase 4.
+
 ## Outcomes & retrospective
+
+- **무엇이 생겼나.** 티켓에 dev-stage **type** 이 생겼다: `director/taxonomy.py` 의 `TAXONOMY`
+  레지스트리(5 stage = institution-as-data) + 순수 `ticket_type`/`compose_worker_prompt`,
+  board 의 라벨 읽기, `dispatch` 의 type 라우팅. 180 테스트 GREEN(+14). planning→design→spec→
+  impl 파이프라인을 넣으면 3a 의 DAG 가 의존순으로 풀며 각 티켓을 **제 stage 의 하네스
+  방법론 워크플로 prompt**(spec→product-design, impl→execplan …)로 dispatch 한다 — RV1 의
+  "typed 티켓 DAG = 조직"이 구조로 성립.
+- **라이브.** M4 로 `labels{nodes{name}}` wire 를 실 Linear 에서 핀(LIN-9), 첫 시도 정확
+  (Phase 1~3a 에 이어 라이브 버그 0).
+- **핵심 배움 1 — 조직이 데이터다.** 5 stage × {방법론·산출물·자식·템플릿}을 한 dict 에
+  담으니 라우팅은 순수 함수 한 줄, 분해는 템플릿 한 줄이 됐다. 조직도가 레지스트리고,
+  새 type 추가 = dict 한 엔트리. Phase 4(자율 Director)가 이 seam 으로 깔끔히 확장된다.
+- **핵심 배움 2 — self-hosting 참조.** 템플릿이 repo 자신의 방법론을 경로로 가리킨다 →
+  워커가 하네스를 자기 자신에 돌린다. spec 워커가 product-design 을, impl 워커가 execplan 을
+  따른다. 도그푸딩이 아키텍처가 됐다.
+- **핵심 배움 3 — spec 내부 정합성.** 리뷰가 다이어그램↔표 모순(P2-B), 미구현 필드(P2-A)를
+  짚었다. spec 을 코드에 맞춰 정합화(중복 필드 제거, 다이어그램 수정)하는 게 죽은 데이터를
+  더하는 것보다 정직하다 — spec 은 계약이라 모순이 가장 비싸다.
+- **남은 것(Phase 3 전체 완료).** Phase 4(자율 Director: loop/scheduled oversee, taste-vs-handle
+  escalation 정책, PR 머지 관리 + `linear_graphql` 권한 경계 가드레일 — unwatched 전 필수);
+  실-codex 방법론 실행 + git-worktree provisioning(D-22, codex auth 복구 후); planning 템플릿
+  child-선택 지침; Phase 5(GitHub tracker).

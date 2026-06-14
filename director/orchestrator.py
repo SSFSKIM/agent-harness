@@ -61,7 +61,10 @@ def dispatch(ticket: dict, **kwargs) -> dict:
 
     The worker's prompt is composed via the dev-stage taxonomy (Phase 3b): a typed
     ticket (a Linear stage label) gets its stage-workflow template wrapped around the
-    task; an untyped ticket passes through unchanged."""
+    task; an untyped ticket passes through unchanged.
+
+    `composed` is an intentional SHALLOW copy — its `blockers`/`labels` lists alias the
+    board ticket's. Nothing downstream (run_ticket) mutates them; callers must not."""
     composed = {**ticket, "prompt": taxonomy.compose_worker_prompt(ticket)}
     try:
         return run.run_ticket(composed, **kwargs)

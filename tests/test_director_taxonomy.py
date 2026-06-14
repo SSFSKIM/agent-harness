@@ -19,7 +19,8 @@ class RegistryTest(unittest.TestCase):
 
     def test_child_types_form_pipeline(self):
         # planning -> {research,design,spec}; design -> spec; spec -> impl; leaves are leaves
-        self.assertIn("spec", tax.TAXONOMY["planning"]["child_types"])
+        self.assertEqual(set(tax.TAXONOMY["planning"]["child_types"]),
+                         {"research", "design", "spec"})
         self.assertEqual(tax.TAXONOMY["design"]["child_types"], ["spec"])
         self.assertEqual(tax.TAXONOMY["spec"]["child_types"], ["impl"])
         self.assertEqual(tax.TAXONOMY["research"]["child_types"], [])
