@@ -5,6 +5,7 @@
 | Type | Name | Description / wiring | Source |
 |---|---|---|---|
 | skill | architecture-setup | This skill should be used to set up or revise a repo's architecture & taste enforcement — at harness | plugin/skills/architecture-setup/SKILL.md |
+| skill | docs-sync | Keep curated docs CURRENT and RETRACT stale content — the update/delete counterpart to the append-on | plugin/skills/docs-sync/SKILL.md |
 | skill | docs-tree | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, applies fro | plugin/skills/docs-tree/SKILL.md |
 | skill | dream | Use periodically (or after several work sessions) to consolidate memory — dispatches the dreamer age | plugin/skills/dream/SKILL.md |
 | skill | dream-rollouts | Mine recent Claude Code sessions into long-term memory via the two-phase dreaming pipeline (small-mo | plugin/skills/dream-rollouts/SKILL.md |

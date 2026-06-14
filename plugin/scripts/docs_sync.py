@@ -393,6 +393,72 @@ def build_change_scope(root, base="main", run_diff=_git_diff):
     return parse_diff_surface(run_diff(root, base))
 
 
+# ---- M3: the read-only audit agent + maintenance-plan parsing --------------
+#
+# The agent only PROPOSES (it has Read/Glob/Grep/LS, no Write/Edit/Bash). Its
+# output is a maintenance plan (JSON) that M1's deterministic applicator
+# re-validates and applies — so the agent can never itself edit a curated doc
+# (the same containment-by-construction shape as the dreaming router).
+
+AUDIT_MODEL = "sonnet"
+AUDIT_TIMEOUT = 1200
+MAX_PLAN_ITEMS = 64
+
+
+def load_audit_templates():
+    d = hl.plugin_root() / "skills" / "docs-sync" / "templates"
+    return (d / "audit_system.md").read_text(encoding="utf-8"), \
+           (d / "audit_input.md").read_text(encoding="utf-8")
+
+
+def render_audit_prompt(system_tmpl, input_tmpl, scope):
+    """System (raw) + input (.format-substituted). Only the input template is
+    formatted, and the scope is inserted as a single value, so its braces are not
+    re-scanned (same framing guarantee as the dreaming prompts)."""
+    filled = input_tmpl.format(scope=json.dumps(scope, ensure_ascii=False, indent=2))
+    return system_tmpl + "\n\n" + filled
+
+
+def spawn_audit(prompt, model, cwd, timeout=AUDIT_TIMEOUT):
+    """Spawn the READ-ONLY audit agent (Read/Glob/Grep/LS only, cwd = repo so it
+    can compare the change scope against the docs, prompt via stdin). It writes
+    NOTHING — it returns a maintenance plan as stdout JSON. Raises on nonzero/timeout."""
+    proc = subprocess.run(
+        ["claude", "-p", "--model", model, "--allowedTools", "Read,Glob,Grep,LS"],
+        input=prompt, capture_output=True, text=True,
+        cwd=str(cwd), env=hl.headless_env(), timeout=timeout)
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude -p exit {proc.returncode}: {proc.stderr[:300]}")
+    return proc.stdout
+
+
+def parse_maintenance_plan(text):
+    """Extract the outermost JSON object and return its `plan` list (dict items,
+    capped). Raises ValueError on empty/non-object/no-plan output. Unknown item
+    shapes are KEPT — M1's classify() routes anything non-mechanical to the report,
+    so a malformed item is surfaced, never silently dropped."""
+    if not text or not text.strip():
+        raise ValueError("empty audit output")
+    s = text.strip()
+    start, end = s.find("{"), s.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("no JSON object in audit output")
+    obj = json.loads(s[start:end + 1])
+    if not isinstance(obj, dict) or not isinstance(obj.get("plan"), list):
+        raise ValueError("audit output lacks a `plan` list")
+    return [it for it in obj["plan"] if isinstance(it, dict)][:MAX_PLAN_ITEMS]
+
+
+def audit(scope, root, spawn=spawn_audit, templates=None, model=AUDIT_MODEL,
+          timeout=AUDIT_TIMEOUT):
+    """Render the audit prompt from the change scope, spawn the read-only agent,
+    and parse its maintenance plan. `spawn`/`templates` are injectable for tests."""
+    system_tmpl, input_tmpl = templates or load_audit_templates()
+    prompt = render_audit_prompt(system_tmpl, input_tmpl, scope)
+    out = spawn(prompt, model, cwd=root, timeout=timeout)
+    return parse_maintenance_plan(out)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Apply a docs-sync maintenance plan (JSON on stdin).")
     ap.add_argument("--root", default=None)

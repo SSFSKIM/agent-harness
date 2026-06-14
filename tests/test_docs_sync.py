@@ -288,5 +288,61 @@ class TestBuildChangeScope(unittest.TestCase):
         self.assertEqual(scope, {"changed_files": [], "changed_symbols": [], "removed": []})
 
 
+# ---- M3: the read-only audit agent + plan parsing --------------------------
+
+import json as _json
+
+STUB_TMPL = ("AUDIT SYSTEM", "SCOPE:\n{scope}\nEND")
+
+
+class TestParseMaintenancePlan(unittest.TestCase):
+    def test_extracts_plan_from_prose(self):
+        plan = ds.parse_maintenance_plan(
+            'Here is the plan:\n{"plan":[{"target":"docs/x.md","kind":"outdated"}]}\n')
+        self.assertEqual(plan, [{"target": "docs/x.md", "kind": "outdated"}])
+
+    def test_keeps_dicts_drops_non_dicts(self):
+        plan = ds.parse_maintenance_plan(_json.dumps(
+            {"plan": [{"kind": "outdated"}, "notadict", 5]}))
+        self.assertEqual(plan, [{"kind": "outdated"}])
+
+    def test_empty_raises(self):
+        with self.assertRaises(ValueError):
+            ds.parse_maintenance_plan("   ")
+
+    def test_no_plan_list_raises(self):
+        with self.assertRaises(ValueError):
+            ds.parse_maintenance_plan('{"foo": 1}')
+
+
+class TestAudit(_Case):
+    def test_audit_renders_scope_and_returns_parsed_plan(self):
+        captured = {}
+
+        def stub(prompt, model, cwd, timeout):
+            captured["prompt"] = prompt
+            captured["cwd"] = cwd
+            return '{"plan":[{"target":"docs/design-docs/foo.md","kind":"outdated",' \
+                   '"evidence":"m.py:1","change":{"op":"rename","old":"feeder_sessionstart",' \
+                   '"new":"feeder_start"},"risk":"mechanical"}]}'
+        scope = {"changed_symbols": [{"symbol": "feeder_sessionstart", "file": "m.py"}]}
+        plan = ds.audit(scope, self.root, spawn=stub, templates=STUB_TMPL)
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]["change"]["op"], "rename")
+        self.assertIn("feeder_sessionstart", captured["prompt"])   # scope embedded as DATA
+        self.assertEqual(captured["cwd"], self.root)
+
+    def test_audit_to_apply_seam_mechanical_fix(self):
+        # the M3 -> M1 seam: a live-shaped plan flows into the deterministic applicator.
+        def stub(prompt, model, cwd, timeout):
+            return '{"plan":[{"target":"docs/design-docs/foo.md","kind":"outdated",' \
+                   '"evidence":"m.py:1","change":{"op":"rename","old":"feeder_sessionstart",' \
+                   '"new":"feeder_start"},"risk":"mechanical"}]}'
+        plan = ds.audit({"changed_symbols": []}, self.root, spawn=stub, templates=STUB_TMPL)
+        res = ds.apply_plan(self.root, plan, NOW, run_check=GREEN)
+        self.assertEqual(len(res["applied"]), 1)
+        self.assertIn("feeder_start hook compiles", self._foo())
+
+
 if __name__ == "__main__":
     unittest.main()
