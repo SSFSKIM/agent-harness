@@ -26,3 +26,8 @@ owner: harness
   — Phase 3b. 티켓 type(planning/research/design/spec/impl)을 하네스 doc 파이프라인 단계에
   매핑: type→methodology+산출 doc+typed 자식. type=Linear 라벨, prompt 라우팅(순수 함수),
   worker-driven 분해, 3a DAG 가 정렬. 하네스가 자신을 돌리는 typed 티켓 DAG(RV1).
+- [Worker authority guardrail](2026-06-14-worker-authority-guardrail.md)
+  — Phase 4 첫 슬라이스 + 하드 선행조건. 워커의 `linear_graphql` 를 mutation root-field
+  allowlist(default-deny)로 묶는다: reads 무제한, allowlisted forward-only mutation 만 통과,
+  파괴적/미지 mutation 은 Linear 로 나가기 전 로컬 거부. 서버 parser 와 정렬된 최소 GraphQL
+  분류기. un-watched dispatch 전에 사람 키로 보드를 파괴하지 못하게(tracker line 49, T10).
