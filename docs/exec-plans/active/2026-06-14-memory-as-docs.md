@@ -46,8 +46,10 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   entry; `check.py` GREEN. Technical contract: the new `consolidate()` output
   target, the `docs-tree` placement seam, the ledger-append function signature.
 - [ ] M3 Migrate + retire `docs/memory/`. Move existing content to its docs homes
-  per the taxonomy (progress → exec-plans/tracker; limitations → tracker/
-  RELIABILITY; archive/sessions → ledger), then delete the layer. Touches
+  per the confirmed collapse: knowledge/adr/openq → design-docs (body / Decision
+  log / Open-decisions); limitations → tech-debt-tracker + RELIABILITY; progress →
+  exec-plans/tracker; archive/sessions → journal; MEMORY.md bootloader role →
+  AGENTS.md (M4). Then delete the layer. Touches
   persistent state → idempotence: gate on a pre-move inventory; re-runnable as a
   no-op once the tree is empty.
 - [ ] M4 Rewire read-path bootloader + lint. Bootloader `docs/memory/MEMORY.md` →
@@ -90,6 +92,14 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   mis-classified claim then degrades to a harmless episodic journal entry, never
   pollution of a curated design-doc. Curated docs are touched only on a confident,
   typed, deduped match.
+- 2026-06-14 (user, flagged): docs/memory is NOT mostly-duplicate — the docs-tree
+  skill routes 4 first-class kinds (knowledge/adr/limitations/openq) into it. Chose
+  MAXIMAL COLLAPSE: fold all into existing docs homes (knowledge/adr/openq →
+  design-docs facets; limitations → tracker/RELIABILITY), leaving only docs/journal
+  as residual; the docs-tree taxonomy + the routing rule are now ONE list. Why: the
+  one-brain=docs thesis; a separate memory namespace was redundant once each kind
+  has a docs home. This unifies M2's routing homes, M3's migration targets, and the
+  M4 docs-tree rewrite.
 - 2026-06-14: collapse the memory layer into `docs/` (one brain) — most of
   `docs/memory/` already duplicated `docs/`; the only residual docs cannot hold is
   episodic/provenance. Why: the harness thesis is docs-as-brain + progressive

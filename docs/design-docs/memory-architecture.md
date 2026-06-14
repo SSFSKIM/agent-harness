@@ -65,21 +65,31 @@ docs home (1-5) ONLY when the claim is a confident, present-tense, durable truth
 anything uncertain, episodic, or novel-without-a-home falls to the journal (6). A
 journal provenance line is appended either way.
 
-1. A decision or durable fact about how OUR system works -> the relevant
-   `docs/design-docs/*` page (edit it) + its Decision log.
-2. A known limitation, bug, or debt -> `docs/exec-plans/tech-debt-tracker.md`
-   (a row) or `RELIABILITY.md`.
-3. A fact about an EXTERNAL API/tool we depend on -> `docs/references/*`.
+1. A durable truth about how OUR system works — design rationale, a reusable
+   how-it-works, a decision (+why), or an open question -> the relevant
+   `docs/design-docs/*` page: body for rationale/how-it-works, its Decision log
+   for a decision, its Open-decisions for an open question. (Absorbs the old
+   `docs/memory/{knowledge,adr,openq}`.)
+2. A known limitation / landmine / bug / debt -> `docs/exec-plans/tech-debt-tracker.md`
+   (a row); a failure-mode/idempotency rule -> `RELIABILITY.md`. (Absorbs the old
+   `docs/memory/limitations`.)
+3. A fact about an EXTERNAL API/tool we depend on -> `docs/references/*` ONLY if it
+   is a full llms.txt-style digest (vendored); a one-off discovered behavior is a
+   how-it-works -> step 1, or, if minor, the journal.
 4. A recurring user preference / "how we work" correction -> `docs/DESIGN.md` /
    `core-beliefs.md`, but only on the 2nd sighting (feedback-twice -> promote);
    the 1st sighting is a `[held]` journal line with a count.
 5. Product intent / what we optimize -> `docs/product-specs/*` / `PRODUCT_SENSE.md`.
 6. Otherwise (episodic story, low-confidence, no clear home) -> `docs/journal/`.
 
-Before writing to a docs home, check the claim is not already there (sqlite
-provenance + a content check) -> dedupe to a no-op. Conservative by construction:
-curated docs are touched only on a confident typed match, so a mis-classification
-degrades to a harmless journal entry, never docs pollution.
+This list IS the docs-tree taxonomy after the 2026-06-14 collapse decision
+(knowledge/adr/openq folded into design-docs; limitations into the tracker /
+RELIABILITY); the `docs-tree` skill is rewritten to match in M4, so dreaming and
+manual placement share ONE taxonomy. Before writing to a docs home, check the
+claim is not already there (sqlite provenance + a content check) -> dedupe to a
+no-op. Conservative by construction: curated docs are touched only on a confident
+typed match, so a mis-classification degrades to a harmless journal entry, never
+docs pollution.
 
 ## Dreaming's redefined role
 Keep the PR2 engine wholesale (Phase 1 extract + no-op gate + usage curation +
