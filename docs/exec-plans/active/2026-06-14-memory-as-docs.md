@@ -31,13 +31,12 @@ dreaming-v2 is retired for self-hosting (kept only as the bare-host fallback).
 This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
 
 ## Milestones
-- [ ] M1 (spec) Residual ledger + routing rule. Decide the ledger's home/name
-  (provisional `docs/journal/`), its frontmatter + append-only shape, and how
-  provenance (session → insight) is recorded. Encode the routing rule
-  (episodic/provenance → ledger; present-tense truth → its docs home) precisely
-  enough to be a prompt. Pure-doc milestone (lands in memory-architecture.md +
-  this plan). Acceptance: 3 sample distilled insights each route to exactly one
-  home with no ambiguity.
+- [x] M1 (spec) Residual ledger + routing rule. DONE — `memory-architecture.md`
+  now fixes the ledger (`docs/journal/YYYY-MM.md`, append-only, `[routed]`/`[held]`
+  lines) and the 6-step per-claim routing rule with the journal as the conservative
+  default. Acceptance MET: 3 sample claims each routed to exactly one home (debt →
+  tracker; external-tool fact → references; a mixed insight SPLIT into a design-doc
+  decision + an episodic journal line — the surprise that forced per-claim routing).
 - [ ] M2 (PoC) Phase 2 → docs router. Replace the flat-MEMORY.md output with a
   router: Phase 2 reads selected stage-1 outputs and EITHER edits/creates the
   routed `docs/` page OR appends to the ledger (placement via the `docs-tree`
@@ -70,10 +69,27 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
 - 2026-06-14: plan created off `34896c8` (on the `dreaming-v2` branch, after the
   PR2 audit). Spec design captured in `design-docs/memory-architecture.md`; the
   dreaming-v2 design-doc carries a supersede banner on its output target.
+- 2026-06-14: M1 done. Ledger = `docs/journal/YYYY-MM.md` (monthly, append-only,
+  doubles as provenance log + promotion inbox); routing rule = 6-step per-claim
+  ordered match, journal as conservative default. Both written into
+  `memory-architecture.md`. Validated against 3 sample claims.
 
 ## Surprises & discoveries
+- 2026-06-14 (M1): routing must be per-CLAIM, not per-insight. A Phase 1
+  raw_memory bundles several claims; the third validation sample ("we discovered
+  git rename detection hid a forgetting cue; fix = --no-renames") split cleanly
+  into a DURABLE design decision (→ dreaming-v2.md Decision log) and an EPISODIC
+  retrospective (→ journal `[held]`). A per-insight router would have mis-filed
+  the whole thing into one bucket. → Phase 2 must atomize before routing (M2).
 
 ## Decision log
+- 2026-06-14: ledger = `docs/journal/YYYY-MM.md`, append-only monthly files. Why:
+  episodic content is inherently chronological; monthly rotation bounds growth and
+  stays progressive (only recent months load); append-only avoids rewrite churn.
+- 2026-06-14: the journal is the conservative DEFAULT home (rule step 6). Why: a
+  mis-classified claim then degrades to a harmless episodic journal entry, never
+  pollution of a curated design-doc. Curated docs are touched only on a confident,
+  typed, deduped match.
 - 2026-06-14: collapse the memory layer into `docs/` (one brain) — most of
   `docs/memory/` already duplicated `docs/`; the only residual docs cannot hold is
   episodic/provenance. Why: the harness thesis is docs-as-brain + progressive

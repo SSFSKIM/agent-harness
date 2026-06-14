@@ -39,16 +39,47 @@ This line IS the routing rule the dreaming author applies.
 - read-time map / bootloader → `AGENTS.md` (already the map; no separate MEMORY.md)
 - RESIDUAL (episodic / provenance only) → the ledger
 
-## The residual ledger (the only surviving "memory" structure)
-A small append-only record inside `docs/` for what docs cannot express:
-- session provenance — which past session produced which distilled insight (also
-  what dreaming needs for dedupe + forgetting);
-- an inbox of distilled learnings / feedback not yet promoted to a docs home;
-- forgetting state.
+## The residual ledger — `docs/journal/` (decided, M1)
+A single append-only episodic record at `docs/journal/YYYY-MM.md` (monthly files:
+bounded growth, progressive — only recent months load). It is BOTH the home for
+what docs cannot hold AND the audit trail of what dreaming did. Each dreaming run
+appends one dated block listing every distilled claim and where it went:
 
-Provisional home/name: `docs/journal/` (episodic, append-only). The FINAL name +
-shape is the first decision of the follow-on ExecPlan. The sqlite `stage1_outputs`
-store stays as internal staging (machinery, not the readable ledger).
+    ## 2026-06-14T10:30Z — dream run (sessions: S1, S2)
+    - [routed]  design fact "scope check is post-hoc" -> docs/design-docs/dreaming-v2.md
+    - [routed]  external "Claude slug = non-alnum->-" -> docs/references/claude-cli-headless-llms.txt
+    - [held]    episodic "spent 3h on git rename detection" (no docs home)
+    - [held]    feedback 1/2 "user prefers terse commits" (promote at 2x)
+
+A `[routed]` line is provenance only (the content lives in its docs home); a
+`[held]` line IS residual content (episodic / un-promoted, kept here). The journal
+doubles as the promotion inbox: a `[held]` feedback line promotes to its docs home
+on the second sighting. Machine state for dedupe/forgetting stays in sqlite
+(`stage1_outputs` + a routed-target marker); the journal is its readable
+projection plus the residual itself.
+
+## Routing rule — per CLAIM, not per insight (decided, M1)
+Phase 1 raw_memories bundle several claims, so Phase 2 ATOMIZES each into claims
+and routes each claim to exactly one home. Ordered; first match wins. Route to a
+docs home (1-5) ONLY when the claim is a confident, present-tense, durable truth;
+anything uncertain, episodic, or novel-without-a-home falls to the journal (6). A
+journal provenance line is appended either way.
+
+1. A decision or durable fact about how OUR system works -> the relevant
+   `docs/design-docs/*` page (edit it) + its Decision log.
+2. A known limitation, bug, or debt -> `docs/exec-plans/tech-debt-tracker.md`
+   (a row) or `RELIABILITY.md`.
+3. A fact about an EXTERNAL API/tool we depend on -> `docs/references/*`.
+4. A recurring user preference / "how we work" correction -> `docs/DESIGN.md` /
+   `core-beliefs.md`, but only on the 2nd sighting (feedback-twice -> promote);
+   the 1st sighting is a `[held]` journal line with a count.
+5. Product intent / what we optimize -> `docs/product-specs/*` / `PRODUCT_SENSE.md`.
+6. Otherwise (episodic story, low-confidence, no clear home) -> `docs/journal/`.
+
+Before writing to a docs home, check the claim is not already there (sqlite
+provenance + a content check) -> dedupe to a no-op. Conservative by construction:
+curated docs are touched only on a confident typed match, so a mis-classification
+degrades to a harmless journal entry, never docs pollution.
 
 ## Dreaming's redefined role
 Keep the PR2 engine wholesale (Phase 1 extract + no-op gate + usage curation +
@@ -77,9 +108,8 @@ a hardcode: a host with a docs library (self-hosting) → author into it; a host
 with none → fall back to the self-contained store. This matches the existing
 `architecture-setup` / `harness-init` host-adaptation principle.
 
-## Open decisions (→ follow-on ExecPlan, M1)
-- ledger name/shape (`docs/journal/`?) and how provenance is recorded;
-- the exact routing rule encoded in the Phase 2 prompt — the episodic-vs-stable
-  judgment is the hard part, and a mis-route either pollutes a clean design-doc
-  with history or loses the history;
-- migration order for the existing `docs/memory/*` content.
+## Open decisions
+- (→ ExecPlan M3) migration order for the existing `docs/memory/*` content;
+- (→ ExecPlan M2) how the Phase 2 prompt is given the claim-atomization + routing
+  rule above so the episodic-vs-durable judgment is reliable — the hard part;
+  M1 fixed the rule, M2 proves a model can apply it.
