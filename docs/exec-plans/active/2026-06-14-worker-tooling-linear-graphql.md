@@ -90,7 +90,11 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
 
 ## Progress log
 
-- [x] (2026-06-14) Plan created; base_commit 74bca60; 프로토콜 정본 확정(D-7). W1–W4 미착수.
+- [x] (2026-06-14) Plan created; base_commit 74bca60; 프로토콜 정본 확정(D-7).
+- [x] (2026-06-14) W1 완료: app_server 에 tool_executor + thread_start(tools=)→dynamicTools +
+  `item/tool/call`→tool_executor 라우팅(approval seam 과 분리) + normalize_tool_result
+  ({success,output,contentItems}) + mock 'tool' 시나리오. 증거: 5 app_server tests OK
+  (tool-call 이 tool_executor 로 (name,args) 전달·turn completed). W2–W4 미착수.
 
 ## Surprises & discoveries
 

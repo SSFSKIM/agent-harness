@@ -16,6 +16,7 @@ import sys
 THREAD_ID = "thr_mock_1"
 TURN_ID = "turn_mock_1"
 APPROVAL_ID = 9001  # id of the server-initiated approval request
+TOOL_CALL_ID = 9002  # id of the server-initiated dynamic-tool call
 
 
 def out(msg):
@@ -34,6 +35,7 @@ def complete_turn():
 def main():
     scenario = sys.argv[1] if len(sys.argv) > 1 else "plain"
     awaiting_approval = False
+    awaiting_tool = False
     while True:  # readline() (not `for line in sys.stdin`) to avoid pipe read-ahead deadlock
         raw = sys.stdin.readline()
         if raw == "":
@@ -66,6 +68,13 @@ def main():
                                 "cwd": "/ws",
                                 "availableDecisions": ["accept", "decline", "cancel"]}})
                 awaiting_approval = True
+            elif scenario == "tool":
+                out({"id": TOOL_CALL_ID, "method": "item/tool/call",
+                     "params": {"tool": "linear_graphql",
+                                "arguments": {"query": "query { viewer { id } }"},
+                                "itemId": "item_t", "threadId": THREAD_ID,
+                                "turnId": TURN_ID}})
+                awaiting_tool = True
             else:
                 complete_turn()
         elif awaiting_approval and mid == APPROVAL_ID and ("result" in msg or "error" in msg):
@@ -74,6 +83,12 @@ def main():
                  "params": {"threadId": THREAD_ID, "requestId": APPROVAL_ID}})
             complete_turn()
             awaiting_approval = False
+        elif awaiting_tool and mid == TOOL_CALL_ID and ("result" in msg or "error" in msg):
+            # the client's tool result -> resume the SAME turn
+            out({"method": "item/completed",
+                 "params": {"itemId": "item_t", "threadId": THREAD_ID, "turnId": TURN_ID}})
+            complete_turn()
+            awaiting_tool = False
         # anything else: ignore
 
 

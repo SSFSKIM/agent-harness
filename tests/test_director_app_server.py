@@ -43,6 +43,30 @@ class AppServerClientTest(unittest.TestCase):
             c.run_turn(tid, "x")
         self.assertEqual(seen, [])  # plain turn never asks for a decision
 
+    def test_tool_call_routes_to_tool_executor(self):
+        # W1: a Codex item/tool/call is routed to tool_executor, not the approval seam.
+        calls = []
+
+        def tool_exec(name, args):
+            calls.append((name, args))
+            return {"success": True, "output": "ok"}
+
+        with _client("tool", tool_executor=tool_exec) as c:
+            c.initialize()
+            tid = c.thread_start(tools=[{"name": "linear_graphql", "description": "d",
+                                         "inputSchema": {"type": "object"}}])
+            res = c.run_turn(tid, "use the tool")
+        self.assertEqual(res["status"], "completed")
+        self.assertEqual(calls, [("linear_graphql", {"query": "query { viewer { id } }"})])
+
+    def test_normalize_tool_result_shape(self):
+        n = appsrv.normalize_tool_result({"success": True, "output": "x"})
+        self.assertEqual(n, {"success": True, "output": "x",
+                             "contentItems": [{"type": "inputText", "text": "x"}]})
+        n2 = appsrv.normalize_tool_result({"success": False})  # no output -> JSON-encoded
+        self.assertIsInstance(n2["output"], str)
+        self.assertEqual(n2["contentItems"][0]["type"], "inputText")
+
 
 if __name__ == "__main__":
     unittest.main()

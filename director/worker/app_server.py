@@ -42,15 +42,33 @@ class ReadTimeout(RuntimeError):
     """No output from the app-server within read_timeout_s."""
 
 
+def normalize_tool_result(result) -> dict:
+    """Coerce a tool_executor return into the Codex dynamic-tool result shape
+    {success, output, contentItems:[{type:"inputText", text}]} (confirmed against
+    the app-server schema: DynamicToolCallOutputContentItem)."""
+    if not isinstance(result, dict):
+        result = {"success": False, "output": str(result)}
+    success = bool(result.get("success", False))
+    output = result.get("output")
+    if not isinstance(output, str):
+        output = json.dumps(result, ensure_ascii=False)
+    items = result.get("contentItems")
+    if not isinstance(items, list):
+        items = [{"type": "inputText", "text": output}]
+    return {"success": success, "output": output, "contentItems": items}
+
+
 class AppServerClient:
     def __init__(self, command: list[str], cwd: Path | str,
                  on_event: Callable[[dict], None] | None = None,
                  on_server_request: Callable[[str, dict], object] | None = None,
+                 tool_executor: Callable[[str, dict], dict] | None = None,
                  read_timeout_s: float = 10.0):
         self.command = command
         self.cwd = str(cwd)
         self.on_event = on_event or (lambda ev: None)
         self.on_server_request = on_server_request
+        self.tool_executor = tool_executor
         self.read_timeout_s = read_timeout_s
         self._id = 0
         self._proc: subprocess.Popen | None = None
@@ -125,11 +143,30 @@ class AppServerClient:
             self._rbuf += chunk
 
     def _handle_server_initiated(self, msg: dict) -> None:
-        """Reply to a server-initiated request via on_server_request (the seam)."""
-        result = None
-        if self.on_server_request is not None:
-            result = self.on_server_request(msg["method"], msg.get("params", {}))
+        """Reply to a server-initiated request: a Codex dynamic-tool call
+        (`item/tool/call`) goes to tool_executor; approval/input requests go to
+        on_server_request (the Phase 1 seam). Same channel, routed by method."""
+        method = msg["method"]
+        params = msg.get("params", {})
+        if method == "item/tool/call":
+            result = self._run_tool(params)
+        else:
+            result = None
+            if self.on_server_request is not None:
+                result = self.on_server_request(method, params)
         self._send({"id": msg["id"], "result": result})
+
+    def _run_tool(self, params: dict) -> dict:
+        name = params.get("tool") or params.get("name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(name, str) or self.tool_executor is None:
+            return normalize_tool_result(
+                {"success": False, "output": f"unsupported tool call: {name!r}"})
+        try:
+            result = self.tool_executor(name, arguments)
+        except Exception as exc:  # a tool must never crash the turn
+            result = {"success": False, "output": f"tool {name!r} raised: {exc}"}
+        return normalize_tool_result(result)
 
     def _request(self, method: str, params: dict) -> dict:
         rid = self._next_id()
@@ -160,10 +197,13 @@ class AppServerClient:
 
     def thread_start(self, model: str | None = None,
                      approval_policy: str = "untrusted",
-                     sandbox: str = "workspace-write") -> str:  # SandboxMode enum (hyphenated)
-        params = {"cwd": self.cwd, "approvalPolicy": approval_policy, "sandbox": sandbox}
+                     sandbox: str = "workspace-write",  # SandboxMode enum (hyphenated)
+                     tools: list[dict] | None = None) -> str:
+        params: dict = {"cwd": self.cwd, "approvalPolicy": approval_policy, "sandbox": sandbox}
         if model:
             params["model"] = model
+        if tools:
+            params["dynamicTools"] = tools  # [{name, description, inputSchema}]
         return self._request("thread/start", params)["thread"]["id"]
 
     def run_turn(self, thread_id: str, text: str,
@@ -175,8 +215,8 @@ class AppServerClient:
         turn/start response and confirmed by the terminal notification — this is
         what proves a mid-turn approval did NOT spawn a new turn (M3)."""
         rid = self._next_id()
-        params = {"threadId": thread_id, "input": [{"type": "text", "text": text}],
-                  "cwd": self.cwd, "approvalPolicy": approval_policy}
+        params: dict = {"threadId": thread_id, "input": [{"type": "text", "text": text}],
+                        "cwd": self.cwd, "approvalPolicy": approval_policy}
         if sandbox_policy:
             params["sandboxPolicy"] = sandbox_policy
         self._send({"id": rid, "method": "turn/start", "params": params})
