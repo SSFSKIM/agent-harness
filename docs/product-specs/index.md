@@ -18,3 +18,7 @@ owner: harness
 - [오케스트레이터 — poll→dispatch→reconcile 루프](2026-06-14-orchestrator-dispatch-loop.md)
   — 위 로드맵 Phase 2 후반. ready 티켓을 poll 해 N개 워커에 동시 dispatch, 결과를
   board 로 reconcile 하는 thin·watched 첫 컷. 큐 동시성 안전화 포함.
+- [DAG-aware 연속 오케스트레이션](2026-06-14-dag-aware-orchestration.md)
+  — Phase 3a. `blocked_by` 를 존중하는 연속 re-poll(wave) 루프: ready 그리고 blocker 가
+  전부 done 인 티켓만 dispatch, 완료가 의존을 unblock, 워커-생성 티켓을 집음. board-as-truth,
+  cycle/stuck 검출, bounded·watched. (3b dev-stage taxonomy 는 별도.)
