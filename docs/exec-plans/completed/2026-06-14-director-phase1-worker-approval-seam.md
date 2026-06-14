@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: fc8b3ea4adb67be74df13be941102d5bc9a9f22b
@@ -164,4 +164,23 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 
 ## Feedback (from completion gate)
 
+completion gate 2026-06-14 (codex `/codex:rescue` gpt-5.5, review_level=standard):
+Verdict A(architecture)=SATISFIED, Verdict B(reliability)=SATISFIED, P1=none.
+- P2-3 (app_server.stop() kill 후 wait 누락 → 좀비 가능) — **고침**(이 커밋).
+- P2-4 (run_turn 이 turn/start error 응답 무시 → ReadTimeout 오보) — **고침** + 테스트 추가.
+- P2-1 (queue append dedupe read-before-append race) — tech-debt-tracker 등록(open).
+- P2-2 (seam wait 중 subprocess 사망 미감지) — tech-debt-tracker 등록(open).
+self-review: P1 없음(run.main test stdout 노이즈·shipped mock 은 의도된 fixture).
+
 ## Outcomes & retrospective
+
+Phase 1 달성: ticket→worker(codex app-server)→approval→Director 큐→answer→**동일 turn
+resume** 의 novel core 를 mock(결정적) + 실 `codex app-server 0.139.0`(live) 양쪽에서 증명.
+director/ 패키지(queue · worker.app_server · worker.approval · board.linear · run ·
+director_min) + 19 director tests, 전체 게이트 GREEN(7 commits). 목적(=워커가 사람 기다려
+멈추지 않고 Director 가 대신 답해 turn 지속) 대비 충족.
+
+발견·수정: web 문서가 codex 프로토콜을 2곳 틀리게 안내 → `generate-json-schema` 가 정본
+(sandbox=workspace-write, approval 응답={"decision":…}); stdin read-ahead 교착 + select/
+buffered-readline 불일치(raw fd framing 으로 해결). 남은 것: Linear LIVE(이슈 id 대기),
+P2-1/P2-2 하드닝(Phase 2 동시성 도입 시), 그리고 Phase 2(orchestrator)~5 로드맵.

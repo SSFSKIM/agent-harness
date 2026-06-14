@@ -81,6 +81,10 @@ class AppServerClient:
             self._proc.wait(timeout=5)
         except Exception:
             self._proc.kill()
+            try:
+                self._proc.wait(timeout=5)  # reap the child on the hard-kill path
+            except Exception:
+                pass
         self._proc = None
 
     def __enter__(self):
@@ -193,4 +197,6 @@ class AppServerClient:
                     return {"status": method.split("/", 1)[1], "turn_id": turn_id}
                 continue
             if msg.get("id") == rid:                       # response to turn/start
+                if "error" in msg:
+                    raise AppServerError(f"turn/start error: {msg['error']}")
                 turn_id = msg.get("result", {}).get("turn", {}).get("id")

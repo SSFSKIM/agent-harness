@@ -53,6 +53,9 @@ def main():
             out({"id": mid, "result": {"thread": {"id": THREAD_ID}}})
             out({"method": "thread/started", "params": {"thread": {"id": THREAD_ID}}})
         elif method == "turn/start":
+            if scenario == "turn_error":
+                out({"id": mid, "error": {"code": -32000, "message": "boom"}})
+                continue
             out({"id": mid, "result": {"turn": {"id": TURN_ID, "status": "inProgress"}}})
             out({"method": "turn/started", "params": {"turn": {"id": TURN_ID}}})
             if scenario == "approval":

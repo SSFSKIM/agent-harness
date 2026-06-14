@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-13
+last_verified: 2026-06-14
 owner: doc-gardener
 ---
 # Tech debt tracker
@@ -44,3 +44,5 @@ GCs continuously — debt is a high-interest loan.
 | T7 extension candidate: any hook output injected into agent context that quotes repo-file content must carry the inline DATA guard (tidy_stop now does; rule not yet in SECURITY.md) | Minor | 2026-06-12 | portability gate (review-security proposed) | open |
 | pre-commit hook body is a bare exec — missing python3 / dead gate path yields a raw shell error with no FIX hint; worktrees (`.git` file) and core.hooksPath silently get no hook | Minor | 2026-06-12 | portability gate (review-reliability proposed) | open |
 | Lint thresholds (STALE_DAYS 30 / former D1 120 / former D7 400 / former MEMORY 60) and the MACHINE_DOCS tuple are hardcoded in plugin source — ported hosts lack the self-host "change the rule in the same commit" escape; design one host-config mechanism jointly with HARNESS_LINT_CMD (G3) at second-target porting, driven by which constants the target actually fights | Minor | 2026-06-13 | post-gate portability audit | fixed then superseded — line caps were removed; `.harness.json` still overrides D4 (`stale_days`), wires `HARNESS_LINT_CMD`/`lint_cmd` host-lint, and lets `architecture-setup` author per-repo app-code lints. MACHINE_DOCS stays plugin-side by design (the machine's own grounding contract, not a host-tunable threshold) |
+| director/queue append_request dedupe is read-before-append (no lock): concurrent duplicate delivery of the same request_id can double-append. Phase 1 is single-worker/single-Director so it can't yet bite; harden (O_APPEND+lock or atomic claim) when Phase 2 adds concurrency | Minor | 2026-06-14 | director Phase 1 completion gate (codex review P2-1) | open |
+| director/worker/app_server: while the seam blocks in wait_for_answer, the client stops reading the subprocess, so an app-server that dies mid-approval is detected only at answer timeout/BrokenPipe, not promptly; add a liveness check / monitor | Minor | 2026-06-14 | director Phase 1 completion gate (codex review P2-2) | open |

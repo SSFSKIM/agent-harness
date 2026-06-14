@@ -27,6 +27,14 @@ class AppServerClientTest(unittest.TestCase):
         self.assertIn("turn/started", events)
         self.assertIn("turn/completed", events)
 
+    def test_turn_start_error_raises_not_timeout(self):
+        # P2-4 fix: a turn/start error response surfaces as AppServerError, not ReadTimeout.
+        with _client("turn_error") as c:
+            c.initialize()
+            tid = c.thread_start()
+            with self.assertRaises(appsrv.AppServerError):
+                c.run_turn(tid, "x")
+
     def test_no_server_request_in_plain_turn(self):
         seen = []
         with _client("plain", on_server_request=lambda m, p: seen.append(m) or "accept") as c:
