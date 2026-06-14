@@ -70,11 +70,12 @@ class AppServerClient:
     def stop(self) -> None:
         if self._proc is None:
             return
-        try:
-            if self._proc.stdin:
-                self._proc.stdin.close()
-        except Exception:
-            pass
+        for stream in (self._proc.stdin, self._proc.stdout):
+            try:
+                if stream:
+                    stream.close()
+            except Exception:
+                pass
         try:
             self._proc.terminate()
             self._proc.wait(timeout=5)

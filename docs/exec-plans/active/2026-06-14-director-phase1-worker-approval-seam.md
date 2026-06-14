@@ -111,7 +111,12 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   증거: 5 tests OK, `check.py` GREEN(100 tests).
 - [x] (2026-06-14) M2 완료: `director/worker/app_server.py`(JSON-RPC/stdio client) +
   `_mock_app_server.py`(plain+approval 시나리오) + `tests/test_director_app_server.py`.
-  증거: 2 tests OK, plain turn 이 thread/turn id 추출 후 turn/completed. M3–M5 미착수.
+  증거: 2 tests OK, plain turn 이 thread/turn id 추출 후 turn/completed.
+- [x] (2026-06-14) M3 완료(novel core): `director/worker/approval.py` seam(method→kind,
+  큐 기록, answer 대기, decision→result; R7 timeout→decline) + mock approval 시나리오 +
+  `tests/test_director_seam.py`. 증거: 2 tests OK — 워커가 approval 에서 큐로 라우팅·블록,
+  Director 가 accept 쓰면 **동일 turn id(turn_mock_1)** 로 resume·completed; 무응답 시
+  decline 후에도 turn 완료. stop() 의 stdout ResourceWarning 도 수정. M4–M5 미착수.
 
 ## Surprises & discoveries
 
