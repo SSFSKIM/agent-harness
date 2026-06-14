@@ -42,7 +42,8 @@ applicator pattern with a hybrid auto/report safety split.
 ## The safety crux — the "mechanical 4" whitelist
 The applicator deterministically RE-VALIDATES each item's `risk` (never trusting the
 agent's label) and auto-applies ONLY four mechanical kinds:
-1. regenerate a generated section (inventory/codemap — drift-proof by construction);
+1. regenerate a generator-owned section (e.g. the component inventory; drift-proof
+   by construction — more such sections as generated-maximize lands);
 2. set a frontmatter field (`last_verified`);
 3. a verbatim symbol-rename swap — old and new both given AND the old string is
    found exactly (a literal replace, no prose authoring);
