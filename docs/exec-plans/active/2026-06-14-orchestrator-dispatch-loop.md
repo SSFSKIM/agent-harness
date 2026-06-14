@@ -132,7 +132,15 @@ reconcile 주체:
 - [x] (2026-06-14) M2 — queue `append_request` 를 모듈 `_APPEND_LOCK` 으로 직렬화;
   동시성 회귀테스트 2건(distinct 40→무손상, same-id 40→1). 락 무력화 시 60 동시 same-id
   가 4줄로 깨짐을 확인해 테스트 유효성 입증. tech-debt line 47 → fixed.
-- [ ] M3 — orchestrator 엔진(run_once/dispatch/reconcile). (다음.)
+- [x] (2026-06-14) M3 — `director/orchestrator.py`: `resolve_states`, `dispatch`,
+  `reconcile`, `run_once`(claim→ThreadPoolExecutor(N)→FIRST_COMPLETED 소비→retry-once),
+  + in-memory `MockBoard`. test_director_orchestrator.py 11 테스트: e2e(실 mock 워커 2 +
+  watched auto_respond → Todo→In Progress→Done, 큐 2 approval 무손상 응답), concurrency
+  cap(≤N), retry-once, failed-state, claim_failed, reconcile_error.
+- [x] (2026-06-14) M4 — `main(argv, board=None)` CLI(--team/--*-state/--concurrency/
+  --mock/--codex/--queue-dir/--workspace-root/--tools/--install-skills) + 요약 출력.
+  `python -m director.orchestrator --mock` 가 데모 보드 2 티켓을 end-to-end 처리, exit 0.
+- [ ] M5 — 라이브 contract pin(board GraphQL 우선; 실 codex 2-워커는 quota 판단). (다음.)
 
 ## Surprises & discoveries
 - (2026-06-14) M2 락 검증: `_APPEND_LOCK` 을 `nullcontext` 로 무력화하면 60 동시
