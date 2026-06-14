@@ -37,14 +37,17 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   default. Acceptance MET: 3 sample claims each routed to exactly one home (debt →
   tracker; external-tool fact → references; a mixed insight SPLIT into a design-doc
   decision + an episodic journal line — the surprise that forced per-claim routing).
-- [ ] M2 (PoC) Phase 2 → docs router. Replace the flat-MEMORY.md output with a
-  router: Phase 2 reads selected stage-1 outputs and EITHER edits/creates the
-  routed `docs/` page OR appends to the ledger (placement via the `docs-tree`
-  skill), always recording provenance. Reuse the Phase 1 engine + sqlite store
-  unchanged. Acceptance (command → output): `python3 plugin/scripts/dream_run.py`
-  over one real past session → a concrete `docs/` edit/add + a ledger provenance
-  entry; `check.py` GREEN. Technical contract: the new `consolidate()` output
-  target, the `docs-tree` placement seam, the ledger-append function signature.
+- [x] M2 (PoC) Phase 2 → docs router. DONE — new `plugin/scripts/dream_router.py`:
+  a READ-ONLY agent (`Read,Glob,LS`) atomizes the selected stage-1 outputs into
+  claims and emits a JSON routing plan; a deterministic applicator appends ONLY
+  onto an allowlist (tracker rows / design-doc Decision-log + Open-decisions /
+  `docs/journal/YYYY-MM.md`), re-redacting secrets, demoting any out-of-allowlist
+  target to a journal `[held]` note. `dream_run` picks router (self-hosting) vs the
+  sandbox `dream_phase2` (bare host) by `docs/design-docs/` presence. 18 tests.
+  Acceptance MET: live Sonnet over one seeded real-session memory → atomized 2
+  claims → a `Major` tracker row (durable debt) + a journal `[held]` line
+  (episodic), status `routed`; `check.py` GREEN (158 tests). Reuses the Phase 1
+  engine + sqlite store unchanged.
 - [ ] M3 Migrate + retire `docs/memory/`. Move existing content to its docs homes
   per the confirmed collapse: knowledge/adr/openq → design-docs (body / Decision
   log / Open-decisions); limitations → tech-debt-tracker + RELIABILITY; progress →
@@ -75,6 +78,9 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   doubles as provenance log + promotion inbox); routing rule = 6-step per-claim
   ordered match, journal as conservative default. Both written into
   `memory-architecture.md`. Validated against 3 sample claims.
+- 2026-06-14: M2 done (`dream_router.py` + router templates + 18 tests + dream_run
+  wiring + S1 allowlist). Live Sonnet PoC PASSED (one seeded real-session memory →
+  1 Major tracker row + 1 journal `[held]`, status `routed`); gate GREEN.
 
 ## Surprises & discoveries
 - 2026-06-14 (M1): routing must be per-CLAIM, not per-insight. A Phase 1
@@ -83,6 +89,12 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   into a DURABLE design decision (→ dreaming-v2.md Decision log) and an EPISODIC
   retrospective (→ journal `[held]`). A per-insight router would have mis-filed
   the whole thing into one bucket. → Phase 2 must atomize before routing (M2).
+- 2026-06-14 (M2): the live router self-deduped WITHOUT being given the dedupe as
+  code. Fed a claim whose durable fact already lived in `dreaming-v2.md`, the agent
+  Read that doc, found it ("already recorded in dreaming-v2.md line 62"), and chose
+  a journal `[held]` provenance note over re-routing it into the design-doc — dedupe
+  is emergent from the read-only-with-Read posture, not just the applicator's
+  substring check.
 
 ## Decision log
 - 2026-06-14: ledger = `docs/journal/YYYY-MM.md`, append-only monthly files. Why:
@@ -100,6 +112,14 @@ This plan runs in the agent-harness repo and follows `docs/PLANS.md`.
   one-brain=docs thesis; a separate memory namespace was redundant once each kind
   has a docs home. This unifies M2's routing homes, M3's migration targets, and the
   M4 docs-tree rewrite.
+- 2026-06-14 (M2): Phase 2 output = a READ-ONLY agent that emits a routing plan +
+  a deterministic applicator that applies it (the threat-model "MemoryManager
+  proposal tool" pattern), NOT an agent that writes docs directly. Why: the agent
+  has no Write/Edit tool, so a transcript injection has no mechanism to write
+  anything; the applicator only appends onto an allowlist. This is containment BY
+  CONSTRUCTION and absorbs most of M5's "containment shift" — M5 narrows to the
+  SECURITY.md rewrite + retiring the old loop. The old sandbox scope-check
+  (`dream_phase2`) is kept only as the bare-host fallback.
 - 2026-06-14: collapse the memory layer into `docs/` (one brain) — most of
   `docs/memory/` already duplicated `docs/`; the only residual docs cannot hold is
   episodic/provenance. Why: the harness thesis is docs-as-brain + progressive

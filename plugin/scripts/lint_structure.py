@@ -14,7 +14,7 @@ ALLOWED_IMPORTS = {
     "os", "pathlib", "re", "shlex", "shutil", "sqlite3", "subprocess", "sys",
     "tempfile", "textwrap", "time", "unittest", "harness_lib",
     "imprint_guard", "memories_db", "dream_discover", "dream_phase1",
-    "memories_workspace", "dream_phase2",
+    "memories_workspace", "dream_phase2", "dream_router",
 }
 ALLOWED_EVENTS = {"SessionStart", "UserPromptSubmit", "PreCompact", "SessionEnd",
                   "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"}

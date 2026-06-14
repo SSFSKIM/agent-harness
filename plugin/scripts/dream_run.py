@@ -20,16 +20,26 @@ from pathlib import Path
 import dream_discover as dd
 import dream_phase1 as p1
 import dream_phase2 as p2
+import dream_router as router
 import harness_lib as hl
 import memories_db as mdb
 
 LOCK_STALE = 3 * 3600   # a dream can take a while (several Haiku + one Sonnet run)
 
 
+def _has_docs_library(root):
+    """Self-hosting (has a docs brain) → Phase 2 routes into the docs tree; a bare
+    host (no docs library) → the sandbox-store fallback (`dream_phase2`)."""
+    return (Path(root) / "docs" / "design-docs").is_dir()
+
+
 def run(conn, root, now, *, phase1_model=None, phase2_model=None,
-        phase1_spawn=p1.spawn_phase1, phase2_spawn=p2.spawn_phase2):
-    """Phase 1 → Phase 2 over one repo. `*_spawn` are injectable so the chaining
-    is testable without a live model. Returns `{phase1, phase2}`."""
+        phase1_spawn=p1.spawn_phase1, phase2_spawn=None):
+    """Phase 1 → Phase 2 over one repo. `*_spawn` are injectable so the chaining is
+    testable without a live model. Phase 2 ROUTES into the docs tree when the host
+    has a docs library (self-hosting), else falls back to the sandbox store; the
+    chosen path's spawn is the default when `phase2_spawn` is None. Returns
+    `{phase1, phase2}`."""
     phase1_model = phase1_model or os.environ.get(
         "HARNESS_DREAM_PHASE1_MODEL", p1.DEFAULT_MODEL)
     phase2_model = phase2_model or os.environ.get(
@@ -40,8 +50,12 @@ def run(conn, root, now, *, phase1_model=None, phase2_model=None,
     claimed = dd.claim_rollouts(conn, rollouts, worker, now)
     p1_results = p1.extract_rollouts(conn, root, claimed, phase1_model, now,
                                      spawn=phase1_spawn)
-    p2_result = p2.consolidate(conn, root, now, model=phase2_model,
-                               spawn=phase2_spawn, worker_id=worker)
+    if _has_docs_library(root):
+        consolidate, default_spawn = router.consolidate, router.spawn_router
+    else:
+        consolidate, default_spawn = p2.consolidate, p2.spawn_phase2
+    p2_result = consolidate(conn, root, now, model=phase2_model,
+                            spawn=phase2_spawn or default_spawn, worker_id=worker)
     return {"phase1": {"claimed": len(claimed), "results": p1_results},
             "phase2": p2_result}
 
