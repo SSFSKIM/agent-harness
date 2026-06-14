@@ -98,7 +98,7 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   Acceptance: the Goal's `mktemp` block runs clean — `docs/journal` present, no
   `docs/memory`, `check.py --root "$tmp"` GREEN.
 
-- [ ] **M3 — Delete the dormant feeder + imprint.** `git rm` the five scripts
+- [x] **M3 — Delete the dormant feeder + imprint.** `git rm` the five scripts
   `plugin/scripts/{feeder_sessionstart,feeder_firstprompt,imprint_enqueue,
   imprint_guard,imprint_run}.py` and the three tests
   `tests/{test_feeder_sessionstart,test_feeder_firstprompt,test_imprint_guard}.py`.
@@ -171,6 +171,12 @@ imprint are dormant code, no live importer), the three `load_templates()` sites,
   that file exists. So M2 reaches a GREEN fresh-host gate WITHOUT M4; M4 is pure
   dead-constant cleanup, not a prerequisite. Confirms the milestones are
   independent (each gate-GREEN on its own).
+- 2026-06-14 (M3): one live coupling beyond the dormant scripts — `imprint_guard`
+  sat in `lint_structure.ALLOWED_IMPORTS` (the S1 inter-script import allowlist).
+  Harmless to leave (an unused allowlist entry can't FAIL — S1 only rejects imports
+  NOT in the set), but removed it as dead. The only OTHER remaining `feeder_/imprint_`
+  references are the host-facing `agent-harness.md` TEMPLATE (unlinted plugin source
+  → M5) and historical completed ExecPlans (immutable history).
 
 ## Decision log
 - 2026-06-14 (user): **hard-delete** the old loop (feeder_* + imprint_* + the
