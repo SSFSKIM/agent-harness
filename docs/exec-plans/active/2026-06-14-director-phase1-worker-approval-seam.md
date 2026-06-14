@@ -108,9 +108,18 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 - [x] (2026-06-14) Plan created from product-spec; base_commit fc8b3ea.
 - [x] (2026-06-14) M1 완료: `director/queue/`(append/read_pending/write_answer/read_answer/
   wait_for_answer — idempotent dedupe + temp→rename atomic) + `tests/test_director_queue.py`.
-  증거: 5 tests OK, `check.py` GREEN(95→100 tests). M2–M5 미착수.
+  증거: 5 tests OK, `check.py` GREEN(100 tests).
+- [x] (2026-06-14) M2 완료: `director/worker/app_server.py`(JSON-RPC/stdio client) +
+  `_mock_app_server.py`(plain+approval 시나리오) + `tests/test_director_app_server.py`.
+  증거: 2 tests OK, plain turn 이 thread/turn id 추출 후 turn/completed. M3–M5 미착수.
 
 ## Surprises & discoveries
+
+- mock stdin: `for line in sys.stdin` 는 pipe read-ahead 로 turn/start 를 늦게 yield →
+  라이브 구동 시 교착. `sys.stdin.readline()` 루프로 교체.
+- client stdout: `select` + 버퍼드 `readline` 혼용 시 readline 이 다음 줄까지 파이썬
+  버퍼로 당겨와 select 가 빈 fd 로 보고 → turn/completed 누락·timeout. raw fd 를
+  binary/unbuffered(os.read)로 직접 framing 해 해결. 증거: M2 2 tests 0.14s OK.
 
 ## Decision log
 
