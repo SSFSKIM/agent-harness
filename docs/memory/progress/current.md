@@ -96,6 +96,10 @@ owner: dreamer
   the one place product-direction escalation lands; ExecPlan stays fully
   autonomous. Gate GREEN (92 tests); codex review-arch caught one P1 (host
   AGENTS.md seed missed the entry decision) → fixed.
+- 2026-06-14: document line caps removed from the commit gate. `D1` now only
+  checks that `AGENTS.md` exists; `D7` size failures and `.harness.json`
+  `size_limits` / `default_size_limit` behavior were removed. Map-like docs are
+  still a taste/review expectation, not a numeric blocking gate.
 - Next: (a) memory-loop redesign (openq) — the deferred sophistication;
   (b) optionally migrate a wave of Lingual's declared legacy trees;
   (c) complete review/close `flexible-host-governance` if subagent dispatch is

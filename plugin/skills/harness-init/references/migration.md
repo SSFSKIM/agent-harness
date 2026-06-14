@@ -37,16 +37,15 @@ universal taxonomy.
    description (D8). Host-owned project roots may use whatever index or README
    shape makes the agent effective.
 4. Fix inbound links repo-wide (D5): grep the old path, update references.
-5. Pages over 400 lines (D7): split detail into linked sub-pages, or move to
-   a size-exempt area only if it genuinely belongs there
-   (`exec-plans/`, `references/`).
+5. If a managed page becomes hard to scan, split detail into linked sub-pages.
+   This is an agent-usability choice, not a line-count gate.
 
 ## AGENTS.md / CLAUDE.md merge
 
 - Existing AGENTS.md: keep it the single map. Add the harness rows
   (agent-harness.md, docs/memory/, exec-plans/, RELIABILITY/SECURITY) and the
-  5-step operating model; cut detail until ≤120 lines — relocated detail goes
-  to docs/ pages it links.
+  5-step operating model; keep it map-like by relocating deep detail to docs/
+  pages it links.
 - Existing CLAUDE.md with real content: move that content into AGENTS.md or
   the right docs/ page, then reduce CLAUDE.md to the 3-line pointer
   (single-map principle — two competing manuals drift).
@@ -59,7 +58,6 @@ universal taxonomy.
 | D4 stale last_verified | Re-verify content then bump the date, or set `status: archived` |
 | D5 broken link | Old path moved — grep and update; or create the missing target |
 | D6 not kebab-case | `git mv` to lowercase-kebab-case.md |
-| D7 over size limit | Split into sub-pages behind a pointer |
 | D8 not in index.md | Add a one-line entry to the category index |
 | D9 component unmentioned | Ensure `docs/design-docs/agent-harness.md` exists (scaffold creates it; do not delete the components table) |
 
@@ -68,5 +66,5 @@ universal taxonomy.
 Do not block init on a full migration. Wave 1: scaffold + map + gate GREEN
 (possible with zero migrated host docs). Wave 2+: triage highest-traffic docs
 first; add a tech-debt row per remaining batch so the gardener and future
-sessions keep pulling the thread. Use `.harness.json` `managed_doc_roots` only
-for roots where the host wants blocking frontmatter/naming/size/index behavior.
+	sessions keep pulling the thread. Use `.harness.json` `managed_doc_roots` only
+	for roots where the host wants blocking frontmatter/naming/index behavior.

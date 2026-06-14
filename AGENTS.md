@@ -1,7 +1,7 @@
 # AGENTS.md — agent-harness
 
 Self-hosting AI-native harness for big software development on local Claude Code.
-This file is a **map, not an encyclopedia** (max 120 lines, lint-enforced).
+This file is a **map, not an encyclopedia**.
 Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order

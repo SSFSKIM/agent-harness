@@ -30,7 +30,8 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
 ## 3. Write the map (judgment)
 
 - Fresh AGENTS.md: replace every `<!-- FILL: ... -->` marker — repo description,
-  real source-layout map rows, build/test commands. Keep ≤120 lines (D1).
+	  real source-layout map rows, build/test commands. Keep it map-like: point to
+	  deeper docs instead of making AGENTS.md the encyclopedia.
 - Host already had AGENTS.md or a substantive CLAUDE.md: scaffold skipped
   them — merge instead. Fold the harness pointers (operating model, link to
   `docs/design-docs/agent-harness.md`, memory paths) into the existing map.
@@ -58,8 +59,8 @@ keep those roots when they make the agent more capable.
 
 Never delete content — obsolete pages get `status: archived` when migrated.
 Big repos migrate in waves: gate first, remaining docs as tech-debt rows.
-Project-specific roots are host-owned by default: the gate does not block on
-their frontmatter, filename, line count, or index registration unless the host
+	Project-specific roots are host-owned by default: the gate does not block on
+	their frontmatter, filename, or index registration unless the host
 opts that root into `.harness.json` `managed_doc_roots` or sets
 `doc_governance: strict`.
 
@@ -110,10 +111,9 @@ right FORM:
 - The host `ARCHITECTURE.md` must answer "where is the thing that does X?",
   name boundaries/absences, and record an `Invariant -> FORM` table. It is the
   host's map, not a copy of the harness self-host architecture.
-- Threshold defaults are overridable, not mandates: if the host's map or pages
-  legitimately exceed a harness default (e.g. a 295-line AGENTS.md), set
-  `.harness.json` `size_limits` / `default_size_limit` / `stale_days` instead of
-  fighting D1/D7/D4.
+- Freshness defaults are overridable, not mandates: if the host needs a different
+  re-verification window, set `.harness.json` `stale_days` instead of fighting
+  D4.
 - Plugin component inventory/coverage are advisory for external-plugin hosts by
   default so plugin updates do not retroactively break host commits. If this
   host wants them blocking, set `.harness.json` `component_inventory: strict`

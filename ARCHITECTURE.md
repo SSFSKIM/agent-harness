@@ -54,7 +54,7 @@ point rightward at skills — the most actionable instruction wins.
    (`hl.MANAGED_ROOTS`) and top-level machine docs (`hl.MANAGED_DOCS`) are never
    exemptable.
 7. **Host-owned enforcement (the setter axis):** the built-in lints
-   (S1–S7, D1–D10) enforce only the harness's OWN structure (`plugin/`,
+   (S/D series) enforce only the harness's OWN structure (`plugin/`,
    `docs/`, and the root map docs `AGENTS.md`/`ARCHITECTURE.md`). A host's
    app-code invariants are not hardcoded by the machine —
    the `architecture-setup` **skill** (run with the repo's full context) derives
@@ -65,9 +65,8 @@ point rightward at skills — the most actionable instruction wins.
    the substrate (the gate step, the `FAIL … FIX:` contract, the override knobs)
    and the authoring method — never the rules; the lint and skill sets are the
    host's output (zero of either is valid). Harness
-   threshold defaults (D1 120 / D7 400 / D4 30d / MEMORY 60) are per-repo
-   overridable via the same file (`size_limits` / `default_size_limit` /
-   `stale_days`); component inventory/coverage can be made strict explicitly
+   freshness defaults (D4 30d) are per-repo overridable via the same file
+   (`stale_days`); component inventory/coverage can be made strict explicitly
    (`component_inventory`, `component_coverage`). Absent → defaults unchanged.
    `lint_cmd`/`test_cmd` are executable config that run every commit
    (SECURITY.md T9).

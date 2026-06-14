@@ -21,8 +21,8 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   app-code invariants are authored per-repo by the `architecture-setup` skill,
   routed by FORM — `.claude/lints/` (wired via `.harness.json`) for mechanical
   invariants, `.claude/skills/` guide-skills for methodology — never folded into
-  the plugin's universal lints. Our thresholds (D1/D7/D4) are defaults a host
-  overrides via `.harness.json`, not mandates. Determinism is the cheap,
+	  the plugin's universal lints. Our stale-date threshold (D4) is a default a
+	  host overrides via `.harness.json`, not a mandate. Determinism is the cheap,
   reproducible floor; what stays per-repo is WHAT to enforce, in WHICH medium,
   and WHO authors it (ARCHITECTURE invariant 7). A universal hardcoded rule
   applied to every host is the lint-layer form of the monolithic-AGENTS.md

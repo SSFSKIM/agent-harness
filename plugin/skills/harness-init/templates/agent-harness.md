@@ -28,9 +28,9 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   the `architecture-setup` skill (harness-init step 7), routed by FORM — host
   lints under `.claude/lints/` (wired into the gate via `.harness.json`
   `lint_cmd`) for mechanical invariants, guide-skills under `.claude/skills/` for
-  methodology. Override a harness threshold default for this repo in the same
-  file (`size_limits` / `default_size_limit` / `stale_days`). See ARCHITECTURE.md
-  invariant 7; the rules are this repo's, not the machine's.
+	  methodology. Override freshness and strictness defaults for this repo in the
+	  same file (`stale_days`, `managed_doc_roots`, `doc_governance`). See
+	  ARCHITECTURE.md invariant 7; the rules are this repo's, not the machine's.
 - Docs governance is tiered: machine-critical docs and harness-managed roots
   (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
   host-owned business/marketing/research docs are flexible unless listed in

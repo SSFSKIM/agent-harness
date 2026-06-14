@@ -21,4 +21,4 @@ Write rules:
   contract: `YYYY-MM-DD-{sid8}-{event_slug}.md` (event_slug = `session-end` or
   `pre-compact`). No two digests may share a name — the event suffix makes
   same-session, same-date pre_compact + session_end distinct.
-- This file is an index, not a knowledge dump (max 60 lines, lint D7).
+- This file is an index, not a knowledge dump.

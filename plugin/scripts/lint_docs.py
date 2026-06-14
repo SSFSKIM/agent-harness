@@ -21,25 +21,21 @@ INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/limitations")
 HOST_INDEXED_DIRS = ("design-docs", "product-specs", "memory/adr",
                      "memory/knowledge", "memory/openq", "memory/limitations")
-# Relaxed-mode content-governed roots. `generated/` is intentionally absent: it
-# is content-lint-exempt (FM_EXEMPT/SIZE_EXEMPT) and guarded from .harnessignore
-# un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it. Do not
-# "reconcile" the two tuples; the one-element divergence is by design.
+# Relaxed-mode content-governed roots. `generated/` is intentionally absent:
+# generated pages are frontmatter-exempt and guarded from .harnessignore
+# un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it.
 HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
-SIZE_LIMITS = {"AGENTS.md": 120, "MEMORY.md": 60}
-DEFAULT_LIMIT = 400
 FM_EXEMPT = ("generated/", "superpowers/")
-SIZE_EXEMPT = ("generated/", "superpowers/", "exec-plans/", "references/")
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
     "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
 )
-# Harness docs whose D7 cap / D4 staleness a host override may only TIGHTEN,
-# never loosen (SECURITY T8/T9 — a host can't .harness.json its own critical
-# docs into rot/bloat). Keyed by repo-relative PATH, not bare name: the memory
-# bootloader lives at docs/memory/MEMORY.md (not docs/ top level), and keying by
-# name would also wrongly protect a host's unrelated docs/x/SECURITY.md.
+# Harness docs whose D4 staleness a host override may only TIGHTEN, never
+# loosen (SECURITY T8/T9 — a host can't .harness.json its own critical docs into
+# rot). Keyed by repo-relative PATH, not bare name: the memory bootloader lives
+# at docs/memory/MEMORY.md (not docs/ top level), and keying by name would also
+# wrongly protect a host's unrelated docs/x/SECURITY.md.
 PROTECTED_PATHS = frozenset(
     ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
@@ -110,19 +106,11 @@ def _governed_doc(p, root, docs, cfg=None, plugin=None):
                for x in _managed_roots(cfg))
 
 
-def check_entrypoints(root, errors, limits=None):
-    limits = limits or SIZE_LIMITS
-    cap = limits.get("AGENTS.md", SIZE_LIMITS["AGENTS.md"])
+def check_entrypoints(root, errors):
     agents = root / "AGENTS.md"
     if not agents.exists():
         _fail(errors, "D1", "AGENTS.md", "missing.",
               "Create AGENTS.md: a ~100-line map (operating model + docs/ pointers).")
-        return
-    n = len(agents.read_text(encoding="utf-8").splitlines())
-    if n > cap:
-        _fail(errors, "D1", "AGENTS.md",
-              f"{n} lines (max {cap}).",
-              "AGENTS.md is a map, not an encyclopedia: move detail into docs/ and link it.")
 
 
 def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
@@ -191,25 +179,6 @@ def check_naming(root, errors, host=(), cfg=None):
                   "Rename to lowercase-kebab-case.md (top-level docs/ taste docs may be UPPERCASE.md).")
 
 
-def check_sizes(root, errors, host=(), limits=None, default_limit=DEFAULT_LIMIT,
-                cfg=None):
-    limits = limits or SIZE_LIMITS
-    default_limit = _int_or(default_limit, DEFAULT_LIMIT)  # robust to direct calls
-    docs = root / "docs"
-    for p in hl.iter_md(docs):
-        if _exempt(p, docs, SIZE_EXEMPT + host):
-            continue
-        if not _governed_doc(p, root, docs, cfg):
-            continue
-        limit = _int_or(limits.get(p.name, default_limit), default_limit)
-        if p.relative_to(root).as_posix() in PROTECTED_PATHS:
-            limit = min(limit, SIZE_LIMITS.get(p.name, DEFAULT_LIMIT))  # tighten-only
-        n = len(p.read_text(encoding="utf-8").splitlines())
-        if n > limit:
-            _fail(errors, "D7", _rel(p, root), f"{n} lines (max {limit}).",
-                  "Split the page or move detail to a linked sub-page; bootloaders stay terse.")
-
-
 def check_indexes(root, errors, cfg=None):
     docs = root / "docs"
     cats = INDEXED_DIRS if _strict_doc_governance(root, cfg) else HOST_INDEXED_DIRS
@@ -270,21 +239,13 @@ def main():
     root = hl.repo_root()
     host = hl.exempt_roots(root)  # host-declared legacy doc roots (docs/.harnessignore)
     cfg = hl.gate_config(root)  # per-repo threshold overrides (.harness.json)
-    limits = dict(SIZE_LIMITS)
-    ov = cfg.get("size_limits")
-    if isinstance(ov, dict):
-        for k, v in ov.items():
-            if isinstance(k, str):
-                limits[k] = _int_or(v, limits.get(k, DEFAULT_LIMIT))
-    default_limit = _int_or(cfg.get("default_size_limit"), DEFAULT_LIMIT)
     stale_days = _int_or(cfg.get("stale_days"), STALE_DAYS)
     errors = []
-    check_entrypoints(root, errors, limits)
+    check_entrypoints(root, errors)
     check_machine_refs(root, errors)
     check_frontmatter(root, errors, host, stale_days, cfg)
     check_links(root, errors, host, cfg)
     check_naming(root, errors, host, cfg)
-    check_sizes(root, errors, host, limits, default_limit, cfg)
     check_indexes(root, errors, cfg)
     check_coverage(root, errors, hl.plugin_root(), cfg)
     for e in errors:

@@ -25,8 +25,9 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 - Host enforcement: a host's own app-code invariants are mechanized by the
   `architecture-setup` skill, routed by FORM — host lints under `.claude/lints/`
   (wired via `.harness.json` `lint_cmd`) for mechanical invariants, guide-skills
-  under `.claude/skills/` for methodology; a host overrides threshold defaults in
-  the same file. Self-host enforces only `plugin/`+`docs/` (S/D lints); see
+  under `.claude/skills/` for methodology; a host overrides freshness and
+  strictness defaults in the same file. Self-host enforces only `plugin/`+`docs/`
+  (S/D lints); see
   ARCHITECTURE.md invariant 7.
 - Docs governance is tiered: machine-critical docs and harness-managed roots
   (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;

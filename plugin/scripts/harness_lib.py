@@ -149,8 +149,6 @@ def gate_config(root):
     host enforces are the host's, not ours hardcoded. Keys, all optional:
       - `lint_cmd` / `test_cmd` (str) — host check commands the gate runs as
         steps (a host-authored structural lint; the real test suite).
-      - `size_limits` (dict name→int) — merged over D1/D7 line caps.
-      - `default_size_limit` (int) — D7 default cap.
       - `stale_days` (int) — D4 staleness window.
       - `doc_governance` ("strict") / `managed_doc_roots` (list[str]) —
         opt host-owned docs into blocking docs governance.
