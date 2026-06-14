@@ -134,6 +134,22 @@ def prune_stage1_outputs(conn, max_unused_days, now, limit=256):
     return cur.rowcount
 
 
+def dropped_thread_ids(conn, max_unused_days, now, limit=256):
+    """Read-only: the thread_ids eligible to be forgotten — unselected AND stale
+    past the window (the same predicate `prune_stage1_outputs` deletes, WITHOUT
+    deleting). Feeds the docs-sync forgetting pass: revisit the docs these dropped
+    sessions authored. Returns a list of thread_id strings."""
+    cutoff = now - max(0, max_unused_days) * DAY
+    rows = conn.execute(
+        """SELECT thread_id FROM stage1_outputs
+            WHERE selected_for_phase2 = 0
+              AND COALESCE(last_usage, source_updated_at) < ?
+            ORDER BY COALESCE(last_usage, source_updated_at) ASC,
+                     source_updated_at ASC, thread_id ASC
+            LIMIT ?""", (cutoff, limit)).fetchall()
+    return [r["thread_id"] for r in rows]
+
+
 def record_usage(conn, thread_ids, now):
     """Citation feedback: bump usage_count + last_usage (Codex
     `record_stage1_output_usage`). No live source until the read path returns;

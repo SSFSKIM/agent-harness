@@ -461,7 +461,67 @@ def audit(scope, root, spawn=spawn_audit, templates=None, model=AUDIT_MODEL,
 
 def _scope_is_empty(scope):
     return not (scope.get("changed_symbols") or scope.get("removed")
-                or scope.get("changed_files"))
+                or scope.get("changed_files") or scope.get("forgetting_targets"))
+
+
+# ---- M5 (v1.1): provenance-driven forgetting scope -------------------------
+
+_SESSIONS_RE = re.compile(r"\(sessions:\s*([^)]*)\)")
+
+
+def build_provenance_scope(root, dropped_threads):
+    """The forgetting audit input: the docs that now-dropped sessions authored,
+    located via journal `[routed] … -> docs/X` provenance. Returns a scope whose
+    `forgetting_targets` name those docs (empty if none of the dropped threads
+    routed anything — the common case, so the forgetting pass usually no-ops without
+    ever spawning an agent). Same engine as change-driven; only the scope differs."""
+    empty = {"forgetting_targets": [], "changed_files": [], "changed_symbols": [],
+             "removed": []}
+    prefixes = {str(t)[:8] for t in dropped_threads}
+    if not prefixes:
+        return empty
+    base = Path(root) / JOURNAL_DIR
+    if not base.exists():
+        return empty
+    targets, seen = [], set()
+    for jf in sorted(base.rglob("*.md")):
+        cur = set()
+        try:
+            lines = jf.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if line.startswith("## "):
+                m = _SESSIONS_RE.search(line)
+                cur = {s.strip() for s in m.group(1).split(",")} if m else set()
+                continue
+            rm = ROUTED_RE.search(line)
+            hit = cur & prefixes
+            if rm and hit:
+                snippet, target = rm.group(1).strip(), os.path.normpath(rm.group(2))
+                key = (target, snippet)
+                if key not in seen:
+                    seen.add(key)
+                    targets.append({"target": target, "thread": sorted(hit)[0],
+                                    "routed_snippet": snippet})
+    empty["forgetting_targets"] = targets
+    return empty
+
+
+def forgetting_pass(root, dropped_threads, spawn=spawn_audit, now=None,
+                    run_check=run_check, run_generator=run_generator):
+    """v1.1 forgetting: retract the docs a now-dropped session authored. Builds the
+    provenance scope and runs the SAME audit→apply engine; the applicator DELETEs
+    only the journal-attributable lines and reports the rest. No-op (no agent spawn)
+    when no dropped thread has journal provenance."""
+    scope = build_provenance_scope(root, dropped_threads)
+    if _scope_is_empty(scope):
+        return {"applied": [], "report": [], "rolled_back": False, "plan": [],
+                "forgetting_targets": 0}
+    result = run(root, scope=scope, spawn=spawn, now=now,
+                 run_check=run_check, run_generator=run_generator)
+    result["forgetting_targets"] = len(scope["forgetting_targets"])
+    return result
 
 
 # ---- M4: the completion-gate orchestration (scope -> audit -> apply) --------

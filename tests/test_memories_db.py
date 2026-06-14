@@ -61,6 +61,17 @@ class TestMemoriesDb(unittest.TestCase):
             "SELECT thread_id FROM stage1_outputs").fetchall()}
         self.assertEqual(rows, {"kept"})
 
+    def test_dropped_thread_ids_are_stale_and_unselected(self):
+        self._put("dropped", 40)   # stale, unselected -> a forgetting candidate
+        self._put("kept", 40)      # stale, but selected -> retained
+        self._put("fresh", 1)      # unselected but inside the window -> not dropped
+        mdb.mark_phase2_selected(self.conn, [("kept", NOW - 40 * DAY)])
+        self.assertEqual(mdb.dropped_thread_ids(self.conn, 30, NOW), ["dropped"])
+        # read-only: the rows still exist (unlike prune)
+        rows = {r["thread_id"] for r in self.conn.execute(
+            "SELECT thread_id FROM stage1_outputs").fetchall()}
+        self.assertEqual(rows, {"dropped", "kept", "fresh"})
+
     def test_usage_bump_sets_count_and_timestamp(self):
         self._put("t", 1)
         mdb.record_usage(self.conn, ["t"], NOW)

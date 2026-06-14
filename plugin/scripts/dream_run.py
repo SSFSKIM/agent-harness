@@ -21,6 +21,7 @@ import dream_discover as dd
 import dream_phase1 as p1
 import dream_phase2 as p2
 import dream_router as router
+import docs_sync as ds
 import harness_lib as hl
 import memories_db as mdb
 
@@ -34,12 +35,14 @@ def _has_docs_library(root):
 
 
 def run(conn, root, now, *, phase1_model=None, phase2_model=None,
-        phase1_spawn=p1.spawn_phase1, phase2_spawn=None):
+        phase1_spawn=p1.spawn_phase1, phase2_spawn=None, forget_spawn=None):
     """Phase 1 → Phase 2 over one repo. `*_spawn` are injectable so the chaining is
     testable without a live model. Phase 2 ROUTES into the docs tree when the host
     has a docs library (self-hosting), else falls back to the sandbox store; the
-    chosen path's spawn is the default when `phase2_spawn` is None. Returns
-    `{phase1, phase2}`."""
+    chosen path's spawn is the default when `phase2_spawn` is None. On a self-host
+    repo it then runs the docs-sync FORGETTING pass over the sessions now dropped
+    from retention (a no-op unless one of them routed something into the docs).
+    Returns `{phase1, phase2[, forgetting]}`."""
     phase1_model = phase1_model or os.environ.get(
         "HARNESS_DREAM_PHASE1_MODEL", p1.DEFAULT_MODEL)
     phase2_model = phase2_model or os.environ.get(
@@ -56,8 +59,13 @@ def run(conn, root, now, *, phase1_model=None, phase2_model=None,
         consolidate, default_spawn = p2.consolidate, p2.spawn_phase2
     p2_result = consolidate(conn, root, now, model=phase2_model,
                             spawn=phase2_spawn or default_spawn, worker_id=worker)
-    return {"phase1": {"claimed": len(claimed), "results": p1_results},
-            "phase2": p2_result}
+    result = {"phase1": {"claimed": len(claimed), "results": p1_results},
+              "phase2": p2_result}
+    if _has_docs_library(root):
+        dropped = mdb.dropped_thread_ids(conn, router.MAX_UNUSED_DAYS, now)
+        result["forgetting"] = ds.forgetting_pass(
+            root, dropped, spawn=forget_spawn or ds.spawn_audit)
+    return result
 
 
 def acquire_lock(lock, stale=LOCK_STALE):

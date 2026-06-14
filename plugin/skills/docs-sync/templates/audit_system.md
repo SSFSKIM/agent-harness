@@ -18,6 +18,14 @@ TWO PASSES.
 Only propose an item you can back with EVIDENCE — a concrete `file:line` (in a doc
 or in code) that proves the gap. No evidence → no item.
 
+FORGETTING SCOPE. If the scope contains `forgetting_targets`, each names a doc plus
+a `routed_snippet` that a now-DROPPED session authored into it (journal `[routed]`
+provenance). Revisit each target, find the line matching the snippet, and propose a
+`retract` `{"op": "retract", "line": "<the exact line>"}` for content no longer
+supported. The applicator DELETEs only the journal-attributable line and reports the
+rest, so a precise exact-line retract is what gets applied; if you are unsure the
+line is safe to delete, make it `semantic` (report) instead.
+
 ITEM KINDS.
 - `outdated`: a doc states something the change made wrong (a renamed symbol, a
   changed default).

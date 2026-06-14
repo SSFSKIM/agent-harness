@@ -377,5 +377,52 @@ class TestRun(_Case):
         self.assertEqual(len(res["report"]), 1)        # surfaced, not applied, not blocked
 
 
+# ---- M5 (v1.1): provenance-driven forgetting -------------------------------
+
+class TestForgetting(_Case):
+    def _journal_block(self, thread, snippet, target):
+        (self.root / "docs" / "journal" / "2026-06.md").write_text(
+            f"## 2026-06-14T00:00Z — dream run (sessions: {thread[:8]})\n"
+            f'- [routed] decision "{snippet}" -> {target}\n', encoding="utf-8")
+
+    def test_provenance_scope_names_dropped_targets(self):
+        self._journal_block("threadAAA000", "routed claim about caching",
+                            "docs/design-docs/foo.md")
+        scope = ds.build_provenance_scope(self.root, ["threadAAA000", "other"])
+        self.assertEqual(len(scope["forgetting_targets"]), 1)
+        t = scope["forgetting_targets"][0]
+        self.assertEqual(t["target"], "docs/design-docs/foo.md")
+        self.assertIn("caching", t["routed_snippet"])
+
+    def test_provenance_scope_ignores_non_dropped_threads(self):
+        self._journal_block("keepKEEP000", "x", "docs/design-docs/foo.md")
+        scope = ds.build_provenance_scope(self.root, ["dropDROP000"])
+        self.assertEqual(scope["forgetting_targets"], [])
+
+    def test_forgetting_pass_retracts_attributable_line(self):
+        # the journal attributes foo.md's line to a now-dropped thread -> the agent
+        # proposes a retract -> M1 DELETEs it (attributable via the same provenance).
+        self._journal_block("dropDROP000", "routed claim about caching",
+                            "docs/design-docs/foo.md")
+        line = "- 2026-01-01: routed claim about caching — because."
+        plan = _json.dumps({"plan": [{"target": "docs/design-docs/foo.md",
+            "kind": "retract", "change": {"op": "retract", "line": line},
+            "risk": "mechanical"}]})
+        res = ds.forgetting_pass(self.root, ["dropDROP000"],
+                                 spawn=lambda p, m, cwd, timeout: plan,
+                                 now=NOW, run_check=GREEN)
+        self.assertEqual(len(res["applied"]), 1)
+        self.assertEqual(res["forgetting_targets"], 1)
+        self.assertNotIn("routed claim about caching", self._foo())
+
+    def test_forgetting_pass_noop_without_provenance(self):
+        def boom(*a, **k):
+            raise AssertionError("must not spawn the agent when nothing was routed")
+        res = ds.forgetting_pass(self.root, ["nobodyNO000"], spawn=boom, now=NOW,
+                                 run_check=GREEN)
+        self.assertEqual(res["forgetting_targets"], 0)
+        self.assertEqual(res["applied"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
