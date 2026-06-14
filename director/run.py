@@ -25,15 +25,30 @@ _SKILLS_SRC = Path(__file__).resolve().parent / "workspace_skills"
 
 
 def install_workspace_skills(workspace) -> None:
-    """Copy the vendored Codex worker skills into <workspace>/.codex/skills/ (idempotent)."""
-    dst = Path(workspace) / ".codex" / "skills"
+    """Copy the vendored Codex worker skills into <workspace>/.codex/skills/.
+
+    Safety (completion-gate P1): the per-ticket workspace is reused across runs and
+    a prior worker (workspace-write sandbox) can plant symlinks, so we must never
+    write THROUGH a pre-existing symlink. A symlinked `.codex`/`skills` parent is
+    refused; each skill target is removed (link unlinked, dir/file deleted) before a
+    fresh copy — copytree never runs into an attacker-controlled destination.
+    Idempotent: always re-copies clean."""
+    ws = Path(workspace)
+    for parent in (ws / ".codex", ws / ".codex" / "skills"):
+        if parent.is_symlink():
+            raise RuntimeError(f"refusing to install skills through symlink: {parent}")
+    dst = ws / ".codex" / "skills"
     dst.mkdir(parents=True, exist_ok=True)
     for item in _SKILLS_SRC.iterdir():
         if item.name == "ATTRIBUTION.md":
             continue
         target = dst / item.name
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        elif target.is_dir():
+            shutil.rmtree(target)
         if item.is_dir():
-            shutil.copytree(item, target, dirs_exist_ok=True)
+            shutil.copytree(item, target)
         else:
             shutil.copy2(item, target)
 

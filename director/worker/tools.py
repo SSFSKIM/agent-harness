@@ -42,7 +42,7 @@ def linear_graphql_spec() -> dict:
 def make_linear_tool_executor(
         api_key: str | None = None,
         endpoint: str = linear.DEFAULT_ENDPOINT,
-        http_post: Callable[[str, bytes, dict], dict] = linear._urllib_post
+        http_post: Callable[[str, bytes, dict], dict] = linear.urllib_post
 ) -> Callable[[str, dict], dict]:
     """A tool_executor `(name, arguments) -> {success, output}` handling linear_graphql."""
     key = api_key or linear.load_api_key()

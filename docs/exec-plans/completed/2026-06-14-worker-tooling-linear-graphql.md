@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-14
 owner: harness
 base_commit: 74bca60c889cc8b69d29512706bbbc68f0e55f59
@@ -123,4 +123,23 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
 
 ## Feedback (from completion gate)
 
+completion gate 2026-06-14 (codex `/codex:rescue` gpt-5.5, review_level=standard):
+초기 Verdict A=SATISFIED, B=NOT SATISFIED(P1) → P1 고침 후 B 충족.
+- P1 run.py install_workspace_skills 가 pre-existing 심링크 target 를 따라가 워크스페이스
+  밖 쓰기 가능 → **고침**: 심링크 parent 거부 + target remove-then-fresh-copy(심링크 미추종)
+  + 회귀테스트 2개. 재게이트 GREEN.
+- P2 normalize_tool_result 가 non-serializable output 에 raise → `json.dumps(default=str)` 고침.
+- P2 `board.linear._urllib_post` → public `urllib_post` 승격(공유 Linear transport).
+- P2 linear_graphql 가 .env 키로 무제한 Linear GraphQL → tech-debt-tracker 등록(권한 경계
+  가드레일은 autonomous dispatch 전에).
+
 ## Outcomes & retrospective
+
+Phase 2 달성: Codex 워커가 client-advertised 도구를 turn 중 호출해 실제 일을 한다 —
+`linear_graphql` 로 실 Linear read/write. dynamicTools 광고 + `item/tool/call`→tool_executor
+라우팅(approval seam 과 분리, 같은 채널) + linear_graphql executor + `.codex/skills` 설치.
+mock(결정적) + live(실 codex 워커가 LIN-5 에 코멘트 작성→Linear MCP 로 교차확인) 양쪽 증명,
+31 director tests, 게이트 GREEN. Phase 1 의 gated live-Linear READ 도 이 과정에서 해소.
+남은 것: linear_graphql 권한 경계 가드레일(tracker), orchestrator(poll·dispatch·concurrency·
+reconciliation), Phase 3+(티켓 DAG·dev-stage taxonomy·자율 Director). 교훈: 정본 schema
+선확정으로 live contract 버그 0; 워크스페이스 재사용은 setup 단계 심링크 path-escape 를 부른다.

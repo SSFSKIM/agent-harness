@@ -79,6 +79,28 @@ class RunEndToEndTest(unittest.TestCase):
         self.assertEqual(res["status"], "completed")
         self.assertEqual(seen, ["linear_graphql"])
 
+    def test_install_skills_does_not_follow_symlink_target(self):
+        # P1: a pre-existing symlinked skill target must not be written through.
+        ws = self.tmp / "wssym"
+        skills = ws / ".codex" / "skills"
+        skills.mkdir(parents=True)
+        outside = self.tmp / "outside_dir"
+        outside.mkdir()
+        (skills / "linear").symlink_to(outside, target_is_directory=True)
+        run.install_workspace_skills(ws)
+        self.assertFalse((skills / "linear").is_symlink())  # replaced by a real dir
+        self.assertTrue((skills / "linear" / "SKILL.md").exists())
+        self.assertEqual(list(outside.iterdir()), [])  # nothing leaked outside
+
+    def test_install_skills_refuses_symlinked_parent(self):
+        ws = self.tmp / "wssym2"
+        ws.mkdir()
+        outside = self.tmp / "outside2"
+        outside.mkdir()
+        (ws / ".codex").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(RuntimeError):
+            run.install_workspace_skills(ws)
+
 
 if __name__ == "__main__":
     unittest.main()

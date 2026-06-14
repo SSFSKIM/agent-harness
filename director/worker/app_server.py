@@ -51,7 +51,7 @@ def normalize_tool_result(result) -> dict:
     success = bool(result.get("success", False))
     output = result.get("output")
     if not isinstance(output, str):
-        output = json.dumps(result, ensure_ascii=False)
+        output = json.dumps(result, ensure_ascii=False, default=str)  # never raise here
     items = result.get("contentItems")
     if not isinstance(items, list):
         items = [{"type": "inputText", "text": output}]

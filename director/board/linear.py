@@ -44,7 +44,7 @@ def load_api_key(env_path: str | Path = ".env") -> str | None:
     return None
 
 
-def _urllib_post(url: str, data: bytes, headers: dict) -> dict:
+def urllib_post(url: str, data: bytes, headers: dict) -> dict:
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (fixed Linear endpoint)
         return json.loads(resp.read().decode("utf-8"))
@@ -67,7 +67,7 @@ def normalize_issue(issue: dict) -> dict:
 
 def read_issue(issue_id: str, *, api_key: str | None = None,
                endpoint: str = DEFAULT_ENDPOINT,
-               http_post: Callable[[str, bytes, dict], dict] = _urllib_post) -> dict:
+               http_post: Callable[[str, bytes, dict], dict] = urllib_post) -> dict:
     """Read one Linear issue by id/identifier and normalize it into a ticket dict."""
     key = api_key or load_api_key()
     if not key:
