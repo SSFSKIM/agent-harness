@@ -116,7 +116,12 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
   큐 기록, answer 대기, decision→result; R7 timeout→decline) + mock approval 시나리오 +
   `tests/test_director_seam.py`. 증거: 2 tests OK — 워커가 approval 에서 큐로 라우팅·블록,
   Director 가 accept 쓰면 **동일 turn id(turn_mock_1)** 로 resume·completed; 무응답 시
-  decline 후에도 turn 완료. stop() 의 stdout ResourceWarning 도 수정. M4–M5 미착수.
+  decline 후에도 turn 완료. stop() 의 stdout ResourceWarning 도 수정.
+- [x] (2026-06-14) M4 완료(e2e on stub): `director/run.py`(run_ticket/main CLI) +
+  `director/director_min.py`(main-세션 responder: pending/answer/auto_respond) +
+  `tests/test_director_run.py`. 증거: 3 tests OK + CLI smoke `python -m director.run
+  --ticket … --mock` → `{status: completed, turn_id: turn_mock_1}`. mock 으로 Phase 1
+  전구간(워커→approval→큐→Director answer→resume) 증명. **M5(Linear) 만 남음.**
 
 ## Surprises & discoveries
 
