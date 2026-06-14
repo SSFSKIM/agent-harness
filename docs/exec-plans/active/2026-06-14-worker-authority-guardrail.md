@@ -102,7 +102,14 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
       목록에 T10. `tests/test_director_tools.py` 보강(6 신규): destructive→POST 없이 거부,
       allowed/read→POST, default-guard-on(run.py/orchestrator.py 경로), guard=False opt-out,
       custom allowlist tighten. 기존 errors-test 는 allowlisted mutation 으로 수정(guard 통과 후
-      서버 errors 도달). 다음: M3(live wire-pin + 게이트).
+      서버 errors 도달). 커밋 a369e07.
+- [x] (2026-06-14) M3 done. 실제 Linear(LIN/Lingu team) live wire-pin 5/5 PASS: guarded
+      executor 로 ① issueCreate(LIN-10 생성) ② commentCreate 성공(allowlisted mutation 이
+      실데이터에서 동작 — 경계가 정당한 작업 안 깸), ③ issueDelete 는 guard 가 로컬 거부
+      ("blocked by authority guardrail"), ④ `query { issueDelete }` 는 서버가 400 으로 거부
+      (mutation field 가 query 로 실행 안 됨 — D-23 가정 live 확인; cleanup 이 같은 id 를
+      삭제할 수 있었던 것 자체가 query 가 삭제 안 했다는 증거), ⑤ unguarded 로 LIN-10 정리.
+      일회성 스크립트 미커밋·삭제. 게이트 GREEN. 모든 milestone 완료 → 완료 게이트로.
 
 ## Surprises & discoveries
 
