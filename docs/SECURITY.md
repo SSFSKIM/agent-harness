@@ -13,7 +13,7 @@ Grounding document for the review-security persona. Threats are numbered.
 > threats are dormant alongside it. The live surface is small: **T3** (hook
 > execution), **T8** (lint-exemption scope), **T9** (`.harness.json` /
 > `.claude/lints` executable config), **T10** (worker tool authority — the
-> Director's live exec surface). The full model is no longer an active,
+> Director's live exec surface), **T11** (autonomous worker posture). The full model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
 > exec surface (hooks · `.harness.json`/host-lint · `.harnessignore`); see the
@@ -111,3 +111,24 @@ Grounding document for the review-security persona. Threats are numbered.
   boundary is at mutation-name granularity, not argument-level; escalate-denied-
   mutations-to-Director is deferred to the taste-vs-handle escalation slice
   (`authorize`'s reason is the seam).
+- **T11 — Autonomous worker posture.** Dispatched `--autonomous` (opt-in; default
+  off keeps the watched `untrusted` posture), a worker runs Codex with
+  `approval_policy=on-request` + `approvals_reviewer=auto_review` +
+  `sandbox=workspace-write` + `sandbox_workspace_write.network_access=true` (full
+  outbound). The worker **self-governs**: Codex auto-runs in-sandbox actions and
+  routes genuine escalations (sandbox escape, blocked network, side-effecting
+  MCP/app tool calls) through its OWN reviewer agent, which **fails closed** on
+  critical risk — so no human and no Director is the per-action approver
+  (`director/worker/autonomy.py`). Boundaries: (1) Codex OS sandbox = filesystem
+  containment (workspace + `/tmp`; `.git`/`.codex`/`.agents` forced read-only);
+  (2) `auto_review` (fail-closed) on escalations; (3) **T10** bounds the worker's
+  `linear_graphql` host-key writes (deterministic default-deny — the one write
+  surface outside Codex's sandbox). **Accepted residual:** with
+  `network_access=true`, *in-sandbox* network is NOT `auto_review`-gated
+  (auto_review reviews only blocked/escalated actions), so a prompt-injected worker
+  could exfiltrate over the network — accepted for local-dev / throwaway tickets;
+  the mitigation if it ever matters is a `network_proxy` domain allowlist (not
+  enabled this slice). The autonomous loop itself (the orchestrator) is unchanged —
+  this is purely the worker's Codex posture. Verified live (codex-cli 0.139.0): an
+  autonomous worker auto-ran an in-sandbox command and completed its turn with
+  **zero** seam traffic. Part of the live exec surface (status note).

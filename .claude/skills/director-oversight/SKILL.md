@@ -86,6 +86,17 @@ A worker on ticket `b` requests approval to run a broad cleanup command.
 Same request, opposite call — because the context flipped it. That is the whole
 point of reading the picture first.
 
+## Un-watched runs (when you're not here)
+
+When the orchestrator is dispatched `--autonomous`, workers self-govern via
+Codex's own approval gate (`on-request` + `auto_review`), so routine command/file
+actions **never reach this queue** — Codex approves them in-sandbox, and only
+genuine `tool/requestUserInput` questions arrive (and time out to a safe default
+if nobody answers). So un-watched, this skill is **not** an approval path; the
+status surface above is for *monitoring* what the autonomous run did (and for a
+human or watched Director catching up). The security boundary is Codex's sandbox +
+`auto_review` + the T10 Linear guardrail — not you. See SECURITY.md T11.
+
 ## 4. Reporting up
 
 When you do escalate (or when the human asks "what's happening"), lead with the

@@ -133,13 +133,27 @@ headless Director. SECURITY.md gains T11 (the autonomous worker posture).
 - [x] (2026-06-15) plan created; base_commit 11360eb; review_level targeted
       (review-security). Verified codex 0.139.0 `-c` key names via `--strict-config`
       (4 keys accepted, bogus key rejected) before drafting.
-- [ ] M1 — autonomy preset + threaded config
-- [ ] M2 — SECURITY T11 + live verification + docs + gate
+- [x] (2026-06-15) M1 done. `director/worker/autonomy.py` (preset + `codex_command`);
+      `run_ticket` threads `approval_policy`/`sandbox` into thread_start + run_turn; run.py
+      + orchestrator.py `--autonomous` (default off = untrusted, watched unchanged) selects
+      the preset + wraps the codex command with `-c` overrides. `tests/test_director_autonomy.py`
+      (8). check.py GREEN (244). Commit e07f173.
+- [x] (2026-06-15) M2 done. SECURITY.md **T11** (autonomous worker posture + accepted
+      in-sandbox-network residual) + live-surface list. Parent symphony spec **D-38** (un-watched
+      = Codex config, headless Director rejected) + roadmap. director-oversight skill: un-watched
+      note (not an approval path). **Live wire-pin (real codex 0.139.0):** `director.run --autonomous`
+      on a trivial stub → `status: completed`, worker AUTO-RAN `echo hi > hello.txt` in-sandbox,
+      and **zero seam requests** (no approval escalated) — proves the preset is accepted, runs
+      headlessly, and a worker self-governs with no Director round-trip.
 
 ## Surprises & discoveries
 - The whole prior "autonomous-oversee" spec (reverted, 835cdbd) was mis-founded:
   it rebuilt Codex's `auto_review` as a headless Director. The real lever is one
   config preset. Codex owns per-action approval; the Director never did.
+- Live-pin proved the thesis empirically: an autonomous worker completed a ticket
+  with **zero** seam traffic — the in-sandbox command auto-approved. So the
+  "throughput dies when the human leaves" problem was 100% the `untrusted` default,
+  not a missing Director. Loosening one config knob is the entire fix.
 
 ## Decision log
 - 2026-06-15: un-watched autonomy = tune Codex's approval config (on-request +
