@@ -37,3 +37,9 @@ owner: harness
   스냅샷으로 영속화하고, Director 가 read-API + 스킬로 끌어 쓴다. 요청↔오케스트레이션
   join(`context_for`)이 bare 큐 요청을 상황 그림으로 감싸 인라인 판단을 떠받친다 — 정책은 그 위
   얇은 guideline. guardrail 의 escalate-to-Director seam + 부모의 taste 정책 Open Question 해소.
+- [Multi-turn 티켓 실행 — Director-driven continuation + worker-proposed status](2026-06-15-multi-turn-ticket-execution.md)
+  — Phase 4. orchestrator 의 "한 턴 → `completed→Done` 코드 매핑"이 틀렸음을 교정: 티켓 하나는
+  여러 턴에 걸치고, 턴 종료 ≠ 티켓 완료. 워커가 structured outcome(continuing/done/blocked+children/
+  needs_human) 제안 → Director 가 집행·검수(watched) 또는 워커 신뢰·auto-continue(un-watched).
+  코드는 done-ness 판단 0. multi-turn continuation feasibility live 검증(2턴/1thread 맥락 유지).
+  Phase 2 reconcile 재설계, reporting/PR-merge 보다 선행.
