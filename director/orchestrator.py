@@ -22,6 +22,7 @@ from pathlib import Path
 
 from director import run, status as status_mod, taxonomy
 from director.board import linear as board_linear
+from director.worker import autonomy
 
 # Default logical-state → Linear workflow-state-name mapping (overridable on the CLI).
 DEFAULT_STATE_NAMES = {"ready": "Todo", "started": "In Progress",
@@ -136,7 +137,9 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                    tools=None, tool_executor=None, install_skills: bool = False,
                    read_timeout_s: float = 30.0, timeout_s: float = 300.0,
-                   status=None, wave: int = 1) -> dict:
+                   status=None, wave: int = 1,
+                   approval_policy: str = "untrusted",
+                   sandbox: str = "workspace-write") -> dict:
     """Claim, dispatch (bounded concurrency), and fully drain a given (already
     eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
     only once every ticket has reached a terminal summary (incl. retries), so the
@@ -158,7 +161,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             dispatch, ticket, command=command, queue_base=queue_base,
             workspace_root=workspace_root, tools=tools, tool_executor=tool_executor,
             install_skills=install_skills, read_timeout_s=read_timeout_s,
-            timeout_s=timeout_s)
+            timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox)
         futures[fut] = ticket
         status.dispatched(ticket)
 
@@ -372,7 +375,8 @@ def _build_board(args):
 def _command(args) -> list[str]:
     if args.mock:
         return [sys.executable, run._MOCK, args.mock_scenario]
-    return ["bash", "-lc", args.codex]
+    codex = autonomy.codex_command(args.codex) if args.autonomous else args.codex
+    return ["bash", "-lc", codex]
 
 
 def main(argv=None, *, board=None) -> int:
@@ -403,6 +407,9 @@ def main(argv=None, *, board=None) -> int:
                     help="disable the orchestration-visibility snapshot (default: on)")
     ap.add_argument("--status-dir", default=None,
                     help="orchestration-status dir override (default: .claude/harness/director-status)")
+    ap.add_argument("--autonomous", action="store_true",
+                    help="un-watched posture: workers self-govern (on-request + auto_review "
+                         "+ workspace-write + full network); default off = watched untrusted")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)
@@ -420,7 +427,9 @@ def main(argv=None, *, board=None) -> int:
     kwargs = {"team": args.team, "states": states, "concurrency": args.concurrency,
               "queue_base": args.queue_dir, "tools": tools, "tool_executor": tool_executor,
               "install_skills": args.install_skills, "done_types": done_types,
-              "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir)}
+              "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir),
+              "approval_policy": autonomy.APPROVAL_POLICY if args.autonomous else "untrusted",
+              "sandbox": autonomy.SANDBOX if args.autonomous else "workspace-write"}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)
 

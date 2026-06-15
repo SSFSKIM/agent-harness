@@ -16,6 +16,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from director.worker import autonomy
 from director.worker.app_server import AppServerClient
 from director.worker.approval import make_seam
 
@@ -71,8 +72,14 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
 def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                workspace_root=DEFAULT_WORKSPACE_ROOT,
                timeout_s: float = 300.0, read_timeout_s: float = 30.0,
-               tools=None, tool_executor=None, install_skills: bool = False) -> dict:
-    """Drive one worker through one ticket; returns the turn result {status, turn_id}."""
+               tools=None, tool_executor=None, install_skills: bool = False,
+               approval_policy: str = "untrusted",
+               sandbox: str = "workspace-write") -> dict:
+    """Drive one worker through one ticket; returns the turn result {status, turn_id}.
+
+    `approval_policy`/`sandbox` set the worker's Codex posture on thread AND turn
+    (the autonomous preset passes `on-request`/`workspace-write`; the default is the
+    conservative watched `untrusted`)."""
     ws = _workspace_for(ticket, workspace_root)
     if install_skills:
         install_workspace_skills(ws)
@@ -81,14 +88,16 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                              tool_executor=tool_executor, read_timeout_s=read_timeout_s)
     with client as c:
         c.initialize()
-        thread_id = c.thread_start(model=ticket.get("model"), tools=tools)
-        return c.run_turn(thread_id, ticket["prompt"])
+        thread_id = c.thread_start(model=ticket.get("model"), tools=tools,
+                                   approval_policy=approval_policy, sandbox=sandbox)
+        return c.run_turn(thread_id, ticket["prompt"], approval_policy=approval_policy)
 
 
 def _command(args) -> list[str]:
     if args.mock:
         return [sys.executable, _MOCK, args.mock_scenario]
-    return ["bash", "-lc", args.codex]
+    codex = autonomy.codex_command(args.codex) if args.autonomous else args.codex
+    return ["bash", "-lc", codex]
 
 
 def main(argv=None) -> int:
@@ -103,6 +112,9 @@ def main(argv=None) -> int:
                     help="advertise worker tools (linear = linear_graphql)")
     ap.add_argument("--install-skills", action="store_true",
                     help="install vendored .codex/skills into the worker workspace")
+    ap.add_argument("--autonomous", action="store_true",
+                    help="un-watched posture: Codex self-governs (on-request + auto_review "
+                         "+ workspace-write + full network); default off = watched untrusted")
     args = ap.parse_args(argv)
 
     if args.linear:
@@ -119,9 +131,12 @@ def main(argv=None) -> int:
         from director.worker.tools import linear_graphql_spec, make_linear_tool_executor
         tools = [linear_graphql_spec()]
         tool_executor = make_linear_tool_executor()
+    policy = (autonomy.APPROVAL_POLICY if args.autonomous else "untrusted")
+    sandbox = (autonomy.SANDBOX if args.autonomous else "workspace-write")
     result = run_ticket(ticket, command=_command(args), queue_base=args.queue_dir,
                         tools=tools, tool_executor=tool_executor,
-                        install_skills=args.install_skills)
+                        install_skills=args.install_skills,
+                        approval_policy=policy, sandbox=sandbox)
     print(json.dumps({"ticket": ticket["id"], **result}))
     return 0 if result.get("status") == "completed" else 1
 
