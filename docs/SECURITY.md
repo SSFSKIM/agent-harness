@@ -134,7 +134,24 @@ Grounding document for the review-security persona. Threats are numbered.
   `auto_review`-gated), a prompt-injected worker can read the real Linear key off
   disk and POST it to an arbitrary domain — T10 bounds the `linear_graphql` *tool*,
   not a stolen key over direct network, so this is a materially stronger attack than
-  mutation abuse, and it defeats the guardrail. **Effective mitigations (workspace
+  mutation abuse, and it defeats the guardrail.
+  **Why `auto_review` does NOT close this (the "trust auto_review" premise fails):**
+  auto_review evaluates *only* actions that escalate for approval — sandbox escapes,
+  **blocked** network requests, `request_permissions`, side-effecting MCP/app tool
+  calls; in-sandbox actions proceed unreviewed. Under this preset the whole exfil
+  chain is in-sandbox: the `.env` read does not escalate (confirmed — zero seam
+  traffic), and with `network_access=true` the outbound POST is *allowed* in-sandbox
+  so it is **not** a "blocked network request" and never reaches the reviewer. The
+  irony: enabling full network deletes the very `blocked-network` escalation that
+  would otherwise hand a send attempt to auto_review's data-exfiltration check. Even
+  with network OFF (where a send *would* escalate), auto_review only *raises the bar*
+  — it is a probabilistic model reviewer (fails closed on *critical*, but exfil
+  framed as mundane can pass), it gates the *send* not the *read* (the secret is
+  already compromised in-sandbox), and indirect channels route around it (write the
+  key into a committed file + `git push`, exfil to an allowed domain). OpenAI's own
+  guidance points to network controls, not the reviewer, for injection-driven exfil.
+  So auto_review is a real layer for the escalations it sees, but it is **not** a
+  credential-exfil boundary here. **Effective mitigations (workspace
   relocation does NOT help — reads are fs-wide):** a `network_proxy` domain
   allowlist (constrain outbound so a read key can't reach an attacker host),
   container/VM isolation where host secrets are absent (Codex devcontainer), and/or
