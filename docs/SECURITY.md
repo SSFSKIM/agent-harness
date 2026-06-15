@@ -140,7 +140,9 @@ Grounding document for the review-security persona. Threats are numbered.
   container/VM isolation where host secrets are absent (Codex devcontainer), and/or
   removing secrets from disk before an autonomous run. Until one is in place,
   `--autonomous` + `network_access=true` is safe ONLY where every reachable
-  credential is itself throwaway. Tracked: tech-debt-tracker. Verified live: an
+  credential is itself throwaway. **Network posture: full outbound, INFORMED-accepted
+  by the human (2026-06-15) after the live-probe above** — the `network_proxy` allowlist
+  mitigation is tracked (tech-debt-tracker), not enabled. Verified live: an
   autonomous worker auto-ran an in-sandbox command with **zero** seam traffic.
   `--autonomous` is opt-in (default off → watched `untrusted`); part of the live
   exec surface (status note).

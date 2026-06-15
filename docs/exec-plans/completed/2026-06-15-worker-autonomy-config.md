@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-15
 owner: harness
 base_commit: 11360eb
@@ -180,8 +180,10 @@ companion still unreliable in-band). Verdict: **CHANGES REQUESTED**, P1.1.
   regardless of workspace location; full outbound then exfiltrates it. → SECURITY.md T11 rewritten
   to state this confirmed residual + that **workspace relocation does NOT mitigate** (reads fs-wide);
   effective fix = `network_proxy` allowlist / container / secret-scrub. tech-debt-tracker (Major).
-  **The network posture (full vs scoped allowlist) is escalated to the human** — their earlier
-  "full outbound OK" predated this confirmed exfil path. Plan stays ACTIVE pending that call.
+  **Resolved: the human INFORMED-accepted full outbound (2026-06-15)** after seeing the live-probe
+  evidence (re-asked with the confirmed exfil path on the table). Risk documented (T11) + mitigation
+  tracked (Major). Per the reviewer's own bar ("document OR mitigate"), documenting an accepted
+  residual satisfies P1.1.
 - **P2.1 — fixed.** T11 generalized to "`.env` and process-env credentials," not just the Linear key.
 - **P2.2 — fixed.** `run_ticket` comment clarifies `sandbox` is thread-level (set at thread/start,
   not run_turn) — the param is intentionally not forwarded to the turn.
@@ -191,3 +193,21 @@ companion still unreliable in-band). Verdict: **CHANGES REQUESTED**, P1.1.
   path (host-side executor, outside the sandbox).
 
 ## Outcomes & retrospective
+**달성.** un-watched 자율이 `--autonomous`(default off) opt-in 으로 출하. 워커가 Codex 자체
+게이트로 self-govern(`on-request` + `auto_review` + `workspace-write` + full network) —
+`director/worker/autonomy.py` preset 을 thread/start params + `-c` launch overrides 로 전달.
+off 면 watched(`untrusted`) 경로 byte-identical. **실 codex 0.139.0 live-pin: 자율 워커가
+in-sandbox 명령을 auto-run 하고 seam traffic 0 으로 turn 완료** — "사람 떠나면 throughput 0"
+문제는 100% `untrusted` 기본값의 산물이었음(헤드리스 Director 불필요). SECURITY T11, 부모 D-38.
+gate GREEN(244), 적대적 review-security 후 SATISFIED(P1.1 = informed-accepted residual).
+
+**핵심 통찰.** ① Codex 가 per-action approval 을 자체 소유 → Director 는 승인자가 아님(헤드리스
+Director 는 auto_review 의 열등한 재구현이었음). ② review-security 가 내가 놓친 P1 을 잡았고,
+그 claim 을 **live-probe 로 검증**하니 더 심각: `workspace-write` 는 *쓰기*만 가둘 뿐 *읽기*는
+filesystem-wide(워커가 repo 밖 workspace 에서 절대경로로 repo 파일을 읽음) → `.env` 키가 어디서든
+읽혀 full network 로 exfil, **T10 우회**. workspace 재배치로는 못 막음(읽기가 fs-wide). 사람이
+증거를 보고 full outbound 를 informed-accept.
+
+**남은 것.** ① `network_proxy` 도메인 allowlist(또는 container/secret-scrub)로 exfil 닫기
+(tracker, Major). ② `--autonomous` 를 orchestrator 기본값으로 승격(신뢰 후 one-liner). ③ board
+reporting → PR-merge(Phase 4 후속). worker context map(D-36) 여전히 연기.
