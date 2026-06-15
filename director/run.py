@@ -186,7 +186,9 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
 def _command(args) -> list[str]:
     if args.mock:
         return [sys.executable, _MOCK, args.mock_scenario]
-    codex = autonomy.codex_command(args.codex) if args.autonomous else args.codex
+    # Both modes self-govern per-action (auto_review always); only --autonomous adds
+    # full network (the exfil vector, T11). Watched stays network-off.
+    codex = autonomy.codex_command(args.codex, network=args.autonomous)
     return ["bash", "-lc", codex]
 
 
@@ -205,8 +207,9 @@ def main(argv=None) -> int:
     ap.add_argument("--install-skills", action="store_true",
                     help="install vendored .codex/skills into the worker workspace")
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched posture: Codex self-governs (on-request + auto_review "
-                         "+ workspace-write + full network); default off = watched untrusted")
+                    help="un-watched: adds full network + the code turn-end decider. "
+                         "Per-action self-governance (on-request + auto_review) is shared "
+                         "with the watched default, which stays network-off")
     ap.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                     help="multi-turn drive bound (R6); over it → stuck")
     args = ap.parse_args(argv)
@@ -225,8 +228,10 @@ def main(argv=None) -> int:
         from director.worker.tools import linear_graphql_spec, make_linear_tool_executor
         tools = [linear_graphql_spec()]
         tool_executor = make_linear_tool_executor()
-    policy = (autonomy.APPROVAL_POLICY if args.autonomous else "untrusted")
-    sandbox = (autonomy.SANDBOX if args.autonomous else "workspace-write")
+    # Per-action posture is the SHARED on-request + auto_review baseline (the command
+    # is wrapped with auto_review in _command); only --autonomous adds network.
+    policy = autonomy.APPROVAL_POLICY
+    sandbox = autonomy.SANDBOX
     # The single-ticket CLI is un-watched (no orchestrator queue / live Director to
     # answer turn reviews), so it drives with the autonomous code decider.
     disp = drive(ticket, command=_command(args), decide=autonomous_decide,

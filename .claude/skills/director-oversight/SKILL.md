@@ -5,11 +5,15 @@ description: Use as the Director (the main Claude session) when overseeing a Sym
 # Director oversight — judge in context, escalate only taste
 
 You are the Director: the main Claude session the human talks to. A pool of Codex
-workers runs tickets under `director/orchestrator.py`; when a worker hits a
-mid-turn approval/input request it does **not** stop — it queues the request
-(`director/director_min.py: pending()`) and you answer it, and the worker resumes
-the same turn. You absorb every non-taste question and surface **only taste** to
-the human (PRODUCT_SENSE.md; AGENTS.md "Escalate only on judgment").
+workers runs tickets under `director/orchestrator.py`. **Per-action approvals are
+mostly NOT your job** — in both watched and un-watched runs the worker self-governs
+routine in-sandbox actions via Codex's own `auto_review` (fail-closed), so `cat`/`ls`/
+edits do not reach your queue (SECURITY T11). Your two real jobs: **(1) answer each
+worker's turn-end (`turnReview`)** — the primary work, §4 — and **(2) handle the rare
+genuine escalation** (a mid-turn approval/input request that auto_review still routes
+to the queue, `director/director_min.py: pending()`). For both, you absorb every
+non-taste decision and surface **only taste** to the human (PRODUCT_SENSE.md;
+AGENTS.md "Escalate only on judgment").
 
 **You are the judge — inline, in this session.** There is no separate headless
 process that decides escalation (decision D-5/D-30). `auto_respond(decide=…)` in
@@ -119,19 +123,21 @@ a mechanical/technical choice you answer with a `reply`. A product-direction or
 irreversible fork is **taste** — `escalate`. Do not conflate them: most forks the
 worker raises are yours to answer, not the human's.
 
-## Un-watched runs (when you're not here)
+## Watched vs un-watched (the only real difference)
 
-When the orchestrator is dispatched `--autonomous`, workers self-govern via
-Codex's own approval gate (`on-request` + `auto_review`), so routine command/file
-actions **never reach this queue** — Codex approves them in-sandbox, and only
-genuine `tool/requestUserInput` questions arrive (and time out to a safe default
-if nobody answers). **Turn ends, too, are auto-handled un-watched:** the code
-decider (`director.decider.autonomous_decide`) trusts the worker's terminal proposal
-and otherwise replies "use your best judgment and continue" — no `turnReview` reaches
-this queue. So un-watched, this skill is **not** an approval or turn-review path; the
-status surface above is for *monitoring* what the autonomous run did (and for a
-human or watched Director catching up). The security boundary is Codex's sandbox +
-`auto_review` + the T10 Linear guardrail — not you. See SECURITY.md T11.
+Per-action self-governance (`on-request` + `auto_review`) is the **same in both
+modes** — Codex absorbs routine actions either way. The two modes differ on exactly
+two axes, both flipped by `--autonomous`:
+
+- **network** — watched (default) runs **network-OFF** (no exfil vector; a send
+  attempt escalates to auto_review); `--autonomous` adds full outbound (SECURITY T11).
+- **turn ends** — watched = **you** answer each `turnReview` (§4). `--autonomous` =
+  the code decider (`director.decider.autonomous_decide`) trusts the worker's terminal
+  proposal and otherwise replies "use your best judgment and continue" — **no
+  `turnReview` reaches this queue**, so un-watched this skill is *not* a turn-review
+  path. The status surface is then for *monitoring* what the autonomous run did (and
+  for a human or watched Director catching up). The security boundary un-watched is
+  Codex's sandbox + `auto_review` + the T10 Linear guardrail — not you. See SECURITY T11.
 
 ## 5. Reporting up
 

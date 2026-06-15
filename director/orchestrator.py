@@ -429,7 +429,9 @@ def _build_board(args):
 def _command(args) -> list[str]:
     if args.mock:
         return [sys.executable, run._MOCK, args.mock_scenario]
-    codex = autonomy.codex_command(args.codex) if args.autonomous else args.codex
+    # Both modes self-govern per-action (auto_review always); only --autonomous adds
+    # full network (the exfil vector, T11). Watched stays network-off.
+    codex = autonomy.codex_command(args.codex, network=args.autonomous)
     return ["bash", "-lc", codex]
 
 
@@ -469,8 +471,9 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--status-dir", default=None,
                     help="orchestration-status dir override (default: .claude/harness/director-status)")
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched posture: workers self-govern (on-request + auto_review "
-                         "+ workspace-write + full network); default off = watched untrusted")
+                    help="un-watched: adds full network + the code turn-end decider. "
+                         "Per-action self-governance (on-request + auto_review) is shared "
+                         "with the watched default, which stays network-off")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)
@@ -498,8 +501,10 @@ def main(argv=None, *, board=None) -> int:
               "queue_base": args.queue_dir, "tools": tools, "tool_executor": tool_executor,
               "install_skills": args.install_skills, "done_types": done_types,
               "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir),
-              "approval_policy": autonomy.APPROVAL_POLICY if args.autonomous else "untrusted",
-              "sandbox": autonomy.SANDBOX if args.autonomous else "workspace-write",
+              # Shared per-action posture for both modes (auto_review wrapped in _command);
+              # --autonomous differs only by network (T11) + the code decider above.
+              "approval_policy": autonomy.APPROVAL_POLICY,
+              "sandbox": autonomy.SANDBOX,
               "decide": decide, "max_turns": args.max_turns}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)

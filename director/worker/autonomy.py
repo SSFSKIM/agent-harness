@@ -1,14 +1,21 @@
-"""Autonomous worker posture — let Codex self-govern instead of stalling for a
-human approver (ExecPlan: worker-autonomy-config).
+"""Worker posture — let Codex self-govern per-action instead of stalling for a
+human approver (ExecPlan: worker-autonomy-config; refined for watched parity).
 
-Un-watched autonomy is not a new subsystem: `director/orchestrator.py`'s
-`run_until_drained` loop is already the driver, and the worker's only reason to
-stall was the conservative `untrusted` approval policy. This preset flips that —
-Codex auto-runs in-sandbox work and routes genuine escalations through its OWN
-reviewer agent (`approvals_reviewer=auto_review`, fail-closed on critical risk),
-so neither a human nor the Director is the per-action approver. See SECURITY.md
-T11 for the risk basis (notably: with full network on, in-sandbox network is NOT
-auto_review-gated — that exposure rests on sandbox FS containment + T10).
+**Per-action self-governance is the SHARED baseline for BOTH watched and
+un-watched runs.** The worker's only reason to stall was the conservative
+`untrusted` policy that escalated every routine command to the Director — pointless
+toil. Both modes now run `on-request` + `approvals_reviewer=auto_review`: Codex
+auto-runs in-sandbox work and routes genuine escalations through its OWN reviewer
+agent (fail-closed on critical risk), so neither a human nor the Director is the
+per-action approver in either mode. The Director's job is the TURN END (taste), not
+rubber-stamping `cat`/`ls`.
+
+The two modes therefore differ on exactly TWO axes, both folded into `--autonomous`:
+  1. **network** — un-watched gets full outbound (`network_access=true`); watched does
+     NOT. Network is the exfil vector (SECURITY.md T11), so watched — which keeps a
+     human in the loop at turn ends — stays network-off and carries no exfil exposure.
+  2. **turn-end decider** — watched = inline Director (queue); un-watched = code
+     decider (director.decider). Not this module's concern.
 
 Two delivery channels — precedence matters (a thread/start param overrides a
 process `-c` config for that thread):
@@ -19,22 +26,25 @@ Key names verified against codex-cli 0.139.0 via `codex app-server --strict-conf
 """
 from __future__ import annotations
 
-# thread/start params for an un-watched worker.
+# thread/start params — the shared per-action posture for BOTH modes.
 APPROVAL_POLICY = "on-request"   # auto-run in-sandbox; review escalations (not `never`)
 SANDBOX = "workspace-write"      # FS-contained; .git/.codex forced read-only by Codex
 
-# `-c` config overrides appended to the `codex app-server` launch command.
-CONFIG_OVERRIDES = (
-    "approvals_reviewer=auto_review",                # Codex's native fail-closed reviewer
-    "sandbox_workspace_write.network_access=true",   # full outbound (human-accepted, T11)
-)
+# `-c` config overrides on the `codex app-server` launch command.
+AUTO_REVIEW = "approvals_reviewer=auto_review"            # shared: Codex's fail-closed reviewer
+NETWORK = "sandbox_workspace_write.network_access=true"   # un-watched ONLY (exfil vector, T11)
 
 
-def codex_command(base: str) -> str:
-    """Append the autonomous `-c` overrides to a codex launch command string.
+def codex_command(base: str, *, network: bool = False) -> str:
+    """Append the self-governance `-c` overrides to a codex launch command string.
 
-    `base` is the worker command (e.g. "codex app-server"); returns it with the
-    overrides so the launched app-server self-governs. Only the real codex path is
-    wrapped — the mock app-server takes no `-c`."""
-    extra = " ".join(f"-c {ov}" for ov in CONFIG_OVERRIDES)
+    `auto_review` is ALWAYS added — it is the shared per-action baseline that keeps the
+    Director out of routine approvals in both watched and un-watched runs. `network`
+    (full outbound) is added ONLY for un-watched (`--autonomous`): it is the exfil
+    vector (T11), so a watched run never gets it. Only the real codex path is wrapped —
+    the mock app-server takes no `-c`."""
+    overrides = [AUTO_REVIEW]
+    if network:
+        overrides.append(NETWORK)
+    extra = " ".join(f"-c {ov}" for ov in overrides)
     return f"{base} {extra}"
