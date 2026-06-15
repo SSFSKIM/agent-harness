@@ -125,19 +125,18 @@ worker raises are yours to answer, not the human's.
 
 ## Watched vs un-watched (the only real difference)
 
-Per-action self-governance (`on-request` + `auto_review`) is the **same in both
-modes** — Codex absorbs routine actions either way. The two modes differ on exactly
-two axes, both flipped by `--autonomous`:
+Posture is **identical** in both modes — per-action self-governance (`on-request` +
+`auto_review`) AND full network are shared (SECURITY T11; the exfil residual is
+deferred to one holistic mitigation, not a per-mode network toggle). The **only**
+difference is who answers turn ends:
 
-- **network** — watched (default) runs **network-OFF** (no exfil vector; a send
-  attempt escalates to auto_review); `--autonomous` adds full outbound (SECURITY T11).
-- **turn ends** — watched = **you** answer each `turnReview` (§4). `--autonomous` =
-  the code decider (`director.decider.autonomous_decide`) trusts the worker's terminal
-  proposal and otherwise replies "use your best judgment and continue" — **no
-  `turnReview` reaches this queue**, so un-watched this skill is *not* a turn-review
-  path. The status surface is then for *monitoring* what the autonomous run did (and
-  for a human or watched Director catching up). The security boundary un-watched is
-  Codex's sandbox + `auto_review` + the T10 Linear guardrail — not you. See SECURITY T11.
+- **watched** (default) — **you** answer each `turnReview` (§4).
+- **`--autonomous`** — the code decider (`director.decider.autonomous_decide`) trusts
+  the worker's terminal proposal and otherwise replies "use your best judgment and
+  continue" — **no `turnReview` reaches this queue**, so un-watched this skill is *not*
+  a turn-review path. The status surface is then for *monitoring* what the autonomous
+  run did (and for a human or watched Director catching up). The security boundary
+  un-watched is Codex's sandbox + `auto_review` + the T10 Linear guardrail — not you.
 
 ## 5. Reporting up
 

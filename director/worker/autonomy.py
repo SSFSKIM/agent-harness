@@ -10,12 +10,16 @@ agent (fail-closed on critical risk), so neither a human nor the Director is the
 per-action approver in either mode. The Director's job is the TURN END (taste), not
 rubber-stamping `cat`/`ls`.
 
-The two modes therefore differ on exactly TWO axes, both folded into `--autonomous`:
-  1. **network** — un-watched gets full outbound (`network_access=true`); watched does
-     NOT. Network is the exfil vector (SECURITY.md T11), so watched — which keeps a
-     human in the loop at turn ends — stays network-off and carries no exfil exposure.
-  2. **turn-end decider** — watched = inline Director (queue); un-watched = code
-     decider (director.decider). Not this module's concern.
+Per-action self-governance AND full network are now **shared by both modes**. The
+two modes therefore differ on exactly ONE axis:
+  - **turn-end decider** — watched = inline Director (queue); un-watched
+    (`--autonomous`) = code decider (director.decider). Not this module's concern.
+
+Network is the credential-exfil vector (SECURITY.md T11) and is ON for both modes by
+human decision (2026-06-15): the exfil residual is **deferred to a one-shot mitigation**
+(egress via a `network_proxy` allowlist, or removing secrets from disk behind a secret
+manager), addressed holistically rather than per-mode. Until then, both postures are
+safe only where reachable credentials are throwaway.
 
 Two delivery channels — precedence matters (a thread/start param overrides a
 process `-c` config for that thread):
@@ -30,21 +34,18 @@ from __future__ import annotations
 APPROVAL_POLICY = "on-request"   # auto-run in-sandbox; review escalations (not `never`)
 SANDBOX = "workspace-write"      # FS-contained; .git/.codex forced read-only by Codex
 
-# `-c` config overrides on the `codex app-server` launch command.
-AUTO_REVIEW = "approvals_reviewer=auto_review"            # shared: Codex's fail-closed reviewer
-NETWORK = "sandbox_workspace_write.network_access=true"   # un-watched ONLY (exfil vector, T11)
+# `-c` config overrides on the `codex app-server` launch command — both shared by
+# both modes (the only watched/un-watched difference is the turn-end decider).
+AUTO_REVIEW = "approvals_reviewer=auto_review"            # Codex's fail-closed reviewer
+NETWORK = "sandbox_workspace_write.network_access=true"   # full outbound (exfil deferred, T11)
 
 
-def codex_command(base: str, *, network: bool = False) -> str:
+def codex_command(base: str) -> str:
     """Append the self-governance `-c` overrides to a codex launch command string.
 
-    `auto_review` is ALWAYS added — it is the shared per-action baseline that keeps the
-    Director out of routine approvals in both watched and un-watched runs. `network`
-    (full outbound) is added ONLY for un-watched (`--autonomous`): it is the exfil
-    vector (T11), so a watched run never gets it. Only the real codex path is wrapped —
-    the mock app-server takes no `-c`."""
-    overrides = [AUTO_REVIEW]
-    if network:
-        overrides.append(NETWORK)
-    extra = " ".join(f"-c {ov}" for ov in overrides)
+    `auto_review` (the per-action baseline) AND `network` (full outbound) are added for
+    BOTH watched and un-watched runs — the only mode difference is the turn-end decider,
+    not this command. The network exfil residual is deferred to a one-shot mitigation
+    (T11). Only the real codex path is wrapped — the mock app-server takes no `-c`."""
+    extra = " ".join(f"-c {ov}" for ov in (AUTO_REVIEW, NETWORK))
     return f"{base} {extra}"

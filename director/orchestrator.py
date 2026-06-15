@@ -429,9 +429,9 @@ def _build_board(args):
 def _command(args) -> list[str]:
     if args.mock:
         return [sys.executable, run._MOCK, args.mock_scenario]
-    # Both modes self-govern per-action (auto_review always); only --autonomous adds
-    # full network (the exfil vector, T11). Watched stays network-off.
-    codex = autonomy.codex_command(args.codex, network=args.autonomous)
+    # Both modes self-govern per-action (auto_review) AND get full network; the only
+    # watched/un-watched difference is the turn-end decider. Exfil deferred (T11).
+    codex = autonomy.codex_command(args.codex)
     return ["bash", "-lc", codex]
 
 
@@ -471,9 +471,9 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--status-dir", default=None,
                     help="orchestration-status dir override (default: .claude/harness/director-status)")
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched: adds full network + the code turn-end decider. "
-                         "Per-action self-governance (on-request + auto_review) is shared "
-                         "with the watched default, which stays network-off")
+                    help="un-watched: use the code turn-end decider (no live Director "
+                         "answers turn ends). Per-action self-governance (on-request + "
+                         "auto_review) and full network are shared with the watched default")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)

@@ -12,14 +12,10 @@ from director.worker import autonomy  # noqa: E402
 
 
 class CodexCommandTest(unittest.TestCase):
-    def test_watched_wraps_auto_review_only_no_network(self):
-        # the shared per-action baseline: auto_review, NO network (watched is network-off).
+    def test_wraps_auto_review_and_network_for_both_modes(self):
+        # auto_review AND network are shared by both modes (the only difference is the
+        # turn-end decider, not the command). Exfil deferred to a one-shot mitigation.
         out = autonomy.codex_command("codex app-server")
-        self.assertEqual(out, "codex app-server -c approvals_reviewer=auto_review")
-        self.assertNotIn("network_access", out)
-
-    def test_autonomous_adds_network(self):
-        out = autonomy.codex_command("codex app-server", network=True)
         self.assertEqual(
             out,
             "codex app-server -c approvals_reviewer=auto_review "
@@ -82,19 +78,17 @@ class CommandWrapTest(unittest.TestCase):
     def _ns(self, autonomous):
         return argparse.Namespace(mock=False, autonomous=autonomous, codex="codex app-server")
 
-    def test_command_always_wraps_auto_review_network_only_when_autonomous(self):
-        # both modes wrap auto_review (shared per-action baseline); network is added
-        # only for --autonomous (watched stays network-off).
+    def test_command_wraps_auto_review_and_network_for_both_modes(self):
+        # both modes wrap auto_review AND network — identical command; the only
+        # watched/un-watched difference is the turn-end decider (not this command).
         for build in (run._command, orch._command):
             auton = build(self._ns(True))
             watched = build(self._ns(False))
-            self.assertEqual(auton, ["bash", "-lc",
-                                     autonomy.codex_command("codex app-server", network=True)])
-            self.assertEqual(watched, ["bash", "-lc",
-                                       autonomy.codex_command("codex app-server")])
+            expected = ["bash", "-lc", autonomy.codex_command("codex app-server")]
+            self.assertEqual(auton, expected)
+            self.assertEqual(watched, expected)               # identical now
             self.assertIn("approvals_reviewer=auto_review", watched[2])
-            self.assertNotIn("network_access", watched[2])   # watched: no exfil vector
-            self.assertIn("network_access", auton[2])        # autonomous: full outbound
+            self.assertIn("network_access", watched[2])       # network shared (exfil deferred)
 
     def test_mock_command_never_wrapped(self):
         ns = argparse.Namespace(mock=True, mock_scenario="plain",

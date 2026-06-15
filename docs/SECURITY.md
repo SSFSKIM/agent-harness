@@ -111,38 +111,32 @@ Grounding document for the review-security persona. Threats are numbered.
   boundary is at mutation-name granularity, not argument-level; escalate-denied-
   mutations-to-Director is deferred to the taste-vs-handle escalation slice
   (`authorize`'s reason is the seam).
-- **T11 — Worker posture (shared per-action self-governance + autonomous network).**
-  Per-action self-governance is the **shared baseline for BOTH watched and un-watched**
-  runs: a worker runs Codex with `approval_policy=on-request` +
-  `approvals_reviewer=auto_review` + `sandbox=workspace-write`. Codex auto-runs
-  in-sandbox actions and routes genuine escalations (sandbox escape, blocked network,
-  side-effecting MCP/app tool calls) through its OWN reviewer agent, which **fails
-  closed** on critical risk — so **neither a human nor the Director is the per-action
-  approver in either mode** (the Director's job is the turn-end taste, not rubber-
-  stamping routine commands; `director/worker/autonomy.py`). `--autonomous` (opt-in;
-  default = **watched**) adds exactly ONE thing on top: full outbound
-  `sandbox_workspace_write.network_access=true`, and selects the code turn-end decider.
-  **Network is the exfil vector (below), so the watched default stays network-OFF.**
-  Boundaries (both modes): (1) Codex OS sandbox = filesystem containment (workspace +
-  `/tmp`; `.git`/`.codex`/`.agents` forced read-only); (2) `auto_review` (fail-closed)
-  on escalations; (3) **T10** bounds the worker's `linear_graphql` host-key writes
-  (deterministic default-deny — the one write surface outside Codex's sandbox).
-  **Watched (network OFF) is materially safer than autonomous:** an in-sandbox outbound
-  POST is a *blocked network request* → it escalates → `auto_review`'s data-exfil check
-  gates it (the very escalation that `network=true` deletes). So the confirmed
-  credential-exfil residual below — an unguarded *outbound network* channel — is
-  **specific to `--autonomous` (network=true)**; the watched default has no such
-  channel. (Live-verified 2026-06-15: a watched worker auto-ran a routine in-sandbox
-  command with **zero** seam traffic and the Director was not woken.)
-  **Honest residual for watched:** moving routine actions off the Director's per-action
-  queue (the prior `untrusted` posture eyeballed each command) means the Director no
-  longer backstops *indirect* exfil — a secret read fs-wide then written into a
-  workspace file a human later commits, or posted via an allowlisted Linear mutation
-  (bounded by **T10**'s mutation allowlist + the sandbox, but not zero). This is the
-  same class the autonomous posture already accepts, minus the direct network path,
-  and rests on the project's standing assumption that the worker is not prompt-injected
-  (T6/T7 discarded by decision). The Director still sees the worker's turn-end message;
-  per-action review is no longer a backstop. Accepted with the autonomous trust model.
+- **T11 — Worker posture (shared self-governance + full network; modes differ only by
+  turn-end decider).** Per-action self-governance AND full outbound network are the
+  **shared baseline for BOTH watched and un-watched** runs: a worker runs Codex with
+  `approval_policy=on-request` + `approvals_reviewer=auto_review` +
+  `sandbox=workspace-write` + `sandbox_workspace_write.network_access=true`. Codex
+  auto-runs in-sandbox actions and routes genuine escalations (sandbox escape, blocked
+  network, side-effecting MCP/app tool calls) through its OWN reviewer agent, which
+  **fails closed** on critical risk — so **neither a human nor the Director is the
+  per-action approver in either mode** (the Director's job is the turn-end taste, not
+  rubber-stamping routine commands; `director/worker/autonomy.py`). `--autonomous`
+  (opt-in; default = **watched**) now changes exactly ONE thing: the **turn-end
+  decider** (watched = inline Director answers each turn end; un-watched = code
+  decider). Posture/network are identical. Boundaries (both modes): (1) Codex OS
+  sandbox = filesystem containment (workspace + `/tmp`; `.git`/`.codex`/`.agents`
+  forced read-only); (2) `auto_review` (fail-closed) on escalations; (3) **T10**
+  bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
+  the one write surface outside Codex's sandbox).
+  **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
+  residual below now applies to **both** watched and un-watched, and is **deferred to a
+  single, holistic mitigation** rather than a per-mode network toggle — either egress
+  via a `network_proxy` domain allowlist, or removing host secrets from disk behind a
+  secret manager / env-injection proxy (tech-debt-tracker). Until that lands, BOTH
+  postures are safe ONLY where every reachable credential is throwaway. (An earlier cut
+  kept watched network-off — which would have let a blocked-network POST escalate to
+  `auto_review`'s exfil check — but the human chose full network for both, to fix the
+  exfil exposure once, properly, at the credential layer.)
   **Confirmed residual — credential exfiltration that BYPASSES T10 (live-probed,
   codex-cli 0.139.0):** `workspace-write` restricts *writes* to the workspace but
   NOT *reads* — a probe worker read a sentinel both via `../../../` traversal and by
