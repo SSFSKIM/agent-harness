@@ -474,6 +474,12 @@ def main(argv=None, *, board=None) -> int:
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "
                          "auto_review) and full network are shared with the watched default")
+    ap.add_argument("--read-timeout", type=float, default=30.0,
+                    help="per-event read timeout for a worker turn (s); raise for slow "
+                         "real codex workers that think >30s mid-turn")
+    ap.add_argument("--turn-review-timeout", type=float, default=300.0,
+                    help="watched: how long the queue decider waits for the Director to "
+                         "answer a turn end before escalating (s)")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)
@@ -489,7 +495,8 @@ def main(argv=None, *, board=None) -> int:
     # --mock has no live Director session to answer turnReviews, so the watched queue
     # decider would hang — the code decider self-resolves + trusts the worker proposal.
     decide = (decider.autonomous_decide if (args.autonomous or args.mock)
-              else decider.make_queue_decider(base=args.queue_dir))
+              else decider.make_queue_decider(base=args.queue_dir,
+                                              timeout_s=args.turn_review_timeout))
 
     tools = tool_executor = None
     if args.tools == "linear":
@@ -505,7 +512,8 @@ def main(argv=None, *, board=None) -> int:
               # --autonomous differs only by network (T11) + the code decider above.
               "approval_policy": autonomy.APPROVAL_POLICY,
               "sandbox": autonomy.SANDBOX,
-              "decide": decide, "max_turns": args.max_turns}
+              "decide": decide, "max_turns": args.max_turns,
+              "read_timeout_s": args.read_timeout}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)
 
