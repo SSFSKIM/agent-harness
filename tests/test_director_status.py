@@ -1,8 +1,10 @@
+import io
 import json
 import sys
 import tempfile
 import threading
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -183,6 +185,26 @@ class ReadAndContextTest(unittest.TestCase):
         self.assertEqual(sib_ids, ["u2"])
         self.assertEqual([r["status"] for r in ctx["recent_for_ticket"]], ["failed"])
         self.assertEqual(ctx["stuck"][0]["ticket"], "DEMO-3")
+
+    def test_cli_dumps_snapshot_and_joins_request(self):
+        # The skill's communication surface: `python3 -m director.status` and
+        # `--request <json>` are the Director's read commands (R6).
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1", "DEMO-1"), wave=1, attempt=2)
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = ds.main(["--status-dir", str(self.base)])
+        self.assertEqual(rc, 0)
+        snap = json.loads(buf.getvalue())
+        self.assertEqual(snap["in_flight"][0]["ticket_id"], "u1")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ds.main(["--status-dir", str(self.base),
+                     "--request", json.dumps(_req(ticket_id="u1"))])
+        ctx = json.loads(buf.getvalue())
+        self.assertEqual(ctx["ticket"]["attempt"], 2)
 
 
 if __name__ == "__main__":

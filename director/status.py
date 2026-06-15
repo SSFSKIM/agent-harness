@@ -206,3 +206,29 @@ def context_for(request: dict, base: Path | str | None = None) -> dict:
             "recent_for_ticket": recent_for_ticket,
             "run": snap.get("run"),
             "stuck": snap.get("stuck", [])}
+
+
+def main(argv=None) -> int:
+    """Read surface for the Director (the main Claude session, via the
+    director-oversight skill): with no args, dump the current snapshot; with
+    --request <json>, print the orchestration context joined to that queue request
+    (`context_for`). Read-only — never mutates anything (R6/R9)."""
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        prog="director.status",
+        description="Read the orchestration status the Director judges requests against.")
+    ap.add_argument("--request",
+                    help="a JSON queue request to join (context_for); omit to dump the snapshot")
+    ap.add_argument("--status-dir", default=None, help="status dir override")
+    args = ap.parse_args(argv)
+    if args.request:
+        out = context_for(json.loads(args.request), base=args.status_dir)
+    else:
+        out = read_status(base=args.status_dir)
+    print(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

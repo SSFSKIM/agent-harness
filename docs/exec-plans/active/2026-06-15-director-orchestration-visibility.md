@@ -132,7 +132,15 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
       +6: off→summary byte-identical(R3), mid-run in-flight, stuck+finished 스냅샷, retry attempt
       bump(1→2), `context_for` 가 실 orchestrator 스냅샷을 읽음(R5 e2e), main `--status-dir` 스냅샷.
       기존 MainCliTest 3 은 `--no-status`(opt-out 증명 + repo 오염 방지). check.py GREEN(233).
-- [ ] M3 — 스킬 + guideline (docs-tree 배치)
+- [x] (2026-06-15) M3 done. 배치 확정(docs-tree + layer law): 이 스킬은 host 특정(director/
+      서브시스템)이라 portable `plugin/skills/` 가 아니라 **host guide-skill** `.claude/skills/
+      director-oversight/SKILL.md`(ARCHITECTURE invariant 7). `director/status.py` 에 read CLI
+      추가(`python3 -m director.status` / `--request <json>`) — 스킬이 부를 구체 명령(layer
+      law: skill 이 script 실행 지시). SKILL.md: read 절차 + 얇은 taste-vs-handle guideline
+      (handle/escalate/fail-safe) + join 이 같은 요청을 뒤집는 worked example + D-5/D-30 인라인-
+      judge 노트 + `decide`=test-only(R8). `tests/test_director_status.py` +1(CLI dump/join).
+      check.py GREEN(234). lint 영향 없음(`.claude/skills/` 는 S6 범위 밖, gitignore 는
+      `.claude/harness/` 만).
 
 ## Surprises & discoveries
 
@@ -144,6 +152,12 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
 - 2026-06-15: status dir = 별도 `.claude/harness/director-status/`(큐 계약 불변, D-34).
 - 2026-06-15: 헤드리스 judge 폐기(D-30)는 코드 변경이 아니라 *비추가* — director_min 무수정,
   `claude -p` escalation 경로를 만들지 않음으로써 충족.
+- 2026-06-15: 스킬 배치 = `.claude/skills/director-oversight/`(host guide-skill), `plugin/skills/`
+  아님. 근거: layer law — `plugin/` 은 portable Machine, 이 스킬은 director/ 서브시스템(host
+  app-code) 특정. ARCHITECTURE invariant 7 의 "host guide-skills under `.claude/skills/`". 부수:
+  S6 lint(plugin/skills 만 스캔)·gitignore(`.claude/harness/` 만) 영향 없음 → 정상 추적.
+- 2026-06-15: 스킬↔read-API seam = `director/status.py` 의 `python3 -m director.status [--request]`
+  CLI. 근거: skill 이 ad-hoc `-c` one-liner 대신 구체 명령을 부르도록(layer law: skill→script).
 
 ## Feedback (from completion gate)
 
