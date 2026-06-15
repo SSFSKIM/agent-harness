@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-15
 owner: harness
 base_commit: 0c9ec4c2a866f3a795dd068f869e27791732845b
@@ -283,4 +283,67 @@ mock board unless noted:
 
 ## Feedback (from completion gate)
 
+`review_level: standard` → review-arch + review-reliability, plus a codex
+(gpt-5.5, high) third pass per CLAUDE.md. Three independent reviewers; strong
+convergence.
+
+**Fixed in-slice (P1 / robustness):**
+- **`turnReview` request_id collision on retry** (all three; conf 88). A retried
+  ticket restarts `turn_index` at 0, so the watched decider's `{tid}|turn|0` matched
+  attempt 1's append-only queue entry → dedupe-drop / stale answer. Fixed: the rid
+  carries the attempt (`{tid}|turn|{i}|a{attempt}`), threaded `_dispatch_wave →
+  dispatch → drive → decide ctx`. Regression: `test_retry_does_not_collide_…`.
+- **terminal `else → Done` too permissive** (codex P1). A malformed/unrecognized
+  terminal outcome status silently set Done — the exact R4 violation. Fixed: only
+  `done` sets Done; unknown → `terminal_unknown`, stays in `started`. Regression:
+  `test_terminal_with_unknown_outcome_not_marked_done`.
+- **empty `reply` disposition** → would feed the worker a blank turn; now escalates.
+- **crash-path `turns=None`** → `dispatch` exception fallback carries `turns=0` (R8).
+
+**Tracked (accepted; tech-debt-tracker):**
+- A failed Done-write still labels `final_state: "done"` (pre-existing best-effort;
+  the failure IS surfaced via `reconcile_error`).
+- Watched pool-occupation bound `timeout_s × max_turns × concurrency` — inherent to
+  watched mode (a no-answer must surface, not auto-continue); documented in
+  `make_queue_decider`, dedicated per-turn-review-timeout knob deferred.
+
+Cleared with no finding: R4 (no turn-status→board mapping survives), the
+no-headless-Director invariant (watched decider reuses the queue seam), sink
+lifecycle / no cross-worker shared state, `max_turns` bound, layer law, `report_outcome`
+scope (D-44), skill layer placement.
+
 ## Outcomes & retrospective
+
+**Built (Phase 4, multi-turn ticket execution), all GREEN (262 tests):**
+- A ticket is driven across **multiple Codex turns on one thread** until the worker
+  (an LLM), not code, judges it terminal — `director/run.py::drive` with an injected
+  `decide(ctx) → disposition`.
+- **The `completed → Done` code mapping is gone** (R4): `orchestrator.reconcile` now
+  EXECUTES a disposition (terminal done/blocked · escalate · stuck · failed→retry).
+- **Watched** = the inline main session answers each turn-end free-form via a new
+  `turnReview` queue kind (`decider.make_queue_decider` + `director_min.answer_turn`,
+  director-oversight skill); **un-watched/offline** = `autonomous_decide`
+  (self-resolve + trust the worker's terminal proposal). No headless Director.
+- The Director's reply is **content-bearing, not a fixed "continue"** (D-45):
+  "A 냐 B 냐" → "A 로 해라".
+
+**Live-verified against real `codex app-server` (0.139.0), not assumed:**
+- M1 pinned the two wire unknowns: the final assistant message arrives as an
+  `item/completed` `agentMessage` with a `phase` (`final_answer`); `report_outcome`
+  is called on instruction and routes through `item/tool/call` → the sink.
+- M4 wire-pin: a 2-part ticket drove 2 turns on one thread; the worker ended turn 0
+  in prose asking "approach A or B?", the Director answered "Use approach A…", the
+  worker implemented A + `report_outcome(done)` → terminal. On-disk artifacts confirm.
+
+**Retrospective:** the deepest design lever was recognizing the turn-end as the
+*seam* (reuse the approval queue), which is why no new subsystem and no headless
+Director were needed. The single genuine unknown (final-message capture) was
+de-risked in M1 *before* the loop was built on it — cheap. The reconcile redesign
+forced a wide but mechanical test migration (old `completed→Done` contract → the
+disposition contract); the churn was the R4 change made visible, not collateral. The
+three-reviewer convergence on the retry request_id collision (a path the happy-path
+tests didn't exercise) earned its budget.
+
+**Follow-ups (tracked, not for this slice):** worker work-quality verification
+(done-is-really-done), un-watched terminal sanity-checks, the watched
+per-turn-review-timeout knob, board reporting / PR-merge.
