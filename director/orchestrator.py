@@ -212,15 +212,24 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
 
 
 def run_once(board, command: list[str], *, team: str, states: dict,
-             done_types=("completed",), **wave_kwargs) -> list[dict]:
+             done_types=("completed",), status=None, **wave_kwargs) -> list[dict]:
     """One poll→filter→dispatch→reconcile pass. Polls ready tickets, keeps only the
     DAG-eligible ones (blockers all done), then dispatches+drains that wave. Returns
     a per-ticket summary list. The shared Director queue carries approvals to the
-    watched responder — this function never answers them."""
+    watched responder — this function never answers them.
+
+    A single-pass primitive: it records per-ticket transitions AND its own pass
+    lifecycle (wave 1 → finished "pass_complete"). The MULTI-pass run envelope
+    (re-poll waves, stuck detection, drained/stuck terminal) belongs to
+    run_until_drained — a `--once` snapshot ends at "pass_complete" by design."""
+    status = status or status_mod.NoopStatusWriter()
+    status.wave(1)
     ready = board.list_ready_issues(team, states["ready"])
     eligible = eligible_tickets(ready, done_types=done_types)
-    return list(_dispatch_wave(board, eligible, command=command, states=states,
-                               **wave_kwargs).values())
+    summaries = list(_dispatch_wave(board, eligible, command=command, states=states,
+                                    status=status, **wave_kwargs).values())
+    status.finished("pass_complete")
+    return summaries
 
 
 def run_until_drained(board, command: list[str], *, team: str, states: dict,

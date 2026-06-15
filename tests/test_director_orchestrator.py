@@ -562,6 +562,18 @@ class OrchestrationVisibilityTest(unittest.TestCase):
                                        status=ds.StatusWriter(base=st))
         self.assertEqual(attempts_seen, [1, 2])  # initial attempt, then the retry
 
+    def test_run_once_records_single_pass_lifecycle(self):
+        board = orch.MockBoard([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as st:
+            with mock.patch("director.orchestrator.dispatch", _completing_dispatch([])):
+                orch.run_once(board, command=["x"], team="T", states=states,
+                              status=ds.StatusWriter(base=st))
+            snap = ds.read_status(base=st)
+        assert snap is not None
+        self.assertEqual(snap["run"]["stopped_reason"], "pass_complete")
+        self.assertEqual([r["ticket_id"] for r in snap["recent"]], ["a"])
+
     def test_context_for_reads_live_orchestrator_snapshot(self):
         # R5 end-to-end: context_for joins a queued request to the ticket entry the
         # REAL orchestrator wrote — single-ticket wave keeps it deterministic.

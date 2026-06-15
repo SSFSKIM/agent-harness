@@ -97,6 +97,8 @@ class StatusWriter:
         self._flush()
 
     def dispatched(self, ticket: dict) -> None:
+        # "running" = submitted to the worker pool; under pool saturation the worker
+        # may still be queued (benign — the Director treats it as in-flight either way).
         self._set_phase(_ticket_key(ticket), "running")
 
     def retrying(self, ticket: dict, *, attempt: int) -> None:
@@ -157,7 +159,11 @@ class StatusWriter:
             finally:
                 if os.path.exists(tmp):
                     os.remove(tmp)
-        except OSError as exc:  # best-effort: never let a disk hiccup block dispatch
+        except Exception as exc:  # best-effort: visibility NEVER blocks dispatch (R3).
+            # Broad on purpose — a disk hiccup (OSError) OR an unexpected serialize
+            # failure (json.dump TypeError/ValueError) is recorded, never raised, so
+            # no status write can sink a run. The hard boundary is the guardrail, not
+            # this read-only instrument.
             self.last_error = str(exc)
 
 
@@ -204,7 +210,7 @@ def context_for(request: dict, base: Path | str | None = None) -> dict:
     return {"ticket": ticket,
             "siblings_in_flight": siblings,
             "recent_for_ticket": recent_for_ticket,
-            "run": snap.get("run"),
+            "run": snap.get("run") or {},  # safe default (R4): no run → {}, not None
             "stuck": snap.get("stuck", [])}
 
 

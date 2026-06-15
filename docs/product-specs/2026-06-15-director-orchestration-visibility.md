@@ -149,8 +149,11 @@ read 측은 기존 큐 dir 계열의 영속 표면 + 메인 세션이 그걸 끌
   종료 → `status.finished(stopped_reason)`. 모든 콜백은 dispatch 결과에 영향 없음(R3).
 - `main` 이 실제 `StatusWriter` 를 기본 on 으로 구성, `--no-status` 로만 opt-out.
 
-**신규 스킬 `plugin/skills/<director-oversight>/` — 통신 surface + guideline(R6/R7).**
-(정확한 이름/배치는 `docs-tree` 스킬이 ExecPlan 시 확정 — Open Question.)
+**신규 스킬 `.claude/skills/director-oversight/SKILL.md` — 통신 surface + guideline(R6/R7).**
+(배치 확정, ExecPlan: 이 스킬은 director/ 서브시스템 특정 = host app-code 라 portable
+`plugin/skills/` 가 아니라 **host guide-skill** `.claude/skills/` 에 산다 — ARCHITECTURE
+invariant 7. 따라서 S6 lint(plugin/skills 만 스캔) 범위 밖이고, gitignore 는 `.claude/harness/`
+만 제외하므로 정상 추적된다.)
 - 메인 Claude 세션용: 큐 요청에 답하기 전 `director.status.context_for(req)` 를 부르고,
   oversee/리포트 시 `read_status()` 를 부르는 절차.
 - **얇은 taste-vs-handle guideline**(PRODUCT_SENSE escalation rule 에 정박):
@@ -264,8 +267,9 @@ read_status(부재/정상), `context_for` join(형제·직전-실패·stuck), wr
 
 ## Open Questions
 
-- 스킬 정확한 이름/배치(스킬 vs docs/ 룰) — `docs-tree` 스킬이 ExecPlan 시 확정. guideline 이
-  스킬 본문에 사는지, 짧은 docs/ 룰 + 스킬 포인터인지.
+- ~~스킬 정확한 이름/배치~~ → **해소(ExecPlan):** host guide-skill
+  `.claude/skills/director-oversight/SKILL.md`(host app-code 특정, layer law / ARCHITECTURE
+  invariant 7). guideline 은 스킬 본문에 산다(별도 docs/ 룰 불필요 — 얇음).
 - status 표면 위치: `.claude/harness/director-status/` vs 기존 `director-queue/` 하위. 사소 —
   ExecPlan/RELIABILITY 가 확정.
 - **자율(un-watched) scheduled Director loop 가 오는 다음 슬라이스**에선 사람이 지켜보지 않는

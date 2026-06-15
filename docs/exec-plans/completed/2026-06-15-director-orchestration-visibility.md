@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-15
 owner: harness
 base_commit: 733c0b5c4c0eee3276c9361be997a479f939ed77
@@ -141,8 +141,21 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
       judge 노트 + `decide`=test-only(R8). `tests/test_director_status.py` +1(CLI dump/join).
       check.py GREEN(234). lint 영향 없음(`.claude/skills/` 는 S6 범위 밖, gitignore 는
       `.claude/harness/` 만).
+- [x] (2026-06-15) 완료 게이트. self-review(orchestrator diff = 전부 side-channel status
+      호출 + `wave`→`wave_summaries` 리네임, behavior-neutral) + review(standard). codex
+      (`/codex:rescue` gpt-5.5/high) async 디스패치했으나 in-band 미반환 → CLAUDE.md fallback
+      대로 Claude `feature-dev:code-reviewer` 2개(arch·reliability 프레이밍, grounding 문서
+      각각)로 standard 예산 충족. 둘 다 CHANGES REQUESTED → P1 fix-forward 후 SATISFIED.
+      check.py GREEN(236). 상세는 Feedback.
 
 ## Surprises & discoveries
+- review-reliability 가 정확히 짚음: `_flush` 의 `except OSError` 는 "visibility never
+  blocks dispatch"(R3) 계약보다 좁다 — `json.dump` 의 TypeError/ValueError 가 새어 dispatch
+  를 죽일 수 있음(현 입력은 전부 직렬화 가능이라 오늘은 안 터지지만 계약 미달). broad
+  `except Exception`(+`last_error`) 으로 닫음. 계약을 코드가 실제로 지키게 만든 fix.
+- arch review 가 `run_once`(--once)가 wave/finished 를 안 남겨 스냅샷이 불완전함을 지적 →
+  run_once 를 단일-pass lifecycle("pass_complete")로 대칭화. run_until_drained 가 multi-pass
+  envelope 를 소유한다는 경계가 명확해짐.
 
 ## Decision log
 - 2026-06-15: review_level = standard(review-arch + review-reliability). 새 영속 read 표면 +
@@ -160,5 +173,54 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
   CLI. 근거: skill 이 ad-hoc `-c` one-liner 대신 구체 명령을 부르도록(layer law: skill→script).
 
 ## Feedback (from completion gate)
+review_level=standard. codex(`/codex:rescue` gpt-5.5/high) async 디스패치 → in-band 미반환
+(guardrail 슬라이스와 동일 패턴), CLAUDE.md fallback 대로 Claude reviewer 2개로 arch +
+reliability 커버. 둘 다 **CHANGES REQUESTED** → 아래 처리 후 SATISFIED.
+
+- **P1 (reliability P1-A; arch 도 P2 로 동의) — fixed.** `director/status.py` `_flush` 의
+  `except OSError` 가 `json.dump` 의 TypeError/ValueError 를 못 잡아 dispatch 를 죽일 수 있음
+  (R3 계약 위반). → `except Exception`(+`last_error` 기록)으로 확장. 회귀 테스트
+  `test_flush_swallows_serialize_error_never_raises`(non-serializable `now` → claimed() 가
+  안 죽고 last_error 설정, 유효 스냅샷 미기록).
+- **P1 (arch P1-1) — fixed.** `run_once`(--once)가 `wave`/`finished` 미기록 → 스냅샷
+  `stopped_reason` null. → `run_once` 에 단일-pass lifecycle 추가(`wave(1)` → `finished
+  ("pass_complete")`), multi-pass envelope 는 run_until_drained 소유로 docstring 명시. 테스트
+  `test_run_once_records_single_pass_lifecycle`.
+- **P2 (arch P2-3) — fixed.** `context_for` 가 no-run 시 `run: None` → 스킬 worked example 의
+  run 접근이 위험. → `run: snap.get("run") or {}`(stuck 의 `[]` 와 대칭, R4 safe default). +
+  SKILL.md 의 실제 버그 수정(`run.stuck` → top-level `stuck`) + run/stuck empty-default 명시.
+  테스트 보강.
+- **P2 (arch P2-1) — fixed.** spec Design 이 `plugin/skills/` 라 stale → `.claude/skills/
+  director-oversight/` 로 갱신 + placement Open Question 해소(layer law / invariant 7).
+- **P2 (reliability P2-B) — fixed(문서).** `dispatched` 의 "running" 은 pool 제출 시점(saturation
+  시 워커 큐잉 가능)임을 docstring 에 명시.
+- **P2 (reliability P2-A) — deferred(tracker).** SIGKILL 시 orphan `*.tmp`(status + queue 가
+  같은 패턴 공유; single-writer; reads 무영향). tech-debt-tracker 에 기록 — 둘 중 하나가 bite
+  하면 init 시 stale `.tmp` glob-unlink 로 공동 처리.
+- **Non-issues(양 reviewer 명시 확인):** layer law/placement(.claude/skills 정확), runtime
+  state(.claude/harness, invariant 5), 큐 스키마 불변(D-34), DI grain(tool_executor 패턴 일치),
+  no new live exec surface(R9 — SECURITY.md 무변경 정당), no headless judge(director_min 무수정),
+  atomic write(temp+os.replace, queue 와 동일), behavior-neutrality(run_once/run_until_drained
+  kwargs 중복-키워드 버그 없음), concurrency(모든 status 호출이 메인 스레드 — 워커 스레드 0).
 
 ## Outcomes & retrospective
+**달성.** 오케스트레이터가 in-memory 로만 갖던 런 상태(in-flight·attempt·wave·stuck·recent)를
+`director/status.py` 의 atomic 스냅샷(temp→os.replace, torn-read 없음)으로 영속화. Director(메인
+세션)가 `python3 -m director.status [--request <json>]` + read-API(`read_status`/`context_for`)로
+그림을 끌어 쓴다. `context_for` 가 bare 큐 요청을 ticket_id 로 스냅샷에 join 해 wave/attempt/형제/
+직전-fail/stuck 을 입힌다(= context 주입기). 오케스트레이터 결선은 injectable writer(기본 on,
+`--no-status`/`--status-dir`)이고 off 시 dispatch summary byte-identical(R3). host guide-skill
+`.claude/skills/director-oversight/` 가 메인 세션에게 *언제* 그림을 읽고 taste-vs-handle(handle/
+escalate/fail-safe)을 적용할지 규정 — 헤드리스 judge 아님, 인라인 Director(D-5/D-30). gate
+GREEN(236), 적대적 arch+reliability review SATISFIED(P1 2건 fix-forward).
+
+**핵심 통찰.** 두 층의 분리가 코드에 박혔다: 결정적 fail-closed guardrail(하드 경계, T10) vs.
+확률적 fail-safe 인라인 판단(가시성 위). 그리고 "instrument 는 절대 run 을 깨지 않는다"는 R3
+계약은 `except OSError` 로는 *말만* 지켜졌고 — reviewer 가 그 틈(json.dump 비-OSError)을 짚어
+`except Exception` 으로 계약을 코드가 실제로 지키게 만들었다. 가시성 = read-only 계측이라는
+원칙이 이 fix 의 정당화(broad except 가 보통은 smell 이지만 여기선 옳다).
+
+**남은 것(다음 슬라이스).** 이 슬라이스는 Director 에게 *그림*을 줬다. 다음: ① **자율 un-watched
+/ scheduled oversee 루프**(이 그림을 주기 폴링; 사람이 안 지켜보므로 security review 필요할 수
+있음 — 이 슬라이스는 watched 라 면제), ② board reporting, ③ PR-merge 관리. 후속 정제: worker
+context map(D-36, 연기), recent tail N 튜닝, orphan-tmp cleanup(tracker).

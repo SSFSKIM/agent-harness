@@ -33,8 +33,9 @@ commands (read-only — they never mutate anything):
   python3 -m director.status --request '<the pending request JSON>'
   ```
   Returns `{ticket, siblings_in_flight, recent_for_ticket, run, stuck}`. `ticket`
-  is null when nothing matches (run not started, or the ticket already finished) —
-  a legitimate state, read it as-is.
+  is null when nothing matches (run not started, or the ticket already finished),
+  and `run`/`stuck` are empty (`{}`/`[]`) when there is no run — all legitimate
+  states; read them as-is.
 
 Always run the `--request` join before answering a queued request. The bare
 request tells you *what* is being asked; the join tells you *whether the situation
@@ -60,8 +61,8 @@ mechanical or already settled:
   (publishing, merging, deleting external state) — the human owns those even if
   technically allowlisted;
 - **a pattern the context reveals**, not a one-off: the joined `ticket.attempt`
-  is ≥2 (already failed) and the request is destructive or unusual; `run.stuck`
-  is non-empty and the request looks like forcing past a blocker;
+  is ≥2 (already failed) and the request is destructive or unusual; the top-level
+  `stuck` list is non-empty and the request looks like forcing past a blocker;
   `siblings_in_flight` / `recent_for_ticket` show a systemic failure, not an
   isolated hiccup.
 

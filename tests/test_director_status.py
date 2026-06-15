@@ -75,6 +75,14 @@ class StatusWriterTest(unittest.TestCase):
         self.assertEqual(len(recent), 3)
         self.assertEqual([r["ticket_id"] for r in recent], ["u2", "u3", "u4"])
 
+    def test_flush_swallows_serialize_error_never_raises(self):
+        # R3 contract: a status-write failure (here a non-serializable timestamp)
+        # is recorded, never raised — visibility must never break dispatch.
+        w = ds.StatusWriter(base=self.base, now=lambda: object())  # type: ignore[arg-type]
+        w.claimed(_ticket(), wave=1, attempt=1)  # must not raise
+        self.assertIsNotNone(w.last_error)
+        self.assertIsNone(ds.read_status(base=self.base))  # nothing valid written
+
     def test_wave_stuck_finished(self):
         w = ds.StatusWriter(base=self.base)
         w.wave(2)
@@ -161,6 +169,7 @@ class ReadAndContextTest(unittest.TestCase):
         self.assertEqual(ctx["siblings_in_flight"], [])
         self.assertEqual(ctx["recent_for_ticket"], [])
         self.assertEqual(ctx["stuck"], [])
+        self.assertEqual(ctx["run"], {})  # safe default, not None (R4)
 
     def test_context_for_joins_ticket_siblings_prior_fail_and_stuck(self):
         w = ds.StatusWriter(base=self.base)
