@@ -93,6 +93,32 @@ TAXONOMY: dict[str, dict] = {
 # Most-specific-first: a ticket carrying several stage labels routes to the latest stage.
 _PRIORITY = ["impl", "spec", "design", "research", "planning"]
 
+# The multi-turn TERMINAL CONTRACT injected into every worker's first-turn prompt
+# (multi-turn-ticket-execution slice). Without it a worker that finishes its work but
+# never calls `report_outcome` is read un-watched as "still continuing" and loops to
+# `stuck` (a finished ticket mis-reported). This tells the worker, where it reliably
+# reads it, that signalling terminal is ITS job and how. Pairs with the report_outcome
+# tool `drive` advertises — so `drive` (not compose_worker_prompt) injects it, covering
+# the orchestrator, run.main, and direct-drive paths alike.
+TERMINAL_CONTRACT = """\
+This ticket may take several turns on one thread; keep working across turns until the \
+work is genuinely done — do not stop merely because a turn ends. YOU signal the \
+terminal outcome by calling the `report_outcome` tool, and only when the work truly ends:
+- done — the ticket is fully complete: report_outcome(status="done", reason="…").
+- blocked — you cannot proceed and have filed follow-up child tickets: \
+report_outcome(status="blocked", reason="…", spawned_ticket_ids=["…"]).
+- needs_human — a product/taste decision is genuinely required: \
+report_outcome(status="needs_human", reason="…").
+Do NOT call report_outcome to ask whether to continue. If you need to pause and ask, \
+just end your turn with the question — you will receive a directive and continue on the \
+same thread. Call report_outcome exactly once, at the end."""
+
+
+def with_terminal_contract(prompt: str) -> str:
+    """Append the multi-turn TERMINAL CONTRACT to a worker's first-turn prompt, so the
+    worker knows it must call `report_outcome` when (and only when) its work ends."""
+    return f"{prompt}\n\n---\nTURN PROTOCOL\n{TERMINAL_CONTRACT}"
+
 
 def ticket_type(ticket: dict) -> str | None:
     """The dev-stage type of a ticket from its labels, or None (untyped) if it carries

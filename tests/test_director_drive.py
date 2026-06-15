@@ -61,6 +61,23 @@ class DriveLoopTest(unittest.TestCase):
         # every turn ran on the SAME thread id (R1)
         self.assertEqual({tid for tid, _ in calls}, {disp["thread_id"]})
 
+    def test_first_turn_carries_terminal_contract(self):
+        # The worker must be TOLD (where it reads it) to call report_outcome at terminal,
+        # else un-watched a finished worker loops to stuck. drive injects the contract on
+        # turn 0; the decider's reply (not the contract) drives later turns.
+        def decider(ctx):
+            if ctx["turn_index"] == 0:
+                return {"kind": "reply", "reply": "go on"}
+            return {"kind": "terminal", "outcome": {"status": "done"}}
+
+        patcher, calls = _spy_run_turn()
+        with patcher:
+            run.drive(self._ticket("BUILD THING"), command=_cmd("plain"),
+                      decide=decider, workspace_root=self.tmp / "wsc")
+        self.assertIn("BUILD THING", calls[0][1])        # the task is there
+        self.assertIn("report_outcome", calls[0][1])     # …plus the terminal contract
+        self.assertNotIn("report_outcome", calls[1][1])  # turn 1 = just the reply
+
     def test_reply_is_fed_as_next_turn_input(self):
         # A non-terminal disposition's free-form reply becomes the NEXT turn's input
         # verbatim (D-45: content-bearing, not a fixed "continue").
@@ -79,8 +96,8 @@ class DriveLoopTest(unittest.TestCase):
                              decide=decider, workspace_root=self.tmp / "wsr2")
 
         self.assertEqual(disp["kind"], "terminal")
-        self.assertEqual(calls[0][1], "first prompt")        # turn 0 = the ticket prompt
-        self.assertEqual(calls[1][1], "DO_APPROACH_A")       # turn 1 = the Director's reply
+        self.assertIn("first prompt", calls[0][1])           # turn 0 = ticket prompt (+contract)
+        self.assertEqual(calls[1][1], "DO_APPROACH_A")       # turn 1 = the Director's reply (verbatim)
         self.assertEqual(seen_ctx[0]["final_message"], "done")  # captured turn-end message
 
     def test_report_outcome_done_drives_autonomous_terminal(self):

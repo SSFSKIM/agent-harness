@@ -16,6 +16,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from director import taxonomy
 from director.decider import autonomous_decide
 from director.worker import autonomy, tools as worker_tools
 from director.worker.app_server import AppServerClient
@@ -156,7 +157,10 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
         c.initialize()
         thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
                                    approval_policy=approval_policy, sandbox=sandbox)
-        input_text = ticket["prompt"]
+        # First turn: frame the ticket with the multi-turn terminal contract so the
+        # worker knows to call report_outcome at terminal (else un-watched it would
+        # loop to stuck). Later turns carry the decider's directive verbatim.
+        input_text = taxonomy.with_terminal_contract(ticket["prompt"])
         for i in range(max_turns):
             turns = i + 1
             sink.pop("outcome", None)  # fresh terminal-signal slot for this turn

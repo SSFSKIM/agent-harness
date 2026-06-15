@@ -6,6 +6,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.taxonomy as tax  # noqa: E402
 
 
+class TerminalContractTest(unittest.TestCase):
+    def test_contract_names_report_outcome_and_three_statuses(self):
+        c = tax.TERMINAL_CONTRACT
+        self.assertIn("report_outcome", c)
+        for status in ("done", "blocked", "needs_human"):
+            self.assertIn(status, c)
+        # it must NOT tell the worker to use report_outcome to ask about continuing
+        self.assertIn("Do NOT call report_outcome to ask whether to continue", c)
+
+    def test_with_terminal_contract_appends_to_prompt(self):
+        out = tax.with_terminal_contract("do the thing")
+        self.assertTrue(out.startswith("do the thing"))
+        self.assertIn("report_outcome", out)
+        self.assertIn("TURN PROTOCOL", out)
+
+
 class RegistryTest(unittest.TestCase):
     def test_all_five_types_present(self):
         self.assertEqual(set(tax.TAXONOMY), {"planning", "research", "design", "spec", "impl"})
