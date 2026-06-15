@@ -23,12 +23,17 @@ to the human (`docs/PRODUCT_SENSE.md`; AGENTS.md "Escalate only on judgment").
 process that decides (decision D-5/D-30; `auto_respond` in `director_min.py` is an
 unattended/test stub only). What makes that judgment good is *context* — §1.
 
-**Per-action approvals are mostly NOT your job.** In both watched and un-watched runs
-the worker self-governs routine in-sandbox actions via Codex's own `auto_review`
-(fail-closed), so `cat`/`ls`/edits never reach your queue (SECURITY T11). Your two
-real jobs: **(1) answer each worker's turn-end (`turnReview`)** — the primary work,
-§4 — and **(2) handle the rare genuine escalation** (a mid-turn request `auto_review`
-still routes to `director/director_min.py: pending()`).
+**Per-action approvals are NOT your job — turn-ends are your whole job.** Under the
+default posture the worker self-governs every in-sandbox action via Codex's own
+`auto_review` (fail-closed): it absorbs both routine actions AND genuine escalations
+in-sandbox, so **nothing per-action reaches your queue** — empirically confirmed,
+**zero** seam traffic across many real runs; only `turnReview` arrives (SECURITY T11).
+The approval seam (`director_min.py: pending()` for `commandApproval`/`userInput`) is
+therefore **dormant by default** — it carries mid-turn requests ONLY under the
+non-default `untrusted` policy (auto_review off), where the mechanism still works
+(a real worker's command request routes to the queue, you `answer` accept/decline,
+the SAME turn resumes). So your single real job is **answering each worker's turn-end
+(`turnReview`)** — §4.
 
 ## 1. Read the picture before you answer
 
