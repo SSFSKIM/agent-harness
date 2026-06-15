@@ -198,7 +198,11 @@ Linear 는 operation 키워드가 문자 그대로 `mutation` 일 때만 mutatio
 
 ## Open Questions
 
-- escalate-to-Director 경로의 정확한 형태(어떤 거부를 Director 승인으로 올리나)는 다음
-  슬라이스(taste-vs-handle escalation policy)에서 확정. 이 spec 은 default-deny 로 닫는다.
+- ~~escalate-to-Director 경로의 정확한 형태(어떤 거부를 Director 승인으로 올리나)~~ →
+  **해소:** 다음 슬라이스
+  [Director 오케스트레이션 가시성 → 인라인 taste-vs-handle escalation](2026-06-15-director-orchestration-visibility.md)
+  가 닫는다 — escalate 는 별도 헤드리스 judge 가 아니라 인라인 Director 가 `authorize` 의
+  `reason` + 오케스트레이션 맥락(`context_for`)을 읽어 taste 만 사람에게 올린다(그 spec D-30/R7).
+  이 spec 은 default-deny 로 standalone 닫혀 있다.
 - per-worker 동적 scope(워커가 자기 티켓 외 mutation 금지)는 Phase 4 후반 정제 후보 —
   지금은 전역 allowlist 로 충분(YAGNI).

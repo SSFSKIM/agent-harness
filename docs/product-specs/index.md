@@ -31,3 +31,9 @@ owner: harness
   allowlist(default-deny)로 묶는다: reads 무제한, allowlisted forward-only mutation 만 통과,
   파괴적/미지 mutation 은 Linear 로 나가기 전 로컬 거부. 서버 parser 와 정렬된 최소 GraphQL
   분류기. un-watched dispatch 전에 사람 키로 보드를 파괴하지 못하게(tracker line 49, T10).
+- [Director 오케스트레이션 가시성 → 인라인 taste-vs-handle escalation](2026-06-15-director-orchestration-visibility.md)
+  — Phase 4 둘째 슬라이스. escalation judge = 별도 헤드리스 프로세스가 아니라 인라인 메인
+  세션(D-5). 오케스트레이터가 in-memory 로만 갖던 상태(in-flight·attempt·wave·stuck)를 atomic
+  스냅샷으로 영속화하고, Director 가 read-API + 스킬로 끌어 쓴다. 요청↔오케스트레이션
+  join(`context_for`)이 bare 큐 요청을 상황 그림으로 감싸 인라인 판단을 떠받친다 — 정책은 그 위
+  얇은 guideline. guardrail 의 escalate-to-Director seam + 부모의 taste 정책 Open Question 해소.
