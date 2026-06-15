@@ -61,7 +61,7 @@ def main():
                 continue
             out({"id": mid, "result": {"turn": {"id": TURN_ID, "status": "inProgress"}}})
             out({"method": "turn/started", "params": {"turn": {"id": TURN_ID}}})
-            if scenario == "approval":
+            if scenario in ("approval", "approval_done"):
                 out({"id": APPROVAL_ID,
                      "method": "item/commandExecution/requestApproval",
                      "params": {"itemId": "item_1", "threadId": THREAD_ID,
@@ -95,8 +95,16 @@ def main():
             # the client's decision on the approval request -> resume the SAME turn
             out({"method": "serverRequest/resolved",
                  "params": {"threadId": THREAD_ID, "requestId": APPROVAL_ID}})
-            complete_turn()
             awaiting_approval = False
+            if scenario == "approval_done":
+                # after the approval, signal terminal so a multi-turn drive completes.
+                out({"id": REPORT_CALL_ID, "method": "item/tool/call",
+                     "params": {"tool": "report_outcome",
+                                "arguments": {"status": "done", "reason": "mock done"},
+                                "itemId": "item_r", "threadId": THREAD_ID, "turnId": TURN_ID}})
+                awaiting_tool = True
+            else:
+                complete_turn()
         elif awaiting_tool and mid in (TOOL_CALL_ID, REPORT_CALL_ID) \
                 and ("result" in msg or "error" in msg):
             # the client's tool result -> resume the SAME turn

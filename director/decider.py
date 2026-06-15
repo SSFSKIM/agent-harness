@@ -21,6 +21,13 @@ the orchestrator slice (M3).
 """
 from __future__ import annotations
 
+import datetime
+
+import director.queue as dq
+
+# Queue request kind for a turn-end the watched Director must answer (free-form).
+TURN_REVIEW_KIND = "turnReview"
+
 # The un-watched default reply for a non-terminal prose turn-end. NOT a fixed
 # "continue": it is a content-bearing directive that generalizes "self-resolve and
 # continue" — the worker is an LLM, so at a fork it decides rather than stops
@@ -51,3 +58,49 @@ def autonomous_decide(ctx: dict) -> dict:
                     "outcome": outcome}
     # No terminal signal → non-terminal turn-end → keep working (self-resolve).
     return {"kind": "reply", "reply": CONTINUE_REPLY}
+
+
+def _now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def disposition_from_answer(answer: dict | None) -> dict:
+    """Map a Director's turn-review answer to a drive disposition. The Director writes
+    `{"disposition": {"kind": "terminal"|"reply"|"escalate", ...}}` (via
+    director_min.answer_turn). A missing answer (timeout) or a malformed one →
+    escalate: in a watched run a no-answer should SURFACE to the human, never
+    fabricate progress or silently burn turns (mirrors the approval seam's
+    surface-the-default discipline)."""
+    if isinstance(answer, dict):
+        disp = answer.get("disposition")
+        if isinstance(disp, dict) and disp.get("kind") in ("terminal", "reply", "escalate"):
+            return disp
+    return {"kind": "escalate", "reason": "turn review unanswered or malformed"}
+
+
+def make_queue_decider(base=None, timeout_s: float = 300.0, now=_now_iso):
+    """Watched decider (spec R5): post each turn-end to the Director queue and block
+    for the main session's FREE-FORM answer. The Director reads `final_message` +
+    `outcome` (director-oversight skill) and writes a disposition — terminal
+    (review+execute), a content-bearing reply ("A 로 해라"), or escalate. Same
+    request/answer channel as the approval seam — no new transport, no headless
+    Director (the recurring anti-pattern this design refuses, [[no-headless-director-codex-owns-approval]])."""
+    def decide(ctx: dict) -> dict:
+        ticket = ctx.get("ticket") or {}
+        tid = str(ticket.get("id"))
+        turn_index = ctx.get("turn_index")
+        rid = f"{tid}|turn|{turn_index}"
+        dq.append_request({
+            "request_id": rid,
+            "ticket_id": tid,
+            "session_id": f"{tid}-turn{turn_index}",
+            "kind": TURN_REVIEW_KIND,
+            "payload": {"final_message": ctx.get("final_message"),
+                        "outcome": ctx.get("outcome"),
+                        "turn_index": turn_index},
+            "workspace_path": ticket.get("workspace"),
+            "created_at": now(),
+        }, base=base)
+        answer = dq.wait_for_answer(rid, base=base, timeout_s=timeout_s)
+        return disposition_from_answer(answer)
+    return decide

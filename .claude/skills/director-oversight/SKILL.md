@@ -1,6 +1,6 @@
 ---
 name: director-oversight
-description: Use as the Director (the main Claude session) when overseeing a Symphony/orchestrator run or answering a worker's queued approval/input request — reads orchestration status (director.status) to judge each request in context, then applies the taste-vs-handle line, escalating only taste to the human.
+description: Use as the Director (the main Claude session) when overseeing a Symphony/orchestrator run, answering a worker's queued approval/input request, or answering a worker's turn-end (turnReview) — reads orchestration status (director.status) to judge each in context, then applies the taste-vs-handle line: a worker's turn end gets a free-form content-bearing reply (continue / "do A") unless it is a terminal or a taste fork, and only taste escalates to the human.
 ---
 # Director oversight — judge in context, escalate only taste
 
@@ -86,18 +86,54 @@ A worker on ticket `b` requests approval to run a broad cleanup command.
 Same request, opposite call — because the context flipped it. That is the whole
 point of reading the picture first.
 
+## 4. Answering a turn review (the worker ended a turn)
+
+A worker rarely one-shots a ticket. When it ends a turn — often pausing on a
+would-be-human moment like *"이제 ExecPlan 할까요?"* or *"A 일 수도 B 일 수도"* — the
+orchestrator (watched) posts a `turnReview` request and **blocks the next turn for
+your answer**. This is the core of the multi-turn slice: the worker does not stop,
+and you answer **on the human's behalf** so it continues (PRODUCT_SENSE.md RV2). The
+request's `payload` carries `final_message` (the worker's turn-end message — your
+primary input), an optional `outcome` (a `report_outcome` terminal signal:
+done / blocked / needs_human), and `turn_index`.
+
+Read it (and the `--request` join for context), then answer **free-form** with a
+disposition via `director_min.answer_turn(request_id, disposition)`:
+
+- **Continue / decide — `{"kind": "reply", "reply": "<directive>"}`.** The default
+  for a non-terminal turn end. The reply is **content-bearing, not a fixed
+  "continue"**: to *"계속할까요?"* answer `"continue"`; to *"A 냐 B 냐"* answer
+  `"A 로 해라"`; to *"X 가 빠진 것 같다"* answer `"X 도 처리해라"`. You are answering the
+  worker's actual question as the human would. The worker resumes the SAME thread
+  with your directive as the next turn's input; the board does not move.
+- **Terminal — `{"kind": "terminal", "outcome": {"status": "done"|"blocked",
+  "reason": "...", "spawned_ticket_ids": [...]}}`.** Only when the work is genuinely
+  finished or blocked (usually the worker already sent `report_outcome`; confirm it).
+  The orchestrator executes the board transition here and ONLY here.
+- **Escalate — `{"kind": "escalate", "reason": "..."}`.** A real product/taste fork
+  (PRODUCT_SENSE.md) — you must not choose the direction yourself. Surfaces to the
+  human; the ticket stays visible.
+
+The taste-vs-handle line (§2) decides which: *"A 냐 B 냐"* is **usually non-taste** —
+a mechanical/technical choice you answer with a `reply`. A product-direction or
+irreversible fork is **taste** — `escalate`. Do not conflate them: most forks the
+worker raises are yours to answer, not the human's.
+
 ## Un-watched runs (when you're not here)
 
 When the orchestrator is dispatched `--autonomous`, workers self-govern via
 Codex's own approval gate (`on-request` + `auto_review`), so routine command/file
 actions **never reach this queue** — Codex approves them in-sandbox, and only
 genuine `tool/requestUserInput` questions arrive (and time out to a safe default
-if nobody answers). So un-watched, this skill is **not** an approval path; the
+if nobody answers). **Turn ends, too, are auto-handled un-watched:** the code
+decider (`director.decider.autonomous_decide`) trusts the worker's terminal proposal
+and otherwise replies "use your best judgment and continue" — no `turnReview` reaches
+this queue. So un-watched, this skill is **not** an approval or turn-review path; the
 status surface above is for *monitoring* what the autonomous run did (and for a
 human or watched Director catching up). The security boundary is Codex's sandbox +
 `auto_review` + the T10 Linear guardrail — not you. See SECURITY.md T11.
 
-## 4. Reporting up
+## 5. Reporting up
 
 When you do escalate (or when the human asks "what's happening"), lead with the
 snapshot: in-flight tickets and their attempt/wave, anything stuck and why, recent

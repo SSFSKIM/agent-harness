@@ -190,7 +190,9 @@ def main(argv=None) -> int:
     ap.add_argument("--ticket", help="path to a stub ticket JSON")
     ap.add_argument("--linear", help="Linear issue id/identifier to read as the ticket")
     ap.add_argument("--mock", action="store_true", help="use the bundled fake app-server")
-    ap.add_argument("--mock-scenario", default="plain", choices=["plain", "approval"])
+    ap.add_argument("--mock-scenario", default="plain",
+                    choices=["plain", "approval", "approval_done", "report",
+                             "tool", "turn_failed"])
     ap.add_argument("--codex", default="codex app-server", help="real worker command")
     ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
@@ -200,6 +202,8 @@ def main(argv=None) -> int:
     ap.add_argument("--autonomous", action="store_true",
                     help="un-watched posture: Codex self-governs (on-request + auto_review "
                          "+ workspace-write + full network); default off = watched untrusted")
+    ap.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                    help="multi-turn drive bound (R6); over it → stuck")
     args = ap.parse_args(argv)
 
     if args.linear:
@@ -218,12 +222,14 @@ def main(argv=None) -> int:
         tool_executor = make_linear_tool_executor()
     policy = (autonomy.APPROVAL_POLICY if args.autonomous else "untrusted")
     sandbox = (autonomy.SANDBOX if args.autonomous else "workspace-write")
-    result = run_ticket(ticket, command=_command(args), queue_base=args.queue_dir,
-                        tools=tools, tool_executor=tool_executor,
-                        install_skills=args.install_skills,
-                        approval_policy=policy, sandbox=sandbox)
-    print(json.dumps({"ticket": ticket["id"], **result}))
-    return 0 if result.get("status") == "completed" else 1
+    # The single-ticket CLI is un-watched (no orchestrator queue / live Director to
+    # answer turn reviews), so it drives with the autonomous code decider.
+    disp = drive(ticket, command=_command(args), decide=autonomous_decide,
+                 queue_base=args.queue_dir, tools=tools, tool_executor=tool_executor,
+                 install_skills=args.install_skills, approval_policy=policy,
+                 sandbox=sandbox, max_turns=args.max_turns)
+    print(json.dumps({"ticket": ticket["id"], **disp}))
+    return 0 if disp.get("kind") == "terminal" else 1
 
 
 if __name__ == "__main__":

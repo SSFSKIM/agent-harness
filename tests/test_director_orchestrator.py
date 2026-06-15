@@ -15,12 +15,22 @@ import director.status as ds  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
+# Drive dispositions a faked dispatch returns (the post-R4 contract: dispatch yields a
+# disposition, not a turn-status). reconcile EXECUTES these onto the board.
+def _done(**extra):
+    return {"kind": "terminal", "outcome": {"status": "done", "reason": "ok"},
+            "turns": 1, "turn_id": "t", **extra}
+
+
+def _failed():
+    return {"kind": "failed", "status": "failed", "turn_id": None}
+
 
 class ResolveStatesTest(unittest.TestCase):
     def test_resolves_defaults_to_ids(self):
         states = orch.resolve_states(orch.MockBoard.demo(), "T")
         self.assertEqual(states, {"ready": "st_todo", "started": "st_prog",
-                                  "done": "st_done", "failed": None})
+                                  "done": "st_done", "failed": None, "blocked": None})
 
     def test_missing_state_name_raises_before_dispatch(self):
         with self.assertRaises(RuntimeError):
@@ -81,7 +91,7 @@ class EligibilityTest(unittest.TestCase):
 
         def fake(ticket, **kw):
             seen.append(ticket["id"])
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
         with mock.patch("director.orchestrator.dispatch", fake):
             res = orch.run_once(board, command=["x"], team="T", states=states)
@@ -104,7 +114,7 @@ class RunOnceEndToEndTest(unittest.TestCase):
             responder.start()
             try:
                 res = orch.run_once(
-                    board, command=[sys.executable, MOCK, "approval"],
+                    board, command=[sys.executable, MOCK, "approval_done"],
                     team="T", states=states, concurrency=2,
                     queue_base=qbase, workspace_root=Path(tmp) / "ws")
             finally:
@@ -145,7 +155,7 @@ class RunOnceConcurrencyTest(unittest.TestCase):
             time.sleep(0.05)
             with guard:
                 live["now"] -= 1
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
         with mock.patch("director.orchestrator.dispatch", fake_dispatch):
             res = orch.run_once(board, command=["x"], team="T", states=states,
@@ -164,7 +174,7 @@ class RunOnceRetryTest(unittest.TestCase):
 
         def always_fail(ticket, **kw):
             calls[ticket["id"]] += 1
-            return {"status": "failed", "turn_id": None}
+            return _failed()
 
         with mock.patch("director.orchestrator.dispatch", always_fail):
             res = orch.run_once(board, command=["x"], team="T", states=states,
@@ -182,7 +192,7 @@ class RunOnceRetryTest(unittest.TestCase):
             states={**orch.MockBoard.STATES, "Blocked": {"id": "st_block", "type": "started"}})
         states = orch.resolve_states(board, "T", {"failed": "Blocked"})
         with mock.patch("director.orchestrator.dispatch",
-                        lambda ticket, **kw: {"status": "failed", "turn_id": None}):
+                        lambda ticket, **kw: _failed()):
             res = orch.run_once(board, command=["x"], team="T", states=states,
                                 concurrency=1, retry_budget=0)
         self.assertEqual(res[0]["final_state"], "failed")
@@ -211,7 +221,7 @@ class RunOnceErrorPathsTest(unittest.TestCase):
                            "description": "d", "prompt": "p", "state_id": "st_todo"}])
         states = orch.resolve_states(board, "T")
         with mock.patch("director.orchestrator.dispatch",
-                        lambda ticket, **kw: {"status": "completed", "turn_id": "t"}):
+                        lambda ticket, **kw: _done()):
             res = orch.run_once(board, command=["x"], team="T", states=states)
         self.assertEqual(res[0]["status"], "completed")
         self.assertIn("reconcile_error", res[0])
@@ -246,7 +256,7 @@ class RunOnceErrorPathsTest(unittest.TestCase):
                              "description": "d", "prompt": "p", "state_id": "st_todo"}])
         states = orch.resolve_states(board, "T")
         with mock.patch("director.orchestrator.dispatch",
-                        lambda ticket, **kw: {"status": "completed", "turn_id": "t"}):
+                        lambda ticket, **kw: _done()):
             res = orch.run_once(board, command=["x"], team="T", states=states)
         self.assertEqual(res[0]["status"], "completed")
         self.assertIn("reconcile_error", res[0])
@@ -267,7 +277,7 @@ class RunOnceErrorPathsTest(unittest.TestCase):
 
         def fake(ticket, **kw):
             calls["n"] += 1
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
         with mock.patch("director.orchestrator.dispatch", fake):
             res = orch.run_once(board, command=["x"], team="T", states=states)
@@ -288,7 +298,7 @@ def _issue(tid, blockers=None, state="st_todo", labels=None):
 def _completing_dispatch(order):
     def fake(ticket, **kw):
         order.append(ticket["id"])
-        return {"status": "completed", "turn_id": "t"}
+        return _done()
     return fake
 
 
@@ -322,7 +332,7 @@ class RunUntilDrainedTest(unittest.TestCase):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         states = orch.resolve_states(board, "T")
         with mock.patch("director.orchestrator.dispatch",
-                        lambda ticket, **kw: {"status": "failed", "turn_id": None}):
+                        lambda ticket, **kw: _failed()):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
         self.assertEqual(out["stopped_reason"], "stuck")
         # B blocked by failed A; stuck reports the unmet blocker (A now in 'started')
@@ -399,11 +409,11 @@ class TypeRoutingTest(unittest.TestCase):
     def test_dispatch_composes_typed_prompt(self):
         captured = {}
 
-        def fake_run_ticket(ticket, **kw):
+        def fake_drive(ticket, **kw):
             captured["prompt"] = ticket["prompt"]
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
-        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+        with mock.patch("director.orchestrator.run.drive", fake_drive):
             orch.dispatch(_issue("a", labels=["spec"]), command=["x"])
         self.assertIn("product-design", captured["prompt"])  # spec template applied
         self.assertIn("p-a", captured["prompt"])              # original task preserved
@@ -411,11 +421,11 @@ class TypeRoutingTest(unittest.TestCase):
     def test_dispatch_untyped_passes_raw_prompt(self):
         captured = {}
 
-        def fake_run_ticket(ticket, **kw):
+        def fake_drive(ticket, **kw):
             captured["prompt"] = ticket["prompt"]
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
-        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+        with mock.patch("director.orchestrator.run.drive", fake_drive):
             orch.dispatch(_issue("a"), command=["x"])  # no labels
         self.assertEqual(captured["prompt"], "p-a")  # unchanged (backward compat)
 
@@ -428,11 +438,11 @@ class TypeRoutingTest(unittest.TestCase):
         states = orch.resolve_states(board, "T")
         seen = []
 
-        def fake_run_ticket(ticket, **kw):
+        def fake_drive(ticket, **kw):
             seen.append((ticket["id"], ticket["prompt"]))
-            return {"status": "completed", "turn_id": "t"}
+            return _done()
 
-        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+        with mock.patch("director.orchestrator.run.drive", fake_drive):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
         self.assertEqual([s[0] for s in seen], ["plan", "design", "spec", "impl"])
         prompts = dict(seen)
@@ -445,10 +455,12 @@ class TypeRoutingTest(unittest.TestCase):
 
 class MainCliTest(unittest.TestCase):
     def test_main_mock_runs_and_reconciles(self):
+        # --autonomous: an offline mock run has no live Director to answer turn reviews,
+        # so it uses the code decider; the `report` worker signals report_outcome(done).
         board = orch.MockBoard.demo()
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
-            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
-                            "--queue-dir", q, "--workspace-root", ws,
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "report",
+                            "--autonomous", "--queue-dir", q, "--workspace-root", ws,
                             "--concurrency", "2", "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("u1"), "Done")
@@ -457,8 +469,9 @@ class MainCliTest(unittest.TestCase):
     def test_main_once_skips_blocked(self):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
-            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain", "--once",
-                            "--queue-dir", q, "--workspace-root", ws, "--no-status"], board=board)
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "report", "--once",
+                            "--autonomous", "--queue-dir", q, "--workspace-root", ws,
+                            "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("a"), "Done")
         self.assertEqual(board.state_name("b"), "Todo")  # single pass: B stays blocked
@@ -466,8 +479,9 @@ class MainCliTest(unittest.TestCase):
     def test_main_continuous_drains_chain(self):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
-            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
-                            "--queue-dir", q, "--workspace-root", ws, "--no-status"], board=board)
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "report",
+                            "--autonomous", "--queue-dir", q, "--workspace-root", ws,
+                            "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("a"), "Done")
         self.assertEqual(board.state_name("b"), "Done")  # continuous: A unblocks B
@@ -476,8 +490,8 @@ class MainCliTest(unittest.TestCase):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws, \
                 tempfile.TemporaryDirectory() as st:
-            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
-                            "--queue-dir", q, "--workspace-root", ws,
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "report",
+                            "--autonomous", "--queue-dir", q, "--workspace-root", ws,
                             "--status-dir", st], board=board)
             snap = ds.read_status(base=st)
         self.assertEqual(rc, 0)
@@ -518,7 +532,7 @@ class OrchestrationVisibilityTest(unittest.TestCase):
                 # the worker reads the snapshot mid-turn: its own ticket is in flight
                 snap = ds.read_status(base=st)
                 seen["in_flight"] = snap["in_flight"] if snap else None
-                return {"status": "completed", "turn_id": "t"}
+                return _done()
 
             with mock.patch("director.orchestrator.dispatch", capturing):
                 orch.run_until_drained(board, command=["x"], team="T", states=states,
@@ -535,7 +549,7 @@ class OrchestrationVisibilityTest(unittest.TestCase):
         states = orch.resolve_states(board, "T")
         with tempfile.TemporaryDirectory() as st:
             with mock.patch("director.orchestrator.dispatch",
-                            lambda ticket, **kw: {"status": "failed", "turn_id": None}):
+                            lambda ticket, **kw: _failed()):
                 orch.run_until_drained(board, command=["x"], team="T", states=states,
                                        status=ds.StatusWriter(base=st))
             snap = ds.read_status(base=st)
@@ -554,7 +568,7 @@ class OrchestrationVisibilityTest(unittest.TestCase):
                 snap = ds.read_status(base=st)
                 assert snap is not None
                 attempts_seen.append(snap["in_flight"][0]["attempt"])
-                return {"status": "failed", "turn_id": None}
+                return _failed()
 
             with mock.patch("director.orchestrator.dispatch", fail_capturing):
                 orch.run_until_drained(board, command=["x"], team="T", states=states,
@@ -585,7 +599,7 @@ class OrchestrationVisibilityTest(unittest.TestCase):
             def capturing(ticket, **kw):
                 captured["ctx"] = ds.context_for({"ticket_id": "b",
                                                   "kind": "commandApproval"}, base=st)
-                return {"status": "completed", "turn_id": "t"}
+                return _done()
 
             with mock.patch("director.orchestrator.dispatch", capturing):
                 orch.run_until_drained(board, command=["x"], team="T", states=states,

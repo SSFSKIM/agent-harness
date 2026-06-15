@@ -27,8 +27,10 @@ from pathlib import Path
 # Single-process scope — cross-process hardening (O_APPEND/flock) is Phase 4.
 _APPEND_LOCK = threading.Lock()
 
-# Normalized request kinds (Codex method -> kind mapping lives in the worker seam).
-REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation")
+# Normalized request kinds. Approval/input kinds come from a Codex server request
+# (mapping lives in the worker seam); `turnReview` is a turn-end the watched Director
+# answers free-form (multi-turn slice — director.decider.make_queue_decider).
+REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation", "turnReview")
 
 # Decisions the Director may return for an approval-style request.
 APPROVAL_DECISIONS = ("accept", "decline", "acceptForSession", "cancel")

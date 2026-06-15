@@ -18,7 +18,7 @@ Snapshot schema (.claude/harness/director-status/status.json):
   {
     "run":       {"started_at", "pass", "stopped_reason"},
     "in_flight": [{"ticket_id", "identifier", "phase", "attempt", "wave", "started_at"}],
-    "recent":    [{"ticket_id", "ticket", "status", "final_state", "attempts"}],  # bounded
+    "recent":    [{"ticket_id", "ticket", "status", "final_state", "attempts", "turns"}],  # bounded
     "stuck":     [{"ticket", "blocked_by": [{"id", "state_type"}]}],
     "updated_at"
   }
@@ -115,7 +115,8 @@ class StatusWriter:
         self._recent.append({"ticket_id": key, "ticket": summary.get("ticket"),
                              "status": summary.get("status"),
                              "final_state": summary.get("final_state"),
-                             "attempts": summary.get("attempts")})
+                             "attempts": summary.get("attempts"),
+                             "turns": summary.get("turns")})  # R8: multi-turn visibility
         if len(self._recent) > self._recent_max:
             self._recent = self._recent[-self._recent_max:]
         self._flush()

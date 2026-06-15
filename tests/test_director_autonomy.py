@@ -96,18 +96,18 @@ class CommandWrapTest(unittest.TestCase):
 
 
 class OrchestratorThreadsPostureTest(unittest.TestCase):
-    def test_run_until_drained_threads_posture_to_run_ticket(self):
+    def test_run_until_drained_threads_posture_to_drive(self):
         board = orch.MockBoard([{"id": "a", "identifier": "A", "title": "t",
                                  "description": "d", "prompt": "p", "state_id": "st_todo"}])
         states = orch.resolve_states(board, "T")
         captured = {}
 
-        def fake_run_ticket(ticket, **kw):
+        def fake_drive(ticket, **kw):
             captured["approval_policy"] = kw.get("approval_policy")
             captured["sandbox"] = kw.get("sandbox")
-            return {"status": "completed", "turn_id": "t"}
+            return {"kind": "terminal", "outcome": {"status": "done"}, "turns": 1}
 
-        with mock.patch("director.orchestrator.run.run_ticket", fake_run_ticket):
+        with mock.patch("director.orchestrator.run.drive", fake_drive):
             orch.run_until_drained(board, command=["x"], team="T", states=states,
                                    approval_policy="on-request", sandbox="workspace-write")
         self.assertEqual(captured["approval_policy"], "on-request")

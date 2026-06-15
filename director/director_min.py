@@ -33,11 +33,27 @@ def answer(request_id: str, decision: str | None = None, *, answers=None,
     dq.write_answer(payload, base=base)
 
 
+def answer_turn(request_id: str, disposition: dict, *, base=None,
+                answered_by: str = "director") -> None:
+    """Answer a `turnReview` request with a drive disposition
+    ({"kind": "terminal"|"reply"|"escalate", ...}). The main session calls this after
+    reading the turn-end (final_message + outcome) via the director-oversight skill —
+    the FREE-FORM equivalent of `answer` for the multi-turn turn-end seam (D-45)."""
+    dq.write_answer({"request_id": request_id, "answered_by": answered_by,
+                     "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                     "disposition": disposition}, base=base)
+
+
 def auto_respond(base=None, decide: Callable[[dict], str] = lambda req: "accept",
                  stop: threading.Event | None = None, poll_s: float = 0.02) -> None:
-    """Answer pending requests with decide(req) until `stop` is set (unattended/tests)."""
+    """Answer pending APPROVAL/INPUT requests with decide(req) until `stop` is set
+    (unattended/tests). Skips `turnReview` requests — those need a free-form
+    disposition (answer_turn), not a decision string, so a fixed-policy responder
+    must not touch them."""
     stop = stop or threading.Event()
     while not stop.is_set():
         for req in pending(base=base):
+            if req.get("kind") == "turnReview":
+                continue
             answer(req["request_id"], decide(req), base=base)
         time.sleep(poll_s)

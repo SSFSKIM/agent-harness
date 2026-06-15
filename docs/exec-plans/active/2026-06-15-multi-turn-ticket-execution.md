@@ -208,8 +208,17 @@ mock board unless noted:
   `report`/`turn_failed` scenarios + `tests/test_director_drive.py` (8 tests: multi-turn
   same-thread, reply-fed-forward, report_outcome→terminal, no-signal→stuck, failed,
   + decider units). `run_ticket`/`run.main` stay single-turn — rewiring is M3.
-- [ ] M3 — orchestrator reconcile redesign + watched decider + status + CLI flags;
-  rewire `run.main` + `orchestrator.dispatch` onto `drive`.
+- [x] (2026-06-15) M3 — `orchestrator.reconcile` redesigned to EXECUTE a drive
+  disposition (terminal done/blocked, escalate, stuck, failed→retry) — the
+  `completed → Done` turn-status mapping is GONE (R4). `dispatch`→`run.drive`;
+  `decide`/`max_turns` threaded through the wave. Watched decider
+  (`decider.make_queue_decider` + `director_min.answer_turn`, `turnReview` queue kind)
+  is the orchestrator default; `--autonomous`/`--mock` use the code decider.
+  `run.main`→`drive`. `--max-turns`/`--blocked-state` CLI. `resolve_states` gained
+  optional `blocked`. `status` records per-ticket `turns` (R8). director-oversight
+  skill regained its turn-review purpose. Tests migrated to the disposition contract;
+  `tests/test_director_decider.py` added (queue decider, answer_turn, escalate-on-
+  timeout, auto_respond skips turnReview).
 - [ ] M4 — live wire-pin (real codex, 2+ turns, content-bearing reply, terminal).
 
 ## Surprises & discoveries
@@ -249,6 +258,22 @@ mock board unless noted:
   is the LLM's, code applies the proposal).
 - 2026-06-15: **M1 de-risks the wire unknowns before the loop is built** — live
   inspection pins the real `agentMessage` event shape and `report_outcome` adoption.
+- 2026-06-15 (M3): **Watched decider via a new `turnReview` queue kind, not a new
+  transport** — the turn-end reuses append_request/wait_for_answer exactly like the
+  approval seam; the live main session answers via `director_min.answer_turn`. No
+  headless Director ([[no-headless-director-codex-owns-approval]]).
+- 2026-06-15 (M3): **Watched-decider timeout → escalate** (not auto-continue) — in a
+  watched run a no-answer must SURFACE, never fabricate progress; max_turns is the
+  ultimate backstop.
+- 2026-06-15 (M3): **Offline `--mock`/test runs pass `--autonomous`** — the watched
+  queue decider needs a live Director answering turnReviews, which an offline run has
+  no responder for; the code decider is the offline-safe path. Mock orchestrator
+  tests that expect completion use the terminal-signaling `report`/`approval_done`
+  scenarios (a `plain` worker now correctly *continues* → stuck, encoding R4).
+- 2026-06-15 (M3): **Worker proposes status / orchestrator executes the parent's
+  transition; worker spawns children itself** — `reconcile.apply` for `blocked` uses
+  the optional `--blocked-state` (else stay started + comment) and records
+  `spawned_ticket_ids`; the DAG (Phase 3a) picks the children up on re-poll.
 
 ## Feedback (from completion gate)
 

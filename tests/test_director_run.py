@@ -45,9 +45,11 @@ class RunEndToEndTest(unittest.TestCase):
         self.assertIsNotNone(ans)
         self.assertEqual(ans["decision"], "accept")
 
-    def test_main_plain_ticket_returns_zero(self):
+    def test_main_report_ticket_returns_zero(self):
+        # run.main now drives multi-turn; the `report` worker signals report_outcome(done)
+        # so the autonomous decider returns a terminal disposition → rc 0.
         rc = run.main(["--ticket", str(self._ticket_path()), "--mock",
-                       "--mock-scenario", "plain", "--queue-dir", str(self.qbase)])
+                       "--mock-scenario", "report", "--queue-dir", str(self.qbase)])
         self.assertEqual(rc, 0)
 
     def test_load_ticket_requires_id_and_prompt(self):

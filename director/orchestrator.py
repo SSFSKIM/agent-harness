@@ -20,13 +20,15 @@ import sys
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from director import run, status as status_mod, taxonomy
+from director import decider, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 from director.worker import autonomy
 
 # Default logical-state → Linear workflow-state-name mapping (overridable on the CLI).
+# `failed`/`blocked` are OPTIONAL (None = no such state → leave the ticket in `started`
+# + comment).
 DEFAULT_STATE_NAMES = {"ready": "Todo", "started": "In Progress",
-                       "done": "Done", "failed": None}
+                       "done": "Done", "failed": None, "blocked": None}
 
 
 def resolve_states(board, team: str, names: dict | None = None) -> dict:
@@ -44,44 +46,53 @@ def resolve_states(board, team: str, names: dict | None = None) -> dict:
                 f"workflow state {name!r} (for {logical!r}) not found in team "
                 f"{team!r}; have: {sorted(states)}")
         out[logical] = states[name]["id"]
-    failed_name = names.get("failed")
-    if failed_name:
-        if failed_name not in states:
-            raise RuntimeError(
-                f"configured failed state {failed_name!r} not found in team {team!r}")
-        out["failed"] = states[failed_name]["id"]
-    else:
-        out["failed"] = None
+    for opt in ("failed", "blocked"):  # optional terminal states
+        oname = names.get(opt)
+        if oname:
+            if oname not in states:
+                raise RuntimeError(
+                    f"configured {opt} state {oname!r} not found in team {team!r}")
+            out[opt] = states[oname]["id"]
+        else:
+            out[opt] = None
     return out
 
 
 def dispatch(ticket: dict, **kwargs) -> dict:
-    """Drive one worker through one ticket (wraps run.run_ticket), converting any
-    crash into a {status: failed} result so one bad worker never sinks the pool.
-    A module-level function so tests can patch it deterministically.
+    """Drive one worker through one ticket across multiple turns (wraps run.drive),
+    converting any crash into a {kind: failed} disposition so one bad worker never
+    sinks the pool. A module-level function so tests can patch it deterministically.
 
     The worker's prompt is composed via the dev-stage taxonomy (Phase 3b): a typed
     ticket (a Linear stage label) gets its stage-workflow template wrapped around the
     task; an untyped ticket passes through unchanged.
 
+    Returns a DISPOSITION (`{kind: terminal|escalate|stuck|failed, ...}`) — the
+    worker's/Director's judgment of what the turns meant, NOT a turn-status. reconcile
+    executes it onto the board (R4: code never judges done-ness).
+
     `composed` is an intentional SHALLOW copy — its `blockers`/`labels` lists alias the
-    board ticket's. Nothing downstream (run_ticket) mutates them; callers must not."""
+    board ticket's. Nothing downstream (drive) mutates them; callers must not."""
     composed = {**ticket, "prompt": taxonomy.compose_worker_prompt(ticket)}
     try:
-        return run.run_ticket(composed, **kwargs)
+        return run.drive(composed, **kwargs)
     except Exception as exc:  # subprocess death, handshake error, etc.
-        return {"status": "failed", "turn_id": None, "error": str(exc)}
+        return {"kind": "failed", "status": "failed", "turn_id": None, "error": str(exc)}
 
 
-def reconcile(board, ticket: dict, result: dict, attempts: int,
+def reconcile(board, ticket: dict, disp: dict, attempts: int,
               states: dict, retry_budget: int) -> dict:
-    """Map a worker result to board state/comment. Returns {"retry": True} to ask
-    run_once to re-dispatch, or {"summary": {...}} for a terminal outcome. Board
-    writes are best-effort — a write failure is recorded in the summary, never
-    raised (the ticket stays visible in `started` for the watched Director)."""
+    """EXECUTE a drive disposition onto the board. Returns {"retry": True} to ask
+    run_once to re-dispatch (a `failed` disposition within budget), or
+    {"summary": {...}} for a terminal outcome. This is the R4 redesign: the board
+    transition follows the worker/Director DISPOSITION (terminal done/blocked,
+    escalate, stuck) — there is NO turn-status→board-state mapping. Board writes are
+    best-effort — a write failure is recorded in the summary, never raised (the ticket
+    stays visible in `started` for the watched Director)."""
     tid = ticket["id"]
     label = ticket.get("identifier") or tid
-    status = result.get("status")
+    kind = disp.get("kind")
+    turns = disp.get("turns")
     errs: list[str] = []
 
     def set_state(state_id):
@@ -101,22 +112,52 @@ def reconcile(board, ticket: dict, result: dict, attempts: int,
         except Exception as exc:
             errs.append(f"comment: {exc}")
 
-    if status == "completed":
-        set_state(states["done"])
-        comment(f"✅ worker completed (turn {result.get('turn_id')})")
-        summary = {"ticket": label, "status": "completed",
-                   "final_state": "done", "attempts": attempts}
-    elif attempts < 1 + retry_budget:
-        return {"retry": True}
-    else:
-        detail = f": {result['error']}" if result.get("error") else ""
-        comment(f"❌ worker failed ({status}) after {attempts} attempt(s){detail}")
+    def summarize(status, final_state, **extra):
+        s = {"ticket": label, "status": status, "final_state": final_state,
+             "attempts": attempts, "turns": turns}
+        s.update(extra)
+        return s
+
+    if kind == "terminal":
+        outcome = disp.get("outcome") or {}
+        ostatus = outcome.get("status")
+        if ostatus == "blocked":
+            spawned = outcome.get("spawned_ticket_ids") or []
+            final = "started"
+            if states.get("blocked"):
+                set_state(states["blocked"])
+                final = "blocked"
+            note = f" (spawned {', '.join(spawned)})" if spawned else ""
+            comment(f"⛔ worker blocked after {turns} turn(s): {outcome.get('reason')}{note}")
+            summary = summarize("blocked", final, spawned_ticket_ids=spawned)
+        else:  # done is the default terminal outcome
+            set_state(states["done"])
+            reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
+            comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
+            summary = summarize("completed", "done")
+    elif kind == "escalate":
+        comment(f"🙋 escalated to human after {turns} turn(s): {disp.get('reason')}")
+        summary = summarize("escalated", "started")  # stays visible; human acts async
+    elif kind == "stuck":
         final = "started"
         if states.get("failed"):
             set_state(states["failed"])
             final = "failed"
-        summary = {"ticket": label, "status": "failed",
-                   "final_state": final, "attempts": attempts}
+        comment(f"🌀 worker stuck ({disp.get('reason')}) after {turns} turn(s)")
+        summary = summarize("stuck", final)
+    elif kind == "failed":
+        if attempts < 1 + retry_budget:
+            return {"retry": True}
+        detail = f": {disp['error']}" if disp.get("error") else ""
+        comment(f"❌ worker failed ({disp.get('status')}) after {attempts} attempt(s){detail}")
+        final = "started"
+        if states.get("failed"):
+            set_state(states["failed"])
+            final = "failed"
+        summary = summarize("failed", final)
+    else:  # unknown disposition — never silently drop; surface and stay visible
+        comment(f"⚠️ unknown disposition {kind!r} after {turns} turn(s)")
+        summary = summarize("unknown", "started")
 
     if errs:
         summary["reconcile_error"] = "; ".join(errs)
@@ -139,7 +180,9 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    read_timeout_s: float = 30.0, timeout_s: float = 300.0,
                    status=None, wave: int = 1,
                    approval_policy: str = "untrusted",
-                   sandbox: str = "workspace-write") -> dict:
+                   sandbox: str = "workspace-write",
+                   decide=decider.autonomous_decide,
+                   max_turns: int = run.DEFAULT_MAX_TURNS) -> dict:
     """Claim, dispatch (bounded concurrency), and fully drain a given (already
     eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
     only once every ticket has reached a terminal summary (incl. retries), so the
@@ -161,7 +204,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             dispatch, ticket, command=command, queue_base=queue_base,
             workspace_root=workspace_root, tools=tools, tool_executor=tool_executor,
             install_skills=install_skills, read_timeout_s=read_timeout_s,
-            timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox)
+            timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox,
+            decide=decide, max_turns=max_turns)
         futures[fut] = ticket
         status.dispatched(ticket)
 
@@ -387,9 +431,16 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--done-state", default="Done")
     ap.add_argument("--failed-state", default=None,
                     help="optional workflow state for exhausted failures (else stay started)")
+    ap.add_argument("--blocked-state", default=None,
+                    help="optional workflow state for a worker-reported blocked terminal "
+                         "(else stay started + comment)")
+    ap.add_argument("--max-turns", type=int, default=run.DEFAULT_MAX_TURNS,
+                    help="multi-turn drive bound per ticket (R6); over it → stuck")
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--mock", action="store_true", help="in-memory board + fake worker")
-    ap.add_argument("--mock-scenario", default="plain", choices=["plain", "approval"])
+    ap.add_argument("--mock-scenario", default="plain",
+                    choices=["plain", "approval", "approval_done", "report",
+                             "tool", "turn_failed"])
     ap.add_argument("--codex", default="codex app-server", help="real worker command")
     ap.add_argument("--queue-dir", default=None)
     ap.add_argument("--workspace-root", default=None)
@@ -415,8 +466,17 @@ def main(argv=None, *, board=None) -> int:
     board = board if board is not None else _build_board(args)
     states = resolve_states(board, args.team, {
         "ready": args.ready_state, "started": args.started_state,
-        "done": args.done_state, "failed": args.failed_state})
+        "done": args.done_state, "failed": args.failed_state,
+        "blocked": args.blocked_state})
     done_types = tuple(s.strip() for s in args.done_types.split(",") if s.strip())
+
+    # Decider selection (spec R5). Watched (default): each turn-end routes to the
+    # Director queue and the live main session answers free-form (director-oversight
+    # skill). Un-watched (--autonomous): the offline code decider self-resolves +
+    # trusts the worker's terminal proposal. An offline --mock/test run uses
+    # --autonomous precisely because there is no live Director to answer turnReviews.
+    decide = (decider.autonomous_decide if args.autonomous
+              else decider.make_queue_decider(base=args.queue_dir))
 
     tools = tool_executor = None
     if args.tools == "linear":
@@ -429,7 +489,8 @@ def main(argv=None, *, board=None) -> int:
               "install_skills": args.install_skills, "done_types": done_types,
               "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir),
               "approval_policy": autonomy.APPROVAL_POLICY if args.autonomous else "untrusted",
-              "sandbox": autonomy.SANDBOX if args.autonomous else "workspace-write"}
+              "sandbox": autonomy.SANDBOX if args.autonomous else "workspace-write",
+              "decide": decide, "max_turns": args.max_turns}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)
 

@@ -70,7 +70,7 @@ class LinearAdapterTest(unittest.TestCase):
                         return_value={"identifier": "ABC-9", "prompt": "do it"}):
             with tempfile.TemporaryDirectory() as q:
                 rc = run.main(["--linear", "ABC-9", "--mock",
-                               "--mock-scenario", "plain", "--queue-dir", q])
+                               "--mock-scenario", "report", "--queue-dir", q])
         self.assertEqual(rc, 0)
 
 
