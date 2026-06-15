@@ -74,6 +74,10 @@ def disposition_from_answer(answer: dict | None) -> dict:
     if isinstance(answer, dict):
         disp = answer.get("disposition")
         if isinstance(disp, dict) and disp.get("kind") in ("terminal", "reply", "escalate"):
+            # An empty `reply` would feed the worker a blank next turn (no directive) —
+            # surface it instead of sending nothing (review fix; D-45 content-bearing).
+            if disp["kind"] == "reply" and not (disp.get("reply") or "").strip():
+                return {"kind": "escalate", "reason": "empty reply disposition"}
             return disp
     return {"kind": "escalate", "reason": "turn review unanswered or malformed"}
 
@@ -84,12 +88,24 @@ def make_queue_decider(base=None, timeout_s: float = 300.0, now=_now_iso):
     `outcome` (director-oversight skill) and writes a disposition — terminal
     (review+execute), a content-bearing reply ("A 로 해라"), or escalate. Same
     request/answer channel as the approval seam — no new transport, no headless
-    Director (the recurring anti-pattern this design refuses, [[no-headless-director-codex-owns-approval]])."""
+    Director (the recurring anti-pattern this design refuses, [[no-headless-director-codex-owns-approval]]).
+
+    Availability note: `wait_for_answer` blocks the orchestrator POOL thread (which
+    also holds the worker subprocess open) for up to `timeout_s` per turn end. So a
+    watched run can occupy a thread for up to `timeout_s × max_turns` per ticket, and
+    `× concurrency` across the pool, before any of them frees. This is intended (a no-
+    answer must surface, not auto-continue), but means watched runs want a modest
+    `timeout_s`; a dedicated per-turn-review timeout knob is tracked (tech-debt)."""
     def decide(ctx: dict) -> dict:
         ticket = ctx.get("ticket") or {}
         tid = str(ticket.get("id"))
         turn_index = ctx.get("turn_index")
-        rid = f"{tid}|turn|{turn_index}"
+        # The attempt discriminant is REQUIRED: a retried ticket restarts turn_index at
+        # 0, so without it the retry's `{tid}|turn|0` collides with attempt 1's queue
+        # entry — append_request dedupes and wait_for_answer reads the STALE answer
+        # (review fix; queue is append-only across retries).
+        attempt = ctx.get("attempt", 1)
+        rid = f"{tid}|turn|{turn_index}|a{attempt}"
         dq.append_request({
             "request_id": rid,
             "ticket_id": tid,

@@ -284,6 +284,20 @@ class RunOnceErrorPathsTest(unittest.TestCase):
         self.assertEqual(calls["n"], 1)
         self.assertEqual(len(res), 1)
 
+    def test_terminal_with_unknown_outcome_not_marked_done(self):
+        # R4 guard: a terminal disposition with an unrecognized outcome status must
+        # NOT silently mark Done — it stays visible for review (review fix).
+        board = orch.MockBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                                 "description": "d", "prompt": "p", "state_id": "st_todo"}])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        lambda ticket, **kw: {"kind": "terminal",
+                                              "outcome": {"status": "weird"}, "turns": 1}):
+            res = orch.run_once(board, command=["x"], team="T", states=states)
+        self.assertEqual(res[0]["status"], "terminal_unknown")
+        self.assertEqual(res[0]["final_state"], "started")
+        self.assertNotEqual(board.state_name("u1"), "Done")  # never falsely completed
+
 
 def _issue(tid, blockers=None, state="st_todo", labels=None):
     d = {"id": tid, "identifier": tid.upper(), "title": "t", "description": "d",

@@ -115,7 +115,7 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
           timeout_s: float = 300.0, read_timeout_s: float = 30.0,
           tools=None, tool_executor=None, install_skills: bool = False,
           approval_policy: str = "untrusted", sandbox: str = "workspace-write",
-          max_turns: int = DEFAULT_MAX_TURNS) -> dict:
+          max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1) -> dict:
     """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
     until the worker is terminal (or `max_turns` is hit). This is the multi-turn
     slice's core: a ticket is a thread, a turn end is an *event* not a completion,
@@ -169,7 +169,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             if status != "completed":  # turn/failed | turn/cancelled — not a disposition
                 return {"kind": "failed", "status": status, **base}
             disp = decide({"ticket": ticket, "turn_index": i, "status": status,
-                           "final_message": final_message, "outcome": sink.get("outcome")})
+                           "final_message": final_message, "outcome": sink.get("outcome"),
+                           "attempt": attempt})
             if disp.get("kind") in ("terminal", "escalate"):
                 return {**disp, **base}
             # kind == "reply": continue the SAME thread with the directive (board untouched)

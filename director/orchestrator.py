@@ -77,7 +77,8 @@ def dispatch(ticket: dict, **kwargs) -> dict:
     try:
         return run.drive(composed, **kwargs)
     except Exception as exc:  # subprocess death, handshake error, etc.
-        return {"kind": "failed", "status": "failed", "turn_id": None, "error": str(exc)}
+        return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 0,
+                "error": str(exc)}
 
 
 def reconcile(board, ticket: dict, disp: dict, attempts: int,
@@ -121,7 +122,12 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     if kind == "terminal":
         outcome = disp.get("outcome") or {}
         ostatus = outcome.get("status")
-        if ostatus == "blocked":
+        if ostatus == "done":
+            set_state(states["done"])
+            reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
+            comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
+            summary = summarize("completed", "done")
+        elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
             final = "started"
             if states.get("blocked"):
@@ -130,11 +136,15 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             note = f" (spawned {', '.join(spawned)})" if spawned else ""
             comment(f"⛔ worker blocked after {turns} turn(s): {outcome.get('reason')}{note}")
             summary = summarize("blocked", final, spawned_ticket_ids=spawned)
-        else:  # done is the default terminal outcome
-            set_state(states["done"])
-            reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
-            comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
-            summary = summarize("completed", "done")
+        else:
+            # A terminal with an unrecognized/missing status must NEVER silently mark
+            # Done (R4: code never falsely completes). The standard paths only ever
+            # produce done/blocked (needs_human is mapped to escalate by the decider
+            # before reconcile), so this guards a malformed Director answer — surface
+            # it and leave the ticket visible in `started` (review fix).
+            comment(f"⚠️ terminal with unrecognized outcome {ostatus!r} after "
+                    f"{turns} turn(s) — left in progress for review")
+            summary = summarize("terminal_unknown", "started")
     elif kind == "escalate":
         comment(f"🙋 escalated to human after {turns} turn(s): {disp.get('reason')}")
         summary = summarize("escalated", "started")  # stays visible; human acts async
@@ -205,7 +215,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             workspace_root=workspace_root, tools=tools, tool_executor=tool_executor,
             install_skills=install_skills, read_timeout_s=read_timeout_s,
             timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox,
-            decide=decide, max_turns=max_turns)
+            decide=decide, max_turns=max_turns, attempt=attempts.get(ticket["id"], 1))
         futures[fut] = ticket
         status.dispatched(ticket)
 
