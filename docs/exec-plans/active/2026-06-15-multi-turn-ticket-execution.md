@@ -202,8 +202,14 @@ mock board unless noted:
   `run_turn` returns `final_message`) + `report_outcome` spec/executor/sink +
   `tool_dispatcher` in `director/worker/tools.py`. **Live-pinned twice** against real
   `codex app-server` (0.139.0): raw event-stream discovery, then the committed paths.
-- [ ] M2 — `drive` loop + code decider + mock scenarios + unit tests.
-- [ ] M3 — orchestrator reconcile redesign + watched decider + status + CLI flags.
+- [x] (2026-06-15) M2 — `director/run.py::drive` (multi-turn loop on one thread,
+  injected `decide`, internal `report_outcome` sink + tool composition, R6 bound) +
+  `director/decider.py::autonomous_decide` (un-watched code decider, D-45) + mock
+  `report`/`turn_failed` scenarios + `tests/test_director_drive.py` (8 tests: multi-turn
+  same-thread, reply-fed-forward, report_outcome→terminal, no-signal→stuck, failed,
+  + decider units). `run_ticket`/`run.main` stay single-turn — rewiring is M3.
+- [ ] M3 — orchestrator reconcile redesign + watched decider + status + CLI flags;
+  rewire `run.main` + `orchestrator.dispatch` onto `drive`.
 - [ ] M4 — live wire-pin (real codex, 2+ turns, content-bearing reply, terminal).
 
 ## Surprises & discoveries

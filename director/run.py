@@ -16,11 +16,14 @@ import shutil
 import sys
 from pathlib import Path
 
-from director.worker import autonomy
+from director.decider import autonomous_decide
+from director.worker import autonomy, tools as worker_tools
 from director.worker.app_server import AppServerClient
 from director.worker.approval import make_seam
 
 DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
+DEFAULT_MAX_TURNS = 8  # multi-turn drive bound (R6): a worker that never signals
+#                        terminal stops here and is reported stuck.
 _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
 _SKILLS_SRC = Path(__file__).resolve().parent / "workspace_skills"
 
@@ -69,23 +72,35 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
     return ws
 
 
+def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
+             read_timeout_s, tool_executor, install_skills) -> AppServerClient:
+    """Build (but do not start) the worker client for one ticket: resolve+create the
+    workspace, optionally install the vendored skills, and wire the approval seam.
+    Shared by the single-turn `run_ticket` and the multi-turn `drive`."""
+    ws = _workspace_for(ticket, workspace_root)
+    if install_skills:
+        install_workspace_skills(ws)
+    seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
+    return AppServerClient(command, cwd=ws, on_server_request=seam,
+                           tool_executor=tool_executor, read_timeout_s=read_timeout_s)
+
+
 def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                workspace_root=DEFAULT_WORKSPACE_ROOT,
                timeout_s: float = 300.0, read_timeout_s: float = 30.0,
                tools=None, tool_executor=None, install_skills: bool = False,
                approval_policy: str = "untrusted",
                sandbox: str = "workspace-write") -> dict:
-    """Drive one worker through one ticket; returns the turn result {status, turn_id}.
+    """Drive one worker through ONE turn; returns {status, turn_id, final_message}.
 
-    `approval_policy`/`sandbox` set the worker's Codex posture on thread AND turn
-    (the autonomous preset passes `on-request`/`workspace-write`; the default is the
-    conservative watched `untrusted`)."""
-    ws = _workspace_for(ticket, workspace_root)
-    if install_skills:
-        install_workspace_skills(ws)
-    seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
-    client = AppServerClient(command, cwd=ws, on_server_request=seam,
-                             tool_executor=tool_executor, read_timeout_s=read_timeout_s)
+    The single-turn primitive (kept for callers that want one turn). The multi-turn
+    driver is `drive`. `approval_policy`/`sandbox` set the worker's Codex posture on
+    thread AND turn (the autonomous preset passes `on-request`/`workspace-write`; the
+    default is the conservative watched `untrusted`)."""
+    client = _prepare(ticket, command=command, queue_base=queue_base,
+                      workspace_root=workspace_root, timeout_s=timeout_s,
+                      read_timeout_s=read_timeout_s, tool_executor=tool_executor,
+                      install_skills=install_skills)
     with client as c:
         c.initialize()
         thread_id = c.thread_start(model=ticket.get("model"), tools=tools,
@@ -93,6 +108,74 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
         # `sandbox` is a THREAD-level attribute (set on thread/start only); the turn
         # inherits it, so run_turn takes approval_policy but not sandbox.
         return c.run_turn(thread_id, ticket["prompt"], approval_policy=approval_policy)
+
+
+def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
+          queue_base=None, workspace_root=DEFAULT_WORKSPACE_ROOT,
+          timeout_s: float = 300.0, read_timeout_s: float = 30.0,
+          tools=None, tool_executor=None, install_skills: bool = False,
+          approval_policy: str = "untrusted", sandbox: str = "workspace-write",
+          max_turns: int = DEFAULT_MAX_TURNS) -> dict:
+    """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
+    until the worker is terminal (or `max_turns` is hit). This is the multi-turn
+    slice's core: a ticket is a thread, a turn end is an *event* not a completion,
+    and the per-turn disposition is owned by the injected `decide` (LLM/human in a
+    watched run; the autonomous code decider un-watched) — never by this code (R4).
+
+    Returns the FINAL disposition, enriched with run facts:
+      {"kind": "terminal",  "outcome": {...}, "turns", "turn_id", "final_message", "thread_id"}
+      {"kind": "escalate",  "reason": str, "outcome"?, "turns", ...}        # taste → human
+      {"kind": "stuck",     "reason": "max_turns", "turns", ...}            # R6 bound
+      {"kind": "failed",    "status": "failed"|"cancelled", "turns", ...}   # a turn errored
+
+    `report_outcome` is wired in HERE (not by the caller): a per-turn sink captures the
+    worker's terminal proposal, composed over any `tool_executor` the caller passed
+    (e.g. linear_graphql), and `report_outcome` is appended to the advertised tools."""
+    sink: dict = {}
+    report_exec = worker_tools.make_report_outcome_executor(sink)
+
+    def combined(name, arguments):
+        if name == worker_tools.REPORT_OUTCOME_TOOL:
+            return report_exec(name, arguments)
+        if tool_executor is not None:
+            return tool_executor(name, arguments)
+        return {"success": False, "output": f"unsupported tool: {name!r}"}
+
+    advertised = list(tools or [])
+    if not any(t.get("name") == worker_tools.REPORT_OUTCOME_TOOL for t in advertised):
+        advertised.append(worker_tools.report_outcome_spec())
+
+    client = _prepare(ticket, command=command, queue_base=queue_base,
+                      workspace_root=workspace_root, timeout_s=timeout_s,
+                      read_timeout_s=read_timeout_s, tool_executor=combined,
+                      install_skills=install_skills)
+    turns = 0
+    turn_id = None
+    final_message = None
+    with client as c:
+        c.initialize()
+        thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
+                                   approval_policy=approval_policy, sandbox=sandbox)
+        input_text = ticket["prompt"]
+        for i in range(max_turns):
+            turns = i + 1
+            sink.pop("outcome", None)  # fresh terminal-signal slot for this turn
+            result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
+            turn_id = result.get("turn_id")
+            final_message = result.get("final_message")
+            status = result.get("status")
+            base = {"turns": turns, "turn_id": turn_id,
+                    "final_message": final_message, "thread_id": thread_id}
+            if status != "completed":  # turn/failed | turn/cancelled — not a disposition
+                return {"kind": "failed", "status": status, **base}
+            disp = decide({"ticket": ticket, "turn_index": i, "status": status,
+                           "final_message": final_message, "outcome": sink.get("outcome")})
+            if disp.get("kind") in ("terminal", "escalate"):
+                return {**disp, **base}
+            # kind == "reply": continue the SAME thread with the directive (board untouched)
+            input_text = disp.get("reply") or ""
+    return {"kind": "stuck", "reason": "max_turns", "turns": turns,
+            "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id}
 
 
 def _command(args) -> list[str]:

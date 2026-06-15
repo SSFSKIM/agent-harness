@@ -17,6 +17,7 @@ THREAD_ID = "thr_mock_1"
 TURN_ID = "turn_mock_1"
 APPROVAL_ID = 9001  # id of the server-initiated approval request
 TOOL_CALL_ID = 9002  # id of the server-initiated dynamic-tool call
+REPORT_CALL_ID = 9003  # id of the server-initiated report_outcome dynamic-tool call
 
 
 def out(msg):
@@ -75,6 +76,19 @@ def main():
                                 "itemId": "item_t", "threadId": THREAD_ID,
                                 "turnId": TURN_ID}})
                 awaiting_tool = True
+            elif scenario == "report":
+                # terminal-signal proof: the worker calls report_outcome(done) mid-turn,
+                # then the turn completes. drive's sink captures it → terminal disposition.
+                out({"id": REPORT_CALL_ID, "method": "item/tool/call",
+                     "params": {"tool": "report_outcome",
+                                "arguments": {"status": "done", "reason": "mock done"},
+                                "itemId": "item_r", "threadId": THREAD_ID,
+                                "turnId": TURN_ID}})
+                awaiting_tool = True
+            elif scenario == "turn_failed":
+                # mid-turn failure (NOT a turn/start error): drive maps it to kind=failed.
+                out({"method": "turn/failed",
+                     "params": {"turn": {"id": TURN_ID, "status": "failed"}}})
             else:
                 complete_turn()
         elif awaiting_approval and mid == APPROVAL_ID and ("result" in msg or "error" in msg):
@@ -83,7 +97,8 @@ def main():
                  "params": {"threadId": THREAD_ID, "requestId": APPROVAL_ID}})
             complete_turn()
             awaiting_approval = False
-        elif awaiting_tool and mid == TOOL_CALL_ID and ("result" in msg or "error" in msg):
+        elif awaiting_tool and mid in (TOOL_CALL_ID, REPORT_CALL_ID) \
+                and ("result" in msg or "error" in msg):
             # the client's tool result -> resume the SAME turn
             out({"method": "item/completed",
                  "params": {"itemId": "item_t", "threadId": THREAD_ID, "turnId": TURN_ID}})
