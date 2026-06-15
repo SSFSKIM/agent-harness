@@ -34,6 +34,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/product-specs/` | What this harness is, product-wise |
 | `docs/references/` | llms.txt digests of external APIs we depend on |
 | `docs/DESIGN.md` | Taste rules for skills / agents / hooks / scripts |
+| `docs/DIRECTOR.md` | Director operating manual: identity, taste-vs-handle, the watched event-loop (`director` launcher skill enters it) |
 | `docs/PLANS.md` | ExecPlan methodology |
 | `docs/PRODUCT_SENSE.md` | What we optimize: minimum human-in-loop |
 | `docs/QUALITY_SCORE.md` | Domain × layer grades, gap tracking over time |

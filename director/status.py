@@ -216,8 +216,8 @@ def context_for(request: dict, base: Path | str | None = None) -> dict:
 
 
 def main(argv=None) -> int:
-    """Read surface for the Director (the main Claude session, via the
-    director-oversight skill): with no args, dump the current snapshot; with
+    """Read surface for the Director (the main Claude session, per
+    docs/DIRECTOR.md): with no args, dump the current snapshot; with
     --request <json>, print the orchestration context joined to that queue request
     (`context_for`). Read-only — never mutates anything (R6/R9)."""
     import argparse

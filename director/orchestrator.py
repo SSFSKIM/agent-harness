@@ -484,8 +484,8 @@ def main(argv=None, *, board=None) -> int:
     done_types = tuple(s.strip() for s in args.done_types.split(",") if s.strip())
 
     # Decider selection (spec R5). Watched (default): each turn-end routes to the
-    # Director queue and the live main session answers free-form (director-oversight
-    # skill). Un-watched (--autonomous) and offline (--mock) use the code decider:
+    # Director queue and the live main session answers free-form (docs/DIRECTOR.md).
+    # Un-watched (--autonomous) and offline (--mock) use the code decider:
     # --mock has no live Director session to answer turnReviews, so the watched queue
     # decider would hang — the code decider self-resolves + trusts the worker proposal.
     decide = (decider.autonomous_decide if (args.autonomous or args.mock)

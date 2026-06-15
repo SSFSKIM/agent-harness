@@ -37,7 +37,7 @@ def answer_turn(request_id: str, disposition: dict, *, base=None,
                 answered_by: str = "director") -> None:
     """Answer a `turnReview` request with a drive disposition
     ({"kind": "terminal"|"reply"|"escalate", ...}). The main session calls this after
-    reading the turn-end (final_message + outcome) via the director-oversight skill —
+    reading the turn-end (final_message + outcome) per docs/DIRECTOR.md §4 —
     the FREE-FORM equivalent of `answer` for the multi-turn turn-end seam (D-45)."""
     dq.write_answer({"request_id": request_id, "answered_by": answered_by,
                      "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
