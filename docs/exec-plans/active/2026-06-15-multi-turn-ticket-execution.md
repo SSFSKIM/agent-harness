@@ -219,7 +219,13 @@ mock board unless noted:
   skill regained its turn-review purpose. Tests migrated to the disposition contract;
   `tests/test_director_decider.py` added (queue decider, answer_turn, escalate-on-
   timeout, auto_respond skips turnReview).
-- [ ] M4 — live wire-pin (real codex, 2+ turns, content-bearing reply, terminal).
+- [x] (2026-06-15) M4 — **live wire-pin PASSED** against real `codex app-server`.
+  A 2-part ticket drove **2 turns on one thread** (id `019eca26-…`): turn 0 the worker
+  created `approaches.txt` and ended in prose asking "approach A or B?" (no
+  report_outcome); the scripted Director answered **content-bearing** "Use approach
+  A. Implement it in greet.py…"; turn 1 the worker wrote `greet.py` (approach A),
+  verified `greet()=="hello"`, and called `report_outcome(done)` → terminal. On-disk
+  artifacts confirm real work. This is the spec's headline RV2 case, end-to-end live.
 
 ## Surprises & discoveries
 - **M1 — the real worker's final-message shape (was the #1 risk).** Live (codex-cli
