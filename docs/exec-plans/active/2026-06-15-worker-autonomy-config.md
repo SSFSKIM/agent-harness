@@ -169,5 +169,25 @@ headless Director. SECURITY.md gains T11 (the autonomous worker posture).
   in-sandbox network). Recorded in T11.
 
 ## Feedback (from completion gate)
+review_level=targeted → review-security (Claude reviewer w/ SECURITY.md grounding; codex
+companion still unreliable in-band). Verdict: **CHANGES REQUESTED**, P1.1.
+
+- **P1.1 (review-security) — LIVE-CONFIRMED, doc-fixed + tracked.** `--autonomous` +
+  `network_access=true` exfiltrates host secrets, bypassing T10. The reviewer flagged the
+  read-above-workspace claim as impl-dependent; I **probed it live** (codex 0.139.0): a worker
+  read a sentinel via `../../../` AND by absolute path into the repo from a workspace *outside*
+  it → `workspace-write` reads are filesystem-wide. So `.env`/`LINEAR_API_KEY` is readable
+  regardless of workspace location; full outbound then exfiltrates it. → SECURITY.md T11 rewritten
+  to state this confirmed residual + that **workspace relocation does NOT mitigate** (reads fs-wide);
+  effective fix = `network_proxy` allowlist / container / secret-scrub. tech-debt-tracker (Major).
+  **The network posture (full vs scoped allowlist) is escalated to the human** — their earlier
+  "full outbound OK" predated this confirmed exfil path. Plan stays ACTIVE pending that call.
+- **P2.1 — fixed.** T11 generalized to "`.env` and process-env credentials," not just the Linear key.
+- **P2.2 — fixed.** `run_ticket` comment clarifies `sandbox` is thread-level (set at thread/start,
+  not run_turn) — the param is intentionally not forwarded to the turn.
+- **Confirmed SATISFIED by the reviewer (no change needed):** default-off behavior-neutrality
+  (watched path untrusted, byte-identical), no command-injection (hardcoded `-c` constants +
+  operator `--codex`; no ticket/worker data in the command), T10 not weakened for the GraphQL tool
+  path (host-side executor, outside the sandbox).
 
 ## Outcomes & retrospective

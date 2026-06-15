@@ -90,6 +90,8 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
         c.initialize()
         thread_id = c.thread_start(model=ticket.get("model"), tools=tools,
                                    approval_policy=approval_policy, sandbox=sandbox)
+        # `sandbox` is a THREAD-level attribute (set on thread/start only); the turn
+        # inherits it, so run_turn takes approval_policy but not sandbox.
         return c.run_turn(thread_id, ticket["prompt"], approval_policy=approval_policy)
 
 

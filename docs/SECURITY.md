@@ -123,12 +123,24 @@ Grounding document for the review-security persona. Threats are numbered.
   containment (workspace + `/tmp`; `.git`/`.codex`/`.agents` forced read-only);
   (2) `auto_review` (fail-closed) on escalations; (3) **T10** bounds the worker's
   `linear_graphql` host-key writes (deterministic default-deny — the one write
-  surface outside Codex's sandbox). **Accepted residual:** with
-  `network_access=true`, *in-sandbox* network is NOT `auto_review`-gated
-  (auto_review reviews only blocked/escalated actions), so a prompt-injected worker
-  could exfiltrate over the network — accepted for local-dev / throwaway tickets;
-  the mitigation if it ever matters is a `network_proxy` domain allowlist (not
-  enabled this slice). The autonomous loop itself (the orchestrator) is unchanged —
-  this is purely the worker's Codex posture. Verified live (codex-cli 0.139.0): an
-  autonomous worker auto-ran an in-sandbox command and completed its turn with
-  **zero** seam traffic. Part of the live exec surface (status note).
+  surface outside Codex's sandbox).
+  **Confirmed residual — credential exfiltration that BYPASSES T10 (live-probed,
+  codex-cli 0.139.0):** `workspace-write` restricts *writes* to the workspace but
+  NOT *reads* — a probe worker read a sentinel both via `../../../` traversal and by
+  ABSOLUTE path into the repo from a workspace placed entirely outside it. Reads are
+  therefore effectively **filesystem-wide**: the host `.env` (`LINEAR_API_KEY`) and
+  any other on-disk / process-env credential are readable regardless of workspace
+  location. Combined with `network_access=true` (in-sandbox network, NOT
+  `auto_review`-gated), a prompt-injected worker can read the real Linear key off
+  disk and POST it to an arbitrary domain — T10 bounds the `linear_graphql` *tool*,
+  not a stolen key over direct network, so this is a materially stronger attack than
+  mutation abuse, and it defeats the guardrail. **Effective mitigations (workspace
+  relocation does NOT help — reads are fs-wide):** a `network_proxy` domain
+  allowlist (constrain outbound so a read key can't reach an attacker host),
+  container/VM isolation where host secrets are absent (Codex devcontainer), and/or
+  removing secrets from disk before an autonomous run. Until one is in place,
+  `--autonomous` + `network_access=true` is safe ONLY where every reachable
+  credential is itself throwaway. Tracked: tech-debt-tracker. Verified live: an
+  autonomous worker auto-ran an in-sandbox command with **zero** seam traffic.
+  `--autonomous` is opt-in (default off → watched `untrusted`); part of the live
+  exec surface (status note).
