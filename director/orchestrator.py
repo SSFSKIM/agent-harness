@@ -20,7 +20,7 @@ import sys
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from director import run, taxonomy
+from director import run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 
 # Default logical-state → Linear workflow-state-name mapping (overridable on the CLI).
@@ -135,11 +135,18 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    concurrency: int = 3, queue_base=None,
                    workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                    tools=None, tool_executor=None, install_skills: bool = False,
-                   read_timeout_s: float = 30.0, timeout_s: float = 300.0) -> dict:
+                   read_timeout_s: float = 30.0, timeout_s: float = 300.0,
+                   status=None, wave: int = 1) -> dict:
     """Claim, dispatch (bounded concurrency), and fully drain a given (already
     eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
     only once every ticket has reached a terminal summary (incl. retries), so the
-    continuous loop never has cross-wave in-flight tickets to re-dispatch."""
+    continuous loop never has cross-wave in-flight tickets to re-dispatch.
+
+    `status` (default no-op) is the orchestration-visibility writer (R3): claim →
+    dispatch → terminal transitions are recorded for the Director to read. The calls
+    are pure side-channel — with the no-op writer the returned summaries are
+    byte-identical, so visibility never changes dispatch behavior."""
+    status = status or status_mod.NoopStatusWriter()
     results: dict = {}
     attempts: dict = {}
     in_flight: set = set()  # ticket ids claimed/dispatched this wave (incl. pending retry)
@@ -153,12 +160,14 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             install_skills=install_skills, read_timeout_s=read_timeout_s,
             timeout_s=timeout_s)
         futures[fut] = ticket
+        status.dispatched(ticket)
 
     def claim_failed(ticket, reason):
         tid = ticket["id"]
         results[tid] = {"ticket": ticket.get("identifier") or tid,
                         "status": "claim_failed", "final_state": "ready",
                         "attempts": 0, "error": reason}
+        status.terminal(ticket, results[tid])
 
     try:
         for ticket in tickets:
@@ -179,6 +188,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                 continue
             attempts[tid] = 1
             in_flight.add(tid)
+            status.claimed(ticket, wave=wave, attempt=1)
             submit(ticket)
 
         while futures:
@@ -190,10 +200,12 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                                     attempts[tid], states, retry_budget)
                 if outcome.get("retry"):
                     attempts[tid] += 1
+                    status.retrying(ticket, attempt=attempts[tid])
                     submit(ticket)  # stays in_flight across the retry
                 else:
                     in_flight.discard(tid)
                     results[tid] = outcome["summary"]
+                    status.terminal(ticket, outcome["summary"])
     finally:
         pool.shutdown(wait=True)
     return results
@@ -213,7 +225,7 @@ def run_once(board, command: list[str], *, team: str, states: dict,
 
 def run_until_drained(board, command: list[str], *, team: str, states: dict,
                       done_types=("completed",), max_passes: int = 50,
-                      max_dispatched: int = 200, **wave_kwargs) -> dict:
+                      max_dispatched: int = 200, status=None, **wave_kwargs) -> dict:
     """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
 
     Board-as-truth: a completed ticket leaves the `ready` state (reconciled to done),
@@ -232,11 +244,13 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
     stuck: list = []
     poll_error = None
     done = set(done_types)
+    status = status or status_mod.NoopStatusWriter()
     while True:
         if passes >= max_passes:
             stopped_reason = "max_passes"
             break
         passes += 1
+        status.wave(passes)
         try:
             ready = board.list_ready_issues(team, states["ready"])
         except Exception as exc:  # a transient poll failure ends the run cleanly, not a crash
@@ -257,16 +271,19 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
                                          for b in t.get("blockers", [])
                                          if b.get("state_type") not in done]}
                          for t in pending]
+                status.stuck(stuck)
             break
         if dispatched_count + len(eligible) > max_dispatched:
             stopped_reason = "max_dispatched"
             break
-        wave = _dispatch_wave(board, eligible, command=command, states=states,
-                              **wave_kwargs)
+        wave_summaries = _dispatch_wave(board, eligible, command=command, states=states,
+                                        status=status, wave=passes, **wave_kwargs)
         # count only tickets that actually dispatched — a claim failure is not a dispatch,
         # so it must not consume the max_dispatched budget.
-        dispatched_count += sum(1 for v in wave.values() if v.get("status") != "claim_failed")
-        results.update(wave)
+        dispatched_count += sum(1 for v in wave_summaries.values()
+                                if v.get("status") != "claim_failed")
+        results.update(wave_summaries)
+    status.finished(stopped_reason)
     out = {"summaries": list(results.values()), "passes": passes,
            "stopped_reason": stopped_reason, "stuck": stuck}
     if poll_error:
@@ -373,6 +390,10 @@ def main(argv=None, *, board=None) -> int:
                     help="continuous loop safety bound on total tickets dispatched")
     ap.add_argument("--done-types", default="completed",
                     help="comma-separated blocker state-types that count as done (unblock)")
+    ap.add_argument("--no-status", action="store_true",
+                    help="disable the orchestration-visibility snapshot (default: on)")
+    ap.add_argument("--status-dir", default=None,
+                    help="orchestration-status dir override (default: .claude/harness/director-status)")
     args = ap.parse_args(argv)
 
     board = board if board is not None else _build_board(args)
@@ -389,7 +410,8 @@ def main(argv=None, *, board=None) -> int:
 
     kwargs = {"team": args.team, "states": states, "concurrency": args.concurrency,
               "queue_base": args.queue_dir, "tools": tools, "tool_executor": tool_executor,
-              "install_skills": args.install_skills, "done_types": done_types}
+              "install_skills": args.install_skills, "done_types": done_types,
+              "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir)}
     if args.workspace_root:
         kwargs["workspace_root"] = Path(args.workspace_root)
 

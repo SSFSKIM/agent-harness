@@ -118,8 +118,20 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
 ## Progress log
 - [x] (2026-06-15) plan created; base_commit 733c0b5; review_level standard(review-arch +
       review-reliability; security 제외 — spec R9, 새 live exec surface 없음/read-only 로컬 파일).
-- [ ] M1 — status.py + 단위 테스트
-- [ ] M2 — orchestrator 결선 + end-to-end join + on/off 동등성
+- [x] (2026-06-15) M1 done. `director/status.py`: `StatusWriter`(claimed/dispatched/retrying/
+      terminal/wave/stuck/finished → in-memory 모델 → temp+`os.replace` atomic 재기록),
+      `NoopStatusWriter`(`__getattr__` no-op), `read_status`(부재/unparseable→None),
+      `context_for`(ticket_id join → ticket/siblings/recent_for_ticket/run/stuck). 큐 모듈의
+      atomic-write 결 미러. `tests/test_director_status.py` 11 PASS(인터리브 torn-read 가드 +
+      join 의 형제·직전-fail·stuck). 커밋 23d8a06. (227 tests GREEN.)
+- [x] (2026-06-15) M2 done. `director/orchestrator.py`: `_dispatch_wave`(`status=None`→Noop,
+      `wave` 인자)가 claim→`status.claimed`, submit→`status.dispatched`, retry→`status.retrying`,
+      terminal/claim_failed→`status.terminal`; `run_until_drained`(`status` 명시 인자)가
+      pass→`status.wave`, stuck→`status.stuck`, 종료→`status.finished`. `main` 이 실제 writer
+      기본 on + `--no-status`/`--status-dir` opt-out/override. `tests/test_director_orchestrator.py`
+      +6: off→summary byte-identical(R3), mid-run in-flight, stuck+finished 스냅샷, retry attempt
+      bump(1→2), `context_for` 가 실 orchestrator 스냅샷을 읽음(R5 e2e), main `--status-dir` 스냅샷.
+      기존 MainCliTest 3 은 `--no-status`(opt-out 증명 + repo 오염 방지). check.py GREEN(233).
 - [ ] M3 — 스킬 + guideline (docs-tree 배치)
 
 ## Surprises & discoveries

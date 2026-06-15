@@ -11,6 +11,7 @@ import director.director_min as dmin  # noqa: E402
 import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.run as run  # noqa: E402
+import director.status as ds  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
@@ -448,7 +449,7 @@ class MainCliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
             rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
                             "--queue-dir", q, "--workspace-root", ws,
-                            "--concurrency", "2"], board=board)
+                            "--concurrency", "2", "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("u1"), "Done")
         self.assertEqual(board.state_name("u2"), "Done")
@@ -457,7 +458,7 @@ class MainCliTest(unittest.TestCase):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
             rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain", "--once",
-                            "--queue-dir", q, "--workspace-root", ws], board=board)
+                            "--queue-dir", q, "--workspace-root", ws, "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("a"), "Done")
         self.assertEqual(board.state_name("b"), "Todo")  # single pass: B stays blocked
@@ -466,10 +467,121 @@ class MainCliTest(unittest.TestCase):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
             rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
-                            "--queue-dir", q, "--workspace-root", ws], board=board)
+                            "--queue-dir", q, "--workspace-root", ws, "--no-status"], board=board)
         self.assertEqual(rc, 0)
         self.assertEqual(board.state_name("a"), "Done")
         self.assertEqual(board.state_name("b"), "Done")  # continuous: A unblocks B
+
+    def test_main_writes_status_snapshot_to_status_dir(self):
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws, \
+                tempfile.TemporaryDirectory() as st:
+            rc = orch.main(["--team", "T", "--mock", "--mock-scenario", "plain",
+                            "--queue-dir", q, "--workspace-root", ws,
+                            "--status-dir", st], board=board)
+            snap = ds.read_status(base=st)
+        self.assertEqual(rc, 0)
+        # chain drained: snapshot survives, empty in_flight, both tickets in recent,
+        # run finished as drained.
+        assert snap is not None
+        self.assertEqual(snap["in_flight"], [])
+        self.assertEqual(snap["run"]["stopped_reason"], "drained")
+        self.assertEqual({r["ticket_id"] for r in snap["recent"]}, {"a", "b"})
+
+
+class OrchestrationVisibilityTest(unittest.TestCase):
+    """M2: the orchestrator records its run state to the status snapshot the Director
+    reads (R1/R5), and visibility is read-only — off → byte-identical (R3)."""
+
+    def _chain_board(self):
+        return orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+
+    def test_status_off_keeps_summaries_byte_identical(self):
+        def drive(board, status):
+            states = orch.resolve_states(board, "T")
+            with mock.patch("director.orchestrator.dispatch", _completing_dispatch([])):
+                return orch.run_until_drained(board, command=["x"], team="T",
+                                              states=states, status=status)
+        off = drive(self._chain_board(), None)
+        with tempfile.TemporaryDirectory() as st:
+            on = drive(self._chain_board(), ds.StatusWriter(base=st))
+        self.assertEqual(off["summaries"], on["summaries"])  # visibility never alters dispatch
+        self.assertEqual(off["stopped_reason"], on["stopped_reason"])
+
+    def test_snapshot_shows_ticket_in_flight_during_dispatch(self):
+        board = orch.MockBoard([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as st:
+            seen = {}
+
+            def capturing(ticket, **kw):
+                # the worker reads the snapshot mid-turn: its own ticket is in flight
+                snap = ds.read_status(base=st)
+                seen["in_flight"] = snap["in_flight"] if snap else None
+                return {"status": "completed", "turn_id": "t"}
+
+            with mock.patch("director.orchestrator.dispatch", capturing):
+                orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                       status=ds.StatusWriter(base=st))
+            # and after drain: nothing in flight, the ticket terminal in recent
+            final = ds.read_status(base=st)
+        assert final is not None
+        self.assertEqual([e["ticket_id"] for e in seen["in_flight"]], ["a"])
+        self.assertEqual(final["in_flight"], [])
+        self.assertEqual([r["ticket_id"] for r in final["recent"]], ["a"])
+
+    def test_snapshot_records_stuck_and_finished(self):
+        board = self._chain_board()  # b blocked by a; a will fail → b stuck
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as st:
+            with mock.patch("director.orchestrator.dispatch",
+                            lambda ticket, **kw: {"status": "failed", "turn_id": None}):
+                orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                       status=ds.StatusWriter(base=st))
+            snap = ds.read_status(base=st)
+        assert snap is not None
+        self.assertEqual(snap["run"]["stopped_reason"], "stuck")
+        self.assertEqual([s["ticket"] for s in snap["stuck"]], ["B"])
+        self.assertEqual(snap["stuck"][0]["blocked_by"][0]["id"], "a")
+
+    def test_snapshot_attempt_bumps_on_retry(self):
+        board = orch.MockBoard([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as st:
+            attempts_seen = []
+
+            def fail_capturing(ticket, **kw):
+                snap = ds.read_status(base=st)
+                assert snap is not None
+                attempts_seen.append(snap["in_flight"][0]["attempt"])
+                return {"status": "failed", "turn_id": None}
+
+            with mock.patch("director.orchestrator.dispatch", fail_capturing):
+                orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                       concurrency=1, retry_budget=1,
+                                       status=ds.StatusWriter(base=st))
+        self.assertEqual(attempts_seen, [1, 2])  # initial attempt, then the retry
+
+    def test_context_for_reads_live_orchestrator_snapshot(self):
+        # R5 end-to-end: context_for joins a queued request to the ticket entry the
+        # REAL orchestrator wrote — single-ticket wave keeps it deterministic.
+        board = orch.MockBoard([_issue("b")])
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as st:
+            captured = {}
+
+            def capturing(ticket, **kw):
+                captured["ctx"] = ds.context_for({"ticket_id": "b",
+                                                  "kind": "commandApproval"}, base=st)
+                return {"status": "completed", "turn_id": "t"}
+
+            with mock.patch("director.orchestrator.dispatch", capturing):
+                orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                       status=ds.StatusWriter(base=st))
+        ctx = captured["ctx"]
+        self.assertIsNotNone(ctx["ticket"])
+        self.assertEqual(ctx["ticket"]["ticket_id"], "b")
+        self.assertIsNotNone(ctx["run"])
 
 
 if __name__ == "__main__":
