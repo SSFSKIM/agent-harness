@@ -58,6 +58,22 @@ def normalize_tool_result(result) -> dict:
     return {"success": success, "output": output, "contentItems": items}
 
 
+def agent_message_text(params: dict) -> tuple[str, str | None] | None:
+    """If a notification's params carry a *completed* agentMessage item, return
+    `(text, phase)`; else None. Live-pinned against codex-cli 0.139.0: the agent's
+    message arrives as `item/completed` with `item.type=="agentMessage"`, the full
+    assembled `text`, and a `phase` ∈ {"commentary","final_answer"} (the streaming
+    `item/agentMessage/delta` events are redundant — the completed item has the full
+    text). The Director reads the *final_answer* message; commentary is mid-turn
+    narration. An empty text (the `item/started` placeholder) is ignored upstream."""
+    item = params.get("item")
+    if isinstance(item, dict) and item.get("type") == "agentMessage":
+        text = item.get("text")
+        if isinstance(text, str):
+            return text, item.get("phase")
+    return None
+
+
 class AppServerClient:
     def __init__(self, command: list[str], cwd: Path | str,
                  on_event: Callable[[dict], None] | None = None,
@@ -209,11 +225,15 @@ class AppServerClient:
     def run_turn(self, thread_id: str, text: str,
                  approval_policy: str = "untrusted",
                  sandbox_policy: dict | None = None) -> dict:
-        """Start a turn and stream to terminal. Returns {status, turn_id}.
+        """Start a turn and stream to terminal. Returns {status, turn_id, final_message}.
 
         status ∈ {completed, failed, cancelled}. turn_id is captured from the
         turn/start response and confirmed by the terminal notification — this is
-        what proves a mid-turn approval did NOT spawn a new turn (M3)."""
+        what proves a mid-turn approval did NOT spawn a new turn (M3). final_message
+        is the agent's turn-end assistant text (the Director's primary input for the
+        next-turn disposition — multi-turn slice R2/R7): the last `final_answer`
+        agentMessage, falling back to the last non-empty agentMessage of any phase,
+        or None if the turn produced no message."""
         rid = self._next_id()
         params: dict = {"threadId": thread_id, "input": [{"type": "text", "text": text}],
                         "cwd": self.cwd, "approvalPolicy": approval_policy}
@@ -222,6 +242,8 @@ class AppServerClient:
         self._send({"id": rid, "method": "turn/start", "params": params})
 
         turn_id: str | None = None
+        final_answer: str | None = None   # last phase=="final_answer" agentMessage
+        last_message: str | None = None   # last non-empty agentMessage (any phase) — fallback
         while True:
             msg = self._read_msg()
             if msg is None:
@@ -231,10 +253,20 @@ class AppServerClient:
                 self._handle_server_initiated(msg)
                 continue
             if method is not None:                        # notification
-                self.on_event({"method": method, "params": msg.get("params", {})})
+                mparams = msg.get("params", {})
+                self.on_event({"method": method, "params": mparams})
+                if method == "item/completed":
+                    am = agent_message_text(mparams)
+                    if am is not None:
+                        msg_text, phase = am
+                        if msg_text:
+                            last_message = msg_text
+                            if phase == "final_answer":
+                                final_answer = msg_text
                 if method in ("turn/completed", "turn/failed", "turn/cancelled"):
-                    turn_id = turn_id or msg.get("params", {}).get("turn", {}).get("id")
-                    return {"status": method.split("/", 1)[1], "turn_id": turn_id}
+                    turn_id = turn_id or mparams.get("turn", {}).get("id")
+                    return {"status": method.split("/", 1)[1], "turn_id": turn_id,
+                            "final_message": final_answer or last_message}
                 continue
             if msg.get("id") == rid:                       # response to turn/start
                 if "error" in msg:

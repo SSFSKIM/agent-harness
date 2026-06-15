@@ -198,12 +198,32 @@ mock board unless noted:
   terminal end; the board (if Linear) moves only at terminal.
 
 ## Progress log
-- [ ] M1 — final-message capture + report_outcome wiring; live-pin event shape.
+- [x] (2026-06-15) M1 — final-message capture (`app_server.agent_message_text` +
+  `run_turn` returns `final_message`) + `report_outcome` spec/executor/sink +
+  `tool_dispatcher` in `director/worker/tools.py`. **Live-pinned twice** against real
+  `codex app-server` (0.139.0): raw event-stream discovery, then the committed paths.
 - [ ] M2 — `drive` loop + code decider + mock scenarios + unit tests.
 - [ ] M3 — orchestrator reconcile redesign + watched decider + status + CLI flags.
 - [ ] M4 — live wire-pin (real codex, 2+ turns, content-bearing reply, terminal).
 
 ## Surprises & discoveries
+- **M1 — the real worker's final-message shape (was the #1 risk).** Live (codex-cli
+  0.139.0): the agent's message is an `item/completed` notification with
+  `item.type == "agentMessage"`, the **full assembled `text`**, and a `phase` field
+  ∈ {`commentary` (mid-turn narration), `final_answer` (the turn-end answer)}. The
+  streaming `item/agentMessage/delta` events are redundant. Capture rule shipped:
+  last `final_answer`, else last non-empty agentMessage. Confirmed:
+  prose prompt → `final_message='KIWI88'`.
+- **M1 — `report_outcome` adoption (was the #2 risk).** When told to, the worker
+  calls it; it routes through `item/tool/call` → `tool_executor` and surfaces as an
+  `item` of `type == "dynamicToolCall"` (`tool: "report_outcome"`, `arguments: {...}`).
+  Confirmed through the committed `tool_dispatcher` + `make_report_outcome_executor`
+  sink: `{status:'done', reason:…, spawned_ticket_ids:[]}`. D-44's structured
+  terminal channel is real and reuses the existing plumbing — no prose parsing for
+  terminal. **Adoption tuning:** the worker reports on instruction, so the worker
+  prompt/skill must *tell* it to call `report_outcome` at terminal; absent the call,
+  the Director-read path + max-turns backstop still make the system safe (the design
+  does not depend on adoption — M1 confirms it merely makes terminal *certain*).
 
 ## Decision log
 - 2026-06-15: **Loop lives in `run.py::drive`; orchestrator executes terminal only**
