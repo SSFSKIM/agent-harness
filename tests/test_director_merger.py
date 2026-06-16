@@ -391,6 +391,32 @@ class ReenqueueLoopTest(unittest.TestCase):
         self.assertEqual(len(dmin.merge_reviews(base=self.base)), 1)   # still open → abandon/human
         self.assertEqual(merger.pending_merges(base=self.base), [])    # nothing re-queued
 
+    def test_requeue_enqueue_failure_leaves_review_open(self):
+        # Review fix (P1): enqueue BEFORE answering. If the re-enqueue raises, the review
+        # must stay open (retryable), never consumed-without-a-retry.
+        review = self._escalate(attempt=1)
+        orig = dq.append_merge_request
+        dq.append_merge_request = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io"))
+        try:
+            with self.assertRaises(RuntimeError):
+                dmin.requeue_merge(review, note="x", base=self.base)
+        finally:
+            dq.append_merge_request = orig
+        self.assertEqual(len(dmin.merge_reviews(base=self.base)), 1)  # review NOT consumed
+
+    def test_requeue_is_idempotent_on_double_call(self):
+        # Review fix (P2): a 2nd requeue with a different note is a no-op — the already-
+        # queued retry's guidance stands (audit can't diverge from what was queued).
+        review = self._escalate(attempt=1)
+        r1 = dmin.requeue_merge(review, note="first directive", base=self.base)
+        self.assertTrue(r1["requeued"])
+        r2 = dmin.requeue_merge(review, note="second directive", base=self.base)
+        self.assertFalse(r2["requeued"])
+        self.assertEqual(r2["reason"], "already_queued")
+        pend = merger.pending_merges(base=self.base)
+        self.assertEqual(len(pend), 1)
+        self.assertEqual(pend[0]["payload"]["guidance"], "first directive")  # not overwritten
+
     def test_full_guided_retry_loop_converges(self):
         # M3: the whole loop — attempt 1 escalates; the Director requeues with guidance;
         # attempt 2 (guidance now in the land prompt) merges. The driver merges ONLY when

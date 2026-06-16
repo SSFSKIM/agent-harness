@@ -84,13 +84,19 @@ def requeue_merge(review: dict, *, note: str, base=None, max_attempts: int = 3,
     if next_attempt > max_attempts:
         return {"requeued": False, "reason": "max_attempts", "attempt": attempt,
                 "max_attempts": max_attempts}
-    answer_merge_review(review["request_id"], {"action": "requeue", "note": note},
-                        base=base, answered_by=answered_by)
+    # Enqueue the retry FIRST, THEN answer/consume the review (review fix): if the enqueue
+    # raises, the review stays OPEN (retryable) — never consumed-without-a-retry. A dedup
+    # (the attempt+1 request already exists from a prior requeue) is an idempotent no-op:
+    # don't rewrite the review's recorded guidance to diverge from the queued retry.
     queued = dq.append_merge_request(
         review.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
         workspace_path=review.get("workspace_path"), guidance=note,
         attempt=next_attempt, base=base)
-    return {"requeued": queued, "attempt": next_attempt}
+    if not queued:
+        return {"requeued": False, "reason": "already_queued", "attempt": next_attempt}
+    answer_merge_review(review["request_id"], {"action": "requeue", "note": note},
+                        base=base, answered_by=answered_by)
+    return {"requeued": True, "attempt": next_attempt}
 
 
 # Kinds the fixed-policy responder must NOT touch: `turnReview` needs a free-form
