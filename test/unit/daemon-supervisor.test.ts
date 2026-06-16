@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
-import { DaemonError } from "../../src/daemon/types.js";
+import { DaemonError, daemonOp } from "../../src/daemon/types.js";
 import { NATIVE_TASK_TOOLS } from "../../src/swarm/coordinator.js";
 const CC_TASKS = ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"].map((t) => `mcp__cc-tasks__${t}`);
 
@@ -15,6 +15,18 @@ function captureQuery(sink: any[]) {
   return ({ prompt, options }: any) => {
     sink.push(options);
     return (async function* () { for await (const t of prompt) yield { type: "result", result: "did:" + t.message.content }; })();
+  };
+}
+function controllableQuery(calls: any[]) {
+  return ({ prompt }: any) => {
+    const gen = (async function* () { for await (const _t of prompt) yield { type: "result", result: "ok" }; })();
+    return Object.assign(gen, {
+      setModel: async (m?: string) => { calls.push(["setModel", m]); },
+      interrupt: async () => { calls.push(["interrupt"]); },
+      supportedModels: async () => [{ value: "m1" }],
+      supportedCommands: async () => [{ name: "help" }],
+      mcpServerStatus: async () => [],
+    });
   };
 }
 
@@ -236,5 +248,21 @@ describe("DaemonSupervisor", () => {
     expect(cap[1].mcpServers).toHaveProperty("cc-tasks");
     expect(cap[1].mcpServers).not.toBe(cap[0].mcpServers); // fresh object per session
     await sup.shutdown();
+  });
+
+  // ---- Phase 2 B: control op ----
+  it("control routes a frame to the pooled session via ControlBridge; unknown id throws", async () => {
+    const calls: any[] = [];
+    const sup = new DaemonSupervisor({ query: controllableQuery(calls) }, { dir: dir() });
+    const id = sup.spawn();
+    expect(await sup.control(id, { type: "set_model", model: "x" })).toEqual({ ok: true });
+    expect(calls).toContainEqual(["setModel", "x"]);
+    expect((await sup.control(id, { type: "initialize" })).ok).toBe(true);
+    await expect(sup.control("ghost", { type: "interrupt" })).rejects.toThrow(/unknown session/);
+    await sup.shutdown();
+  });
+  it("daemonOp accepts a control op", () => {
+    expect(daemonOp.safeParse({ op: "control", id: "s1", frame: { type: "interrupt" } }).success).toBe(true);
+    expect(daemonOp.safeParse({ op: "control", id: "s1", frame: { type: "bogus" } }).success).toBe(false);
   });
 });

@@ -6,6 +6,8 @@ import type { QueryFn } from "../swarm/types.js";
 import { TaskStore } from "../tasks/store.js";
 import { createTaskMcpServer } from "../tasks/server.js";
 import { NATIVE_TASK_TOOLS } from "../swarm/coordinator.js";
+import { ControlBridge } from "../bridge/control.js";
+import type { ControlFrame, ControlResponse } from "../bridge/types.js";
 
 export interface DaemonDeps { query: QueryFn; }
 
@@ -91,6 +93,15 @@ export class DaemonSupervisor {
   }
 
   list(): SessionRecord[] { return this.registry.list(); }
+
+  async control(id: string, frame: ControlFrame): Promise<ControlResponse> {
+    const session = this.pool.get(id);
+    if (!session) {
+      const rec = this.registry.get(id);
+      throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
+    }
+    return ControlBridge.apply(session, frame);
+  }
 
   async stop(id: string): Promise<void> {
     const session = this.pool.get(id);

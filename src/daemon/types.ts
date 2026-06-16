@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { controlFrame } from "../bridge/types.js";
 
 export class DaemonError extends Error {}
 
@@ -36,6 +37,7 @@ const submitOp = z.object({ op: z.literal("submit"), id: z.string(), prompt: z.s
 const listOp = z.object({ op: z.literal("list") });
 const stopOp = z.object({ op: z.literal("stop"), id: z.string() });
 const shutdownOp = z.object({ op: z.literal("shutdown") });
+const controlOp = z.object({ op: z.literal("control"), id: z.string(), frame: controlFrame });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;

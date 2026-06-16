@@ -70,6 +70,7 @@ export class DaemonServer {
       switch (op.op) {
         case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart }) }); sock.end(); break;
         case "list": send({ ok: true, sessions: this.supervisor.list() }); sock.end(); break;
+        case "control": send(await this.supervisor.control(op.id, op.frame)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
         case "submit": {
           const r = await this.supervisor.submit(op.id, op.prompt, (m) => send({ type: "chunk", message: m }));
