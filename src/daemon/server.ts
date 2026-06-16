@@ -68,7 +68,7 @@ export class DaemonServer {
     if (this.shuttingDown) { send({ ok: false, error: "daemon shutting down" }); sock.end(); return; }
     try {
       switch (op.op) {
-        case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model }) }); sock.end(); break;
+        case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart }) }); sock.end(); break;
         case "list": send({ ok: true, sessions: this.supervisor.list() }); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
         case "submit": {
