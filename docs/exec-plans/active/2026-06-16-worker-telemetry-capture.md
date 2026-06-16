@@ -149,7 +149,14 @@ still green.
   318 + the new cases; the malformed-payload test passes.
 
 ## Progress log
-- [ ] (2026-06-16) Plan created from product-spec; base_commit recorded; gate green; committed.
+- [x] (2026-06-16) Plan created from product-spec; base_commit recorded; gate green; committed (4d3515f).
+- [x] (2026-06-16) M1 done — `extract_usage`/`extract_rate_limits` + `_pluck_tokens` in
+  app_server.py (tolerant, §13.5 absolute-totals, delta-ignored, lenient field names);
+  `run_turn` returns `usage`/`rate_limits`; `_mock_app_server.py` `usage` scenario emits
+  rising cumulative totals; 7 new tests in test_director_app_server.py. Gate GREEN (326).
+- [ ] M2 — drive per-ticket accumulation + disposition telemetry.
+- [ ] M3 — orchestrator fold + status.py additive schema + run aggregate.
+- [ ] M4 — completion: full gate, backward-compat, R6 tolerance, live-pin.
 
 ## Surprises & discoveries
 

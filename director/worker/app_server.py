@@ -74,6 +74,82 @@ def agent_message_text(params: dict) -> tuple[str, str | None] | None:
     return None
 
 
+# Lenient field-name maps for codex token-usage payloads. §13.5 (Symphony SPEC)
+# says extract input/output/total "leniently from common field names", because the
+# exact casing/keys drift across codex versions — so we accept snake_case, camelCase,
+# and the prompt/completion synonyms rather than pinning one schema.
+_TOKEN_KEYS = {
+    "input": ("input_tokens", "inputTokens", "input", "prompt_tokens", "promptTokens"),
+    "output": ("output_tokens", "outputTokens", "output", "completion_tokens", "completionTokens"),
+    "total": ("total_tokens", "totalTokens", "total"),
+}
+
+
+def _pluck_tokens(obj) -> dict | None:
+    """Pull `{input,output,total}` ints out of a usage-like dict, or None if it
+    carries no recognizable token field. `total` is derived from input+output when
+    absent. bool is rejected (it is an int subclass — `true` must not pass as 1)."""
+    if not isinstance(obj, dict):
+        return None
+    out: dict = {}
+    for canon, names in _TOKEN_KEYS.items():
+        for n in names:
+            v = obj.get(n)
+            if isinstance(v, int) and not isinstance(v, bool):
+                out[canon] = v
+                break
+    if not out:
+        return None
+    inp, outp = out.get("input", 0), out.get("output", 0)
+    return {"input": inp, "output": outp, "total": out.get("total", inp + outp)}
+
+
+def extract_usage(method: str, params: dict) -> dict | None:
+    """Absolute thread token totals `{input,output,total}` from a codex notification,
+    or None. Encodes the §13.5 accounting rules:
+
+      - prefer an explicit absolute-total wrapper (`total_token_usage`), which may
+        ride on any event type;
+      - else the dedicated `thread/tokenUsage/updated` notification's own payload;
+      - IGNORE delta-style payloads (a lone `last_token_usage`) — they are
+        per-turn increments, not cumulative totals, so counting them would
+        double-count the run aggregate.
+
+    Tolerant by contract (plan R6): an unknown shape, a missing field, or a
+    non-dict params yields None and NEVER raises — telemetry is instrumentation,
+    never a gate (mirrors `agent_message_text`, live-pinned to codex-cli 0.139.0)."""
+    if not isinstance(params, dict):
+        return None
+    for k in ("total_token_usage", "totalTokenUsage"):  # absolute wrapper, any event
+        tot = _pluck_tokens(params.get(k))
+        if tot is not None:
+            return tot
+    if method == "thread/tokenUsage/updated":
+        for k in ("usage", "tokenUsage", "token_usage"):  # nested absolute usage
+            tot = _pluck_tokens(params.get(k))
+            if tot is not None:
+                return tot
+        # A payload that carries ONLY a delta (last_token_usage) is not a total.
+        if "last_token_usage" in params or "lastTokenUsage" in params:
+            if not any(n in params for grp in _TOKEN_KEYS.values() for n in grp):
+                return None
+        return _pluck_tokens(params)  # flat absolute totals on the notification
+    return None
+
+
+def extract_rate_limits(params: dict):
+    """The latest rate-limit payload carried by a notification, or None (§13.5:
+    'track the latest rate-limit payload seen in any agent update'). Stored raw —
+    presentation is out of scope."""
+    if not isinstance(params, dict):
+        return None
+    for k in ("rate_limits", "rateLimits", "rate_limit", "rateLimit"):
+        v = params.get(k)
+        if v is not None:
+            return v
+    return None
+
+
 class AppServerClient:
     def __init__(self, command: list[str], cwd: Path | str,
                  on_event: Callable[[dict], None] | None = None,
@@ -230,7 +306,8 @@ class AppServerClient:
     def run_turn(self, thread_id: str, text: str,
                  approval_policy: str = "untrusted",
                  sandbox_policy: dict | None = None) -> dict:
-        """Start a turn and stream to terminal. Returns {status, turn_id, final_message}.
+        """Start a turn and stream to terminal. Returns {status, turn_id,
+        final_message, usage, rate_limits}.
 
         status ∈ {completed, failed, cancelled}. turn_id is captured from the
         turn/start response and confirmed by the terminal notification — this is
@@ -249,6 +326,8 @@ class AppServerClient:
         turn_id: str | None = None
         final_answer: str | None = None   # last phase=="final_answer" agentMessage
         last_message: str | None = None   # last non-empty agentMessage (any phase) — fallback
+        usage: dict | None = None          # latest absolute thread token totals (§13.5)
+        rate_limits = None                 # latest rate-limit payload seen (§13.5)
         while True:
             msg = self._read_msg()
             if msg is None:
@@ -260,6 +339,15 @@ class AppServerClient:
             if method is not None:                        # notification
                 mparams = msg.get("params", {})
                 self.on_event({"method": method, "params": mparams})
+                # Telemetry capture (plan M1): the usage/rate-limit events stream by
+                # on the same channel. We keep the LATEST absolute totals (not a sum):
+                # codex reports cumulative thread totals, so the last value IS the total.
+                u = extract_usage(method, mparams)
+                if u is not None:
+                    usage = u
+                rl = extract_rate_limits(mparams)
+                if rl is not None:
+                    rate_limits = rl
                 if method == "item/completed":
                     am = agent_message_text(mparams)
                     if am is not None:
@@ -271,7 +359,8 @@ class AppServerClient:
                 if method in ("turn/completed", "turn/failed", "turn/cancelled"):
                     turn_id = turn_id or mparams.get("turn", {}).get("id")
                     return {"status": method.split("/", 1)[1], "turn_id": turn_id,
-                            "final_message": final_answer or last_message}
+                            "final_message": final_answer or last_message,
+                            "usage": usage, "rate_limits": rate_limits}
                 continue
             if msg.get("id") == rid:                       # response to turn/start
                 if "error" in msg:
