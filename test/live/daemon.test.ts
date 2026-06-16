@@ -59,4 +59,33 @@ live("live daemon (real SDK)", () => {
     await daemonRequest(sock, { op: "shutdown" });
     await server.closed;
   }, 120_000);
+
+  it("control-plane drives a live session: initialize, set_model, set_thinking, interrupt", async () => {
+    const d = mkdtempSync(join(tmpdir(), "cc-daemon-ctl-"));
+    const sock = join(d, "sock");
+    const sup = new DaemonSupervisor({ query }, { dir: join(d, "sessions") });
+    const server = new DaemonServer(sup, sock);
+    await server.listen();
+    const id = (await daemonRequest(sock, { op: "spawn" }))[0].id;
+
+    // initialize → real capability menus
+    const init = (await daemonRequest(sock, { op: "control", id, frame: { type: "initialize" } }))[0];
+    expect(init.ok).toBe(true);
+    expect(Array.isArray(init.models) && init.models.length > 0).toBe(true);
+    expect(Array.isArray(init.commands)).toBe(true);
+
+    // set_model (to a model the SDK itself reports) + set_thinking → { ok: true }
+    const model = init.models[0].value as string;
+    expect((await daemonRequest(sock, { op: "control", id, frame: { type: "set_model", model } }))[0].ok).toBe(true);
+    expect((await daemonRequest(sock, { op: "control", id, frame: { type: "set_thinking", maxTokens: null } }))[0].ok).toBe(true);
+
+    // interrupt a long turn started on a SEPARATE connection → submit must settle (no hang)
+    const submitP = daemonRequest(sock, { op: "submit", id, prompt: "Slowly count from 1 to 300, one number per line." }, () => {});
+    await new Promise((r) => setTimeout(r, 1500));
+    expect((await daemonRequest(sock, { op: "control", id, frame: { type: "interrupt" } }))[0].ok).toBe(true);
+    await submitP.catch(() => {}); // resolves or rejects, but must not hang
+
+    await daemonRequest(sock, { op: "shutdown" });
+    await server.closed;
+  }, 120_000);
 });
