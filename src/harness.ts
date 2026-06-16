@@ -3,6 +3,9 @@ import type { HarnessConfig } from "./config/types.js";
 import { resolveOptions } from "./config/resolveOptions.js";
 import { TaskStore } from "./tasks/store.js";
 import { createTaskMcpServer } from "./tasks/server.js";
+import { SwarmRuntime } from "./swarm/runtime.js";
+import { createSwarmMcpServer } from "./swarm/server.js";
+import { applyCoordinatorPersona } from "./swarm/coordinator.js";
 
 export interface HarnessDeps { query?: typeof sdkQuery; }
 
@@ -17,6 +20,7 @@ export interface Harness {
   supportedModels(): Promise<unknown>;
   supportedAgents(): Promise<unknown>;
   tasks?: TaskStore;
+  swarm?: SwarmRuntime;
 }
 
 export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}): Harness {
@@ -24,9 +28,21 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
   const options = resolveOptions(config);
 
   let tasks: TaskStore | undefined;
+  let swarm: SwarmRuntime | undefined;
+
+  if (config.swarm) {
+    const so = config.swarm === true ? {} : config.swarm;
+    const to = config.taskTools && config.taskTools !== true ? config.taskTools : {};
+    swarm = new SwarmRuntime({ query }, { cwd: config.cwd, taskOptions: to });
+    tasks = swarm.tasks; // share the runtime's store with cc-tasks if enabled
+    const existing = (options.mcpServers as Record<string, unknown>) ?? {};
+    options.mcpServers = { ...existing, "cc-swarm": createSwarmMcpServer(swarm) };
+    if (so.coordinatorPersona) applyCoordinatorPersona(options, so.tools);
+  }
+
   if (config.taskTools) {
     const opts = config.taskTools === true ? {} : config.taskTools;
-    tasks = new TaskStore({ cwd: config.cwd, dir: opts.dir, listId: opts.listId, agentName: opts.agentName });
+    tasks = tasks ?? new TaskStore({ cwd: config.cwd, dir: opts.dir, listId: opts.listId, agentName: opts.agentName });
     const existing = (options.mcpServers as Record<string, unknown>) ?? {};
     options.mcpServers = { ...existing, "cc-tasks": createTaskMcpServer(tasks) };
   }
@@ -74,5 +90,6 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     supportedModels: call("supportedModels"),
     supportedAgents: call("supportedAgents"),
     tasks,
+    swarm,
   };
 }

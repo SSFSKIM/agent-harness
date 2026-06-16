@@ -7,3 +7,5 @@ export { BUILTIN_AGENTS } from "./config/agents.js";
 export { BUILTIN_OUTPUT_STYLES } from "./config/outputStyle.js";
 export { TaskStore, TaskError, createTaskMcpServer } from "./tasks/index.js";
 export type { Task, TaskStatus, TaskStoreOptions, TaskListItem } from "./tasks/index.js";
+export { SwarmRuntime, MessageBus, createSwarmMcpServer, SwarmError } from "./swarm/index.js";
+export type { Message, MessageKind, TeammateSpec, SwarmOptions } from "./swarm/index.js";
