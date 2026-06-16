@@ -3,6 +3,9 @@ import { DaemonSession } from "./session.js";
 import { DaemonError } from "./types.js";
 import type { DaemonOptions, RestartPolicy, SessionRecord } from "./types.js";
 import type { QueryFn } from "../swarm/types.js";
+import { TaskStore } from "../tasks/store.js";
+import { createTaskMcpServer } from "../tasks/server.js";
+import { NATIVE_TASK_TOOLS } from "../swarm/coordinator.js";
 
 export interface DaemonDeps { query: QueryFn; }
 
@@ -10,6 +13,7 @@ interface SpawnConfig { model?: string; restart: RestartPolicy; }
 
 /** Owns the in-process session pool + the registry + an idle reaper + crash-recovery restarts. */
 export class DaemonSupervisor {
+  tasks?: TaskStore; // shared cc-tasks store when `sharedTasks` is set (D3); public for inspection
   private pool = new Map<string, DaemonSession>();
   private configs = new Map<string, SpawnConfig>();   // per-session config, for re-creation on restart
   private registry: SessionRegistry;
@@ -44,7 +48,18 @@ export class DaemonSupervisor {
       this.reaper = setInterval(() => { void this.reapIdle(); }, opts.reapEvery ?? 30_000);
       this.reaper.unref?.();
     }
-    this.sessionOptions = opts.sessionOptions;
+    const CC_TASKS_TOOLS = ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"].map((t) => `mcp__cc-tasks__${t}`);
+    if (opts.sharedTasks) {
+      const t = opts.sharedTasks === true ? {} : opts.sharedTasks;
+      this.tasks = new TaskStore({ dir: t.dir, listId: t.listId }); // TaskStore defaults the rest
+      this.sessionOptions = opts.sessionOptions ?? (() => ({
+        mcpServers: { "cc-tasks": createTaskMcpServer(this.tasks!) }, // FRESH instance per call
+        disallowedTools: [...NATIVE_TASK_TOOLS],                      // native task tools off → cc-tasks authoritative
+        allowedTools: CC_TASKS_TOOLS,                                // auto-approve the cc-tasks tools
+      }));
+    } else {
+      this.sessionOptions = opts.sessionOptions;
+    }
   }
 
   spawn(opts: { model?: string; restart?: RestartPolicy } = {}): string {

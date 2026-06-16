@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
 import { DaemonError } from "../../src/daemon/types.js";
+import { NATIVE_TASK_TOOLS } from "../../src/swarm/coordinator.js";
+const CC_TASKS = ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"].map((t) => `mcp__cc-tasks__${t}`);
 
 const dir = () => mkdtempSync(join(tmpdir(), "cc-daemon-"));
 function fakeQuery({ prompt }: any) {
@@ -149,6 +151,54 @@ describe("DaemonSupervisor", () => {
     await flush();
     await expect(sup.submit(id, "x", () => {})).rejects.toThrow(/is restarting/);
     await sup.shutdown();
+  });
+
+  // ---- D3 sharedTasks built-in ----
+  it("sharedTasks wires a cc-tasks server + native-off + allowlist into every session", async () => {
+    const cap: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(cap) }, { dir: dir(), sharedTasks: { dir: dir() } });
+    expect(sup.tasks).toBeDefined();
+    sup.spawn(); sup.spawn();
+    for (const opts of cap) {
+      expect(opts.mcpServers).toHaveProperty("cc-tasks");
+      expect(opts.disallowedTools).toEqual(expect.arrayContaining([...NATIVE_TASK_TOOLS]));
+      expect(opts.allowedTools).toEqual(CC_TASKS);
+    }
+    expect(cap[0].mcpServers["cc-tasks"]).not.toBe(cap[1].mcpServers["cc-tasks"]); // fresh instance per session
+    await sup.shutdown();
+  });
+  it("all sessions share ONE task store (writes to supervisor.tasks are visible through it)", async () => {
+    const sup = new DaemonSupervisor({ query: captureQuery([]) }, { dir: dir(), sharedTasks: { dir: dir() } });
+    sup.spawn(); sup.spawn();
+    await sup.tasks!.create({ subject: "SHARED_OK" });
+    const items = await sup.tasks!.list();
+    expect(items.map((t) => t.subject)).toEqual(["SHARED_OK"]);
+    await sup.shutdown();
+  });
+  it("an explicit sessionOptions overrides the sharedTasks default factory (tasks still created)", async () => {
+    const cap: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(cap) }, {
+      dir: dir(), sharedTasks: { dir: dir() },
+      sessionOptions: () => ({ mcpServers: { custom: {} } }),
+    });
+    sup.spawn();
+    expect(cap[0].mcpServers).toHaveProperty("custom");
+    expect(cap[0].mcpServers).not.toHaveProperty("cc-tasks");
+    expect(cap[0].allowedTools).toBeUndefined();
+    expect(sup.tasks).toBeDefined();           // still created for inspection
+    await sup.shutdown();
+  });
+  it("sharedTasks: true normalizes to TaskStore defaults", async () => {
+    const cap: any[] = [];
+    const cwd = process.cwd();
+    process.chdir(dir());                       // keep TaskStore's default write inside a tmp dir
+    try {
+      const sup = new DaemonSupervisor({ query: captureQuery(cap) }, { dir: dir(), sharedTasks: true });
+      expect(sup.tasks).toBeDefined();
+      sup.spawn();
+      expect(cap[0].allowedTools).toEqual(CC_TASKS);
+      await sup.shutdown();
+    } finally { process.chdir(cwd); }
   });
 
   // ---- D3 generic sessionOptions seam ----
