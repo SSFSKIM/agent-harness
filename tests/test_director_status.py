@@ -110,6 +110,20 @@ class StatusWriterTest(unittest.TestCase):
             w.terminal(t, self._tel_summary(tot, ident=tid))
         self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 300)
 
+    def test_partial_tokens_not_folded_into_aggregate(self):
+        # review-reliability P2: a partial/garbage tokens payload must not leave
+        # codex_totals internally inconsistent — the fold is all-or-nothing.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1", "D-1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1", "D-1"),
+                   {"ticket": "D-1", "status": "completed", "final_state": "done",
+                    "attempts": 1, "turns": 1,
+                    "telemetry": {"tokens": {"input": 5},  # missing output/total
+                                  "turn_count": 1, "session_id": "s",
+                                  "last_message": "m", "rate_limits": None}})
+        ct = self._snap()["run"]["codex_totals"]
+        self.assertEqual((ct["input"], ct["output"], ct["total"]), (0, 0, 0))
+
     def test_terminal_without_telemetry_is_backward_compatible(self):
         # A terminal with no telemetry (claim_failed / crash-path failed) → tokens
         # None, aggregate untouched, snapshot still valid (R6 / additive).

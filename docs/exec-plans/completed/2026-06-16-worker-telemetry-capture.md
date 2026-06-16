@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 5a833fb781ce40654e1988d53221a95454f55e3d
@@ -206,5 +206,57 @@ still green.
   ready to carry it the moment the ticket does.
 
 ## Feedback (from completion gate)
+Standard review = review-arch + review-reliability (Claude personas; codex skipped —
+the M4 live-pin proved the codex account is `usageLimitExceeded`, the documented
+codex-unavailable fallback). Both verdicts **SATISFIED, no P1**.
+- review-arch P2 (status.py aggregate) — code sums where the spec worded it "delta vs
+  last-reported"; equivalent in the boundary-capture model. **Fixed inline**: comment now
+  explains the delta-collapses-to-absolute reasoning. Two proposed rule-additions noted
+  below.
+- review-reliability P2.2 (partial-payload fold) — a partial `tokens` dict could leave
+  `codex_totals` internally inconsistent. **Fixed inline**: the {input,output,total} group
+  now folds atomically (all-or-nothing) + regression test
+  `test_partial_tokens_not_folded_into_aggregate`.
+- review-reliability P2.1 (retry token under-count) — failed-then-retried attempts' tokens
+  aren't folded (each `drive` starts fresh; `retry` skips `summarize`), so the aggregate is
+  final-attempt cost, not total burn. Not a double-count, not a crash. **Documented inline**
+  (status.py terminal comment) + **tracked** (tech-debt-tracker, accepted for this slice).
+- Proposed rule-additions (both reviewers, for the host architecture doc, not built here):
+  (1) host telemetry/instrumentation extractors must be total (None/0 on malformed input,
+  never raise, never block the primary path); (2) the StatusWriter is a main-thread lock-free
+  single writer — cross-thread mutation forbidden (steers the Layer-2 live-stream follow-up).
+  Recorded as tracked doc-debt.
 
 ## Outcomes & retrospective
+**Done.** `status.json` now carries Symphony-grade telemetry, captured at turn/dispatch
+boundaries and persisted additively: per completed ticket `recent[].{tokens,session_id,
+last_message}`, and a run-level `run.{codex_totals{input,output,total,seconds_running},
+rate_limits}`. Verifiable via `python3 -m director.status` after any (mock or real) run.
+Gate GREEN at 334 tests (318 baseline + 16 new); base_commit 5a833fb → HEAD.
+
+What newly exists: `extract_usage`/`extract_rate_limits`/`_pluck_tokens` (tolerant,
+§13.5-pinned) + `run_turn` usage/rate_limits return (M1); `drive` per-ticket accumulation
+folded onto every disposition as a `telemetry` block (M2); `reconcile` fold + `StatusWriter`
+additive schema with a lock-free run aggregate and a live `seconds_running` (M3); R6
+malformed-event tolerance + a real-codex live-pin (M4). Blast radius held to the producer
+path (app_server/run/orchestrator/status + mock) with status.py changes strictly additive.
+
+Live-pin result: `rate_limits` confirmed against real codex-cli 0.139.0
+(`account/rateLimits/updated`); the token-event method/fields stayed unobserved because the
+account was `usageLimitExceeded` — which incidentally validated R6 (telemetry absent ≠
+broken) against real codex. Token-event shape is a tracked follow-up.
+
+Completion gate: review-arch + review-reliability both SATISFIED (no P1). Of 3 P2s, two were
+fixed inline (delta-collapses comment; atomic partial-payload fold + test) and one
+documented + tracked (final-attempt aggregate semantics). Two proposed host-architecture
+rule-additions captured as doc-debt.
+
+Retrospective: the boundary-capture decision (D-2) paid off exactly as designed — the
+lock-free single-writer held, both reviewers confirmed no cross-thread path, and the
+"telemetry never a gate" posture (total extractors, None/0 on bad input) was independently
+flagged by both reviewers as a rule worth promoting. The producer-before-renderer pivot
+proved its thesis immediately: the renderer slice (deferred) will now consume genuinely
+rich data rather than rendering a thin snapshot. Follow-ups (all tracked, none blocking):
+token-event live-pin on a credited account; final-attempt-vs-total retry accounting; the
+two architecture-doc rules; and the deferred `url` deep-link (board/linear doesn't carry it
+yet) and Layer-2 live in-flight accrual.

@@ -137,14 +137,23 @@ class StatusWriter:
         entry = self._in_flight.pop(key, None)
         # Per-ticket telemetry (plan M3), folded into the summary by reconcile. The
         # recent row carries the ticket's final tokens/session/last_message; the run
-        # aggregate accumulates tokens (summed once per ticket — no double-count),
-        # the latest rate-limit payload, and this ticket's wall-clock seconds.
+        # aggregate accumulates tokens, the latest rate-limit payload, and this
+        # ticket's wall-clock seconds. Each ticket is an independent codex thread
+        # reported here EXACTLY ONCE (claim-failure short-circuits before dispatch;
+        # retries call retrying() not terminal()), so §13.5's "delta vs last-reported
+        # absolute" rule collapses to a plain sum (last-reported is always 0) and can
+        # never double-count. Tokens burned on FAILED-then-retried attempts are NOT
+        # folded — the aggregate is final-attempt cost, retry burn excluded (tracked
+        # follow-up; the property the spec asserts — no double-count — holds).
         tel = summary.get("telemetry") or {}
         tokens = tel.get("tokens")
         if isinstance(tokens, dict):
-            for k in ("input", "output", "total"):
-                v = tokens.get(k)
-                if isinstance(v, int) and not isinstance(v, bool):
+            # Fold the {input,output,total} group ATOMICALLY (all-or-nothing) so a
+            # partial/garbage payload can't leave the aggregate internally inconsistent
+            # (input ≠ total - output). The current producer always emits all three.
+            vals = {k: tokens.get(k) for k in ("input", "output", "total")}
+            if all(isinstance(v, int) and not isinstance(v, bool) for v in vals.values()):
+                for k, v in vals.items():
                     self._codex_totals[k] += v
         if tel.get("rate_limits") is not None:
             self._rate_limits = tel["rate_limits"]
