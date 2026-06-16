@@ -75,6 +75,15 @@ owner: harness
   current-run only, stdlib-only. 기존 모듈 변경 0 — 신규 `director/dashboard.py` + 테스트 +
   DIRECTOR.md 절. (공유 tracker / GitHub Issues 어댑터는 범위 밖.) **재배치(2026-06-16): worker
   telemetry capture 가 선행 — renderer 는 그 풍부해진 데이터의 consumer.**
+- [Active-run reconciliation + 워커 취소 (daemon stage 1)](2026-06-16-active-run-reconciliation.md)
+  — Symphony 정합 daemon 묶음 1단계(gap #1, SPEC §8.5/§16.3/§14.4). 워커가 도는 동안
+  orchestrator 가 in-flight 티켓 상태를 주기적으로 되읽어(신규 board `fetch_issue_states_by_ids`),
+  사람이 `In Progress` 밖으로 옮긴 티켓의 워커를 **취소**(cooperative `cancel_event` — app-server
+  read loop mid-turn + turn 사이; `TurnCancelled`; retry/board-write 없음). 핵심: `_dispatch_wave`
+  의 `futures` dict 가 이미 running-map → `wait(timeout=)` + monotonic cadence 로 wave-barrier 가
+  완료 사이에도 reconcile(메인 스레드 → R13 단일-writer 보존). stall-reap 은 `read_timeout_s` 가
+  실질 충족 → 연기(D-61). 연속 daemon 루프(#2)·backoff(#3)는 별도 후속. `reconcile_interval_s`
+  config knob.
 - [Director 선언적 설정 계약 (`.harness.json` `director` 블록)](2026-06-16-director-declarative-config.md)
   — Symphony 정합 트랙(SPEC §5–6/§6.2, `WORKFLOW.md` 대응). 코드+CLI 플래그에 흩어진
   오케스트레이션 정책(team·states·concurrency·posture·paths·merger knob)을 `worker_policy`
