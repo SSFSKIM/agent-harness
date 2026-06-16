@@ -18,9 +18,14 @@ function toolMap(rt: SwarmRuntime) {
 const text = (r: any) => r.content[0].text;
 
 describe("cc-swarm MCP server", () => {
-  it("exposes the seven tools", () => {
+  it("exposes the eight tools", () => {
     expect(Object.keys(toolMap(newRuntime())).sort())
-      .toEqual(["CheckMessages", "RespondPermission", "SendMessage", "ShutdownTeammate", "TeamCreate", "TeamDelete", "spawnTeammate"]);
+      .toEqual(["ApprovePlan", "CheckMessages", "RespondPermission", "SendMessage", "ShutdownTeammate", "TeamCreate", "TeamDelete", "spawnTeammate"]);
+  });
+  it("ApprovePlan errors on an unknown request id", async () => {
+    const t = toolMap(newRuntime());
+    const bad = await t.ApprovePlan.handler({ requestId: "nope", decision: "approve" }, {});
+    expect(bad.isError).toBe(true);
   });
   it("RespondPermission errors on an unknown request id; ShutdownTeammate on an unknown teammate", async () => {
     const t = toolMap(newRuntime());

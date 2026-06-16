@@ -2,13 +2,13 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SwarmRuntime } from "./runtime.js";
 import {
   teamCreateShape, teamDeleteShape, spawnTeammateShape, sendMessageShape, checkMessagesShape,
-  respondPermissionShape, shutdownTeammateShape,
+  respondPermissionShape, shutdownTeammateShape, approvePlanShape,
 } from "./types.js";
 
 const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data) }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
 
-/** Build the five cc-swarm SDK tool definitions over a SwarmRuntime (exported for direct handler testing). */
+/** Build the eight cc-swarm SDK tool definitions over a SwarmRuntime (exported for direct handler testing). */
 export function buildSwarmTools(runtime: SwarmRuntime) {
   return [
     tool("TeamCreate", "Create a team of teammates; returns its teamId and roster.", teamCreateShape, async (a) => {
@@ -39,10 +39,15 @@ export function buildSwarmTools(runtime: SwarmRuntime) {
       try { await runtime.requestShutdown(a.name); return ok({ shutdown: a.name }); }
       catch (e) { return fail((e as Error).message); }
     }),
+    tool("ApprovePlan", "Approve or reject a teammate's escalated plan by id (approve → it implements; reject → it revises with your feedback).", approvePlanShape, async (a) => {
+      return (await runtime.respondPlan(a.requestId, a.decision, a.feedback))
+        ? ok({ resolved: a.requestId, decision: a.decision })
+        : fail(`unknown request ${a.requestId}`);
+    }),
   ];
 }
 
-/** Wrap a SwarmRuntime as an in-process SDK MCP server exposing the five cc-swarm tools. */
+/** Wrap a SwarmRuntime as an in-process SDK MCP server exposing the eight cc-swarm tools. */
 export function createSwarmMcpServer(runtime: SwarmRuntime) {
   return createSdkMcpServer({ name: "cc-swarm", version: "0.1.0", tools: buildSwarmTools(runtime) });
 }
