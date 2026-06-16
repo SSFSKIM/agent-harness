@@ -111,8 +111,81 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     }
 
 
-# Replaced by the full inline page in M3; a minimal stub keeps the GET / route honest.
-PAGE = "<!doctype html><meta charset='utf-8'><title>director dashboard</title>"
+# The whole client: one self-contained HTML string (CSS + vanilla JS poller), no
+# framework, no bundler, no external asset — offline-OK (stdlib-only grain). It polls
+# GET /api/v1/state ~1s and re-renders the DOM. Every data value is written via
+# textContent (never innerHTML), so producer text can never be parsed as markup.
+PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>director dashboard</title>
+<style>
+  body { background:#0e1116; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:1.2rem; }
+  h1 { font-size:15px; font-weight:600; margin:0 0 .6rem; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#7d8896; margin:1.1rem 0 .3rem; }
+  .muted { color:#7d8896; }
+  .run { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.2rem; }
+  .tag { background:#1b2230; border:1px solid #2a3343; border-radius:.4rem; padding:.05rem .45rem; }
+  .badge { background:#3a1d1d; border:1px solid #6b2b2b; color:#ffb4b4; border-radius:.4rem; padding:.05rem .45rem; }
+  .item { padding:.12rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
+  .ok { color:#6ee7a8; } .bad { color:#ff9b9b; }
+</style></head><body>
+<h1>director dashboard <span id="updated" class="muted"></span></h1>
+<div id="run" class="run"></div>
+<div id="counts" class="muted"></div>
+<h2>in-flight</h2><div id="inflight"></div>
+<h2>stuck</h2><div id="stuck"></div>
+<h2>recent</h2><div id="recent"></div>
+<h2>pending (director queue)</h2><div id="pending"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+function el(tag, text, cls) {
+  const n = document.createElement(tag);
+  if (text !== undefined && text !== null) n.textContent = String(text);
+  if (cls) n.className = cls;
+  return n;
+}
+function fmtTokens(t) {
+  if (!t || t.total == null) return "—";
+  return t.total + " tok (in " + t.input + " / out " + t.output + ")";
+}
+function fill(id, lines) {
+  const box = $(id); box.innerHTML = "";
+  if (!lines.length) { box.appendChild(el("div", "—", "muted")); return; }
+  for (const [text, cls] of lines) box.appendChild(el("div", text, cls || "item"));
+}
+function render(v) {
+  const run = v.run, h = $("run"); h.innerHTML = "";
+  if (!run) { h.appendChild(el("span", "no active run", "muted")); }
+  else {
+    h.appendChild(el("span", "pass #" + run.pass, "tag"));
+    h.appendChild(el("span", "started " + (run.started_at || "—"), "tag"));
+    if (run.stopped_reason) h.appendChild(el("span", "stopped: " + run.stopped_reason, "badge"));
+    const ct = run.codex_totals || {};
+    h.appendChild(el("span", fmtTokens(ct), "tag"));
+    h.appendChild(el("span", "runtime " + Math.round(ct.seconds_running || 0) + "s", "tag"));
+    if (run.rate_limits) h.appendChild(el("span", "rate " + JSON.stringify(run.rate_limits), "tag"));
+  }
+  const c = v.counts || {};
+  $("counts").textContent = "in-flight " + (c.in_flight||0) + " · stuck " + (c.stuck||0)
+    + " · recent " + (c.recent||0) + " · pending " + (c.pending||0);
+  fill("inflight", (v.in_flight||[]).map(e =>
+    [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave]));
+  fill("stuck", (v.stuck||[]).map(s =>
+    [s.ticket + " ← " + (s.blocked_by||[]).map(b => b.id).join(", ")]));
+  fill("recent", (v.recent||[]).map(r =>
+    [(r.status === "completed" ? "✓ " : "✗ ") + (r.ticket||r.ticket_id)
+      + " · " + fmtTokens(r.tokens) + (r.session_id ? " · " + r.session_id : ""),
+     r.status === "completed" ? "item ok" : "item bad"]));
+  fill("pending", (v.pending||[]).map(p =>
+    [p.kind + " · " + (p.ticket_id||"") + (p.summary ? " · " + p.summary : "")]));
+  $("updated").textContent = "· updated " + (v.generated_at || "");
+}
+async function poll() {
+  try { const r = await fetch("/api/v1/state"); render(await r.json()); }
+  catch (e) { $("updated").textContent = "· fetch error: " + e; }
+}
+setInterval(poll, 1000); poll();
+</script></body></html>"""
 
 
 class _Handler(BaseHTTPRequestHandler):

@@ -188,6 +188,20 @@ class DashboardHTTPTest(unittest.TestCase):
         code, _, _ = self._req(_PATH_STATE)
         self.assertEqual(code, 200)
 
+    def test_page_wires_poller_and_telemetry(self):
+        # The page is asserted by CONTRACT markers, not layout: it must poll the
+        # versioned route on an interval (live, no reload) and reference the now-shipped
+        # cost/usage telemetry fields — proving the renderer consumes the producer's
+        # richness, which is the whole reason this slice was sequenced after telemetry.
+        code, _, body = self._req("/")
+        self.assertEqual(code, 200)
+        html = body.decode("utf-8")
+        self.assertTrue(html.lstrip().startswith("<!doctype html"))
+        self.assertIn("/api/v1/state", html)  # polls the data route
+        self.assertIn("setInterval", html)    # on an interval (D-3 polling, no SSE)
+        for marker in ("codex_totals", "rate_limits", "seconds_running", "tokens"):
+            self.assertIn(marker, html)
+
 
 if __name__ == "__main__":
     unittest.main()
