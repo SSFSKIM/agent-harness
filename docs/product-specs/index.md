@@ -58,3 +58,11 @@ owner: harness
   digest 를 작성해 `PushNotification` 으로 사람을 끌어들인다. terminal-only emit(중간 조기 pull
   defer), watched 전용, 코드는 리포트-가치 판단 0(DIRECTOR.md 절차). watch + doc 만 — orchestrator
   변경 0.
+- [Director observability dashboard (라이브 read-only 웹 뷰)](2026-06-16-director-observability-dashboard.md)
+  — Phase 5(optional)의 observability surface. visibility spec 이 미뤄둔 "라이브 dashboard /
+  web observability"(line 208)를 회수: 기존 `director.status` 스냅샷 + `queue.read_pending`
+  위에 stdlib `http.server` 로 127.0.0.1 read-only 웹 뷰를 얹는다. `GET /api/snapshot` =
+  순수 `build_view(status_dir,queue_dir)` JSON(in-flight/stuck/recent/pending), 인라인
+  vanilla-JS 페이지가 ~1s 폴로 재렌더. read-only(act 는 Director 경유), 폴링(SSE 아님),
+  current-run only, stdlib-only. 기존 모듈 변경 0 — 신규 `director/dashboard.py` + 테스트 +
+  DIRECTOR.md 절. (공유 tracker / GitHub Issues 어댑터는 범위 밖.)
