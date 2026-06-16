@@ -110,3 +110,34 @@ point rightward at skills — the most actionable instruction wins.
 See `docs/RELIABILITY.md`. Headlines: imprint writes are idempotent (dedupe
 keys), feeder degrades to a deterministic minimal pack on timeout/error,
 imprint worker is single-flight via lock file with stale-lock recovery.
+
+## Host runtime (`director/`) invariants
+
+`director/` is THIS repo's self-hosting application — the Symphony ticket-DAG
+orchestrator (a Director main session + Codex app-server workers) the harness is
+built to support. It is **instance-layer app code, not machine (`plugin/`)**: the
+machine governs it only through the gate + review personas, so its own
+architecture invariants live here (review-arch grounds in this doc). Runtime
+*correctness* invariants live in `docs/RELIABILITY.md` (R9, R12–R14).
+
+1. **Stdlib-only.** No third-party imports anywhere under `director/` (no
+   `pyproject.toml` / `requirements.txt`) — the same "boring tech / internalize
+   dependencies" grain as `plugin/scripts`. A new dependency is a design change to
+   justify, never a default.
+2. **Explicit `base=` over ambient state.** Every module resolves its state dir
+   through a single `_root(base=None)` that honors an explicit `base=` (tests)
+   then an env override then a default — and nothing else reads `cwd`/env
+   directly. A test thus drives any module on a fixture dir with no globals
+   (mirrors the `plugin/` cross-cutting S2 rule).
+3. **New network listeners are loopback, fixed-route, read-only by default.** Any
+   server added to `director/` (e.g. `director/dashboard.py`) binds `127.0.0.1`
+   only, exposes a fixed route set (no request-derived filesystem path → zero
+   traversal), and does not mutate state. A write/act surface is a separate,
+   explicitly-fenced decision (origin check + the act-before-consume invariant),
+   never the default.
+4. **Pure core, thin transport.** Put the logic in a pure function that takes
+   explicit paths and returns data (`build_view`, `reconcile`, `extract_usage`),
+   unit-tested without a socket/subprocess; the HTTP/CLI/stdio layer is a thin
+   shim over it. The transport is wiring, the core is the product — the `director/`
+   analog of DESIGN.md's "every check function takes explicit paths; `main()` does
+   the wiring".

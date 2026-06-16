@@ -79,3 +79,16 @@ cite them in findings.
   in-flight-token follow-up) that wants per-event updates must MARSHAL them to
   the main thread (e.g. drain at a turn/dispatch boundary), never reach into the
   writer from an `on_event` callback.
+- **R14 — Read-API listeners fail soft, never to a dropped connection.** Any
+  long-lived HTTP / read-API surface on `director/` (the observability dashboard
+  is the first — `director/dashboard.py`) must isolate every request: a handler
+  bug degrades to a structured error response (a `{"error":{code,message}}` 500
+  the client already handles), and a peer that disconnects mid-write is a quiet
+  drop — catch the FULL errno family (`BrokenPipeError` / `ConnectionResetError` /
+  `ConnectionAbortedError` and any other `OSError` on the socket, not just the
+  named two, including on the error-response's own write). An in-handler exception
+  must NEVER reach `socketserver.handle_error`, which prints a traceback to stderr:
+  a read-only instrument that noisily crashes its own request thread has become a
+  gate on the very run it only meant to observe. This is R6's "hooks fail open"
+  generalized to request threads — the boundary owns a catch-all, the listener
+  stays up.
