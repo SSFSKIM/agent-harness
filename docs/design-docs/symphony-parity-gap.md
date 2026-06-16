@@ -90,6 +90,12 @@ mode; lifts stage 1's reconcile/cancel pieces unchanged).
 (`reconcile` `retry_budget`). Symphony does `min(10000·2^(attempt-1),
 max_retry_backoff_ms)` plus a ~1s continuation retry after a *normal* worker exit
 that re-checks whether the issue is still active. Small; completes the retry model.
+→ **daemon stage 3: `docs/product-specs/2026-06-17-daemon-exponential-backoff.md`**
+(exponential backoff for the daemon's retry/idle/claim via one `_backoff_s` helper;
+batch keeps immediate retry; the per-completion re-check is a non-goal — active-run
+reconciliation already covers it). **With stages 1–3 shipped, the daemon track
+(gaps #1/#2/#3) is CLOSED;** gap #4 (config) is done; only gap #5 (agent protocol
+depth) remains, on the separate worker-protocol track.
 
 **4. No `WORKFLOW.md` declarative contract (§5–6) — the portability/philosophy
 gap.** Symphony's premise — "teams version the agent prompt + runtime settings

@@ -102,3 +102,13 @@ owner: harness
   idle/heartbeat. stuck 은 종료 아닌 status 신호; graceful shutdown(1차 drain·2차 cancel-all,
   stage 1 cancel_event 재사용); poll/claim 실패 fail-soft. backoff(#3)는 `_idle_wait_s` seam 만.
   배치 경로(`--once`/기본 drain)·stage 1 조각 전부 보존(설계 dividend). `poll_interval_s` knob.
+- [Daemon exponential backoff (daemon stage 3 — 마지막)](2026-06-17-daemon-exponential-backoff.md)
+  — Symphony 정합 daemon 묶음 3단계(gap #3 retry model 완성, SPEC §8.4). daemon(`run_forever`)의
+  retry·idle·claim 을 단일 `_backoff_s(n,base,cap)=min(base·2^(n-1),cap)` 로 지수 backoff:
+  (A) 실패 워커는 즉시가 아니라 backoff 뒤 재-dispatch — 메인 블록 없이 pending-retry holding map
+  + tick due-검사(slot 회계 `free=concurrency−futures−pending_retry`); (B) idle 폴은
+  `poll_interval·2^streak`(cap)로 키우고 일 등장 시 리셋 — poll-failure(C)는 idle 경로로 흡수;
+  (D) claim 실패는 영구 배제(D-73) 대신 per-tid backoff 재-admission(bounded). batch 경로는 즉시
+  retry **불변**(reap `on_retry=` 훅의 기본; regression net). knob `backoff_base_s`(10s)/
+  `backoff_cap_s`(300s). Symphony per-completion 재-check 은 NON-GOAL(active-run reconciliation 이
+  충족). 이 슬라이스로 **daemon 트랙(gap #1/#2/#3) CLOSED**.
