@@ -8,7 +8,7 @@ function userTurn(text: string): SDKUserMessage {
   return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } as SDKUserMessage;
 }
 
-interface Waiter { onMessage: (m: unknown) => void; resolve: (r: { result: unknown }) => void; }
+interface Waiter { onMessage: (m: unknown) => void; resolve: (r: { result: unknown }) => void; reject: (e: Error) => void; }
 
 /** One long-lived query() session. A turn is submit(prompt,onMessage) → streamed messages → resolved result. */
 export class DaemonSession {
@@ -18,6 +18,7 @@ export class DaemonSession {
   private q: AsyncIterable<unknown>;
   private done: Promise<void>;
   private waiters: Waiter[] = []; // FIFO: query emits one result per submitted turn, in order
+  private ended = false;          // true once the read-loop finishes (query disposed or died)
 
   constructor(id: string, deps: DaemonSessionDeps, options: Record<string, unknown>, private now: () => number = Date.now) {
     this.id = id;
@@ -27,10 +28,12 @@ export class DaemonSession {
     this.done = this.readLoop().catch(() => {});
   }
 
-  /** Run one turn; non-result messages stream to onMessage; resolves with the turn's result. */
+  /** Run one turn; non-result messages stream to onMessage; resolves with the turn's result.
+   * Rejects immediately if the underlying query has already ended (else the waiter would never drain). */
   submit(prompt: string, onMessage: (m: unknown) => void): Promise<{ result: unknown }> {
-    return new Promise((resolve) => {
-      this.waiters.push({ onMessage, resolve });
+    if (this.ended) return Promise.reject(new Error(`session ${this.id} is not running`));
+    return new Promise((resolve, reject) => {
+      this.waiters.push({ onMessage, resolve, reject });
       this.input.push(userTurn(prompt));
     });
   }
@@ -42,12 +45,13 @@ export class DaemonSession {
     try {
       for await (const m of this.q) {
         this.lastActiveAt = this.now();
-        const w = this.waiters[0];
-        if ((m as any).type === "result") { this.waiters.shift(); w?.resolve({ result: (m as any).result }); }
-        else w?.onMessage(m);
+        if ((m as any).type === "result") this.waiters.shift()?.resolve({ result: (m as any).result }); // consume a waiter only if present
+        else this.waiters[0]?.onMessage(m);
       }
     } finally {
-      for (const w of this.waiters.splice(0)) w.resolve({ result: undefined }); // release callers on teardown
+      this.ended = true;
+      // Reject (not silently resolve) any turn left in flight when the query ends — it never completed.
+      for (const w of this.waiters.splice(0)) w.reject(new Error(`session ${this.id} disposed`));
     }
   }
 }

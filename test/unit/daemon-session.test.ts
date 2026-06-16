@@ -35,6 +35,20 @@ describe("DaemonSession", () => {
     expect((await s.submit("b", () => {})).result).toBe("did:b");
     await s.dispose();
   });
+  it("rejects submit once the session has ended (no silent hang)", async () => {
+    const s = new DaemonSession("sess-1", { query: fakeQuery }, {});
+    await s.submit("a", () => {});
+    await s.dispose();                                  // query ends → ended = true
+    await expect(s.submit("b", () => {})).rejects.toThrow(/not running/);
+  });
+  it("rejects an in-flight submit when disposed mid-turn (no fake success)", async () => {
+    // a query that consumes the turn but never emits a result for it
+    const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { void t; } })();
+    const s = new DaemonSession("sess-1", { query: fq }, {});
+    const p = s.submit("x", () => {});
+    await s.dispose();                                  // loop ends with the turn still pending
+    await expect(p).rejects.toThrow(/disposed/);
+  });
   it("dispose ends the underlying query", async () => {
     let ended = false;
     const fq = ({ prompt }: any) => (async function* () {

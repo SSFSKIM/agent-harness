@@ -45,6 +45,15 @@ describe("DaemonSupervisor", () => {
     expect(sup.list()).toEqual([]);
     await sup.shutdown();
   });
+  it("submit to a session whose query has died rejects instead of hanging", async () => {
+    // query ends after the first turn → session no longer running
+    const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { yield { type: "result", result: "ok:" + t.message.content }; return; } })();
+    const sup = new DaemonSupervisor({ query: fq }, { dir: dir() });
+    const id = sup.spawn();
+    expect((await sup.submit(id, "first", () => {})).result).toBe("ok:first");
+    await expect(sup.submit(id, "second", () => {})).rejects.toBeTruthy(); // would hang without the ended-guard
+    await sup.shutdown();
+  }, 10_000);
   it("shutdown disposes all sessions and clears the registry", async () => {
     const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: dir() });
     sup.spawn(); sup.spawn();

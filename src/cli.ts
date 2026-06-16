@@ -20,7 +20,13 @@ async function runDaemon(): Promise<void> {
   const sup = new DaemonSupervisor({ query: sdkQuery }, {});
   const server = new DaemonServer(sup, sock);
   await server.listen();
-  const stop = async () => { await sup.shutdown().catch(() => {}); await server.close().catch(() => {}); };
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return; // a second signal (e.g. double Ctrl-C) is a no-op
+    stopping = true;
+    await sup.shutdown().catch(() => {});
+    await server.close().catch(() => {});
+  };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   console.error(`cc-harness daemon listening at ${sock}`);

@@ -9,6 +9,8 @@ import type { DaemonSupervisor } from "./supervisor.js";
 export class DaemonServer {
   private server: Server;
   private closeResolve!: () => void;
+  private closing = false;        // idempotency guard for close()
+  private shuttingDown = false;   // stop accepting new ops once a shutdown is in progress
   readonly closed: Promise<void> = new Promise((r) => { this.closeResolve = r; });
 
   constructor(private supervisor: DaemonSupervisor, private socketPath: string) {
@@ -26,6 +28,8 @@ export class DaemonServer {
   }
 
   async close(): Promise<void> {
+    if (this.closing) return;
+    this.closing = true;
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
     rmSync(this.socketPath, { force: true });
     this.closeResolve();
@@ -61,6 +65,7 @@ export class DaemonServer {
     let op;
     try { op = daemonOp.parse(JSON.parse(line)); }
     catch (e) { send({ ok: false, error: `bad request: ${(e as Error).message}` }); sock.end(); return; }
+    if (this.shuttingDown) { send({ ok: false, error: "daemon shutting down" }); sock.end(); return; }
     try {
       switch (op.op) {
         case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model }) }); sock.end(); break;
@@ -71,6 +76,7 @@ export class DaemonServer {
           send({ type: "done", result: r.result }); sock.end(); break;
         }
         case "shutdown":
+          this.shuttingDown = true; // set before any await → concurrent ops are refused, none escape cleanup
           send({ ok: true }); sock.end();
           await this.supervisor.shutdown();
           await this.close();

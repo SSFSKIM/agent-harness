@@ -5,6 +5,9 @@ export function daemonRequest(socketPath: string, op: unknown, onLine?: (o: unkn
   return new Promise((resolve, reject) => {
     const lines: any[] = [];
     let buf = "";
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(lines); } };
+    const fail = (e: Error) => { if (!settled) { settled = true; reject(e); } };
     const sock = connect(socketPath);
     sock.on("connect", () => sock.write(JSON.stringify(op) + "\n"));
     sock.on("data", (d) => {
@@ -16,8 +19,8 @@ export function daemonRequest(socketPath: string, op: unknown, onLine?: (o: unkn
         const o = JSON.parse(line); lines.push(o); onLine?.(o);
       }
     });
-    sock.on("end", () => resolve(lines));
-    sock.on("close", () => resolve(lines)); // daemon may close after shutdown without a clean end
-    sock.on("error", reject);
+    sock.on("end", done);
+    sock.on("close", done);  // daemon may close after shutdown without a clean end (settled-guarded)
+    sock.on("error", fail);
   });
 }
