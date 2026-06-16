@@ -26,6 +26,18 @@ Issues 어댑터는 별도 — 이번 범위 밖, 사람 결정 2026-06-16).
 > "dashboard MUST NOT be REQUIRED for correctness"(§13.4)는 우리 D-2/D-5 와 동일 — Symphony 가
 > 같은 자세를 명문화. `POST /api/v1/refresh` 는 Symphony 의 daemon poll 트리거라 우리 세션-구동
 > orchestrator 엔 비적용(N/A). (본문 §의 `/api/snapshot` 표기는 이 정렬로 대체.)
+>
+> **구체 계약 (이 빌드, 2026-06-16 — telemetry producer 出荷 후):** 데이터 엔드포인트는
+> `GET /api/v1/state`. view dict =
+> `{run, in_flight, stuck, recent, pending[{request_id,ticket_id,kind,summary}],
+> counts{in_flight,stuck,recent,pending}, generated_at}`. `run`/`in_flight`/`stuck`/
+> `recent` 는 스냅샷 **pass-through** 라, telemetry 슬라이스의 producer 필드가 그대로
+> 흐른다 — 렌더러가 새로 계산할 게 없다: `run.codex_totals{input,output,total,
+> seconds_running}` · `run.rate_limits`(또는 null) · `recent[].tokens{input,output,
+> total}|null` · `recent[].session_id` · `recent[].last_message`. 클라이언트가 이
+> 비용/usage 를 헤더(런 누계 토큰 · runtime · rate-limit)와 recent 행(티켓별 토큰)에
+> 렌더한다 — 이게 "telemetry 뒤로 재배치" 가 회수하는 가치다. 라우팅: 미정의 라우트→`404`,
+> 정의된 라우트의 잘못된 메서드→`405`, 둘 다 `{"error":{"code","message"}}` 봉투(JSON).
 
 기존 `director.status` 스냅샷 + `director.watch` 이벤트 스트림 위에 **사람이 브라우저에서
 런을 직접 들여다보는** read-only 뷰를 더한다. 오늘 사람은 Director 가 narrate 해줄 때만
