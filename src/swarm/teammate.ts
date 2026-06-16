@@ -20,10 +20,12 @@ export class TeammateSession {
   constructor(spec: TeammateSpec, private bus: MessageBus, deps: TeammateDeps, options?: Record<string, unknown>) {
     this.name = spec.name;
     this.teamId = spec.teamId;
-    this.bus.subscribe(this.name, (msg) => this.send(msg.body)); // incoming bus message → new turn
+    // Construction has no external side effects (the runtime wires the inbound bus
+    // subscription after registration), so a throwing query() leaves no dirty state.
     this.input.push(userTurn(spec.prompt));                      // seed turn
     this.q = deps.query({ prompt: this.input, options });
-    this.done = this.readLoop();
+    // A dead/errored teammate query must not reject teardown (dispose/disposeAll await this).
+    this.done = this.readLoop().catch(() => {});
   }
 
   /** Deliver a new user turn into this teammate's query. */
@@ -46,13 +48,17 @@ export class TeammateSession {
   }
 
   private async readLoop(): Promise<void> {
-    for await (const m of this.q) {
-      const mm = m as any;
-      if (mm.type === "result") {
-        this.emit("result", String(mm.result ?? ""));
-        if (this.input.pending === 0) this.emit("idle", "");
-        this.settle();
+    try {
+      for await (const m of this.q) {
+        const mm = m as any;
+        if (mm.type === "result") {
+          this.emit("result", String(mm.result ?? ""));
+          if (this.input.pending === 0) this.emit("idle", "");
+          this.settle();
+        }
       }
+    } finally {
+      this.settle(); // release any pending settled() waiters when the query ends
     }
   }
 }

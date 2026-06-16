@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SwarmRuntime } from "../../src/swarm/runtime.js";
+import { TaskStore } from "../../src/tasks/store.js";
 
 const dir = () => mkdtempSync(join(tmpdir(), "swarm-"));
 function fakeQuery({ prompt }: any) {
@@ -43,8 +44,32 @@ describe("SwarmRuntime", () => {
     const rt = newRuntime();
     const t = rt.createTeam("a");
     rt.spawnTeammate({ teamId: t.id, name: "w1", prompt: "x" });
-    rt.deleteTeam(t.id);
+    await rt.deleteTeam(t.id);
     expect(() => rt.sendMessage("w1", "hi")).toThrow(/unknown recipient/);
+  });
+  it("disposeAll unregisters teammates from the bus", async () => {
+    const rt = newRuntime();
+    const t = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: t.id, name: "w1", prompt: "x" });
+    await rt.disposeAll();
+    expect(() => rt.sendMessage("w1", "hi")).toThrow(/unknown recipient/);
+  });
+  it("gives a teammate a cc-tasks server + shares the task list under its own agentName (30.1/15.10)", async () => {
+    let seen: any;
+    const fq = ({ prompt, options }: any) => {
+      seen = options;
+      return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
+    };
+    const d = dir();
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: d } });
+    const team = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
+    expect(seen.mcpServers["cc-tasks"]).toBeTruthy();   // teammate can claim via the task tools
+    await rt.tasks.create({ subject: "job" });
+    const claimed = await new TaskStore({ dir: d, agentName: "w1" }).update(1, { status: "in_progress" });
+    expect(claimed.owner).toBe("w1");                   // claims as itself over the shared file
+    expect((await rt.tasks.get(1))?.owner).toBe("w1");  // visible to the runtime store
+    return rt.disposeAll();
   });
   it("a TaskStore owner change notifies the coordinator over the bus (closes A1 15.10)", async () => {
     const rt = newRuntime();
@@ -61,7 +86,7 @@ describe("SwarmRuntime", () => {
     const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
     const t = rt.createTeam("a");
     rt.spawnTeammate({ teamId: t.id, name: "w1", prompt: "x", agent: "claude-haiku-4-5-20251001" });
-    expect(seen).toEqual({ model: "claude-haiku-4-5-20251001" });
+    expect(seen.model).toBe("claude-haiku-4-5-20251001");
     return rt.disposeAll();
   });
 });

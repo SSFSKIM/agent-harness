@@ -13,7 +13,7 @@ export function buildSwarmTools(runtime: SwarmRuntime) {
       catch (e) { return fail((e as Error).message); }
     }),
     tool("TeamDelete", "Disband a team and stop its teammates.", teamDeleteShape, async (a) => {
-      try { const t = runtime.deleteTeam(a.teamId); return ok({ teamId: t.id, roster: t.members }); }
+      try { const t = await runtime.deleteTeam(a.teamId); return ok({ teamId: t.id, roster: t.members }); }
       catch (e) { return fail((e as Error).message); }
     }),
     tool("spawnTeammate", "Spawn a long-lived teammate session on a team, seeded with a prompt.", spawnTeammateShape, async (a) => {
