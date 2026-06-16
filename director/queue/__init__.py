@@ -15,6 +15,7 @@ Schemas (see the product-spec Design section):
 """
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import tempfile
@@ -29,8 +30,12 @@ _APPEND_LOCK = threading.Lock()
 
 # Normalized request kinds. Approval/input kinds come from a Codex server request
 # (mapping lives in the worker seam); `turnReview` is a turn-end the watched Director
-# answers free-form (multi-turn slice — director.decider.make_queue_decider).
-REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation", "turnReview")
+# answers free-form (multi-turn slice — director.decider.make_queue_decider);
+# `mergeRequest` is a worklist item (not a question) the serialized PR-merger drains —
+# it has no blocking author; the merger writes an answer only to mark it CONSUMED
+# (worker-qa-and-serialized-pr-merge slice — director.merger).
+REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation",
+                 "turnReview", "mergeRequest")
 
 # Decisions the Director may return for an approval-style request.
 APPROVAL_DECISIONS = ("accept", "decline", "acceptForSession", "cancel")
@@ -94,6 +99,33 @@ def append_request(req: dict, base: Path | str | None = None) -> bool:
             f.flush()
             os.fsync(f.fileno())
     return True
+
+
+def _now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def append_merge_request(ticket_id: str, *, pr=None, branch=None,
+                         workspace_path: str | None = None,
+                         self_description: str | None = None,
+                         created_at: str | None = None,
+                         base: Path | str | None = None) -> bool:
+    """Enqueue a PR-merge worklist item for the serialized merger to drain.
+
+    A worker that finished a ticket and opened a PR posts this; the merger pops it,
+    runs the `land` lane, and writes an answer to mark it consumed. The request_id is
+    `merge|<ticket_id>` so re-posting the same ticket's merge is idempotent (at-least-
+    once dedupe, R1/R4) — one impl ticket produces one PR in this model. Returns True
+    if newly queued, False if already present (same contract as append_request)."""
+    return append_request({
+        "request_id": f"merge|{ticket_id}",
+        "ticket_id": ticket_id,
+        "session_id": f"{ticket_id}-merge",
+        "kind": "mergeRequest",
+        "payload": {"pr": pr, "branch": branch, "self_description": self_description},
+        "workspace_path": workspace_path,
+        "created_at": created_at or _now_iso(),
+    }, base=base)
 
 
 def write_answer(answer: dict, base: Path | str | None = None) -> None:

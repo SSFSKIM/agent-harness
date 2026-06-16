@@ -88,7 +88,16 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
   신규 `director/workspace_skills/qa/SKILL.md`(테스트 방법론 + Playwright/fallback + PR 자기명세
   템플릿). 테스트: impl 프롬프트가 SELF-QA/qa/PR/report_outcome(done) 담음 + `qa/` 가 vendored
   설치됨. (PR 자기명세는 push 스킬 대신 qa 스킬 + impl 템플릿에 둠 — push 는 generic 유지, 실행 선택.)
-- [ ] M2 — mergeRequest 큐 + merger.py(직렬 drive drain) + 테스트.
+- [x] (2026-06-16) M2 — `director/queue` 에 `mergeRequest` kind + `append_merge_request`
+  helper(요청을 work-queue 로 재사용 — answer = 소비 마커, request_id `merge|<ticket>` 로
+  idempotent). `director/merger.py`: 단일-소비자 `drain` — 오래된 PR pop → land 프롬프트로
+  `run.drive`(decider 재사용, D-50) → `classify`(terminal done=merged, 그 외 escalated,
+  크래시=failed) → answer 로 소비 → 다음. 직렬화는 루프 구조상 자동(≤1 in-flight), 무한루프는
+  "매 아이템 반드시 소비"로 보장(`max_merges` belt-and-suspenders). `director_min.auto_respond`
+  가 `mergeRequest` 도 skip(고정정책 responder 가 머지를 조용히 소비 못 하게). 테스트
+  9개(FIFO·≤1 동시·escalate/stuck/blocked·크래시=failed·max_merges 바운드·idempotent·
+  auto_respond skip·real `run.drive`+mock worker → merged). 게이트 GREEN(286).
+  실행: `python3 -m unittest discover -s tests -p "test_director_merger.py"`.
 - [ ] M3 — Director 머지 escalation 통합 + DIRECTOR.md.
 - [ ] M4 — scratch repo 라이브 직렬-머지 wire-pin.
 
@@ -99,6 +108,14 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
   작업과 disjoint.
 - 2026-06-16: M4 라이브는 scratch 로컬 repo(하네스 master 에 실제 머지 안 함) — serializer 메커닉만
   검증, 전체 gh 라운드트립은 후속.
+- 2026-06-16 (M2): mergeRequest 는 기존 큐를 work-queue 로 재사용 — 별도 파일 큐 안 만듦. answer
+  부재=pending, 머거가 처리 후 answer 작성=소비. 단일 소비자라 직렬화는 자동(락/카운터 불요).
+- 2026-06-16 (M2): 머거는 escalate/failed 도 **소비**(answer 작성)해서 1-pass 가 항상 종료 —
+  escalation 은 `drain` 반환값으로 surface, Director 재주입/재큐는 M3. (consume-and-surface 가
+  무한루프 없이 단일-패스 바운드를 보장하는 선택.)
+- 2026-06-16 (M2): enqueue 호출부(워커 done+PR → mergeRequest) 와이어링은 M3(Director 통합)로
+  — M2 는 helper 존재 + 머거 drain 만. 머거 decider 기본값=`autonomous_decide`(land 스킬이 충돌
+  자체해소; needs_human 만 escalate), watched 는 호출부가 `make_queue_decider` 주입.
 
 ## Feedback (from completion gate)
 

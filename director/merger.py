@@ -1,0 +1,146 @@
+"""Serialized PR-merger (worker-qa-and-serialized-pr-merge slice, D-47/D-50/D-53).
+
+A worker finishes a ticket, self-QAs, and opens a PR (it does NOT merge). The PR
+lands here: a SINGLE consumer drains the `mergeRequest` queue one PR at a time —
+rebase onto the latest main, run the integration gate, squash-merge when GREEN.
+Serialization is the whole point (R3): "clean against a stale main" is not safe, so
+PRs must land sequentially, each re-based + re-gated against the main the previous
+merge produced. A single consumer draining one-at-a-time gives that for free — no
+lock, no concurrency counter in the hot path.
+
+The merger does NOT invent a turn machine: each PR runs through `director.run.drive`
+with the vendored `land` skill, and the per-turn disposition is owned by the injected
+`decide` (D-50) — exactly the seam the worker driver uses. A clean landing returns a
+`terminal(done)` disposition; a conflict it cannot resolve, a red integration gate, or
+a taste call surfaces as `escalate`/`stuck`/`failed`, which the merger routes to the
+human VIA the Director (single surface, R4/R7) — it never silently merges.
+
+This module owns the drain + classification. The Director-escalation wiring and the
+worker→enqueue call site are M3; the live serializer wire-pin is M4.
+"""
+from __future__ import annotations
+
+from typing import Callable
+
+import director.queue as dq
+from director import run
+from director.decider import autonomous_decide
+
+MERGE_REQUEST_KIND = "mergeRequest"
+
+# Safety bound on one drain pass (mirrors the orchestrator's max_dispatched): a drain
+# should terminate because every item is consumed, but this guards a processing path
+# that somehow fails to consume from spinning forever.
+DEFAULT_MAX_MERGES = 200
+
+_LAND_PROMPT = """\
+You are the PR-MERGER landing ONE pull request. Follow the `land` skill exactly:
+locate the PR for this branch, REBASE it onto the latest `main`, run the full
+integration gate (`python3 plugin/scripts/check.py` / the host gate) against that
+rebased state, resolve any conflicts the `land` skill can cleanly resolve, and
+squash-merge ONLY when the gate is GREEN. Land exactly this one PR — do not touch
+others.
+
+Do NOT force a merge. If you hit a conflict you cannot cleanly resolve, the
+integration gate goes red and you cannot fix it within scope, or a product/taste
+judgment is needed, STOP and surface it: report_outcome(status="needs_human",
+reason="…") (or end your turn explaining). The work is already done and the ticket
+is closed — a bad merge is worse than a delayed one.
+
+PR to land:
+  pr: {pr}
+  branch: {branch}
+The author's PR self-description (what was built, which reviews/tests they ran):
+{self_description}"""
+
+
+def land_prompt(payload: dict) -> str:
+    """The land-lane prompt for one PR, framed from the merge request's payload."""
+    payload = payload or {}
+    return _LAND_PROMPT.format(
+        pr=payload.get("pr") or "(see current branch)",
+        branch=payload.get("branch") or "(current branch)",
+        self_description=(payload.get("self_description") or "(none provided)").strip(),
+    )
+
+
+def land_ticket_from_request(req: dict) -> dict:
+    """Build the synthetic 'ticket' the land lane drives for one merge request. It
+    reuses the worker's own workspace (where the PR branch + git checkout already
+    live), so the `land` skill operates on the real branch."""
+    return {
+        "id": f"merge-{req.get('ticket_id')}",
+        "prompt": land_prompt(req.get("payload") or {}),
+        "workspace": req.get("workspace_path"),
+    }
+
+
+def classify(disp: dict) -> str:
+    """Map a land-lane drive disposition to a merge result.
+
+    Only a clean `terminal(done)` is a merge; everything else (a non-done terminal, an
+    escalate, a max-turns stuck, or a failed turn) needs the human's attention and is
+    surfaced — the merger never quietly drops a PR (R4)."""
+    kind = (disp or {}).get("kind")
+    if kind == "terminal" and (disp.get("outcome") or {}).get("status") == "done":
+        return "merged"
+    if kind == "failed":
+        return "failed"
+    return "escalated"
+
+
+def pending_merges(base=None) -> list[dict]:
+    """Queued, not-yet-consumed merge requests in FIFO (append) order. FIFO + 'rebase
+    onto latest main each time' is the ordering policy (spec Open Q): a sibling that
+    hasn't landed yet simply makes the integration gate fail → escalate, not corruption."""
+    return [r for r in dq.read_pending(base=base) if r.get("kind") == MERGE_REQUEST_KIND]
+
+
+def _consume(req: dict, result: str, *, base=None, now=dq._now_iso) -> None:
+    """Mark a merge request CONSUMED by writing its answer (removes it from pending).
+    Always called after processing — including on escalate/failed — so the drain loop
+    makes progress and never re-processes the same PR (the no-infinite-loop guarantee).
+    The escalation itself is surfaced via the drain's return value (re-injection to the
+    Director is M3)."""
+    dq.write_answer({"request_id": req["request_id"], "answered_by": "merger",
+                     "answered_at": now(), "merge_result": result}, base=base)
+
+
+def process_request(req: dict, *, driver: Callable = run.drive,
+                    decide: Callable = autonomous_decide, **drive_kwargs) -> dict:
+    """Run ONE merge request through the land lane and classify the outcome. A driver
+    crash becomes a `failed` result (one bad PR never sinks the drain) — mirrors the
+    orchestrator's dispatch-wraps-drive discipline."""
+    ticket = land_ticket_from_request(req)
+    try:
+        disp = driver(ticket, decide=decide, **drive_kwargs)
+    except Exception as exc:
+        return {"request_id": req["request_id"], "ticket_id": req.get("ticket_id"),
+                "result": "failed", "error": str(exc)}
+    return {"request_id": req["request_id"], "ticket_id": req.get("ticket_id"),
+            "result": classify(disp), "disposition": disp}
+
+
+def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonomous_decide,
+          max_merges: int = DEFAULT_MAX_MERGES, **drive_kwargs) -> list[dict]:
+    """Drain the merge queue SERIALLY: pop the oldest pending PR, land it, mark it
+    consumed, repeat — strictly one PR in flight at a time (R3). Returns a per-PR result
+    list ({request_id, ticket_id, result: merged|escalated|failed, ...}).
+
+    Single-consumer ⇒ serialization is structural (this loop processes one request fully
+    before reading the next), so there is no concurrency to guard. The loop terminates
+    because each iteration consumes one request (it leaves `pending`); `max_merges` is a
+    belt-and-suspenders bound. `drive_kwargs` (command, queue_base, workspace_root,
+    install_skills, posture, …) pass straight through to the land lane."""
+    results: list[dict] = []
+    processed = 0
+    while processed < max_merges:
+        pend = pending_merges(base=base)
+        if not pend:
+            break
+        req = pend[0]  # FIFO — oldest queued PR first
+        result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
+        _consume(req, result["result"], base=base)
+        results.append(result)
+        processed += 1
+    return results

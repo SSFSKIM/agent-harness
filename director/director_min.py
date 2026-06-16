@@ -44,16 +44,21 @@ def answer_turn(request_id: str, disposition: dict, *, base=None,
                      "disposition": disposition}, base=base)
 
 
+# Kinds the fixed-policy responder must NOT touch: a `turnReview` needs a free-form
+# disposition (answer_turn), and a `mergeRequest` is the serialized merger's worklist
+# (answering it would silently consume the merge before the merger ever sees it).
+_NON_APPROVAL_KINDS = ("turnReview", "mergeRequest")
+
+
 def auto_respond(base=None, decide: Callable[[dict], str] = lambda req: "accept",
                  stop: threading.Event | None = None, poll_s: float = 0.02) -> None:
     """Answer pending APPROVAL/INPUT requests with decide(req) until `stop` is set
-    (unattended/tests). Skips `turnReview` requests — those need a free-form
-    disposition (answer_turn), not a decision string, so a fixed-policy responder
-    must not touch them."""
+    (unattended/tests). Skips `turnReview`/`mergeRequest` requests — those are not
+    approval decisions a fixed-policy responder may answer (see _NON_APPROVAL_KINDS)."""
     stop = stop or threading.Event()
     while not stop.is_set():
         for req in pending(base=base):
-            if req.get("kind") == "turnReview":
+            if req.get("kind") in _NON_APPROVAL_KINDS:
                 continue
             answer(req["request_id"], decide(req), base=base)
         time.sleep(poll_s)

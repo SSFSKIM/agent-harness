@@ -21,7 +21,11 @@ it outlive one plan and be referenced by several.
 2. **Scope check.** If the work spans multiple independent products/subsystems
    (each shippable and verifiable alone), decompose into separate specs (one per
    piece, this one as the parent index) before refining — don't spec a thing
-   that should be several.
+   that should be several. When this is the **parent**, tag each child with its
+   phase/slice as a structured field so the roadmap/status is a *derived view*
+   (group-by), never hand-maintained; this recurses (a child too big decomposes
+   the same way), and run-time fan-out is the ticket DAG, not new tooling. See
+   `docs/memory/adr/0001-recursive-decomposition.md`.
 3. Draft autonomously — your own reasoning, not a human dialogue. Be concrete:
    name real components, interfaces, behaviors, and files — a requirement so
    vague it could be built two ways is a spec failure. Scale each section to its
