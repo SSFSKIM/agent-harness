@@ -275,6 +275,12 @@ minus the barrier."
   + `_pos_num` + resolve_settings + `--poll-interval`; `--daemon` flag declared, routed
   in M4); status.py additive `run.mode/phase/last_poll_at/polls` + `polled()` writer.
   Config 27 tests (+2), status 19 (+2); full gate GREEN.
+- [x] (2026-06-17) M2 — extracted `_RunState` holder (running-map dicts + pool +
+  `claim_and_submit`/`submit`/`reap`/`reconcile_in_flight`/`shutdown`); `_dispatch_wave`
+  refactored to a thin loop over it (flood-claim + drain barrier preserved). Extracted
+  pure `_stuck_report` + routed `run_until_drained` through it. **No new behavior, no
+  signature change.** Regression net: all 51 orchestrator tests pass byte-unchanged;
+  full gate GREEN (389).
 
 ## Surprises & discoveries
 

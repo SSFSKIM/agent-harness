@@ -232,6 +232,18 @@ def eligible_tickets(tickets: list[dict], *, done_types=("completed",)) -> list[
             if all(b.get("state_type") in done for b in t.get("blockers", []))]
 
 
+def _stuck_report(pending: list[dict], done_set: set) -> list[dict]:
+    """Each pending-but-blocked ticket with its not-yet-done blockers — the operator's
+    "why is nothing progressing" view (R7). A None state_type (an unreadable blocker)
+    surfaces here too. Pure; shared by `run_until_drained` (its terminal "stuck" report)
+    and the daemon's idle heartbeat (stuck-as-status, D-66)."""
+    return [{"ticket": t.get("identifier") or t["id"],
+             "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
+                            for b in t.get("blockers", [])
+                            if b.get("state_type") not in done_set]}
+            for t in pending]
+
+
 def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
                          started_state_id, cancelled_states: dict | None = None) -> list:
     """Active-run reconciliation (Symphony §16.3): re-read the tracker state of the
@@ -268,6 +280,113 @@ def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
         return []  # any error in the pass → skip this reconcile tick (§8.5, R5/R12)
 
 
+class _RunState:
+    """The orchestrator's running-map + the claim/submit/reap machinery shared by the
+    batch wave (`_dispatch_wave`) and the continuous daemon (`run_forever`). It holds
+    the per-worker `futures` (the running-map), the claim bookkeeping, and the cancel
+    Events; its methods carry the ONE implementation of claim-before-act, worker submit,
+    and reap→reconcile→retry-or-terminal so the two loops never duplicate that logic
+    (spec D-63).
+
+    Single-threaded by contract: every method runs on the orchestrator's MAIN thread
+    (workers run in the pool and only ever READ their `cancel_event`), so the dicts need
+    no lock and the StatusWriter stays a lock-free single writer (RELIABILITY R13)."""
+
+    def __init__(self, *, board, states, status, retry_budget: int, concurrency: int,
+                 queue_base, workspace_root, **dispatch_kwargs):
+        self.board = board
+        self.states = states
+        self.status = status or status_mod.NoopStatusWriter()
+        self.retry_budget = retry_budget
+        self.queue_base = queue_base
+        self.workspace_root = workspace_root
+        # Fixed per-worker dispatch kwargs (command/tools/posture/decide/timeouts/…);
+        # `attempt` and `cancel_event` are added per submit. queue_base/workspace_root
+        # are stored separately (reconcile needs them too), so they are NOT in here.
+        self._dispatch_kwargs = dispatch_kwargs
+        self.pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
+        self.futures: dict = {}          # Future -> ticket (the running-map)
+        self.attempts: dict = {}         # tid -> attempt count
+        self.in_flight: set = set()      # tids claimed/dispatched, not yet terminal
+        self.cancel_events: dict = {}    # tid -> threading.Event (set by reconciliation)
+        self.cancelled_states: dict = {} # tid -> observed external state name at cancel
+        self.results: dict = {}          # tid -> terminal summary
+        self.claim_failed: set = set()   # tids whose claim raised/returned False
+
+    def submit(self, ticket) -> None:
+        # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
+        # (the prior attempt's event is discarded). The main thread sets it during
+        # reconciliation; the worker thread reads it (Event is thread-safe).
+        ev = threading.Event()
+        self.cancel_events[ticket["id"]] = ev
+        fut = self.pool.submit(
+            dispatch, ticket, queue_base=self.queue_base, workspace_root=self.workspace_root,
+            attempt=self.attempts.get(ticket["id"], 1), cancel_event=ev,
+            **self._dispatch_kwargs)
+        self.futures[fut] = ticket
+        self.status.dispatched(ticket)
+
+    def _claim_failed(self, ticket, reason) -> None:
+        tid = ticket["id"]
+        self.claim_failed.add(tid)
+        self.results[tid] = {"ticket": ticket.get("identifier") or tid,
+                             "status": "claim_failed", "final_state": "ready",
+                             "attempts": 0, "error": reason}
+        self.status.terminal(ticket, self.results[tid])
+
+    def claim_and_submit(self, ticket, *, wave: int) -> bool:
+        """Claim = mark-before-act (D-9): transition to `started` BEFORE spawning, so a
+        crash leaves the ticket visibly in-progress (not silently re-run) and the board
+        shows progress to the watched Director. A write that raises OR returns False is a
+        failed claim — never dispatch unclaimed. Returns whether the worker dispatched."""
+        tid = ticket["id"]
+        try:
+            claimed = self.board.update_issue_state(tid, self.states["started"])
+        except Exception as exc:
+            self._claim_failed(ticket, f"claim raised: {exc}")
+            return False
+        if not claimed:
+            self._claim_failed(ticket, "board rejected claim (update_issue_state returned False)")
+            return False
+        self.attempts[tid] = 1
+        self.in_flight.add(tid)
+        self.status.claimed(ticket, wave=wave, attempt=1)
+        self.submit(ticket)
+        return True
+
+    def reap(self, done) -> None:
+        """Execute each completed future's disposition: pop it, drop its cancel Event,
+        reconcile (retry → re-submit within budget [stays in_flight], else terminal →
+        results + status). The future result is the final word — a cancel Event that
+        fired on an already-finished worker is inert (no double processing)."""
+        for fut in done:
+            ticket = self.futures.pop(fut)
+            tid = ticket["id"]
+            self.cancel_events.pop(tid, None)  # worker ended — drop its cancel Event
+            outcome = reconcile(self.board, ticket, fut.result(), self.attempts[tid],
+                                self.states, self.retry_budget, queue_base=self.queue_base,
+                                workspace_root=self.workspace_root,
+                                external_state=self.cancelled_states.pop(tid, None))
+            if outcome.get("retry"):
+                self.attempts[tid] += 1
+                self.status.retrying(ticket, attempt=self.attempts[tid])
+                self.submit(ticket)  # stays in_flight across the retry
+            else:
+                self.in_flight.discard(tid)
+                self.results[tid] = outcome["summary"]
+                self.status.terminal(ticket, outcome["summary"])
+
+    def reconcile_in_flight(self) -> None:
+        """Active-run reconciliation (§16.3, stage 1, lifted UNCHANGED): re-read in-flight
+        states and signal cancel for any ticket a human moved out of `started`. On the
+        MAIN thread → StatusWriter stays a lock-free single writer (R13/D-60)."""
+        _reconcile_in_flight(self.board, self.futures.values(), self.cancel_events,
+                             self.states["started"], self.cancelled_states)
+
+    def shutdown(self) -> None:
+        self.pool.shutdown(wait=True)
+
+
 def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: dict,
                    concurrency: int = 3, queue_base=None,
                    workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
@@ -284,99 +403,44 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
     only once every ticket has reached a terminal summary (incl. retries), so the
     continuous loop never has cross-wave in-flight tickets to re-dispatch.
 
+    This is the BATCH claim discipline — every eligible ticket is claimed up front
+    ("flood"); the pool bounds how many RUN at once. The daemon (`run_forever`) instead
+    claims only as slots free (bounded top-up, D-64) — the difference is the claim
+    cadence, not the per-worker machinery, which both share via `_RunState`.
+
     `status` (default no-op) is the orchestration-visibility writer (R3): claim →
     dispatch → terminal transitions are recorded for the Director to read. The calls
     are pure side-channel — with the no-op writer the returned summaries are
     byte-identical, so visibility never changes dispatch behavior."""
-    status = status or status_mod.NoopStatusWriter()
-    results: dict = {}
-    attempts: dict = {}
-    in_flight: set = set()  # ticket ids claimed/dispatched this wave (incl. pending retry)
-    cancel_events: dict = {}  # tid -> threading.Event (set by reconciliation to stop a worker)
-    cancelled_states: dict = {}  # tid -> observed external state name at cancel time
-    pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
-    futures: dict = {}
-
-    def submit(ticket):
-        # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
-        # (the prior attempt's event is discarded). The main thread sets it during
-        # reconciliation; the worker thread reads it (Event is thread-safe).
-        ev = threading.Event()
-        cancel_events[ticket["id"]] = ev
-        fut = pool.submit(
-            dispatch, ticket, command=command, queue_base=queue_base,
-            workspace_root=workspace_root, tools=tools, tool_executor=tool_executor,
-            install_skills=install_skills, read_timeout_s=read_timeout_s,
-            timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox,
-            decide=decide, max_turns=max_turns, attempt=attempts.get(ticket["id"], 1),
-            cancel_event=ev)
-        futures[fut] = ticket
-        status.dispatched(ticket)
-
-    def claim_failed(ticket, reason):
-        tid = ticket["id"]
-        results[tid] = {"ticket": ticket.get("identifier") or tid,
-                        "status": "claim_failed", "final_state": "ready",
-                        "attempts": 0, "error": reason}
-        status.terminal(ticket, results[tid])
-
+    state = _RunState(board=board, states=states, status=status, retry_budget=retry_budget,
+                      concurrency=concurrency, queue_base=queue_base,
+                      workspace_root=workspace_root, command=command, tools=tools,
+                      tool_executor=tool_executor, install_skills=install_skills,
+                      read_timeout_s=read_timeout_s, timeout_s=timeout_s,
+                      approval_policy=approval_policy, sandbox=sandbox, decide=decide,
+                      max_turns=max_turns)
     try:
         for ticket in tickets:
             tid = ticket["id"]
-            if tid in in_flight or tid in results:
+            if tid in state.in_flight or tid in state.results:
                 continue  # duplicate ready entry this wave — claim/dispatch exactly once
-            # claim = mark-before-act: transition to `started` BEFORE spawning, so a
-            # crash leaves the ticket visibly in-progress (not silently re-run) and
-            # the board shows progress to the watched Director (D-9). A write that
-            # raises OR returns False is a failed claim — we never dispatch unclaimed.
-            try:
-                claimed = board.update_issue_state(tid, states["started"])
-            except Exception as exc:
-                claim_failed(ticket, f"claim raised: {exc}")
-                continue
-            if not claimed:
-                claim_failed(ticket, "board rejected claim (update_issue_state returned False)")
-                continue
-            attempts[tid] = 1
-            in_flight.add(tid)
-            status.claimed(ticket, wave=wave, attempt=1)
-            submit(ticket)
+            state.claim_and_submit(ticket, wave=wave)
 
         last_reconcile = time.monotonic()
-        while futures:
+        while state.futures:
             # Wake at least every reconcile_interval_s even if no worker finished, so the
             # barrier reconciles in-flight tickets between completions (D-60). `done` is
             # empty on a pure timeout wake.
-            done, _ = wait(list(futures), timeout=reconcile_interval_s,
+            done, _ = wait(list(state.futures), timeout=reconcile_interval_s,
                            return_when=FIRST_COMPLETED)
-            for fut in done:
-                ticket = futures.pop(fut)
-                tid = ticket["id"]
-                cancel_events.pop(tid, None)  # worker ended — drop its cancel Event
-                outcome = reconcile(board, ticket, fut.result(),
-                                    attempts[tid], states, retry_budget,
-                                    queue_base=queue_base, workspace_root=workspace_root,
-                                    external_state=cancelled_states.pop(tid, None))
-                if outcome.get("retry"):
-                    attempts[tid] += 1
-                    status.retrying(ticket, attempt=attempts[tid])
-                    submit(ticket)  # stays in_flight across the retry
-                else:
-                    in_flight.discard(tid)
-                    results[tid] = outcome["summary"]
-                    status.terminal(ticket, outcome["summary"])
-            # Active-run reconciliation (§16.3) on a monotonic cadence (runs even under
-            # steady completions): re-read in-flight states, signal cancel for any ticket
-            # a human moved out of `started`. On the MAIN thread → StatusWriter stays a
-            # lock-free single writer (R13/D-60).
+            state.reap(done)
             now = time.monotonic()
-            if futures and now - last_reconcile >= reconcile_interval_s:
-                _reconcile_in_flight(board, futures.values(), cancel_events,
-                                     states["started"], cancelled_states)
+            if state.futures and now - last_reconcile >= reconcile_interval_s:
+                state.reconcile_in_flight()
                 last_reconcile = now
     finally:
-        pool.shutdown(wait=True)
-    return results
+        state.shutdown()
+    return state.results
 
 
 def run_once(board, command: list[str], *, team: str, states: dict,
@@ -443,11 +507,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
             # WHY it stuck, rather than spinning (R7).
             if pending:
                 stopped_reason = "stuck"
-                stuck = [{"ticket": t.get("identifier") or t["id"],
-                          "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
-                                         for b in t.get("blockers", [])
-                                         if b.get("state_type") not in done]}
-                         for t in pending]
+                stuck = _stuck_report(pending, done)
                 status.stuck(stuck)
             break
         if dispatched_count + len(eligible) > max_dispatched:
