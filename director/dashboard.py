@@ -83,6 +83,19 @@ def _summarize_request(req: dict) -> dict:
             "summary": _summary_for(req.get("kind"), req.get("payload"))}
 
 
+def _read_pending(queue_dir) -> list[dict]:
+    """read_pending, but tolerant at the dashboard boundary. The queue is appended
+    line-by-line (NOT temp+os.replace like status.json) and is shared across parallel
+    processes, so a live reader CAN catch a half-written final line — `read_requests`
+    would then raise on json.loads. R5 forbids changing the queue module, so the
+    tolerance lives here: a torn/absent queue degrades to "no pending" rather than
+    500-ing the view (R3 — visibility is a read-only instrument, never a gate)."""
+    try:
+        return dq.read_pending(base=queue_dir)
+    except (OSError, ValueError):  # ValueError covers json.JSONDecodeError (torn line)
+        return []
+
+
 def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     """Normalize the run snapshot + pending queue into one read-only view dict.
 
@@ -98,7 +111,7 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     in_flight = snap.get("in_flight", [])
     stuck = snap.get("stuck", [])
     recent = snap.get("recent", [])
-    pending = [_summarize_request(r) for r in dq.read_pending(base=queue_dir)]
+    pending = [_summarize_request(r) for r in _read_pending(queue_dir)]
     return {
         "run": snap.get("run"),  # None when no run / unreadable (telemetry rides inside)
         "in_flight": in_flight,

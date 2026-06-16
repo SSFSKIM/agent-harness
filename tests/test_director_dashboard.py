@@ -119,6 +119,22 @@ class BuildViewTest(unittest.TestCase):
         for req, expected in cases:
             self.assertEqual(got[req["request_id"]], expected)
 
+    def test_torn_queue_degrades_to_empty_pending(self):
+        # The queue is JSONL-appended (no atomic temp+replace) and shared across
+        # parallel processes, so a live reader can catch a half-written final line.
+        # build_view must degrade to pending:[] rather than 500 the view (R3 + R5:
+        # the tolerance lives in the dashboard, not in the unchanged queue module).
+        _seed_run(self.status_dir)
+        dq.append_request({"request_id": "ok", "ticket_id": "T1", "kind": "turnReview",
+                           "payload": {"final_message": "fine"}}, base=self.queue_dir)
+        # simulate a torn trailing line mid-write
+        with open(self.queue_dir / "requests.jsonl", "a", encoding="utf-8") as f:
+            f.write('{"request_id": "torn", "kind": "turnRev')
+        v = self._view()
+        self.assertEqual(v["pending"], [])  # tolerant: no crash, no partial garbage
+        self.assertEqual(v["counts"]["pending"], 0)
+        self.assertIsNotNone(v["run"])  # the rest of the view still renders
+
     def test_malformed_payload_summary_never_raises(self):
         # A non-dict / missing payload → empty summary, no exception (R6 — telemetry/
         # rendering is instrumentation, never a gate).
