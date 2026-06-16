@@ -710,5 +710,86 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertEqual(self._merge_reqs()[0]["workspace_path"], "/custom/ws")
 
 
+class _CancelBoard(orch.MockBoard):
+    """A board whose `fetch_issue_states_by_ids` reports every in-flight ticket as
+    moved to a non-`started` state — simulating a human moving it out of In Progress
+    while its worker runs (active-run reconciliation)."""
+
+    def __init__(self, issues, *, fetch_raises=False):
+        super().__init__(issues)
+        self._fetch_raises = fetch_raises
+
+    def fetch_issue_states_by_ids(self, issue_ids):
+        if self._fetch_raises:
+            raise RuntimeError("tracker fetch boom")
+        return {i: {"state_id": "st_done", "state_name": "Done",
+                    "state_type": "completed"} for i in issue_ids}
+
+
+def _wait_then(disposition, fallback):
+    """A fake `dispatch` simulating a long worker: it blocks on its `cancel_event` and
+    returns `disposition` if cancelled, else `fallback` after a short grace."""
+    def fake(ticket, *, cancel_event=None, **kw):
+        if cancel_event is not None and cancel_event.wait(timeout=3.0):
+            return {**disposition, "turns": 1, "telemetry": {}}
+        return {**fallback, "turns": 1, "telemetry": {}}
+    return fake
+
+
+class ActiveRunReconcileTest(unittest.TestCase):
+    def _issue(self, iid="a", ident="A"):
+        return {"id": iid, "identifier": ident, "title": "t", "description": "d",
+                "prompt": "p", "state_id": "st_todo"}
+
+    def test_externally_moved_ticket_is_cancelled_no_retry_no_write(self):
+        board = _CancelBoard([self._issue()])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        _wait_then({"kind": "cancelled", "reason": "reconciliation"},
+                                   {"kind": "terminal", "outcome": {"status": "done"}})):
+            summaries = orch.run_once(board, command=["x"], team="T", states=states,
+                                      reconcile_interval_s=0.1)
+        row = summaries[0]
+        self.assertEqual(row["status"], "cancelled")
+        self.assertEqual(row["final_state"], "released")
+        self.assertEqual(row["attempts"], 1)                 # NOT retried
+        # the only board write for A is the claim → started; reconciliation does not
+        # re-transition (the human owns the new state, D-62)
+        self.assertEqual(board.transitions["a"], ["st_prog"])
+        self.assertEqual(len(board.comments["a"]), 1)        # one "stopped" comment
+
+    def test_fetch_failure_is_fail_soft_workers_complete(self):
+        # a fetch_issue_states_by_ids that raises must NOT sink the wave (R5): no cancel
+        # is ever delivered, so the fake worker falls through to its terminal outcome.
+        board = _CancelBoard([self._issue()], fetch_raises=True)
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        _wait_then({"kind": "cancelled", "reason": "reconciliation"},
+                                   {"kind": "terminal", "outcome": {"status": "done"}})):
+            summaries = orch.run_once(board, command=["x"], team="T", states=states,
+                                      reconcile_interval_s=0.1)
+        self.assertEqual(summaries[0]["status"], "completed")  # worker ran to done
+        self.assertEqual(summaries[0]["final_state"], "done")
+
+    def test_reconcile_outcome_recorded_on_main_thread(self):
+        # R6/D-60: the cancelled outcome flows through the normal StatusWriter.terminal
+        # path on the wave-loop (main) thread — the single-writer invariant holds.
+        main_ident = threading.get_ident()
+        seen = []
+
+        class _RecordingWriter(ds.NoopStatusWriter):
+            def terminal(self, ticket, summary):
+                seen.append((summary.get("status"), threading.get_ident()))
+
+        board = _CancelBoard([self._issue()])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator.dispatch",
+                        _wait_then({"kind": "cancelled", "reason": "reconciliation"},
+                                   {"kind": "terminal", "outcome": {"status": "done"}})):
+            orch.run_once(board, command=["x"], team="T", states=states,
+                          status=_RecordingWriter(), reconcile_interval_s=0.1)
+        self.assertEqual(seen, [("cancelled", main_ident)])
+
+
 if __name__ == "__main__":
     unittest.main()

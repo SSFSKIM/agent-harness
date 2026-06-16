@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
@@ -184,6 +186,14 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     elif kind == "escalate":
         comment(f"🙋 escalated to human after {turns} turn(s): {disp.get('reason')}")
         summary = summarize("escalated", "started")  # stays visible; human acts async
+    elif kind == "cancelled":
+        # Active-run reconciliation stopped this worker: its ticket left `started`
+        # (a human moved it). The human OWNS the new state, so we do NOT re-transition
+        # the board and do NOT retry (D-62 / Symphony "terminate without cleanup") —
+        # just surface that the worker was stopped.
+        comment(f"🛑 worker stopped after {turns} turn(s) — ticket moved out of "
+                f"In Progress externally (reconciliation)")
+        summary = summarize("cancelled", "released")
     elif kind == "stuck":
         final = "started"
         if states.get("failed"):
@@ -219,6 +229,36 @@ def eligible_tickets(tickets: list[dict], *, done_types=("completed",)) -> list[
             if all(b.get("state_type") in done for b in t.get("blockers", []))]
 
 
+def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
+                         started_state_id) -> list:
+    """Active-run reconciliation (Symphony §16.3): re-read the tracker state of the
+    in-flight tickets and signal cancel for any ticket a human moved OUT of `started`
+    (the operator-control lever). **Fail-soft (R5):** a `fetch_issue_states_by_ids`
+    error keeps every worker running (returns []), never raises into the wave loop. A
+    ticket whose id is absent from the refresh (deleted/unknown) is left running —
+    never cancel on missing data. Returns the ticket ids newly signalled to cancel."""
+    tickets = list(in_flight_tickets)
+    ids = [t["id"] for t in tickets]
+    if not ids:
+        return []
+    try:
+        states_now = board.fetch_issue_states_by_ids(ids)
+    except Exception:
+        return []  # state refresh failed → keep workers, retry next pass (§8.5)
+    cancelled: list = []
+    for t in tickets:
+        tid = t["id"]
+        cur = states_now.get(tid)
+        if cur is None:
+            continue  # unknown id → conservative, keep running
+        if cur.get("state_id") != started_state_id:
+            ev = cancel_events.get(tid)
+            if ev is not None and not ev.is_set():
+                ev.set()
+                cancelled.append(tid)
+    return cancelled
+
+
 def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: dict,
                    concurrency: int = 3, queue_base=None,
                    workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
@@ -228,7 +268,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    approval_policy: str = "untrusted",
                    sandbox: str = "workspace-write",
                    decide=decider.autonomous_decide,
-                   max_turns: int = run.DEFAULT_MAX_TURNS) -> dict:
+                   max_turns: int = run.DEFAULT_MAX_TURNS,
+                   reconcile_interval_s: float = 15.0) -> dict:
     """Claim, dispatch (bounded concurrency), and fully drain a given (already
     eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
     only once every ticket has reached a terminal summary (incl. retries), so the
@@ -242,16 +283,23 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
     results: dict = {}
     attempts: dict = {}
     in_flight: set = set()  # ticket ids claimed/dispatched this wave (incl. pending retry)
+    cancel_events: dict = {}  # tid -> threading.Event (set by reconciliation to stop a worker)
     pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
     futures: dict = {}
 
     def submit(ticket):
+        # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
+        # (the prior attempt's event is discarded). The main thread sets it during
+        # reconciliation; the worker thread reads it (Event is thread-safe).
+        ev = threading.Event()
+        cancel_events[ticket["id"]] = ev
         fut = pool.submit(
             dispatch, ticket, command=command, queue_base=queue_base,
             workspace_root=workspace_root, tools=tools, tool_executor=tool_executor,
             install_skills=install_skills, read_timeout_s=read_timeout_s,
             timeout_s=timeout_s, approval_policy=approval_policy, sandbox=sandbox,
-            decide=decide, max_turns=max_turns, attempt=attempts.get(ticket["id"], 1))
+            decide=decide, max_turns=max_turns, attempt=attempts.get(ticket["id"], 1),
+            cancel_event=ev)
         futures[fut] = ticket
         status.dispatched(ticket)
 
@@ -284,11 +332,17 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             status.claimed(ticket, wave=wave, attempt=1)
             submit(ticket)
 
+        last_reconcile = time.monotonic()
         while futures:
-            done, _ = wait(list(futures), return_when=FIRST_COMPLETED)
+            # Wake at least every reconcile_interval_s even if no worker finished, so the
+            # barrier reconciles in-flight tickets between completions (D-60). `done` is
+            # empty on a pure timeout wake.
+            done, _ = wait(list(futures), timeout=reconcile_interval_s,
+                           return_when=FIRST_COMPLETED)
             for fut in done:
                 ticket = futures.pop(fut)
                 tid = ticket["id"]
+                cancel_events.pop(tid, None)  # worker ended — drop its cancel Event
                 outcome = reconcile(board, ticket, fut.result(),
                                     attempts[tid], states, retry_budget,
                                     queue_base=queue_base, workspace_root=workspace_root)
@@ -300,6 +354,14 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                     in_flight.discard(tid)
                     results[tid] = outcome["summary"]
                     status.terminal(ticket, outcome["summary"])
+            # Active-run reconciliation (§16.3) on a monotonic cadence (runs even under
+            # steady completions): re-read in-flight states, signal cancel for any ticket
+            # a human moved out of `started`. On the MAIN thread → StatusWriter stays a
+            # lock-free single writer (R13/D-60).
+            now = time.monotonic()
+            if futures and now - last_reconcile >= reconcile_interval_s:
+                _reconcile_in_flight(board, futures.values(), cancel_events, states["started"])
+                last_reconcile = now
     finally:
         pool.shutdown(wait=True)
     return results
@@ -499,6 +561,7 @@ def resolve_settings(args, cfg) -> dict:
         "max_dispatched": _pick(args.max_dispatched, cfg.max_dispatched),
         "read_timeout_s": _pick(args.read_timeout, cfg.read_timeout_s),
         "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
+        "reconcile_interval_s": _pick(args.reconcile_interval, cfg.reconcile_interval_s),
         "codex_command": _pick(args.codex, cfg.codex_command),
         "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
@@ -567,6 +630,9 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--turn-review-timeout", type=float, default=None,
                     help="watched: how long the queue decider waits for the Director to "
                          "answer a turn end before escalating (s)")
+    ap.add_argument("--reconcile-interval", type=float, default=None,
+                    help="active-run reconciliation cadence (s): how often in-flight "
+                         "ticket states are re-read to stop externally-moved tickets")
     args = ap.parse_args(argv)
 
     # Load + resolve config FIRST — a malformed .harness.json director block raises
@@ -603,7 +669,8 @@ def main(argv=None, *, board=None) -> int:
               "approval_policy": s["posture"].approval_policy,
               "sandbox": s["posture"].sandbox,
               "decide": decide, "max_turns": s["max_turns"],
-              "read_timeout_s": s["read_timeout_s"]}
+              "read_timeout_s": s["read_timeout_s"],
+              "reconcile_interval_s": s["reconcile_interval_s"]}
     if s["workspace_root"]:
         kwargs["workspace_root"] = Path(s["workspace_root"])
 

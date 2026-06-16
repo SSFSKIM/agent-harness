@@ -53,6 +53,10 @@ DEFAULTS: dict = {
     "done_types": ["completed"],
     "read_timeout_s": 30.0,
     "turn_review_timeout_s": 300.0,
+    # active-run reconciliation cadence: how often the wave loop re-reads in-flight
+    # ticket states to stop a worker a human moved out of `started` (lower = faster
+    # operator-stop, more tracker calls).
+    "reconcile_interval_s": 15.0,
     "codex_command": "codex app-server",
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
                "auto_review": True, "network": True},
@@ -101,6 +105,7 @@ class DirectorConfig:
     done_types: tuple
     read_timeout_s: float
     turn_review_timeout_s: float
+    reconcile_interval_s: float
     codex_command: str
     posture: Posture
     paths: Paths
@@ -219,6 +224,8 @@ def _build(raw: dict) -> DirectorConfig:
         read_timeout_s=_pos_num(raw.get("read_timeout_s", DEFAULTS["read_timeout_s"]), "read_timeout_s"),
         turn_review_timeout_s=_pos_num(raw.get("turn_review_timeout_s",
                                                DEFAULTS["turn_review_timeout_s"]), "turn_review_timeout_s"),
+        reconcile_interval_s=_pos_num(raw.get("reconcile_interval_s",
+                                              DEFAULTS["reconcile_interval_s"]), "reconcile_interval_s"),
         codex_command=codex_command, posture=posture, paths=paths, merger=merger)
 
 

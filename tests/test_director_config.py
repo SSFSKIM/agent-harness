@@ -186,8 +186,8 @@ class WiringTest(unittest.TestCase):
         base = dict(team=None, ready_state=None, started_state=None, done_state=None,
                     failed_state=None, blocked_state=None, done_types=None,
                     concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
-                    read_timeout=None, turn_review_timeout=None, codex=None,
-                    workspace_root=None, queue_dir=None, status_dir=None)
+                    read_timeout=None, turn_review_timeout=None, reconcile_interval=None,
+                    codex=None, workspace_root=None, queue_dir=None, status_dir=None)
         base.update(over)
         return argparse.Namespace(**base)
 
@@ -217,6 +217,13 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s["concurrency"], 2)          # CLI wins
         self.assertEqual(s["team"], "T-cli")
         self.assertEqual(s["done_types"], ("completed", "canceled"))
+
+    def test_reconcile_interval_resolves(self):
+        from director import orchestrator
+        cfg = config._build({"reconcile_interval_s": 3.0})
+        self.assertEqual(orchestrator.resolve_settings(self._args(), cfg)["reconcile_interval_s"], 3.0)
+        s = orchestrator.resolve_settings(self._args(reconcile_interval=0.5), cfg)
+        self.assertEqual(s["reconcile_interval_s"], 0.5)  # CLI overrides config
 
     def test_malformed_config_fails_before_dispatch(self):
         from director import orchestrator

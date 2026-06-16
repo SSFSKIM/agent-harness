@@ -169,7 +169,15 @@ ticket is externally moved).
   WHOLE `with client` body in `try/except TurnCancelled` → `{kind:"cancelled"}`. 4 tests
   (drive between-turns cancel; app_server pre-set + mid-wait interrupt + not-AppServerError).
   Gate GREEN at 381.
-- [ ] M3 — orchestrator reconciliation wiring + config knob
+- [x] (2026-06-16) M3 — orchestrator reconciliation wiring + config knob.
+  `_dispatch_wave`: fresh `cancel_event` per `submit` (passed via `dispatch` **kwargs to
+  `run.drive`); `wait(timeout=reconcile_interval_s)` + a `time.monotonic()` cadence calls
+  `_reconcile_in_flight(board, futures.values(), cancel_events, states["started"])` on the
+  MAIN thread (sets cancel for any ticket whose state ≠ started; fail-soft on fetch error).
+  `reconcile()` `kind=="cancelled"` branch (comment + `released` summary, no set_state, no
+  retry). `reconcile_interval_s` knob (config.DEFAULTS + DirectorConfig + resolve_settings
+  + `--reconcile-interval`). 4 tests (operator-cancel no-retry/no-write, fail-soft fetch,
+  main-thread-recorded, reconcile_interval resolve). Gate GREEN at 385.
 
 ## Surprises & discoveries
 - 2026-06-16 (M2): a reconciliation cancel can land during the codex **handshake**
