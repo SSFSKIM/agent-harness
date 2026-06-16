@@ -49,6 +49,14 @@ describe("DaemonSession", () => {
     await s.dispose();                                  // loop ends with the turn still pending
     await expect(p).rejects.toThrow(/disposed/);
   });
+  it("exposes a public done promise that resolves when the query ends", async () => {
+    const s = new DaemonSession("sess-1", { query: fakeQuery }, {});
+    let ended = false;
+    s.done.then(() => { ended = true; });
+    await s.dispose();
+    await Promise.resolve();          // flush the done.then microtask
+    expect(ended).toBe(true);
+  });
   it("dispose ends the underlying query", async () => {
     let ended = false;
     const fq = ({ prompt }: any) => (async function* () {

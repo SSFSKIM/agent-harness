@@ -16,7 +16,7 @@ export class DaemonSession {
   lastActiveAt: number;
   private input = new AsyncQueue<SDKUserMessage>();
   private q: AsyncIterable<unknown>;
-  private done: Promise<void>;
+  readonly done: Promise<void>; // resolves when the read-loop ends; the supervisor attaches its restart end-hook here
   private waiters: Waiter[] = []; // FIFO: query emits one result per submitted turn, in order
   private ended = false;          // true once the read-loop finishes (query disposed or died)
 
