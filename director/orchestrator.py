@@ -245,6 +245,14 @@ def _stuck_report(pending: list[dict], done_set: set) -> list[dict]:
             for t in pending]
 
 
+def _backoff_s(n: int, *, base: float, cap: float) -> float:
+    """Exponential backoff (Symphony §8.4): `min(base · 2^(n-1), cap)` for the n-th
+    occurrence (n≥1 → base, n=2 → 2·base, …, capped at `cap`). Pure; shared by the
+    daemon's retry / idle-poll / claim-re-admission backoff (spec D-78). `n<1` clamps to
+    `base` (defensive — every caller passes n≥1)."""
+    return min(base * (2 ** max(0, n - 1)), cap)
+
+
 def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
                          started_state_id, cancelled_states: dict | None = None) -> list:
     """Active-run reconciliation (Symphony §16.3): re-read the tracker state of the
@@ -591,6 +599,8 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 decide=decider.autonomous_decide, max_turns: int = run.DEFAULT_MAX_TURNS,
                 reconcile_interval_s: float = config.DEFAULTS["reconcile_interval_s"],
                 poll_interval_s: float = config.DEFAULTS["poll_interval_s"],
+                backoff_base_s: float = config.DEFAULTS["backoff_base_s"],
+                backoff_cap_s: float = config.DEFAULTS["backoff_cap_s"],
                 shutdown_event=None, force_event=None, install_signals: bool = True,
                 max_ticks: int | None = None) -> dict:
     """The always-on daemon (gap #2): poll → claim ready work into free slots → keep
@@ -808,6 +818,8 @@ def resolve_settings(args, cfg) -> dict:
         "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
         "reconcile_interval_s": _pick(args.reconcile_interval, cfg.reconcile_interval_s),
         "poll_interval_s": _pick(args.poll_interval, cfg.poll_interval_s),
+        "backoff_base_s": _pick(args.backoff_base, cfg.backoff_base_s),
+        "backoff_cap_s": _pick(args.backoff_cap, cfg.backoff_cap_s),
         "codex_command": _pick(args.codex, cfg.codex_command),
         "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
@@ -885,6 +897,12 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--poll-interval", type=float, default=None,
                     help="daemon (--daemon) board-poll cadence (s): how often new ready "
                          "work is picked up and the idle loop ticks")
+    ap.add_argument("--backoff-base", type=float, default=None,
+                    help="daemon (--daemon) exponential-backoff base (s) for retry/claim "
+                         "re-admission: wait min(base*2^(n-1), cap) (Symphony §8.4)")
+    ap.add_argument("--backoff-cap", type=float, default=None,
+                    help="daemon (--daemon) exponential-backoff ceiling (s), shared by "
+                         "retry / idle-poll / claim re-admission")
     args = ap.parse_args(argv)
 
     # Load + resolve config FIRST — a malformed .harness.json director block raises
@@ -932,7 +950,9 @@ def main(argv=None, *, board=None) -> int:
         # a session summary. Takes precedence over --once (both → daemon). Signal handlers
         # install by default (main thread); --once/batch bounds (max_passes/dispatched)
         # do not apply — the daemon is unbounded by design.
-        result = run_forever(board, command, poll_interval_s=s["poll_interval_s"], **kwargs)
+        result = run_forever(board, command, poll_interval_s=s["poll_interval_s"],
+                             backoff_base_s=s["backoff_base_s"],
+                             backoff_cap_s=s["backoff_cap_s"], **kwargs)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     if args.once:

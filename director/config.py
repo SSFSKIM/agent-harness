@@ -61,6 +61,12 @@ DEFAULTS: dict = {
     # the board for new ready work and ticks while idle (Symphony `polling.interval_ms`).
     # Only used by `--daemon`; the batch paths ignore it.
     "poll_interval_s": 10.0,
+    # daemon (run_forever, gap #3) exponential-backoff curve, shared by retry / idle /
+    # claim re-admission: wait min(base·2^(n-1), cap). `base` seeds retry+claim backoff
+    # (Symphony §8.4 uses 10s); idle backoff seeds from `poll_interval_s` instead. `cap`
+    # bounds all three. Only used by `--daemon`.
+    "backoff_base_s": 10.0,
+    "backoff_cap_s": 300.0,
     "codex_command": "codex app-server",
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
                "auto_review": True, "network": True},
@@ -111,6 +117,8 @@ class DirectorConfig:
     turn_review_timeout_s: float
     reconcile_interval_s: float
     poll_interval_s: float
+    backoff_base_s: float
+    backoff_cap_s: float
     codex_command: str
     posture: Posture
     paths: Paths
@@ -233,6 +241,10 @@ def _build(raw: dict) -> DirectorConfig:
                                               DEFAULTS["reconcile_interval_s"]), "reconcile_interval_s"),
         poll_interval_s=_pos_num(raw.get("poll_interval_s",
                                          DEFAULTS["poll_interval_s"]), "poll_interval_s"),
+        backoff_base_s=_pos_num(raw.get("backoff_base_s",
+                                        DEFAULTS["backoff_base_s"]), "backoff_base_s"),
+        backoff_cap_s=_pos_num(raw.get("backoff_cap_s",
+                                       DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
         codex_command=codex_command, posture=posture, paths=paths, merger=merger)
 
 

@@ -210,7 +210,12 @@ read per tick, consistent ordering.
   small hook or by observing it claims exactly once after recovery). Full gate GREEN.
 
 ## Progress log
-- [ ] (2026-06-17) plan created; base_commit c78dce4; spec committed c78dce4.
+- [x] (2026-06-17) plan created; base_commit c78dce4; spec committed c78dce4.
+- [x] (2026-06-17) M1 — `_backoff_s(n,*,base,cap)=min(base·2^(n-1),cap)` helper +
+  `backoff_base_s`(10.0)/`backoff_cap_s`(300.0) config knobs (DEFAULTS + DirectorConfig +
+  `_pos_num` + resolve_settings + `--backoff-base`/`--backoff-cap` + run_forever params,
+  unused until M2/M3; main() threads them). Tests: `BackoffHelperTest` (values + cap +
+  n<1 clamp) + config precedence/defaults/validation. Gate GREEN (402).
 
 ## Surprises & discoveries
 

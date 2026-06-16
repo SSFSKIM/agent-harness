@@ -187,8 +187,8 @@ class WiringTest(unittest.TestCase):
                     failed_state=None, blocked_state=None, done_types=None,
                     concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
                     read_timeout=None, turn_review_timeout=None, reconcile_interval=None,
-                    poll_interval=None, codex=None, workspace_root=None, queue_dir=None,
-                    status_dir=None)
+                    poll_interval=None, backoff_base=None, backoff_cap=None, codex=None,
+                    workspace_root=None, queue_dir=None, status_dir=None)
         base.update(over)
         return argparse.Namespace(**base)
 
@@ -238,6 +238,22 @@ class WiringTest(unittest.TestCase):
         _write(self.root, {"director": {"poll_interval_s": 0}})  # not positive
         with self.assertRaises(ValueError):
             config.load_director_config(root=self.root)
+
+    def test_backoff_knobs_resolve(self):
+        from director import orchestrator
+        cfg = config._build({"backoff_base_s": 5.0, "backoff_cap_s": 120.0})
+        s = orchestrator.resolve_settings(self._args(), cfg)
+        self.assertEqual((s["backoff_base_s"], s["backoff_cap_s"]), (5.0, 120.0))
+        s = orchestrator.resolve_settings(self._args(backoff_base=0.5, backoff_cap=9.0), cfg)
+        self.assertEqual((s["backoff_base_s"], s["backoff_cap_s"]), (0.5, 9.0))  # CLI wins
+
+    def test_backoff_defaults_and_validation(self):
+        d = config.defaults()
+        self.assertEqual((d.backoff_base_s, d.backoff_cap_s), (10.0, 300.0))
+        for bad in ({"backoff_base_s": 0}, {"backoff_cap_s": -1}):
+            _write(self.root, {"director": bad})
+            with self.assertRaises(ValueError):
+                config.load_director_config(root=self.root)
 
     def test_malformed_config_fails_before_dispatch(self):
         from director import orchestrator

@@ -806,6 +806,16 @@ class ActiveRunReconcileTest(unittest.TestCase):
         self.assertEqual(seen, [("cancelled", main_ident)])
 
 
+class BackoffHelperTest(unittest.TestCase):
+    def test_exponential_with_cap(self):
+        self.assertEqual(orch._backoff_s(1, base=2, cap=100), 2)    # n=1 → base
+        self.assertEqual(orch._backoff_s(2, base=2, cap=100), 4)    # 2·base
+        self.assertEqual(orch._backoff_s(3, base=2, cap=100), 8)    # 4·base
+        self.assertEqual(orch._backoff_s(4, base=2, cap=100), 16)
+        self.assertEqual(orch._backoff_s(99, base=2, cap=100), 100)  # capped
+        self.assertEqual(orch._backoff_s(0, base=2, cap=100), 2)     # n<1 clamps to base
+
+
 def _wait_for(cond, timeout=3.0, msg="condition not met in time"):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
