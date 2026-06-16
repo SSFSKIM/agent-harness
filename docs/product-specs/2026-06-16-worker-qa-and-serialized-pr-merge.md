@@ -179,6 +179,12 @@ merge queue (직렬) ── PR-merger(단일 소비자) ── 하나씩: rebase
 - **D-52 e2e/Playwright 는 워커 self-QA 에 둔다(호스트-통합 아님) — 라이브 확인.** app-server 워커가
   홈 `~/.codex/skills` 를 자동 발견하고 in-sandbox 헤드리스 Chrome 을 실제로 띄움(이 세션). 포팅
   호스트 미설치 시 graceful fallback(smoke/unit). 이로써 스펙의 핵심 PoC 가 선제 통과. (자율 검증.)
+- **D-53 v1: PR-merger 가 *모든* 머지를 `drive`(land 에이전트)로 처리(D-50). "mechanical
+  happy-path" 는 deferred 최적화.** clean+green 머지를 에이전트 없이 코드로(rebase→게이트→squash)
+  떨구고 충돌/red/taste 만 에이전트로 보내는 정제는 — 직렬 큐(D-47)는 유지한 채 — merger 부하가
+  실제로 문제될 때 도입. (워커가 clean 이라고 직접 unserialized 머지하는 안은 기각: "clean against
+  *stale* main" 이라 individually-clean-together-broken main 을 못 막음 — merge-queue 존재 이유.)
+  v1 은 단순·균일 우선. (사람, 이 세션 — defer.)
 
 ## Open Questions
 
