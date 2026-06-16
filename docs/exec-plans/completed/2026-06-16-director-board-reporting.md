@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 723e0dd537590d89640e2131d5d92f22ed444bd7
@@ -114,5 +114,39 @@ Design is the spec's (D-1..D-5); here only execution choices.
   `_emit_line`; `watch` only READS the status snapshot (orchestrator/status.py untouched).
 
 ## Feedback (from completion gate)
+One codex reviewer (review-reliability, gpt-5.5, high effort) — two P1s; one fixed, one
+downgraded-and-tracked with rationale:
+- **[P1, fixed] `started_at=None` dedupe collision.** A no-claim run (stuck-from-start — all
+  blockers unmet) finishes with `started_at=None`; two such runs share key `(None, stopped_reason)`
+  so the 2nd's runReport is swallowed — losing a real "human needed to unblock" pull. **FIXED:**
+  `StatusWriter.wave()` now sets `started_at` at the first wave (every run calls `wave()` before
+  any claim), giving every run a stable identity. Revises the plan's "no status.py change"
+  assumption — a 2-line root-cause fix. Test: a no-claim wave→stuck→finished run has `started_at`.
+- **[P2, downgraded from P1, tracked] snapshot-overwrite race.** The single `status.json` is a
+  latest-state surface: if a 2nd run overwrites it within one 0.5s poll interval of the 1st
+  finishing, `watch` misses the 1st's terminal. Downgraded because the watched-Director model (the
+  only mode this applies to, R5) runs one `run_until_drained` at a time, human/LLM-paced — it never
+  launches sub-poll-interval back-to-back runs. The fix (a durable terminal-event append-log) is a
+  different mechanism that edges toward the *rejected* durable-record/separate-channel direction, so
+  it's out of the chosen snapshot-tail design's scope → tracked, not built. Gate GREEN (318).
 
 ## Outcomes & retrospective
+**Board reporting — the last enumerated Phase 4 roadmap item — is built.** `director.watch` now
+tails the orchestration status snapshot alongside the queue and emits a `runReport` when a run
+reaches a terminal `stopped_reason`; the event-woken Director (DIRECTOR.md §9) reads
+`director.status`, composes a run digest, and `PushNotification`s the human — the taste-vs-handle
+line deciding a real "you're needed" pull (stuck / poll_failed / failure-pattern) vs a quiet "run
+complete." Watched-mode only; code only SIGNALS (the Director judges report-worthiness, never code
+— consistent with D-5/D-30). Blast radius stayed tiny: `watch.py` + `DIRECTOR.md` + a 2-line
+`status.py` run-identity fix; `orchestrator.py` untouched.
+
+With this, **every enumerated Phase 4 roadmap slice is shipped** (worker authority guardrail →
+visibility/escalation → un-watched autonomy → multi-turn → PR-merge incl. re-enqueue → board
+reporting). The remaining Phase-4-adjacent work is the deferred security track (worker fs-wide
+cred read + egress → container + vault-proxy plans) — its own future effort.
+
+Tracked limitation: the snapshot-tail can miss a run terminal under sub-poll-interval back-to-back
+runs (P2; not the watched single-run use case). Retro: the completion gate again earned its keep —
+the no-claim run-identity collision was a real swallow-a-pull bug invisible to the green gate; and
+the overwrite-miss is the honest tradeoff of choosing a latest-state snapshot surface over an
+append-log (chosen knowingly, per the spec's mechanism decision).
