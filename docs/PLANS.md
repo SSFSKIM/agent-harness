@@ -40,6 +40,12 @@ subsystem, this plan as the parent index — *before* filling Milestones.
 Capturing multi-subsystem work in a single plan is a plan failure: you lose
 independent verifiability and the plan stops fitting in one context.
 
+This applies **recursively and at the spec level**: a sub-project that is itself
+too big decomposes the same way, each piece getting its own spec → ExecPlan
+cycle; a parent (capability) spec just indexes its children and any roadmap is a
+derived view of them. No higher-order spec system is needed — run-time fan-out is
+the ticket DAG, not a doc subsystem (see `docs/memory/adr/0001-recursive-decomposition.md`).
+
 ## Review budget
 - `none` — gate + self-review only. Small, low-risk, mechanically checked work.
 - `targeted` — gate + self-review + the persona(s) matching the risk touched.
