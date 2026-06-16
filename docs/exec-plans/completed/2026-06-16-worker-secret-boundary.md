@@ -213,9 +213,12 @@ deny-by-default env — a `SENTINEL_SECRET`/`LINEAR_API_KEY` in the Director's e
 absent from the worker (unit test), while the worker still completes a turn (live smoke).
 The allowed set is host-declared in `.harness.json worker_policy` (secret-agnostic,
 invariant 7). The **env-inheritance** exfil channel of T11 is closed; fs-wide read + egress
-remain (deferred to the container plan, M2 of the arc), and are restated as such in T11.
+remain.
 **What carried the result:** the boundary is two parts — `Popen(env=)` AND a non-login
 shell; either alone leaks. Securing it at `_prepare` (not per-caller) makes every production
-path safe by construction. **Next in the arc:** the container plan (enforceable fs-read +
-egress; `network_allowlist` enforcement), then the GCP Secret-Manager vault-proxy
-(capability mediation; codex's own model key as an ephemeral/brokered token).
+path safe by construction. **What's next (Decision 2026-06-16):** the fs-read + egress
+closure is **deferred to the always-on/cloud deployment**, not built locally — codex cannot
+read-scope (all 3 sandbox modes read fs-wide), the worker already brokers (the only leak is
+the fs-wide read), and a local secret-manager only raises the bar (bootstrap-credential
+recursion). So container isolation + egress enforcement + secret-manager/WIF merge and land
+together at cloud-deploy time. Local residual is INFORMED-accepted (SECURITY.md T11).

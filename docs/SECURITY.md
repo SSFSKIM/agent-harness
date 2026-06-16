@@ -129,10 +129,9 @@ Grounding document for the review-security persona. Threats are numbered.
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
   **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
-  residual below applies to **both** watched and un-watched, and is mitigated as a
-  **three-plan arc** (`docs/exec-plans/.../worker-secret-boundary` — M1, then container,
-  then a GCP Secret-Manager vault-proxy), not a per-mode network toggle. The exfil
-  threat has three channels; the arc closes them in order:
+  residual below applies to **both** watched and un-watched. The exfil threat has three
+  channels; the first is closed, the other two are **deferred to the always-on/cloud
+  deployment** (Decision 2026-06-16, below):
     - **env-inheritance — CLOSED (M1, 2026-06-16).** The worker subprocess no longer
       inherits the Director's environment: `director/worker/policy.py` constructs a
       **deny-by-default** env (operational base + only the keys the host allows in
@@ -140,18 +139,41 @@ Grounding document for the review-security persona. Threats are numbered.
       Secret-agnostic by design (a host's secrets are unknowable to the harness;
       ARCHITECTURE invariant 7). A host credential in the Director env (e.g.
       `LINEAR_API_KEY`) is no longer handed to the worker via the environment.
-    - **fs-wide read & egress — OPEN (deferred to the container plan).** The on-disk
-      `.env` is still readable filesystem-wide, and a read secret can still be POSTed
-      out. `worker_policy.network_allowlist` is **declared, not yet enforced** — codex-cli
+    - **fs-wide read & egress — OPEN, INFORMED-ACCEPTED for local (deferred to the
+      always-on/cloud deployment).** The on-disk `.env` is still readable
+      filesystem-wide, and a read secret can still be POSTed out.
+      `worker_policy.network_allowlist` is **declared, not yet enforced** — codex-cli
       0.139.0 exposes only a boolean `sandbox_workspace_write.network_access` (probe-
-      confirmed: `allowed_domains`/`network_proxy`/… are rejected as unknown config), so
-      per-domain egress needs a container's network namespace + filtering proxy, not
-      codex config.
-  Until the container plan lands, BOTH postures are safe ONLY where every reachable
-  credential is throwaway. (An earlier cut kept watched network-off — which would have
-  let a blocked-network POST escalate to `auto_review`'s exfil check — but the human
-  chose full network for both, to fix the exfil exposure once, properly, at the
-  credential layer.)
+      confirmed: `allowed_domains`/`network_proxy`/… rejected as unknown config), so
+      per-domain egress needs a container's network namespace + filtering proxy.
+
+  **Decision (2026-06-16) — defer the fs-read + egress closure to the always-on/cloud
+  deployment; do NOT build it locally.** Grounded in three findings:
+    1. **codex cannot read-scope.** Its only sandbox modes are `read-only` /
+       `workspace-write` / `danger-full-access` — **all three read filesystem-wide**
+       (`readable_roots` / `allow_read_outside_workspace` / `sandbox_permissions` all
+       rejected as unknown config). So "make codex not read `.env`" is impossible via
+       codex config; the on-disk read can only be stopped by *isolation* (a container/VM
+       where the secret is structurally absent).
+    2. **The worker already brokers.** The `linear_graphql` tool executor runs in the
+       **Director process**, not the codex sandbox — the worker emits a tool call, the
+       Director executes it with the host key, the worker sees only the result. In
+       normal flow the worker never holds `LINEAR_API_KEY`; the *only* leak path is the
+       fs-wide read of the on-disk secret.
+    3. **A local "secret-manager proxy" only raises the bar, not closes it** — the
+       bootstrap-credential recursion: whatever authenticates to the secret manager
+       (e.g. gcloud ADC) is itself an on-disk secret a fs-wide-read worker can steal and
+       replay. The recursion vanishes only with an **off-disk identity** (WIF /
+       metadata-server), i.e. in the cloud.
+  Therefore the container (filesystem boundary), egress allowlist enforcement, and the
+  secret-manager/vault-proxy (off-disk creds) **merge and land together at the
+  always-on/cloud deployment** — where the container is the deploy unit and WIF removes
+  the recursion. On the **local self-host** stage (the human runs their own prompts;
+  injection risk low; reachable secrets are the human's own) the residual is
+  INFORMED-ACCEPTED: safe ONLY where every reachable credential is throwaway. (An earlier
+  cut kept watched network-off — which would have let a blocked-network POST escalate to
+  `auto_review`'s exfil check — but the human chose full network for both, to fix the
+  exfil exposure once, properly, at the credential layer when it deploys.)
   **Confirmed residual — credential exfiltration that BYPASSES T10 (live-probed,
   codex-cli 0.139.0):** `workspace-write` restricts *writes* to the workspace but
   NOT *reads* — a probe worker read a sentinel both via `../../../` traversal and by
