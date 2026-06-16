@@ -122,7 +122,11 @@ export class DaemonSupervisor {
     this.pool.delete(id);                                       // not submittable during the backoff window
     this.registry.update(id, { status: "restarting", restarts });
     const delay = Math.min(this.backoffMs * 2 ** (restarts - 1), this.maxBackoffMs);
-    this.restartCancels.set(id, this.scheduleRestart(() => this.restart(id), delay));
+    const cancel = this.scheduleRestart(() => this.restart(id), delay);
+    // A synchronous scheduler can run restart() before this line — only keep the canceller if a
+    // restart is still actually pending (status is back to "idle" once restart() has run).
+    if (this.registry.get(id)?.status === "restarting") this.restartCancels.set(id, cancel);
+    else cancel();
   }
 
   private restart(id: string): void {

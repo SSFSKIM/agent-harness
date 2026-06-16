@@ -124,13 +124,15 @@ describe("DaemonSupervisor", () => {
   });
   it("a stop during the restarting window cancels the pending restart", async () => {
     let pending: (() => void) | undefined;
-    const scheduleRestart = (fn: () => void) => { pending = fn; return () => {}; };
+    let cancelled = false;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => { cancelled = true; }; };
     const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir(), restart: "on-failure", scheduleRestart });
     const id = sup.spawn();
     await flush();                                   // restarting, pending set
     expect(sup.list()[0].status).toBe("restarting");
     await sup.stop(id);                              // removes the record + config
-    if (pending) pending();                          // firing it now is a no-op (config gone)
+    expect(cancelled).toBe(true);                    // cancelRestart actually invoked the canceller
+    if (pending) pending();                          // firing it now is a no-op anyway (config gone)
     expect(sup.list()).toEqual([]);
     await sup.shutdown();
   });
