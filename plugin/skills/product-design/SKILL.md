@@ -23,9 +23,8 @@ it outlive one plan and be referenced by several.
    piece, this one as the parent index) before refining — don't spec a thing
    that should be several. When this is the **parent**, tag each child with its
    phase/slice as a structured field so the roadmap/status is a *derived view*
-   (group-by), never hand-maintained; this recurses (a child too big decomposes
-   the same way), and run-time fan-out is the ticket DAG, not new tooling. See
-   `docs/memory/adr/0001-recursive-decomposition.md`.
+   (group-by), never hand-maintained; and this recurses — a child too big
+   decomposes the same way. Don't build a separate spec-hierarchy system for it.
 3. Draft autonomously — your own reasoning, not a human dialogue. Be concrete:
    name real components, interfaces, behaviors, and files — a requirement so
    vague it could be built two ways is a spec failure. Scale each section to its
