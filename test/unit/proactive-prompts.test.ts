@@ -42,4 +42,12 @@ describe("proactive prompts & config", () => {
     expect(proactiveConfig.safeParse({ idleBackoff: { stopAfterIdle: 1 } }).success).toBe(true);
     expect(proactiveConfig.safeParse({ intervalMs: "ten" }).success).toBe(false);
   });
+  it("proactiveConfig zod rejects non-positive timing/stop values", () => {
+    expect(proactiveConfig.safeParse({ intervalMs: 0 }).success).toBe(false);
+    expect(proactiveConfig.safeParse({ intervalMs: -1 }).success).toBe(false);
+    expect(proactiveConfig.safeParse({ maxTicks: 0 }).success).toBe(false);
+    expect(proactiveConfig.safeParse({ idleBackoff: { factor: 0.5 } }).success).toBe(false);
+    expect(proactiveConfig.safeParse({ idleBackoff: { stopAfterIdle: 0 } }).success).toBe(false);
+    expect(proactiveConfig.safeParse({ errorBackoff: { maxIntervalMs: -5 } }).success).toBe(false);
+  });
 });

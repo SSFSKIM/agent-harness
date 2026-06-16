@@ -27,13 +27,13 @@ export interface ProactiveConfig {
   errorBackoff: { factor: number; maxIntervalMs: number; stopAfterErrors: number };
 }
 
-const backoffInput = z.object({ factor: z.number().optional(), maxIntervalMs: z.number().optional() });
+const backoffInput = z.object({ factor: z.number().min(1).optional(), maxIntervalMs: z.number().positive().optional() });
 export const proactiveConfig = z.object({
   tickPrompt: z.string().optional(),
-  intervalMs: z.number().optional(),
-  maxTicks: z.number().optional(),
-  idleBackoff: backoffInput.extend({ stopAfterIdle: z.number().optional() }).optional(),
-  errorBackoff: backoffInput.extend({ stopAfterErrors: z.number().optional() }).optional(),
+  intervalMs: z.number().positive().optional(),
+  maxTicks: z.number().int().positive().optional(),
+  idleBackoff: backoffInput.extend({ stopAfterIdle: z.number().int().positive().optional() }).optional(),
+  errorBackoff: backoffInput.extend({ stopAfterErrors: z.number().int().positive().optional() }).optional(),
 });
 export type ProactiveConfigInput = z.infer<typeof proactiveConfig>;
 
