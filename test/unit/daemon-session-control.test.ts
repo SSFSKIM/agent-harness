@@ -39,4 +39,10 @@ describe("DaemonSession control surface", () => {
     await expect(s.interrupt()).resolves.toBeUndefined();   // no assert-running → no throw
     expect(calls.filter((c) => c[0] === "setModel")).toEqual([]); // setter never delegated
   });
+  it("reports unsupported when the underlying Query lacks a control method", async () => {
+    const bareQuery = ({ prompt }: any) => (async function* () { for await (const _t of prompt) yield { type: "result", result: "ok" }; })();
+    const s = new DaemonSession("s3", { query: bareQuery }, {});
+    await expect(s.setModel("x")).rejects.toThrow(/unsupported: setModel/);
+    await s.dispose();
+  });
 });

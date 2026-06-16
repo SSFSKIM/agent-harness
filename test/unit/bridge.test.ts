@@ -45,4 +45,8 @@ describe("ControlBridge", () => {
     expect(controlFrame.safeParse({ type: "set_model", model: "x" }).success).toBe(true);
     expect(controlFrame.safeParse({ type: "set_permission_mode", mode: "bogus" }).success).toBe(false);
   });
+  it("normalizes a non-Error rejection to a string", async () => {
+    const s = fakeSession([], { setModel: async () => { throw "boom-string"; } });
+    expect(await ControlBridge.apply(s, { type: "set_model", model: "x" })).toEqual({ ok: false, error: "boom-string" });
+  });
 });

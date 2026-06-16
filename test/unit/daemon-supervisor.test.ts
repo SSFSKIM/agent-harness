@@ -265,4 +265,12 @@ describe("DaemonSupervisor", () => {
     expect(daemonOp.safeParse({ op: "control", id: "s1", frame: { type: "interrupt" } }).success).toBe(true);
     expect(daemonOp.safeParse({ op: "control", id: "s1", frame: { type: "bogus" } }).success).toBe(false);
   });
+  it("control on a dead (errored) pooled session throws instead of returning ok", async () => {
+    const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir() }); // dies immediately → errored
+    const id = sup.spawn();
+    await flush();                                   // handleSessionEnd → errored (session still pooled)
+    expect(sup.list()[0].status).toBe("errored");
+    await expect(sup.control(id, { type: "interrupt" })).rejects.toThrow(/is errored/);
+    await sup.shutdown();
+  });
 });

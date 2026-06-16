@@ -43,12 +43,19 @@ export class DaemonSession implements ControllableSession {
   async dispose(): Promise<void> { this.input.close(); await this.done; }
 
   // ---- control surface (Phase 2 B): guarded delegations to the underlying Query ----
+  isEnded(): boolean { return this.ended; }
   private assertRunning(): void { if (this.ended) throw new Error(`session ${this.id} is not running`); }
 
-  async setModel(model?: string): Promise<void> { this.assertRunning(); await (this.q as any).setModel?.(model); }
-  async setPermissionMode(mode: string): Promise<void> { this.assertRunning(); await (this.q as any).setPermissionMode?.(mode); }
-  async setMaxThinkingTokens(maxTokens: number | null): Promise<void> { this.assertRunning(); await (this.q as any).setMaxThinkingTokens?.(maxTokens); }
-  async interrupt(): Promise<void> { await (this.q as any).interrupt?.(); } // benign no-op even if ended
+  private callQ(name: string, ...args: unknown[]): Promise<void> {
+    const fn = (this.q as any)[name];
+    if (typeof fn !== "function") return Promise.reject(new Error(`unsupported: ${name}`));
+    return fn.apply(this.q, args);
+  }
+
+  async setModel(model?: string): Promise<void> { this.assertRunning(); await this.callQ("setModel", model); }
+  async setPermissionMode(mode: string): Promise<void> { this.assertRunning(); await this.callQ("setPermissionMode", mode); }
+  async setMaxThinkingTokens(maxTokens: number | null): Promise<void> { this.assertRunning(); await this.callQ("setMaxThinkingTokens", maxTokens); }
+  async interrupt(): Promise<void> { await this.callQ("interrupt"); } // benign no-op when idle; unsupported if absent
 
   async capabilities(): Promise<{ models: unknown[]; commands: unknown[]; mcpServers: unknown[] }> {
     const q = this.q as any;

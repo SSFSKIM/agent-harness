@@ -7,7 +7,10 @@ export class ControlBridge {
     switch (frame.type) {
       case "initialize":
         try { return { ok: true, ...(await session.capabilities()) }; }
-        catch (e) { return { ok: false, error: (e as Error).message }; }
+        catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          return { ok: false, error: message };
+        }
       case "set_model":
         return ControlBridge.call(session.setModel, "setModel", session, frame.model);
       case "set_permission_mode":
@@ -27,6 +30,9 @@ export class ControlBridge {
   ): Promise<ControlResponse> {
     if (typeof method !== "function") return { ok: false, error: `unsupported: ${name}` };
     try { await method.apply(self, args); return { ok: true }; }
-    catch (e) { return { ok: false, error: (e as Error).message }; }
+    catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: message };
+    }
   }
 }

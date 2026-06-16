@@ -96,7 +96,7 @@ export class DaemonSupervisor {
 
   async control(id: string, frame: ControlFrame): Promise<ControlResponse> {
     const session = this.pool.get(id);
-    if (!session) {
+    if (!session || session.isEnded()) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
     }
