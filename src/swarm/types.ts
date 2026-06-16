@@ -34,7 +34,7 @@ export class SwarmError extends Error {}
 
 const KIND = z.enum(["text", "task", "result", "idle"]);
 
-// zod raw shapes for the five cc-swarm tools.
+// zod raw shapes for the cc-swarm tools.
 export const teamCreateShape = {
   name: z.string(),
   members: z.array(z.string()).optional(),

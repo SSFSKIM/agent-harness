@@ -60,4 +60,30 @@ describe("PlanApprovalBroker", () => {
     b.requestApproval("w1", input);
     expect(seen).toEqual([{ n: "w1", plan: input.plan }]);
   });
+  it("cancelFor resolves a teammate's parked plans as deny and forgets them (teardown cleanup)", async () => {
+    const ids: string[] = [];
+    const b = new PlanApprovalBroker({ onEscalate: (n, p, id) => ids.push(id) });
+    const p1 = b.requestApproval("w1", input);
+    const p2 = b.requestApproval("w2", input);
+    expect(b.cancelFor("w1", "stopped")).toBe(1);            // only w1's plan cancelled
+    const r1 = await p1;
+    expect(r1.behavior).toBe("deny");
+    expect((r1 as any).message).toBe("stopped");
+    expect(await b.respond(ids[0], "approve")).toBe(false);  // cancelled id is forgotten
+    expect(await b.respond(ids[1], "approve")).toBe(true);   // w2 untouched
+    expect((await p2).behavior).toBe("allow");
+  });
+  it("denies (not parks forever) if onApprove throws, and clears the owner", async () => {
+    const ids: string[] = [];
+    const b = new PlanApprovalBroker({
+      onEscalate: (n, p, id) => ids.push(id),
+      onApprove: async () => { throw new Error("setMode boom"); },
+    });
+    const p = b.requestApproval("w1", input);
+    expect(await b.respond(ids[0], "approve")).toBe(true);   // handled — as a denial
+    const r = await p;
+    expect(r.behavior).toBe("deny");
+    expect((r as any).message).toMatch(/setMode boom/);
+    expect(await b.respond(ids[0], "approve")).toBe(false);  // owner cleared, no leak
+  });
 });

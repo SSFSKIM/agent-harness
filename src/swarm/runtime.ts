@@ -85,7 +85,7 @@ export class SwarmRuntime {
     await Promise.all(
       team.members.map(async (name) => {
         const s = this.sessions.get(name);
-        if (s) { await s.dispose(); this.sessions.delete(name); }
+        if (s) { this.planBroker.cancelFor(name); await s.dispose(); this.sessions.delete(name); }
         this.bus.unregister(name);
       }),
     );
@@ -145,6 +145,7 @@ export class SwarmRuntime {
   async requestShutdown(name: string): Promise<void> {
     const s = this.sessions.get(name);
     if (!s) throw new SwarmError(`unknown teammate ${name}`);
+    this.planBroker.cancelFor(name);
     await s.shutdown();
     this.sessions.delete(name);
     this.bus.unregister(name);
@@ -153,7 +154,7 @@ export class SwarmRuntime {
 
   async disposeAll(): Promise<void> {
     await Promise.all(
-      [...this.sessions].map(async ([name, s]) => { await s.dispose(); this.bus.unregister(name); }),
+      [...this.sessions].map(async ([name, s]) => { this.planBroker.cancelFor(name); await s.dispose(); this.bus.unregister(name); }),
     );
     this.sessions.clear();
   }

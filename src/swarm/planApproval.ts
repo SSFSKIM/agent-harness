@@ -38,13 +38,32 @@ export class PlanApprovalBroker {
   }
 
   /** Resolve a parked plan request. On approve, fire (and await) onApprove BEFORE resolving so the
-   * teammate's mode transition lands before ExitPlanMode is allowed. Unknown id → false. */
+   * teammate's mode transition lands before ExitPlanMode is allowed. Unknown id → false. If onApprove
+   * throws (e.g. setPermissionMode rejects), deny instead of leaving the teammate parked forever. */
   async respond(requestId: string, decision: "approve" | "reject", feedback?: string): Promise<boolean> {
     const teammate = this.owners.get(requestId);
     if (teammate === undefined) return false;
-    if (decision === "approve") await this.onApprove?.(teammate);
-    const ok = this.requests.resolve(requestId, { decision, feedback });
-    this.owners.delete(requestId);
-    return ok;
+    this.owners.delete(requestId); // committed to handling this id; never leave the owner behind
+    if (decision === "approve") {
+      try {
+        await this.onApprove?.(teammate);
+      } catch (e) {
+        return this.requests.resolve(requestId, { decision: "reject", feedback: `approval failed: ${(e as Error).message}` });
+      }
+    }
+    return this.requests.resolve(requestId, { decision, feedback });
+  }
+
+  /** Resolve (as deny) every plan parked for a teammate and forget them — called on teardown so a
+   * disposed teammate's parked ExitPlanMode promise can't leak in the registry. Returns the count. */
+  cancelFor(teammate: string, reason = "teammate stopped"): number {
+    let n = 0;
+    for (const [id, owner] of this.owners) {
+      if (owner !== teammate) continue;
+      this.requests.resolve(id, { decision: "reject", feedback: reason });
+      this.owners.delete(id);
+      n++;
+    }
+    return n;
   }
 }

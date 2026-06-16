@@ -167,6 +167,18 @@ describe("SwarmRuntime", () => {
     expect((r as any).message).toBe("needs tests");
     await rt.disposeAll();
   });
+  it("disposing a teammate with a parked plan resolves it (deny) instead of leaking it", async () => {
+    let cut: any;
+    const fq = ({ prompt, options }: any) => { cut = options.canUseTool; return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })(); };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
+    const t = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: t.id, name: "w1", prompt: "x", plan: true });
+    const decision = cut("ExitPlanMode", { plan: "p" }); // park awaiting approval
+    rt.checkMessages();                                    // drain the plan envelope
+    await rt.disposeAll();                                 // teardown must cancel the parked plan
+    const r = await decision;
+    expect(r.behavior).toBe("deny");
+  });
   it("requestShutdown emits a shutdown ack and unregisters the teammate", async () => {
     const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
     const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
