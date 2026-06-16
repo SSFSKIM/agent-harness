@@ -172,6 +172,16 @@ This activates the merge pipeline the parent slice built-but-left-inert: the mer
 longer a function nothing calls — it is a runnable separate component (R7) the Director's
 event loop can stand up alongside the orchestrator.
 
+**Live wire-pin (real codex, both ends — 2026-06-16, post-completion).** `/tmp/full_pipeline_wirepin.py`
+(uncommitted) drove the REAL chain against a scratch local repo: `orchestrator.run_once` → a real
+WORKER created `feat-greeting`+`greeting.py` and called `report_outcome(done, pr_branch="feat-greeting")`
+→ `reconcile` enqueued a real `mergeRequest` (`merge_enqueued: True`, 1 turn) → `merger.main(--once
+--autonomous)` → a real LAND agent rebased + ran the integration gate + squash-merged. Result:
+committed `main` = `land feat-greeting`, `greeting.py` present, `python3 gate.py` GREEN, escalation
+inbox empty. PASS — the worker's PR landed on main through the actual
+`run_once`/`reconcile`/`merger.main` paths (no mocks). M3 proved R4 mechanically; this proves it
+live, both ends. (The `gh` PR roundtrip vs the local-merge land lane still needs a remote.)
+
 Still deferred (tracked): the re-enqueue-after-Director-guidance loop (needs a fresh-id
 discriminant + the loop that calls it — spec Open Q); the full live `gh` PR roundtrip (needs
 a remote; the parent slice's M4 already proved the serializer mechanics live on a scratch repo).
