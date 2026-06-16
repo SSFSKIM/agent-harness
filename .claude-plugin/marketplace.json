@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "agent-harness",
+  "description": "The agent-harness machine: self-hosting AI-native dev harness skills and the porting toolchain.",
+  "owner": {
+    "name": "agent-harness"
+  },
+  "plugins": [
+    {
+      "name": "agent-harness",
+      "source": "./plugin",
+      "description": "ExecPlans, taste lints, review-persona gates, docs-as-memory, and the harness-init porting toolchain (skills: execplan, harness-lint, docs-tree, product-design, harness-init, architecture-setup, dream, garden) for minimum human-in-loop development."
+    }
+  ]
+}
