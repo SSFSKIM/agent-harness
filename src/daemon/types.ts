@@ -26,6 +26,8 @@ export interface DaemonOptions {
   backoffMs?: number;      // base restart backoff; default 500
   maxBackoffMs?: number;   // backoff cap; default 30_000
   scheduleRestart?: (fn: () => void, ms: number) => () => void; // returns a canceller (testing seam)
+  sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options merged over { model } (D3)
+  sharedTasks?: boolean | { dir?: string; listId?: string };       // wire a shared cc-tasks store into every session (D3)
 }
 
 // NDJSON op protocol (one request per client connection).
