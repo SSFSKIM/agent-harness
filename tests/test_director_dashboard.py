@@ -1,6 +1,10 @@
+import json
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -9,6 +13,7 @@ import director.queue as dq  # noqa: E402
 import director.status as ds  # noqa: E402
 
 _FIXED_NOW = "2026-06-16T00:00:00+00:00"
+_PATH_STATE = "/api/v1/state"  # the versioned read-only data route (asserted as a literal)
 
 
 def _ticket(tid, ident):
@@ -126,6 +131,62 @@ class BuildViewTest(unittest.TestCase):
         summaries = {p["request_id"]: p["summary"] for p in v["pending"]}
         self.assertEqual(summaries["m1"], "")
         self.assertEqual(summaries["m2"], "")
+
+
+class DashboardHTTPTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.status_dir = Path(self.tmp) / "director-status"
+        self.queue_dir = Path(self.tmp) / "director-queue"
+        _seed_run(self.status_dir)  # so /api/v1/state has real telemetry to serve
+        self.httpd = dash.serve(0, self.status_dir, self.queue_dir)  # port 0 = ephemeral
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _req(self, path, method="GET"):
+        url = f"http://127.0.0.1:{self.port}{path}"
+        try:
+            resp = urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=2)
+            return resp.status, resp.headers.get("Content-Type"), resp.read()
+        except urllib.error.HTTPError as e:  # 404/405 land here
+            return e.code, e.headers.get("Content-Type"), e.read()
+
+    def test_state_route_returns_build_view_json(self):
+        code, ctype, body = self._req(_PATH_STATE)
+        self.assertEqual(code, 200)
+        self.assertIn("application/json", ctype)
+        data = json.loads(body)
+        self.assertEqual(data["counts"]["recent"], 1)
+        self.assertEqual(data["run"]["codex_totals"]["total"], 100)  # telemetry served live
+
+    def test_root_route_returns_html(self):
+        code, ctype, _ = self._req("/")
+        self.assertEqual(code, 200)
+        self.assertIn("text/html", ctype)
+
+    def test_undefined_route_is_404_envelope(self):
+        code, ctype, body = self._req("/nope")
+        self.assertEqual(code, 404)
+        self.assertIn("application/json", ctype)
+        self.assertEqual(json.loads(body)["error"]["code"], 404)
+
+    def test_wrong_method_on_defined_route_is_405_envelope(self):
+        code, _, body = self._req(_PATH_STATE, method="POST")
+        self.assertEqual(code, 405)
+        self.assertEqual(json.loads(body)["error"]["code"], 405)
+
+    def test_server_survives_bad_requests(self):
+        # After a 404 and an odd-verb 405 the server still answers a good GET (tolerance).
+        self._req("/nope")
+        self._req("/", method="DELETE")
+        code, _, _ = self._req(_PATH_STATE)
+        self.assertEqual(code, 200)
 
 
 if __name__ == "__main__":

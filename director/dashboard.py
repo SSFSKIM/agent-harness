@@ -24,10 +24,17 @@ surface — a localhost (127.0.0.1) instrument, never a gate on a run.
 """
 from __future__ import annotations
 
+import argparse
 import datetime
+import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import director.queue as dq
 from director import status
+
+# The single versioned, read-only data route (Symphony §13.7 alignment).
+_STATE_PATH = "/api/v1/state"
+_DEFAULT_PORT = 8787
 
 # Pending-request summary cap: glance-able, not a full payload dump (plan Decision log).
 _SUMMARY_LIMIT = 140
@@ -102,3 +109,93 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
                    "recent": len(recent), "pending": len(pending)},
         "generated_at": now(),
     }
+
+
+# Replaced by the full inline page in M3; a minimal stub keeps the GET / route honest.
+PAGE = "<!doctype html><meta charset='utf-8'><title>director dashboard</title>"
+
+
+class _Handler(BaseHTTPRequestHandler):
+    """Thin shim over build_view. Two defined GET routes; everything else is an
+    error envelope. status_dir/queue_dir come from the SERVER (set in serve), never
+    from the request, so there is no request-derived filesystem path — zero traversal
+    surface (spec R3/D-5)."""
+
+    # HTTP/1.0: each request closes its connection — no keep-alive read-ahead to
+    # mismanage; Content-Length is still sent. Simplicity over throughput (a human
+    # polling ~1s does not need pipelining).
+    protocol_version = "HTTP/1.0"
+
+    def __getattr__(self, name):
+        # Funnel EVERY do_<VERB> (GET/POST/PUT/…) into one dispatcher so an un-listed
+        # method can't slip through as a 501 — _dispatch decides 404/405/serve.
+        if name.startswith("do_"):
+            return self._dispatch
+        raise AttributeError(name)
+
+    def log_message(self, format, *args):  # silence the default stderr access log
+        pass
+
+    def _dispatch(self):
+        path = self.path.split("?", 1)[0]
+        if path not in ("/", _STATE_PATH):
+            return self._error(404, f"no such route: {path}")  # undefined → 404
+        if self.command != "GET":
+            return self._error(405, f"method not allowed: {self.command}")  # defined+wrong verb → 405
+        if path == "/":
+            return self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        view = build_view(self.server.status_dir, self.server.queue_dir)
+        return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+
+    def _send(self, code: int, body: bytes, ctype: str) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _error(self, code: int, message: str) -> None:
+        body = json.dumps({"error": {"code": code, "message": message}}).encode("utf-8")
+        self._send(code, body, "application/json")
+
+
+class _DashboardServer(ThreadingHTTPServer):
+    """Carries the status/queue dirs the handler reads from (set once at construction,
+    never per-request) — an explicit field instead of a monkey-attribute."""
+
+    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None):
+        super().__init__(addr, handler)
+        self.status_dir = status_dir
+        self.queue_dir = queue_dir
+
+
+def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None) -> _DashboardServer:
+    """Bind a read-only dashboard server on 127.0.0.1 (LAN never exposed, D-5). A bind
+    failure (e.g. port in use) propagates immediately — no retry loop. Caller runs
+    serve_forever(); tests bind port 0 and drive it over urllib."""
+    return _DashboardServer(("127.0.0.1", port), _Handler,
+                            status_dir=status_dir, queue_dir=queue_dir)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="director.dashboard",
+        description="Live read-only web view of a Director run (127.0.0.1).")
+    ap.add_argument("--port", type=int, default=_DEFAULT_PORT, help="bind port (default 8787)")
+    ap.add_argument("--status-dir", default=None, help="status dir override")
+    ap.add_argument("--queue-dir", default=None, help="queue dir override")
+    args = ap.parse_args(argv)
+    httpd = serve(args.port, args.status_dir, args.queue_dir)
+    host, port = httpd.server_address[0], httpd.server_address[1]
+    print(f"director.dashboard: http://{host}:{port}/  (read-only; Ctrl-C to stop)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
