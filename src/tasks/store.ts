@@ -129,9 +129,23 @@ export class TaskStore {
       if (task.status === "deleted") throw new TaskError(`task ${id} is deleted`);
       const prevOwner = task.owner;
 
+      // Ownership CAS: a different agent cannot claim or hold an owned task as in_progress
+      // (fires even when the status is unchanged, so re-asserting in_progress is also gated).
+      if (patch.status === "in_progress" && task.owner && task.owner !== this.agentName) {
+        throw new TaskError(`already owned by ${task.owner}`);
+      }
+
       if (patch.status !== undefined && patch.status !== task.status) {
         if (!this.canTransition(task.status, patch.status)) {
           throw new TaskError(`illegal transition ${task.status}->${patch.status}`);
+        }
+        if (patch.status === "in_progress") {
+          const unresolved = task.blockedBy.filter((b) => {
+            const bt = data.tasks.find((t) => t.id === b);
+            return !bt || bt.status !== "completed";
+          });
+          if (unresolved.length) throw new TaskError(`blocked by unresolved tasks: ${unresolved.join(",")}`);
+          task.owner = this.agentName; // claim
         }
         task.status = patch.status;
       }
@@ -139,12 +153,33 @@ export class TaskStore {
       if (patch.description !== undefined) task.description = patch.description;
       if (patch.activeForm !== undefined) task.activeForm = patch.activeForm;
       if (patch.metadata !== undefined) task.metadata = patch.metadata;
+      if (patch.owner !== undefined) task.owner = patch.owner; // explicit reassignment
       if (patch.blockedBy !== undefined) this.setBlockedBy(data, task, patch.blockedBy);
 
       task.updatedAt = new Date().toISOString();
       this.save(data);
       if (task.owner !== prevOwner) this.onOwnerChange?.(task, prevOwner);
       return task;
+    });
+  }
+
+  list(filter: TaskListFilter = {}): Promise<TaskListItem[]> {
+    return this.run(() => {
+      const data = this.load();
+      return data.tasks
+        .filter((t) => t.status !== "deleted")
+        .filter((t) => !filter.status || t.status === filter.status)
+        .filter((t) => !filter.owner || t.owner === filter.owner)
+        .map((t) => ({
+          id: t.id,
+          subject: t.subject,
+          status: t.status,
+          owner: t.owner,
+          blockedBy: t.blockedBy.filter((b) => {
+            const bt = data.tasks.find((x) => x.id === b);
+            return !!bt && bt.status !== "completed";
+          }),
+        }));
     });
   }
 }
