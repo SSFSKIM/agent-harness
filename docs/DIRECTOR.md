@@ -173,12 +173,13 @@ Two things can reach you from a merge:
   conflict, an integration gate that stays red, or a taste/risk call. `director_min.merge_reviews()`
   lists these; each payload carries `{pr, branch, result, reason, disposition}`. Read it
   (and the `--request` join), then resolve with `answer_merge_review(request_id, disposition)`:
-  - **Give a directive + re-enqueue** — `{"action": "requeue", "note": "<how to land it>"}`.
-    Use when the fix is mechanical/settled (you know how to land it). NOTE: automatic
-    re-enqueue is not wired yet — `append_merge_request` dedupes on `merge|<ticket>`, so a
-    consumed ticket-merge won't re-queue under the same id. Re-queuing with a fresh
-    discriminant is part of the deferred re-enqueue loop (spec Open Q); for now prefer
-    **human** / **abandon**, and treat requeue as recording intent until that loop lands.
+  - **Give a directive + re-enqueue** — `requeue_merge(review, note="<how to land it>")`.
+    Use when the fix is mechanical/settled (you know how to land it). It marks the review
+    handled AND re-enqueues the PR at `attempt+1` with your `note` as guidance the merger
+    renders into the land prompt — so the next land attempt follows your directive. Capped
+    at `max_attempts` (default 3): beyond it `requeue_merge` REFUSES (`{"requeued": False,
+    "reason": "max_attempts"}`) and leaves the review open, so you **abandon** or **human**
+    rather than loop forever.
   - **Escalate the taste to the human** — `{"action": "human", "note": "..."}` + a
     `PushNotification`. Use for a genuine product/risk/irreversible call (the merge would
     ship a direction you must not pick yourself). The PR stays unmerged; the ticket stays

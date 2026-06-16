@@ -95,8 +95,18 @@ per-ticket, so a consumed merge can never be re-queued under the same id. Observ
   Tests: attempt discriminates merge ids (attempt 1 vs 2 = 2 distinct requests; same attempt still
   dedupes); land prompt shows guidance only on a guided retry; escalation review carries + discriminates
   by attempt. Gate GREEN (307); existing reconcile/chain tests unaffected (attempt defaults to 1).
-- [ ] M2 — requeue_merge loop driver + DIRECTOR.md §7.
-- [ ] M3 — end-to-end loop test + completion gate.
+- [x] (2026-06-16) M2 — loop driver + DIRECTOR.md. `director_min.requeue_merge(review, note=…,
+  max_attempts=3)`: reads attempt/pr/branch/workspace off the review, answers it (`action=requeue`),
+  and re-enqueues at `attempt+1` with `guidance=note`; refuses beyond `max_attempts` (returns
+  `{"requeued": False, "reason": "max_attempts"}`) leaving the review OPEN so the Director
+  abandons/human (no silent infinite retry). `answer_merge_review`/`merge_reviews` docstrings +
+  `DIRECTOR.md` §7 requeue bullet rewritten (requeue now works). Tests: requeue re-enqueues attempt 2
+  with guidance + carried pr/branch/workspace, review handled; max_attempts refuses + leaves review open.
+- [x] (2026-06-16) M3 — end-to-end loop test (`test_full_guided_retry_loop_converges`): attempt 1
+  escalates → `requeue_merge(note=…)` → attempt 2 drains and MERGES, where the driver merges only
+  when "DIRECTOR GUIDANCE" is in the land prompt — so a green result proves the guidance drove it.
+  Queue + inbox empty (converged). Gate GREEN (310). Targeted completion gate (review-reliability via
+  codex) next.
 
 ## Surprises & discoveries
 

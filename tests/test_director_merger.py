@@ -352,6 +352,69 @@ class MergerCliTest(unittest.TestCase):
         self.assertEqual(merger.pending_merges(base=self.base), [])
 
 
+class ReenqueueLoopTest(unittest.TestCase):
+    """M2 (merge-reenqueue-loop): the Director requeues an escalated PR with guidance."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def _escalate(self, attempt=1):
+        dq.append_merge_request("T1", pr=7, branch="feat/x", workspace_path="/ws",
+                                attempt=attempt, base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "conflict", "turns": 1}
+
+        merger.drain(base=self.base, driver=driver)
+        return dmin.merge_reviews(base=self.base)[0]
+
+    def test_requeue_reenqueues_attempt2_with_guidance(self):
+        review = self._escalate(attempt=1)
+        res = dmin.requeue_merge(review, note="rebase onto origin/main", base=self.base)
+        self.assertTrue(res["requeued"])
+        self.assertEqual(res["attempt"], 2)
+        self.assertEqual(dmin.merge_reviews(base=self.base), [])  # review handled
+        pend = merger.pending_merges(base=self.base)
+        self.assertEqual(len(pend), 1)
+        self.assertEqual(pend[0]["payload"]["attempt"], 2)
+        self.assertEqual(pend[0]["payload"]["guidance"], "rebase onto origin/main")
+        self.assertEqual(pend[0]["payload"]["pr"], 7)          # carried from the review
+        self.assertEqual(pend[0]["payload"]["branch"], "feat/x")
+        self.assertEqual(pend[0]["workspace_path"], "/ws")
+
+    def test_requeue_refuses_beyond_max_attempts_and_leaves_review_open(self):
+        review = self._escalate(attempt=3)  # next would be 4 > max 3
+        res = dmin.requeue_merge(review, note="x", base=self.base, max_attempts=3)
+        self.assertFalse(res["requeued"])
+        self.assertEqual(res["reason"], "max_attempts")
+        self.assertEqual(len(dmin.merge_reviews(base=self.base)), 1)   # still open → abandon/human
+        self.assertEqual(merger.pending_merges(base=self.base), [])    # nothing re-queued
+
+    def test_full_guided_retry_loop_converges(self):
+        # M3: the whole loop — attempt 1 escalates; the Director requeues with guidance;
+        # attempt 2 (guidance now in the land prompt) merges. The driver merges ONLY when
+        # the directive is present, so a green result proves the guidance actually drove it.
+        dq.append_merge_request("T1", pr=7, branch="feat/x", workspace_path="/ws",
+                                base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            if "DIRECTOR GUIDANCE" in ticket["prompt"]:
+                return {"kind": "terminal",
+                        "outcome": {"status": "done", "reason": "landed with guidance"},
+                        "turns": 1}
+            return {"kind": "escalate", "reason": "conflict", "turns": 1}
+
+        r1 = merger.drain(base=self.base, driver=driver)          # round 1 → escalate
+        self.assertEqual(r1[0]["result"], "escalated")
+        review = dmin.merge_reviews(base=self.base)[0]
+        dmin.requeue_merge(review, note="rebase onto origin/main, then merge", base=self.base)
+        r2 = merger.drain(base=self.base, driver=driver)          # round 2 → merged
+        self.assertEqual(r2[0]["result"], "merged")
+        self.assertEqual(merger.pending_merges(base=self.base), [])   # converged, queue empty
+        self.assertEqual(dmin.merge_reviews(base=self.base), [])      # no open escalation
+
+
 class EndToEndPipelineTest(unittest.TestCase):
     """M3 (activate-serialized-merge-pipeline): R4 end-to-end with mocks — a done worker
     that opened a PR flows through reconcile (enqueue) → the standalone merger (land) →

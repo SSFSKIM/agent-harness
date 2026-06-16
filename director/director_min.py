@@ -47,8 +47,9 @@ def answer_turn(request_id: str, disposition: dict, *, base=None,
 def merge_reviews(base=None) -> list[dict]:
     """Pending merge-escalations the serialized PR-merger raised (R6) — the merge half
     of the Director's inbox (cf. `pending()` for approvals, `turnReview` for turn-ends).
-    Each payload carries {pr, branch, result, reason, disposition}; the Director reads
-    these per docs/DIRECTOR.md and resolves each (directive / re-enqueue / human)."""
+    Each payload carries {pr, branch, result, reason, disposition, attempt}; the Director
+    reads these per docs/DIRECTOR.md §7 and resolves each (requeue+guidance / abandon /
+    human)."""
     return [r for r in dq.read_pending(base=base) if r.get("kind") == "mergeReview"]
 
 
@@ -56,13 +57,40 @@ def answer_merge_review(request_id: str, disposition: dict, *, base=None,
                         answered_by: str = "director") -> None:
     """Mark a `mergeReview` HANDLED (removes it from the inbox). `disposition` records
     how the Director resolved the failed merge for the audit trail, e.g.
-    {"action": "requeue"|"abandon"|"human", "note": "…"}. NOTE: `action=requeue` records
-    intent only — `append_merge_request` dedupes on `merge|<ticket>`, so automatic
-    re-enqueue under a fresh discriminant is part of the deferred re-enqueue loop (spec
-    Open Q); today the live resolutions are human / abandon (docs/DIRECTOR.md §7)."""
+    {"action": "requeue"|"abandon"|"human", "note": "…"}. For a guided retry use
+    `requeue_merge` (it calls this AND re-enqueues); use this directly for
+    abandon / human (docs/DIRECTOR.md §7)."""
     dq.write_answer({"request_id": request_id, "answered_by": answered_by,
                      "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                      "merge_review_disposition": disposition}, base=base)
+
+
+def requeue_merge(review: dict, *, note: str, base=None, max_attempts: int = 3,
+                  answered_by: str = "director") -> dict:
+    """Re-enqueue an escalated PR WITH the Director's guidance — the re-enqueue loop (D-48).
+
+    The Director, having read a `mergeReview` and decided the fix is mechanical/settled,
+    calls this: it marks the review handled (`action=requeue`) and posts a FRESH
+    `mergeRequest` at `attempt+1` carrying `note` as the land agent's guidance (rendered
+    into the land prompt by `merger.land_prompt`), so the next attempt follows the
+    directive that should resolve the escalation. pr/branch/workspace are read off the
+    review. Capped at `max_attempts` (default 3): beyond it this REFUSES — it returns
+    `{"requeued": False, "reason": "max_attempts", ...}` and leaves the review OPEN so the
+    Director explicitly abandons or escalates to the human, never a silent infinite retry.
+    Returns `{"requeued": bool, "attempt": <next or current>, ...}`."""
+    payload = review.get("payload") or {}
+    attempt = payload.get("attempt", 1)
+    next_attempt = attempt + 1
+    if next_attempt > max_attempts:
+        return {"requeued": False, "reason": "max_attempts", "attempt": attempt,
+                "max_attempts": max_attempts}
+    answer_merge_review(review["request_id"], {"action": "requeue", "note": note},
+                        base=base, answered_by=answered_by)
+    queued = dq.append_merge_request(
+        review.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
+        workspace_path=review.get("workspace_path"), guidance=note,
+        attempt=next_attempt, base=base)
+    return {"requeued": queued, "attempt": next_attempt}
 
 
 # Kinds the fixed-policy responder must NOT touch: `turnReview` needs a free-form
