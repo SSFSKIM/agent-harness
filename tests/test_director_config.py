@@ -5,7 +5,10 @@ Drives the pure loader on a fixture root with an injected `environ`, so nothing
 touches the real filesystem outside a tmpdir or the real os.environ."""
 from __future__ import annotations
 
+import argparse
+import contextlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,6 +18,16 @@ from director import config
 
 def _write(root: Path, doc: dict) -> None:
     (root / ".harness.json").write_text(json.dumps(doc), encoding="utf-8")
+
+
+@contextlib.contextmanager
+def _chdir(path):
+    prev = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev)
 
 
 class LoadConfigTest(unittest.TestCase):
@@ -156,6 +169,70 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(out["concurrency"], 4)
         self.assertIn("posture", out)
         self.assertEqual(out["posture"]["approval_policy"], "on-request")
+
+
+class WiringTest(unittest.TestCase):
+    """orchestrator.resolve_settings precedence (CLI > config > default) and the
+    fail-loud-before-dispatch guarantee at orchestrator.main (M2)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _args(self, **over):
+        base = dict(team=None, ready_state=None, started_state=None, done_state=None,
+                    failed_state=None, blocked_state=None, done_types=None,
+                    concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
+                    read_timeout=None, turn_review_timeout=None, codex=None,
+                    workspace_root=None, queue_dir=None, status_dir=None)
+        base.update(over)
+        return argparse.Namespace(**base)
+
+    def test_defaults_when_no_cli_no_config(self):
+        from director import orchestrator
+        s = orchestrator.resolve_settings(self._args(), config.defaults())
+        self.assertEqual(s["concurrency"], 3)
+        self.assertEqual(s["states"]["ready"], "Todo")
+        self.assertEqual(s["done_types"], ("completed",))
+        self.assertIsNone(s["team"])
+
+    def test_config_fills_when_no_cli(self):
+        from director import orchestrator
+        cfg = config._build({"concurrency": 9, "team": "T-cfg",
+                             "states": {"ready": "Backlog"}})
+        s = orchestrator.resolve_settings(self._args(), cfg)
+        self.assertEqual(s["concurrency"], 9)
+        self.assertEqual(s["team"], "T-cfg")
+        self.assertEqual(s["states"]["ready"], "Backlog")
+        self.assertEqual(s["states"]["started"], "In Progress")  # default kept
+
+    def test_cli_overrides_config(self):
+        from director import orchestrator
+        cfg = config._build({"concurrency": 9, "team": "T-cfg"})
+        s = orchestrator.resolve_settings(
+            self._args(concurrency=2, team="T-cli", done_types="completed,canceled"), cfg)
+        self.assertEqual(s["concurrency"], 2)          # CLI wins
+        self.assertEqual(s["team"], "T-cli")
+        self.assertEqual(s["done_types"], ("completed", "canceled"))
+
+    def test_malformed_config_fails_before_dispatch(self):
+        from director import orchestrator
+        _write(self.root, {"director": {"concurrency": 0}})  # malformed (not positive)
+        spy = orchestrator.MockBoard.demo()
+        with _chdir(self.root), self.assertRaises(ValueError):
+            orchestrator.main(["--team", "T", "--mock"], board=spy)
+        self.assertEqual(spy.transitions, {})  # raised before any claim/dispatch
+
+    def test_missing_team_fails_before_dispatch(self):
+        from director import orchestrator
+        _write(self.root, {"director": {"concurrency": 2}})  # valid, but no team
+        spy = orchestrator.MockBoard.demo()
+        with _chdir(self.root), self.assertRaises(SystemExit):
+            orchestrator.main(["--mock"], board=spy)  # no --team, no director.team
+        self.assertEqual(spy.transitions, {})
 
 
 if __name__ == "__main__":

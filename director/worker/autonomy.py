@@ -30,26 +30,38 @@ Key names verified against codex-cli 0.139.0 via `codex app-server --strict-conf
 """
 from __future__ import annotations
 
-# thread/start params — the shared per-action posture for BOTH modes.
-APPROVAL_POLICY = "on-request"   # auto-run in-sandbox; review escalations (not `never`)
-SANDBOX = "workspace-write"      # FS writes contained to the workspace. NOTE: `.git` IS
-#                                  writable here — live-probed (codex-cli 0.139.0): an
-#                                  in-sandbox worker's `git commit` lands. The older
-#                                  ".git read-only under workspace-write" assumption does
-#                                  NOT hold for this posture (matters for the threat model).
+from director import config
 
-# `-c` config overrides on the `codex app-server` launch command — both shared by
-# both modes (the only watched/un-watched difference is the turn-end decider).
+# thread/start params — the DEFAULT per-action posture. The VALUES are owned by
+# `config.DEFAULTS["worker"]` (single source of truth, declarative-config slice);
+# these names stay so direct callers/tests keep working, and a host may override
+# them in `.harness.json` `director.worker`. `on-request` = auto-run in-sandbox,
+# review escalations (not `never`). `workspace-write` = FS writes contained to the
+# workspace. NOTE: `.git` IS writable here — live-probed (codex-cli 0.139.0): an
+# in-sandbox worker's `git commit` lands. The older ".git read-only under
+# workspace-write" assumption does NOT hold for this posture (threat model).
+APPROVAL_POLICY = config.DEFAULTS["worker"]["approval_policy"]   # "on-request"
+SANDBOX = config.DEFAULTS["worker"]["sandbox"]                   # "workspace-write"
+
+# `-c` config override STRINGS for the `codex app-server` launch command (mechanism,
+# not a knob — whether each is applied is the config's `auto_review`/`network` bool).
 AUTO_REVIEW = "approvals_reviewer=auto_review"            # Codex's fail-closed reviewer
 NETWORK = "sandbox_workspace_write.network_access=true"   # full outbound (exfil deferred, T11)
 
 
-def codex_command(base: str) -> str:
+def codex_command(base: str, *, auto_review: bool = True, network: bool = True) -> str:
     """Append the self-governance `-c` overrides to a codex launch command string.
 
-    `auto_review` (the per-action baseline) AND `network` (full outbound) are added for
-    BOTH watched and un-watched runs — the only mode difference is the turn-end decider,
-    not this command. The network exfil residual is deferred to a one-shot mitigation
-    (T11). Only the real codex path is wrapped — the mock app-server takes no `-c`."""
-    extra = " ".join(f"-c {ov}" for ov in (AUTO_REVIEW, NETWORK))
-    return f"{base} {extra}"
+    `auto_review` (the per-action baseline) and `network` (full outbound) are applied
+    per the resolved worker posture; the defaults (both on) preserve the historical
+    behavior, and a host that sets `director.worker.network=false`/`auto_review=false`
+    in `.harness.json` *tightens* the worker (the fail-safe direction — the override is
+    omitted, not negated). The network exfil residual is deferred to a one-shot
+    mitigation (T11). Only the real codex path is wrapped — the mock takes no `-c`."""
+    overrides = []
+    if auto_review:
+        overrides.append(AUTO_REVIEW)
+    if network:
+        overrides.append(NETWORK)
+    extra = " ".join(f"-c {ov}" for ov in overrides)
+    return f"{base} {extra}".rstrip()

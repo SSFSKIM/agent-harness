@@ -21,15 +21,17 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import director.queue as dq
-from director import decider, run, status as status_mod, taxonomy
+from director import config, decider, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 from director.worker import autonomy
 
-# Default logical-state → Linear workflow-state-name mapping (overridable on the CLI).
-# `failed`/`blocked` are OPTIONAL (None = no such state → leave the ticket in `started`
-# + comment).
-DEFAULT_STATE_NAMES = {"ready": "Todo", "started": "In Progress",
-                       "done": "Done", "failed": None, "blocked": None}
+# Default logical-state → Linear workflow-state-name mapping. The VALUES are owned by
+# `config.DEFAULTS["states"]` (single source — declarative-config slice); aliased so
+# `resolve_states` and direct callers keep working. A host overrides ready/started/
+# done/failed/blocked in `.harness.json` `director.states` (the CLI flags still win
+# over both). `failed`/`blocked` are OPTIONAL (None = no such state → leave the ticket
+# in `started` + comment).
+DEFAULT_STATE_NAMES = config.DEFAULTS["states"]
 
 
 def resolve_states(board, team: str, names: dict | None = None) -> dict:
@@ -461,47 +463,82 @@ def _build_board(args):
     return board_linear.LinearBoard()
 
 
-def _command(args) -> list[str]:
+def _pick(cli, cfg_value):
+    """CLI flag (explicit, non-None) wins over the config value — which already
+    carries the built-in default (precedence R4: CLI > config > default)."""
+    return cli if cli is not None else cfg_value
+
+
+def resolve_settings(args, cfg) -> dict:
+    """Resolve every run setting CLI > config > default — pure, given the parsed
+    args namespace and a `config.DirectorConfig`. The single resolution point both
+    `main()` and the tests exercise (precedence R4). `done_types` is the one knob a
+    CLI flag delivers as a comma-string vs. the config's tuple."""
+    states = {k: _pick(getattr(args, f"{k}_state", None), cfg.states[k])
+              for k in ("ready", "started", "done", "failed", "blocked")}
+    done_types = (tuple(s.strip() for s in args.done_types.split(",") if s.strip())
+                  if args.done_types else cfg.done_types)
+    return {
+        "team": _pick(args.team, cfg.team), "states": states, "done_types": done_types,
+        "concurrency": _pick(args.concurrency, cfg.concurrency),
+        "max_turns": _pick(args.max_turns, cfg.max_turns),
+        "max_passes": _pick(args.max_passes, cfg.max_passes),
+        "max_dispatched": _pick(args.max_dispatched, cfg.max_dispatched),
+        "read_timeout_s": _pick(args.read_timeout, cfg.read_timeout_s),
+        "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
+        "codex_command": _pick(args.codex, cfg.codex_command),
+        "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
+        "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
+        "status_dir": _pick(args.status_dir, cfg.paths.status_dir),
+        "posture": cfg.posture,
+    }
+
+
+def _command(args, codex_command, posture) -> list[str]:
     if args.mock:
         return [sys.executable, run._MOCK, args.mock_scenario]
-    # Both modes self-govern per-action (auto_review) AND get full network; the only
-    # watched/un-watched difference is the turn-end decider. Exfil deferred (T11).
+    # Posture (auto_review / network) comes from the resolved config — a host may
+    # tighten it in .harness.json director.worker. Exfil deferred (T11).
     # `bash -c` not `-lc`: a login shell would re-inject host profile env past the
     # deny-by-default boundary (run._command has the full rationale; SECURITY.md T11).
-    codex = autonomy.codex_command(args.codex)
+    codex = autonomy.codex_command(codex_command, auto_review=posture.auto_review,
+                                   network=posture.network)
     return ["bash", "-c", codex]
 
 
 def main(argv=None, *, board=None) -> int:
     ap = argparse.ArgumentParser(prog="director.orchestrator")
-    ap.add_argument("--team", required=True, help="Linear team id to poll")
-    ap.add_argument("--ready-state", default="Todo")
-    ap.add_argument("--started-state", default="In Progress")
-    ap.add_argument("--done-state", default="Done")
+    # config-backed flags default to None (sentinel = "not passed") so the resolver
+    # can apply CLI > config > default (R4); the config carries the real defaults.
+    ap.add_argument("--team", default=None,
+                    help="Linear team id to poll (else director.team in .harness.json)")
+    ap.add_argument("--ready-state", default=None)
+    ap.add_argument("--started-state", default=None)
+    ap.add_argument("--done-state", default=None)
     ap.add_argument("--failed-state", default=None,
                     help="optional workflow state for exhausted failures (else stay started)")
     ap.add_argument("--blocked-state", default=None,
                     help="optional workflow state for a worker-reported blocked terminal "
                          "(else stay started + comment)")
-    ap.add_argument("--max-turns", type=int, default=run.DEFAULT_MAX_TURNS,
+    ap.add_argument("--max-turns", type=int, default=None,
                     help="multi-turn drive bound per ticket (R6); over it → stuck")
-    ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--concurrency", type=int, default=None)
     ap.add_argument("--mock", action="store_true", help="in-memory board + fake worker")
     ap.add_argument("--mock-scenario", default="plain",
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
-    ap.add_argument("--codex", default="codex app-server", help="real worker command")
+    ap.add_argument("--codex", default=None, help="real worker command")
     ap.add_argument("--queue-dir", default=None)
     ap.add_argument("--workspace-root", default=None)
     ap.add_argument("--tools", choices=["none", "linear"], default="none")
     ap.add_argument("--install-skills", action="store_true")
     ap.add_argument("--once", action="store_true",
                     help="single pass (no re-poll); default is the DAG-aware continuous loop")
-    ap.add_argument("--max-passes", type=int, default=50,
+    ap.add_argument("--max-passes", type=int, default=None,
                     help="continuous loop safety bound on re-poll passes")
-    ap.add_argument("--max-dispatched", type=int, default=200,
+    ap.add_argument("--max-dispatched", type=int, default=None,
                     help="continuous loop safety bound on total tickets dispatched")
-    ap.add_argument("--done-types", default="completed",
+    ap.add_argument("--done-types", default=None,
                     help="comma-separated blocker state-types that count as done (unblock)")
     ap.add_argument("--no-status", action="store_true",
                     help="disable the orchestration-visibility snapshot (default: on)")
@@ -511,20 +548,23 @@ def main(argv=None, *, board=None) -> int:
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "
                          "auto_review) and full network are shared with the watched default")
-    ap.add_argument("--read-timeout", type=float, default=30.0,
+    ap.add_argument("--read-timeout", type=float, default=None,
                     help="per-event read timeout for a worker turn (s); raise for slow "
                          "real codex workers that think >30s mid-turn")
-    ap.add_argument("--turn-review-timeout", type=float, default=300.0,
+    ap.add_argument("--turn-review-timeout", type=float, default=None,
                     help="watched: how long the queue decider waits for the Director to "
                          "answer a turn end before escalating (s)")
     args = ap.parse_args(argv)
 
+    # Load + resolve config FIRST — a malformed .harness.json director block raises
+    # here, before any board read or worker dispatch (fail-loud, spec R7).
+    cfg = config.load_director_config()
+    s = resolve_settings(args, cfg)
+    if not s["team"]:
+        ap.error("team not configured (set director.team in .harness.json or pass --team)")
+
     board = board if board is not None else _build_board(args)
-    states = resolve_states(board, args.team, {
-        "ready": args.ready_state, "started": args.started_state,
-        "done": args.done_state, "failed": args.failed_state,
-        "blocked": args.blocked_state})
-    done_types = tuple(s.strip() for s in args.done_types.split(",") if s.strip())
+    states = resolve_states(board, s["team"], s["states"])
 
     # Decider selection (spec R5). Watched (default): each turn-end routes to the
     # Director queue and the live main session answers free-form (docs/DIRECTOR.md).
@@ -532,8 +572,8 @@ def main(argv=None, *, board=None) -> int:
     # --mock has no live Director session to answer turnReviews, so the watched queue
     # decider would hang — the code decider self-resolves + trusts the worker proposal.
     decide = (decider.autonomous_decide if (args.autonomous or args.mock)
-              else decider.make_queue_decider(base=args.queue_dir,
-                                              timeout_s=args.turn_review_timeout))
+              else decider.make_queue_decider(base=s["queue_dir"],
+                                              timeout_s=s["turn_review_timeout_s"]))
 
     tools = tool_executor = None
     if args.tools == "linear":
@@ -541,27 +581,28 @@ def main(argv=None, *, board=None) -> int:
         tools = [linear_graphql_spec()]
         tool_executor = make_linear_tool_executor()
 
-    kwargs = {"team": args.team, "states": states, "concurrency": args.concurrency,
-              "queue_base": args.queue_dir, "tools": tools, "tool_executor": tool_executor,
-              "install_skills": args.install_skills, "done_types": done_types,
-              "status": None if args.no_status else status_mod.StatusWriter(base=args.status_dir),
-              # Shared per-action posture for both modes (auto_review wrapped in _command);
-              # --autonomous differs only by network (T11) + the code decider above.
-              "approval_policy": autonomy.APPROVAL_POLICY,
-              "sandbox": autonomy.SANDBOX,
-              "decide": decide, "max_turns": args.max_turns,
-              "read_timeout_s": args.read_timeout}
-    if args.workspace_root:
-        kwargs["workspace_root"] = Path(args.workspace_root)
+    kwargs = {"team": s["team"], "states": states, "concurrency": s["concurrency"],
+              "queue_base": s["queue_dir"], "tools": tools, "tool_executor": tool_executor,
+              "install_skills": args.install_skills, "done_types": s["done_types"],
+              "status": None if args.no_status else status_mod.StatusWriter(base=s["status_dir"]),
+              # Posture from the resolved config (a host may tighten it in
+              # .harness.json director.worker); --autonomous differs only by the decider.
+              "approval_policy": s["posture"].approval_policy,
+              "sandbox": s["posture"].sandbox,
+              "decide": decide, "max_turns": s["max_turns"],
+              "read_timeout_s": s["read_timeout_s"]}
+    if s["workspace_root"]:
+        kwargs["workspace_root"] = Path(s["workspace_root"])
 
+    command = _command(args, s["codex_command"], s["posture"])
     if args.once:
-        summaries = run_once(board, _command(args), **kwargs)
-        for s in summaries:
-            print(json.dumps(s, ensure_ascii=False))
-        return 0 if all(s["status"] != "claim_failed" for s in summaries) else 1
+        summaries = run_once(board, command, **kwargs)
+        for summary in summaries:
+            print(json.dumps(summary, ensure_ascii=False))
+        return 0 if all(x["status"] != "claim_failed" for x in summaries) else 1
 
-    result = run_until_drained(board, _command(args), max_passes=args.max_passes,
-                               max_dispatched=args.max_dispatched, **kwargs)
+    result = run_until_drained(board, command, max_passes=s["max_passes"],
+                               max_dispatched=s["max_dispatched"], **kwargs)
     for s in result["summaries"]:
         print(json.dumps(s, ensure_ascii=False))
     print(json.dumps({"stopped_reason": result["stopped_reason"],

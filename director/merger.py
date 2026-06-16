@@ -29,7 +29,7 @@ import time
 from typing import Callable
 
 import director.queue as dq
-from director import run
+from director import config, run
 from director.decider import autonomous_decide, make_queue_decider
 from director.worker import autonomy
 
@@ -224,15 +224,18 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
 
 
 def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
-             decide: Callable = autonomous_decide, **drive_kwargs) -> int:
+             decide: Callable = autonomous_decide, max_merges: int = DEFAULT_MAX_MERGES,
+             **drive_kwargs) -> int:
     """The standalone merger's body: drain the merge queue, then either exit (`once`) or
     keep watching for new PRs (the drain-runner; spec Open Q resolved to a standalone,
     event-woken process — D-47/R7). `once` runs a single drain pass and returns (cron /
     tests). Otherwise it polls the queue and drains whenever a `mergeRequest` is pending,
-    sleeping `poll` between checks — woken by work, never a busy-spin. Returns 0."""
+    sleeping `poll` between checks — woken by work, never a busy-spin. `max_merges` bounds
+    one drain pass (config `director.merger.max_merges`). Returns 0."""
     while True:
         if pending_merges(base=base):  # only take the flock + drive when there is work
-            drain(base=base, command=command, decide=decide, **drive_kwargs)
+            drain(base=base, command=command, decide=decide, max_merges=max_merges,
+                  **drive_kwargs)
         if once:
             return 0
         time.sleep(poll)
@@ -250,12 +253,15 @@ def select_decider(*, autonomous: bool, mock: bool, queue_base=None,
     return make_queue_decider(base=queue_base, timeout_s=turn_review_timeout)
 
 
-def _command(args) -> list[str]:
+def _command(args, codex_command, posture) -> list[str]:
     if args.mock:
         return [sys.executable, run._MOCK, args.mock_scenario]
-    # Real land agent: same self-governing posture as a worker (auto_review + network),
-    # wrapped in non-login bash (run._command has the env-boundary rationale, SECURITY T11).
-    return ["bash", "-c", autonomy.codex_command(args.codex)]
+    # Real land agent: the resolved worker posture (auto_review + network, a host may
+    # tighten it), wrapped in non-login bash (run._command has the env-boundary
+    # rationale, SECURITY T11).
+    return ["bash", "-c", autonomy.codex_command(codex_command,
+                                                 auto_review=posture.auto_review,
+                                                 network=posture.network)]
 
 
 def main(argv=None) -> int:
@@ -266,9 +272,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="director.merger")
     ap.add_argument("--once", action="store_true",
                     help="drain currently-pending PRs then exit (cron / tests)")
-    ap.add_argument("--poll", type=float, default=1.0, help="loop poll interval (s)")
+    ap.add_argument("--poll", type=float, default=None, help="loop poll interval (s)")
     ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
-    ap.add_argument("--codex", default="codex app-server", help="real land-agent command")
+    ap.add_argument("--codex", default=None, help="real land-agent command")
     ap.add_argument("--mock", action="store_true", help="use the bundled fake app-server")
     ap.add_argument("--mock-scenario", default="report",
                     choices=["plain", "approval", "approval_done", "report",
@@ -276,19 +282,30 @@ def main(argv=None) -> int:
     ap.add_argument("--autonomous", action="store_true",
                     help="un-watched: self-resolve land-lane turn-ends with the code decider "
                          "(no live Director). Default routes turn-ends to the Director (R9)")
-    ap.add_argument("--turn-review-timeout", type=float, default=300.0,
+    ap.add_argument("--turn-review-timeout", type=float, default=None,
                     help="watched: how long the land lane waits for the Director to answer a "
                          "turn-end before escalating (s)")
-    ap.add_argument("--read-timeout", type=float, default=180.0,
+    ap.add_argument("--read-timeout", type=float, default=None,
                     help="per-event read timeout for a land turn (s); land agents think")
     args = ap.parse_args(argv)
+
+    # Resolve CLI > config > default (declarative-config slice). A malformed
+    # .harness.json director block raises here, before any drain/spawn.
+    cfg = config.load_director_config()
+    posture = cfg.posture
+    queue_dir = args.queue_dir if args.queue_dir is not None else cfg.paths.queue_dir
+    poll = args.poll if args.poll is not None else cfg.merger.poll_s
+    codex_command = args.codex if args.codex is not None else cfg.codex_command
+    turn_review_timeout = (args.turn_review_timeout if args.turn_review_timeout is not None
+                           else cfg.turn_review_timeout_s)
+    read_timeout = (args.read_timeout if args.read_timeout is not None
+                    else cfg.merger.read_timeout_s)
     decide = select_decider(autonomous=args.autonomous, mock=args.mock,
-                            queue_base=args.queue_dir,
-                            turn_review_timeout=args.turn_review_timeout)
-    return run_loop(base=args.queue_dir, command=_command(args), poll=args.poll,
-                    once=args.once, decide=decide, queue_base=args.queue_dir,
-                    approval_policy=autonomy.APPROVAL_POLICY, sandbox=autonomy.SANDBOX,
-                    read_timeout_s=args.read_timeout)
+                            queue_base=queue_dir, turn_review_timeout=turn_review_timeout)
+    return run_loop(base=queue_dir, command=_command(args, codex_command, posture),
+                    poll=poll, once=args.once, decide=decide, queue_base=queue_dir,
+                    approval_policy=posture.approval_policy, sandbox=posture.sandbox,
+                    read_timeout_s=read_timeout, max_merges=cfg.merger.max_merges)
 
 
 if __name__ == "__main__":

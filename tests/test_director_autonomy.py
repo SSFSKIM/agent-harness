@@ -8,6 +8,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.orchestrator as orch  # noqa: E402
 import director.run as run  # noqa: E402
+from director import config  # noqa: E402
 from director.worker import autonomy  # noqa: E402
 
 
@@ -76,14 +77,16 @@ class RunTicketPostureTest(unittest.TestCase):
 
 class CommandWrapTest(unittest.TestCase):
     def _ns(self, autonomous):
-        return argparse.Namespace(mock=False, autonomous=autonomous, codex="codex app-server")
+        return argparse.Namespace(mock=False, autonomous=autonomous)
 
     def test_command_wraps_auto_review_and_network_for_both_modes(self):
         # both modes wrap auto_review AND network — identical command; the only
         # watched/un-watched difference is the turn-end decider (not this command).
+        # codex_command + posture now come from the resolved config (default = both on).
+        posture = config.defaults().posture
         for build in (run._command, orch._command):
-            auton = build(self._ns(True))
-            watched = build(self._ns(False))
+            auton = build(self._ns(True), "codex app-server", posture)
+            watched = build(self._ns(False), "codex app-server", posture)
             # `-c` not `-lc`: a login shell would re-inject host profile env past the
             # deny-by-default worker-env boundary (worker-secret-boundary M1, T11).
             expected = ["bash", "-c", autonomy.codex_command("codex app-server")]
@@ -92,10 +95,16 @@ class CommandWrapTest(unittest.TestCase):
             self.assertIn("approvals_reviewer=auto_review", watched[2])
             self.assertIn("network_access", watched[2])       # network shared (exfil deferred)
 
+    def test_command_omits_overrides_when_posture_tightened(self):
+        # a host that tightens director.worker (network/auto_review off) → the `-c`
+        # overrides are OMITTED (the fail-safe direction; declarative-config slice).
+        tight = config.Posture("untrusted", "workspace-write", auto_review=False, network=False)
+        cmd = run._command(self._ns(False), "codex app-server", tight)
+        self.assertEqual(cmd, ["bash", "-c", "codex app-server"])
+
     def test_mock_command_never_wrapped(self):
-        ns = argparse.Namespace(mock=True, mock_scenario="plain",
-                                autonomous=True, codex="codex app-server")
-        cmd = run._command(ns)
+        ns = argparse.Namespace(mock=True, mock_scenario="plain", autonomous=True)
+        cmd = run._command(ns, "codex app-server", config.defaults().posture)
         self.assertNotIn("approvals_reviewer", " ".join(cmd))
 
 

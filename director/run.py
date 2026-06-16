@@ -16,15 +16,17 @@ import shutil
 import sys
 from pathlib import Path
 
-from director import taxonomy
+from director import config, taxonomy
 from director.decider import autonomous_decide
 from director.worker import autonomy, policy as worker_policy, tools as worker_tools
 from director.worker.app_server import AppServerClient
 from director.worker.approval import make_seam
 
 DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
-DEFAULT_MAX_TURNS = 8  # multi-turn drive bound (R6): a worker that never signals
-#                        terminal stops here and is reported stuck.
+# Owned by config.DEFAULTS["max_turns"] (single source); a host overrides via
+# .harness.json director.max_turns (the --max-turns flag still wins). Multi-turn
+# drive bound (R6): a worker that never signals terminal stops here, reported stuck.
+DEFAULT_MAX_TURNS = config.DEFAULTS["max_turns"]
 _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
 _SKILLS_SRC = Path(__file__).resolve().parent / "workspace_skills"
 
@@ -213,17 +215,18 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             "telemetry": _telemetry()}
 
 
-def _command(args) -> list[str]:
+def _command(args, codex_command, posture) -> list[str]:
     if args.mock:
         return [sys.executable, _MOCK, args.mock_scenario]
-    # Both modes self-govern per-action (auto_review) AND get full network; the only
-    # watched/un-watched difference is the turn-end decider. Exfil deferred (T11).
+    # Posture (auto_review / network) is the resolved config's (a host may tighten it
+    # in .harness.json director.worker). Exfil deferred (T11).
     # `bash -c` (NOT `-lc`): a LOGIN shell would source the host's profile and re-inject
     # env the deny-by-default boundary (Popen env=) just stripped — defeating it for any
     # secret a user exports in ~/.profile etc. Non-login + `BASH_ENV` denied (not in the
     # base) means the worker's env is exactly the constructed one. The base carries PATH,
     # so codex still resolves (worker-secret-boundary M1, SECURITY.md T11).
-    codex = autonomy.codex_command(args.codex)
+    codex = autonomy.codex_command(codex_command, auto_review=posture.auto_review,
+                                   network=posture.network)
     return ["bash", "-c", codex]
 
 
@@ -235,7 +238,7 @@ def main(argv=None) -> int:
     ap.add_argument("--mock-scenario", default="plain",
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
-    ap.add_argument("--codex", default="codex app-server", help="real worker command")
+    ap.add_argument("--codex", default=None, help="real worker command")
     ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
                     help="advertise worker tools (linear = linear_graphql)")
@@ -245,9 +248,16 @@ def main(argv=None) -> int:
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "
                          "auto_review) and full network are shared with the watched default")
-    ap.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+    ap.add_argument("--max-turns", type=int, default=None,
                     help="multi-turn drive bound (R6); over it → stuck")
     args = ap.parse_args(argv)
+
+    # Resolve posture / codex / bounds CLI > config > default (declarative-config
+    # slice). A malformed .harness.json director block raises here, before any spawn.
+    cfg = config.load_director_config()
+    codex_command = args.codex if args.codex is not None else cfg.codex_command
+    max_turns = args.max_turns if args.max_turns is not None else cfg.max_turns
+    queue_dir = args.queue_dir if args.queue_dir is not None else cfg.paths.queue_dir
 
     if args.linear:
         from director.board.linear import read_issue
@@ -263,16 +273,16 @@ def main(argv=None) -> int:
         from director.worker.tools import linear_graphql_spec, make_linear_tool_executor
         tools = [linear_graphql_spec()]
         tool_executor = make_linear_tool_executor()
-    # Per-action posture is the SHARED on-request + auto_review baseline (the command
-    # is wrapped with auto_review in _command); only --autonomous adds network.
-    policy = autonomy.APPROVAL_POLICY
-    sandbox = autonomy.SANDBOX
+    # Per-action posture is the resolved config's (a host may tighten it in
+    # .harness.json director.worker; the command's auto_review/network follow it).
+    posture = cfg.posture
     # The single-ticket CLI is un-watched (no orchestrator queue / live Director to
     # answer turn reviews), so it drives with the autonomous code decider.
-    disp = drive(ticket, command=_command(args), decide=autonomous_decide,
-                 queue_base=args.queue_dir, tools=tools, tool_executor=tool_executor,
-                 install_skills=args.install_skills, approval_policy=policy,
-                 sandbox=sandbox, max_turns=args.max_turns)
+    disp = drive(ticket, command=_command(args, codex_command, posture),
+                 decide=autonomous_decide, queue_base=queue_dir, tools=tools,
+                 tool_executor=tool_executor, install_skills=args.install_skills,
+                 approval_policy=posture.approval_policy, sandbox=posture.sandbox,
+                 max_turns=max_turns)
     print(json.dumps({"ticket": ticket["id"], **disp}))
     return 0 if disp.get("kind") == "terminal" else 1
 

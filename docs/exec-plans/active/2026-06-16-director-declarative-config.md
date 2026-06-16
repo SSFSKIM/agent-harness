@@ -165,7 +165,16 @@ values resolve from the environment. `python3 plugin/scripts/check.py` is GREEN.
   GREEN at 368 tests. Refinement vs plan: paths are OPTIONAL overrides (None =
   module built-in), so `run.DEFAULT_WORKSPACE_ROOT` stays in run.py — config.paths
   layers on top, not a relocation (see Decision log).
-- [ ] M2 — constant relocation + main() wiring
+- [x] (2026-06-16) M2 — constant relocation + CLI>config>default wiring at all
+  three `main()`s. `autonomy.APPROVAL_POLICY/SANDBOX` + `orchestrator.DEFAULT_STATE_NAMES`
+  + `run.DEFAULT_MAX_TURNS` now alias `config.DEFAULTS`; `autonomy.codex_command`
+  gained `auto_review`/`network` toggles; `orchestrator.resolve_settings` (pure) +
+  `merger.run_loop(max_merges=...)`. Updated `tests/test_director_autonomy.py` to the
+  new `_command` signature (+ a tighten-via-posture test) and added `WiringTest`
+  (precedence, malformed→fail-loud-before-dispatch, missing-team→SystemExit). Gate
+  GREEN at 374. Live-proved: `cd tmp && python3 -m director.orchestrator --mock --once`
+  with **no `--team`** drained both demo tickets — team/concurrency/states all from a
+  `.harness.json` `director` block (the headline "drop config, no flags" goal).
 - [ ] M3 — docs + cross-links
 
 ## Surprises & discoveries
