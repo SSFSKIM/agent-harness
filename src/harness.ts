@@ -19,6 +19,11 @@ export interface Harness {
 export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}): Harness {
   const query = deps.query ?? sdkQuery;
   const options = resolveOptions(config);
+  // A Harness drives ONE query at a time; `active` tracks the most recent one.
+  // Control methods (rewind/supported*) are SDK control requests that require an
+  // OPEN transport (sdk.d.ts:2242, streaming mode) — call them while a query is
+  // still streaming, not after run() completes. Concurrent/interactive multi-session
+  // use (per-query control handles) is a Phase-2 concern.
   let active: any = null;
 
   function start(prompt: string) {

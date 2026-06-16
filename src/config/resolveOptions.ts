@@ -36,6 +36,9 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   if (config.fallbackModel) options.fallbackModel = config.fallbackModel;
   if (config.maxTurns !== undefined) options.maxTurns = config.maxTurns;
   if (config.permissionMode) options.permissionMode = config.permissionMode;
+  // SDK contract (sdk.d.ts:1719): bypassPermissions REQUIRES allowDangerouslySkipPermissions.
+  // Centralize it here so no path (CLI/lib/tests) can set the mode without satisfying it.
+  if (config.permissionMode === "bypassPermissions") options.allowDangerouslySkipPermissions = true;
   if (config.mcpServers) options.mcpServers = config.mcpServers;
   if (config.plugins) options.plugins = config.plugins;
   if (config.cwd) options.cwd = config.cwd;

@@ -41,10 +41,11 @@ live("live parity (real SDK)", () => {
     const r = await h.run(`Create a file named note.txt containing exactly the text HELLO in the current directory.`);
     expect(r.result).toBeTruthy();
     expect(existsSync(join(dir, "note.txt"))).toBe(true);
-    // NOTE: the live SDK rewindFiles() is a control-protocol request that needs an OPEN
-    // process transport, i.e. streaming-input mode. It cannot be invoked after a one-shot
-    // string-prompt query completes ("ProcessTransport is not ready for writing"). Mid-session
-    // live rewind is therefore a Phase-2 (interactive/streaming) capability; the rewind→rewindFiles
-    // wiring itself is verified deterministically in test/unit/harness.test.ts.
+    // This test intentionally does NOT call live rewind(): the SDK rewindFiles() is a
+    // control-protocol request that needs an OPEN process transport (streaming-input mode)
+    // and fails after a one-shot string-prompt query completes ("ProcessTransport is not
+    // ready for writing"). Its scope is therefore checkpoint-option wiring + a real
+    // checkpointed file write. The rewind→rewindFiles wiring is verified deterministically
+    // in test/unit/harness.test.ts; live mid-session rewind is a Phase-2 capability.
   });
 });

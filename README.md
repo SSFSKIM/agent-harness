@@ -135,6 +135,10 @@ npm run typecheck    # tsc --noEmit
 > applying provider flags / overrides, so setting `provider`/`baseUrl`/`customHeaders`/`env` never
 > erases `PATH`/`HOME`/`ANTHROPIC_API_KEY`.
 
+> **Note on `bypassPermissions`:** the SDK requires `allowDangerouslySkipPermissions: true` whenever
+> `permissionMode: 'bypassPermissions'` is used (`sdk.d.ts:1719`). `resolveOptions` sets it
+> automatically for that mode, so no caller can select the mode without satisfying its contract.
+
 > **Note on `settingSources` default:** the bundled `sdk.d.ts` (v0.3.178) documents that an omitted
 > `settingSources` loads *all* sources (matching the CLI) — newer than the Phase-0 "defaults to none"
 > premise. The harness sets `['user','project','local']` explicitly regardless, so it stays

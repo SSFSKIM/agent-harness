@@ -10,9 +10,19 @@ describe("resolveOptions", () => {
     expect(o.enableFileCheckpointing).toBe(true);
     expect(o.agents["Explore"].disallowedTools).toContain("Write");
   });
-  it("wires outputStyle into systemPrompt.append", () => {
+  it("wires outputStyle into systemPrompt.append and never leaks it into Options", () => {
     const o: any = resolveOptions({ outputStyle: "explanatory" });
-    expect(o.systemPrompt.append).toBeTruthy();
+    expect(o.systemPrompt.append).toContain("educational");
+    expect(o).not.toHaveProperty("outputStyle"); // phantom option must not reach the SDK
+  });
+  it("sets allowDangerouslySkipPermissions when bypassPermissions is used", () => {
+    const o: any = resolveOptions({ permissionMode: "bypassPermissions" });
+    expect(o.permissionMode).toBe("bypassPermissions");
+    expect(o.allowDangerouslySkipPermissions).toBe(true);
+  });
+  it("does not set allowDangerouslySkipPermissions for other permission modes", () => {
+    const o: any = resolveOptions({ permissionMode: "default" });
+    expect(o).not.toHaveProperty("allowDangerouslySkipPermissions");
   });
   it("threads provider env, sandbox, model, mcp, plugins, cwd, maxTurns", () => {
     const o: any = resolveOptions({
