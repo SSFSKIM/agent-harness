@@ -114,7 +114,7 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
 
 def reconcile(board, ticket: dict, disp: dict, attempts: int,
               states: dict, retry_budget: int, *, queue_base=None,
-              workspace_root=None) -> dict:
+              workspace_root=None, external_state=None) -> dict:
     """EXECUTE a drive disposition onto the board. Returns {"retry": True} to ask
     run_once to re-dispatch (a `failed` disposition within budget), or
     {"summary": {...}} for a terminal outcome. This is the R4 redesign: the board
@@ -189,11 +189,14 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     elif kind == "cancelled":
         # Active-run reconciliation stopped this worker: its ticket left `started`
         # (a human moved it). The human OWNS the new state, so we do NOT re-transition
-        # the board and do NOT retry (D-62 / Symphony "terminate without cleanup") —
-        # just surface that the worker was stopped.
-        comment(f"🛑 worker stopped after {turns} turn(s) — ticket moved out of "
-                f"In Progress externally (reconciliation)")
-        summary = summarize("cancelled", "released")
+        # the board and do NOT retry (D-62 / Symphony "terminate without cleanup").
+        # `final_state` is the OBSERVED external state the human moved it to (consistent
+        # with the other branches = the board state the ticket ends in); "released" is
+        # the fallback when that observation wasn't captured.
+        final = external_state or "released"
+        comment(f"🛑 worker stopped after {turns} turn(s) — ticket moved to {final!r} "
+                f"externally (reconciliation); claim released")
+        summary = summarize("cancelled", final)
     elif kind == "stuck":
         final = "started"
         if states.get("failed"):
@@ -230,33 +233,39 @@ def eligible_tickets(tickets: list[dict], *, done_types=("completed",)) -> list[
 
 
 def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
-                         started_state_id) -> list:
+                         started_state_id, cancelled_states: dict | None = None) -> list:
     """Active-run reconciliation (Symphony §16.3): re-read the tracker state of the
     in-flight tickets and signal cancel for any ticket a human moved OUT of `started`
-    (the operator-control lever). **Fail-soft (R5):** a `fetch_issue_states_by_ids`
-    error keeps every worker running (returns []), never raises into the wave loop. A
-    ticket whose id is absent from the refresh (deleted/unknown) is left running —
-    never cancel on missing data. Returns the ticket ids newly signalled to cancel."""
-    tickets = list(in_flight_tickets)
-    ids = [t["id"] for t in tickets]
-    if not ids:
-        return []
+    (the operator-control lever). A ticket whose id is absent from the refresh
+    (deleted/unknown) is left running — never cancel on missing data. When a cancel is
+    signalled, the observed external state name is recorded in `cancelled_states[tid]`
+    so the summary can report what the human moved it to (not just "released").
+
+    **Fail-soft (R5/§8.5):** the WHOLE pass is total — any error (a
+    `fetch_issue_states_by_ids` raise, or anything else) keeps every worker running
+    (returns []) and never raises into the wave loop. Returns the ids newly cancelled."""
     try:
+        tickets = list(in_flight_tickets)
+        ids = [t["id"] for t in tickets]
+        if not ids:
+            return []
         states_now = board.fetch_issue_states_by_ids(ids)
+        cancelled: list = []
+        for t in tickets:
+            tid = t["id"]
+            cur = states_now.get(tid)
+            if cur is None:
+                continue  # unknown id → conservative, keep running
+            if cur.get("state_id") != started_state_id:
+                ev = cancel_events.get(tid)
+                if ev is not None and not ev.is_set():
+                    ev.set()
+                    if cancelled_states is not None:
+                        cancelled_states[tid] = cur.get("state_name")
+                    cancelled.append(tid)
+        return cancelled
     except Exception:
-        return []  # state refresh failed → keep workers, retry next pass (§8.5)
-    cancelled: list = []
-    for t in tickets:
-        tid = t["id"]
-        cur = states_now.get(tid)
-        if cur is None:
-            continue  # unknown id → conservative, keep running
-        if cur.get("state_id") != started_state_id:
-            ev = cancel_events.get(tid)
-            if ev is not None and not ev.is_set():
-                ev.set()
-                cancelled.append(tid)
-    return cancelled
+        return []  # any error in the pass → skip this reconcile tick (§8.5, R5/R12)
 
 
 def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: dict,
@@ -284,6 +293,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
     attempts: dict = {}
     in_flight: set = set()  # ticket ids claimed/dispatched this wave (incl. pending retry)
     cancel_events: dict = {}  # tid -> threading.Event (set by reconciliation to stop a worker)
+    cancelled_states: dict = {}  # tid -> observed external state name at cancel time
     pool = ThreadPoolExecutor(max_workers=max(1, concurrency))
     futures: dict = {}
 
@@ -345,7 +355,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                 cancel_events.pop(tid, None)  # worker ended — drop its cancel Event
                 outcome = reconcile(board, ticket, fut.result(),
                                     attempts[tid], states, retry_budget,
-                                    queue_base=queue_base, workspace_root=workspace_root)
+                                    queue_base=queue_base, workspace_root=workspace_root,
+                                    external_state=cancelled_states.pop(tid, None))
                 if outcome.get("retry"):
                     attempts[tid] += 1
                     status.retrying(ticket, attempt=attempts[tid])
@@ -360,7 +371,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             # lock-free single writer (R13/D-60).
             now = time.monotonic()
             if futures and now - last_reconcile >= reconcile_interval_s:
-                _reconcile_in_flight(board, futures.values(), cancel_events, states["started"])
+                _reconcile_in_flight(board, futures.values(), cancel_events,
+                                     states["started"], cancelled_states)
                 last_reconcile = now
     finally:
         pool.shutdown(wait=True)

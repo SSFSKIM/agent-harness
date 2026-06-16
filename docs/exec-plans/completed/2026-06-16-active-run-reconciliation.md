@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 6bb12b81d855f856caff0ac37e76e9add53eb0fd
@@ -198,5 +198,55 @@ ticket is externally moved).
   released summary, no set_state, no retry (D-62).
 
 ## Feedback (from completion gate)
+Both personas (review-arch + review-reliability) **SATISFIED**; no P1. Two P2s, both
+fixed in-gate:
+- **P2 (review-arch):** the cancelled summary hardcoded `final_state="released"`, but
+  the spec says it should be the OBSERVED external state (and every other branch's
+  `final_state` = the board state the ticket ends in). Fixed: `_reconcile_in_flight`
+  records the observed `state_name` in `cancelled_states[tid]`, threaded to
+  `reconcile(external_state=)` → `summarize("cancelled", observed)` + the comment names
+  it; falls back to "released" if uncaptured. Test updated (`final_state == "Done"`).
+- **P2 (review-reliability):** `_reconcile_in_flight`'s ticket/ids extraction sat
+  OUTSIDE the fail-soft `try` (unreachable today, but R5 wants the WHOLE pass total).
+  Fixed: widened the `try` to wrap the entire pass.
+- **Doc-debt (→ tracker):** (a) cross-thread coordination rules (thread-safe primitive
+  only; cooperative-cancel latency-bound + no-stale-signal) as a RELIABILITY companion
+  to R13; (b) DESIGN notes — `final_state` = board observation not internal label, and
+  the cadence is wall-clock-anchored. Tracked for a later promotion pass.
 
 ## Outcomes & retrospective
+**Shipped (daemon stage 1):** the orchestrator now re-reads in-flight ticket states on a
+cadence and CANCELS a worker whose ticket a human moved out of `started` — Symphony's
+operator-control lever (§14.4), the biggest correctness/operability gap (parity gap #1).
+M1 `board.fetch_issue_states_by_ids`; M2 cooperative cancel (`TurnCancelled` +
+`cancel_event` in the app-server read loop + `drive`); M3 the `_dispatch_wave`
+`wait(timeout=)` + main-thread `_reconcile_in_flight` + the `cancelled` reconcile branch
++ the `reconcile_interval_s` knob.
+
+**Proof:** gate GREEN at **385 tests** (was 374; +11: 3 board, 4 cancel-plumbing, 4
+reconcile/resolve). The operator-cancel path is proven end-to-end on fakes (FakeBoard
+flips state mid-run → worker cancelled, retry=0, no board re-write, observed state
+reported); fail-soft fetch and main-thread-only recording verified. Both review personas
+SATISFIED.
+
+**What went well:** the feared wave-barrier→running-map "refactor" was a one-line
+`wait(timeout=)` + a monotonic cadence — the `futures` dict was already the running-map,
+and keeping the pass on the main thread preserved the StatusWriter single-writer
+invariant (R13) for free. `cancel_event` rides `dispatch`'s `**kwargs` to `drive` with no
+signature change.
+
+**Surprises:** (1) a cancel can land during the codex HANDSHAKE, not just mid-turn — so
+`drive` wraps its WHOLE `with client` body (caught by a pre-set-event test). (2) stall is
+already covered by `read_timeout_s` (per-event), so dedicated stall-reap was correctly
+deferred (D-61) — a `started_at` wall-clock stall would have wrongly killed long-but-healthy
+tickets.
+
+**Stage-2 readiness:** `_reconcile_in_flight` takes explicit params (no wave-local
+globals) and the cancel plumbing is decoupled, so the continuous-tick daemon (gap #2) can
+lift them unchanged when it removes the per-wave barrier.
+
+**QUALITY_SCORE.md:** untouched — `director/` is not graded there (consistent with prior
+director slices).
+
+**Follow-ups (tracker, none blocking):** the two doc-debt rule promotions above; and the
+still-open daemon stages — #2 continuous forever-tick loop, #3 exponential backoff.

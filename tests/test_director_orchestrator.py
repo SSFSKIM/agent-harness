@@ -751,7 +751,7 @@ class ActiveRunReconcileTest(unittest.TestCase):
                                       reconcile_interval_s=0.1)
         row = summaries[0]
         self.assertEqual(row["status"], "cancelled")
-        self.assertEqual(row["final_state"], "released")
+        self.assertEqual(row["final_state"], "Done")         # the OBSERVED external state
         self.assertEqual(row["attempts"], 1)                 # NOT retried
         # the only board write for A is the claim → started; reconciliation does not
         # re-transition (the human owns the new state, D-62)
