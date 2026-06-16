@@ -107,10 +107,20 @@ def main():
                 # one turn (a scripted decider can still drive ≥2 turns for the
                 # latest-absolute proof — the sink signal is just ignored there).
                 turn_n += 1
+                # The REAL codex-cli 0.139.0 shape (live-pinned): nested {total,last}
+                # under tokenUsage; extract_usage reads `.total` (absolute), ignores
+                # `.last` (per-turn delta). Totals rise per turn (turn n → total n*100).
                 out({"method": "thread/tokenUsage/updated",
-                     "params": {"total_token_usage": {"input_tokens": turn_n * 60,
-                                                       "output_tokens": turn_n * 40,
-                                                       "total_tokens": turn_n * 100}}})
+                     "params": {"threadId": THREAD_ID, "turnId": TURN_ID,
+                                "tokenUsage": {
+                                    "total": {"totalTokens": turn_n * 100,
+                                              "inputTokens": turn_n * 60,
+                                              "outputTokens": turn_n * 40,
+                                              "cachedInputTokens": 0,
+                                              "reasoningOutputTokens": 0},
+                                    "last": {"totalTokens": turn_n * 100,
+                                             "inputTokens": turn_n * 60,
+                                             "outputTokens": turn_n * 40}}}})
                 out({"id": REPORT_CALL_ID, "method": "item/tool/call",
                      "params": {"tool": "report_outcome",
                                 "arguments": {"status": "done", "reason": "mock done"},

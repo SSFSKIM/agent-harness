@@ -104,16 +104,33 @@ def _pluck_tokens(obj) -> dict | None:
     return {"input": inp, "output": outp, "total": out.get("total", inp + outp)}
 
 
+def _absolute_from_wrapper(w) -> dict | None:
+    """Absolute `{input,output,total}` from a usage wrapper, or None. codex-cli
+    0.139.0 nests `{total:{...}, last:{...}, modelContextWindow}` under `tokenUsage`
+    — take `total` (the cumulative thread total), NEVER `last` (the per-turn delta,
+    §13.5). Falls back to a flat wrapper (`{totalTokens, inputTokens, ...}`) for
+    forward/other shapes."""
+    if not isinstance(w, dict):
+        return None
+    nested = _pluck_tokens(w.get("total"))  # codex 0.139.0: tokenUsage.total
+    if nested is not None:
+        return nested
+    return _pluck_tokens(w)  # flat wrapper
+
+
 def extract_usage(method: str, params: dict) -> dict | None:
     """Absolute thread token totals `{input,output,total}` from a codex notification,
-    or None. Encodes the §13.5 accounting rules:
+    or None. Live-pinned to codex-cli 0.139.0: `thread/tokenUsage/updated` carries
+    `params.tokenUsage = {total:{totalTokens,inputTokens,outputTokens,...}, last:{...}}`
+    — read `.total` (absolute), ignore `.last` (per-turn delta). §13.5 rules:
 
-      - prefer an explicit absolute-total wrapper (`total_token_usage`), which may
-        ride on any event type;
-      - else the dedicated `thread/tokenUsage/updated` notification's own payload;
-      - IGNORE delta-style payloads (a lone `last_token_usage`) — they are
-        per-turn increments, not cumulative totals, so counting them would
-        double-count the run aggregate.
+      - an explicit absolute-total wrapper (`total_token_usage`) is trusted on ANY
+        event (its name says "total");
+      - the generic `tokenUsage`/`usage` wrapper is trusted ONLY on the dedicated
+        `thread/tokenUsage/updated` notification (a generic `usage` map elsewhere is
+        not necessarily cumulative);
+      - delta-style payloads (a lone `last_token_usage`) are IGNORED — counting them
+        would double-count the run aggregate.
 
     Tolerant by contract (plan R6): an unknown shape, a missing field, or a
     non-dict params yields None and NEVER raises — telemetry is instrumentation,
@@ -121,12 +138,12 @@ def extract_usage(method: str, params: dict) -> dict | None:
     if not isinstance(params, dict):
         return None
     for k in ("total_token_usage", "totalTokenUsage"):  # absolute wrapper, any event
-        tot = _pluck_tokens(params.get(k))
+        tot = _absolute_from_wrapper(params.get(k))
         if tot is not None:
             return tot
     if method == "thread/tokenUsage/updated":
-        for k in ("usage", "tokenUsage", "token_usage"):  # nested absolute usage
-            tot = _pluck_tokens(params.get(k))
+        for k in ("tokenUsage", "token_usage", "usage"):  # nested/flat absolute usage
+            tot = _absolute_from_wrapper(params.get(k))
             if tot is not None:
                 return tot
         # A payload that carries ONLY a delta (last_token_usage) is not a total.

@@ -119,6 +119,20 @@ class ExtractUsageTest(unittest.TestCase):
                                             "totalTokens": 20}})
         self.assertEqual(u, {"input": 12, "output": 8, "total": 20})
 
+    def test_real_codex_0139_nested_shape(self):
+        # The EXACT live-pinned codex-cli 0.139.0 payload: absolute totals nested under
+        # tokenUsage.total; tokenUsage.last (the per-turn delta) MUST be ignored — if it
+        # weren't, total would be the bogus 999, not 26420.
+        params = {"threadId": "t", "turnId": "u",
+                  "tokenUsage": {
+                      "total": {"totalTokens": 26420, "inputTokens": 26391,
+                                "cachedInputTokens": 4480, "outputTokens": 29,
+                                "reasoningOutputTokens": 22},
+                      "last": {"totalTokens": 999, "inputTokens": 999, "outputTokens": 999},
+                      "modelContextWindow": 258400}}
+        u = appsrv.extract_usage("thread/tokenUsage/updated", params)
+        self.assertEqual(u, {"input": 26391, "output": 29, "total": 26420})
+
     def test_delta_only_payload_ignored(self):
         # A lone last_token_usage (per-turn delta) is NOT a cumulative total → None,
         # so the run aggregate never double-counts.

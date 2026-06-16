@@ -183,6 +183,17 @@ still green.
   degraded to null cleanly. The exact token-usage event method/fields for codex-cli 0.139.0
   remain unobserved (couldn't run a token-consuming turn) → tracked follow-up; `extract_usage`
   stays pinned to the SPEC §13.5 documented shapes + lenient matching, proven via the mock.
+- 2026-06-16 (POST-COMPLETION, credits restored): re-ran the live-pin and the token-event
+  shape DIFFERED from the SPEC §13.5 documentation — codex-cli 0.139.0 NESTS the absolute
+  totals under `params.tokenUsage.total` (`{totalTokens,inputTokens,outputTokens,
+  cachedInputTokens,reasoningOutputTokens}`) next to a `last` per-turn delta, NOT the flat
+  `total_token_usage` the SPEC shows. The shipped extractor returned None on real data.
+  Reconciled: `_absolute_from_wrapper` descends to `.total` (never `.last`); the mock now
+  emits the real nested shape; `test_real_codex_0139_nested_shape` pins the exact payload.
+  Live-confirmed end-to-end — `run_turn` captured `{input:26399,output:40,total:26439}` on a
+  real turn. **Token-usage now live-pinned ✓** (joining rate_limits). Vindicates the
+  tolerant "None when the shape differs" stance (D-5/R6): the slice shipped safe — degrading
+  to absent telemetry, not wrong telemetry or a crash — until the real shape could be observed.
 
 ## Decision log
 - 2026-06-16: Chose boundary capture (Approach A) over on_event live-stream (B) —
