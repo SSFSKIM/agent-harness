@@ -1,6 +1,7 @@
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { AsyncQueue } from "../swarm/asyncQueue.js";
 import type { QueryFn } from "../swarm/types.js";
+import type { ControllableSession } from "../bridge/types.js";
 
 export interface DaemonSessionDeps { query: QueryFn; }
 
@@ -11,7 +12,7 @@ function userTurn(text: string): SDKUserMessage {
 interface Waiter { onMessage: (m: unknown) => void; resolve: (r: { result: unknown }) => void; reject: (e: Error) => void; }
 
 /** One long-lived query() session. A turn is submit(prompt,onMessage) → streamed messages → resolved result. */
-export class DaemonSession {
+export class DaemonSession implements ControllableSession {
   readonly id: string;
   lastActiveAt: number;
   private input = new AsyncQueue<SDKUserMessage>();
@@ -40,6 +41,22 @@ export class DaemonSession {
 
   /** End the query (in-flight turn finishes) and wait for the read-loop. */
   async dispose(): Promise<void> { this.input.close(); await this.done; }
+
+  // ---- control surface (Phase 2 B): guarded delegations to the underlying Query ----
+  private assertRunning(): void { if (this.ended) throw new Error(`session ${this.id} is not running`); }
+
+  async setModel(model?: string): Promise<void> { this.assertRunning(); await (this.q as any).setModel?.(model); }
+  async setPermissionMode(mode: string): Promise<void> { this.assertRunning(); await (this.q as any).setPermissionMode?.(mode); }
+  async setMaxThinkingTokens(maxTokens: number | null): Promise<void> { this.assertRunning(); await (this.q as any).setMaxThinkingTokens?.(maxTokens); }
+  async interrupt(): Promise<void> { await (this.q as any).interrupt?.(); } // benign no-op even if ended
+
+  async capabilities(): Promise<{ models: unknown[]; commands: unknown[]; mcpServers: unknown[] }> {
+    const q = this.q as any;
+    const [models, commands, mcpServers] = await Promise.all([
+      q.supportedModels?.() ?? [], q.supportedCommands?.() ?? [], q.mcpServerStatus?.() ?? [],
+    ]);
+    return { models, commands, mcpServers };
+  }
 
   private async readLoop(): Promise<void> {
     try {
