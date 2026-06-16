@@ -180,11 +180,24 @@ WORKER created `feat-greeting`+`greeting.py` and called `report_outcome(done, pr
 committed `main` = `land feat-greeting`, `greeting.py` present, `python3 gate.py` GREEN, escalation
 inbox empty. PASS — the worker's PR landed on main through the actual
 `run_once`/`reconcile`/`merger.main` paths (no mocks). M3 proved R4 mechanically; this proves it
-live, both ends. (The `gh` PR roundtrip vs the local-merge land lane still needs a remote.)
+live, both ends (local-merge land lane).
+
+**Full gh PR roundtrip (real codex + real GitHub — 2026-06-16, post-completion).**
+`/tmp/gh_roundtrip_wirepin.py` (uncommitted) created a throwaway private repo
+(`SSFSKIM/agent-harness-merge-livetest-20260616-140748`) and drove the same chain with a
+gh-based land lane: `orchestrator.run_once` → a real WORKER created `feat-greeting`, pushed,
+and opened a **real PR** (`…/pull/1`) via `gh pr create`, reporting `report_outcome(done,
+pr_url=<live url>, pr_branch="feat-greeting")` → `reconcile` enqueued the mergeRequest with the
+live PR url (`merge_enqueued: True`) → `merger.main(--once --autonomous)` → a real LAND agent
+ran the integration gate and `gh pr merge --squash`. Verified on GitHub: PR #1 **`state: MERGED`**,
+`origin/main` carries `greeting.py`, escalation inbox empty. PASS — a real worker opened a real
+GitHub PR through the pipeline and the merger squash-merged it, all through the real harness
+paths. Pre-req confirmed live: `gh` authenticates under the deny-by-default worker env (keyring
+via `HOME`). (No CI/review workflow on a throwaway repo, so the land lane used a gh-merge prompt
+that skips the production land skill's review-wait; the review-gated land path is unchanged.)
 
 Still deferred (tracked): the re-enqueue-after-Director-guidance loop (needs a fresh-id
-discriminant + the loop that calls it — spec Open Q); the full live `gh` PR roundtrip (needs
-a remote; the parent slice's M4 already proved the serializer mechanics live on a scratch repo).
+discriminant + the loop that calls it — spec Open Q).
 Retro: the completion gate earned its keep — both P1s were real (a silent-escalation-loss
 window and a missing watched-routing path) and neither showed up in the green gate; surfacing
 land-lane turn-ends to the Director (R9) is exactly the kind of design-fidelity a unit test
