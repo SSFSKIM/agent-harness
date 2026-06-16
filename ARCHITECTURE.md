@@ -141,3 +141,14 @@ architecture invariants live here (review-arch grounds in this doc). Runtime
    shim over it. The transport is wiring, the core is the product — the `director/`
    analog of DESIGN.md's "every check function takes explicit paths; `main()` does
    the wiring".
+5. **Deployment policy is declarative, not code.** Operator knobs (the board
+   `team`, the logical→Linear state-name map, concurrency/bounds/timeouts, the
+   worker posture, paths, merger knobs) live in the `director` block of
+   `<root>/.harness.json` and are resolved ONCE at startup by `director/config.py`
+   — the single `DEFAULTS` source, precedence CLI flag > config > default. The
+   *methodology* (dev-stage templates, queue schema, disposition kinds) stays in
+   code: a host buys the harness's method and tunes only its deployment. A
+   present-but-malformed block fails loud at load (before any worker spawns); an
+   absent block uses the defaults. This is the `director/` analog of invariant 7
+   ("a host's rules are the host's, declared in `.harness.json`"), and the Symphony
+   `WORKFLOW.md` analog (SPEC §5–6).

@@ -247,3 +247,28 @@ It is **read-only by design** (D-2/D-5): a pending `turnReview`/`mergeReview` is
 human *sees* it, but answering it still goes through **you** (§4/§7). The dashboard never
 writes — no act path in the browser. It binds `127.0.0.1` only (no LAN, no auth) and is a
 convenience instrument: a run is correct whether or not anyone is watching it.
+
+## 11. Configuring a run (the `.harness.json` `director` block)
+
+The orchestration's *deployment policy* — which `team` to poll, the logical→Linear
+`states` map, `concurrency`, the worker `posture` (approval/sandbox/auto_review/network),
+timeouts, paths, and merger knobs — lives in the repo-owned `<root>/.harness.json` under a
+`director` block (the Symphony `WORKFLOW.md` analog; spec
+`docs/product-specs/2026-06-16-director-declarative-config.md`). It sits beside
+`worker_policy` in the same file. *Methodology* (the dev-stage templates, the queue schema)
+stays in code — a host buys the harness's method, tunes only the deployment.
+
+- **Read what a run is actually configured with** (read-only, like `director.status`):
+  ```
+  python3 -m director.config            # resolved effective config as JSON
+  ```
+- **Precedence:** a CLI flag (e.g. `--concurrency`) overrides the `director` block, which
+  overrides the built-in default. So the committed block is the base; a flag is a one-run
+  override.
+- **`$VAR` indirection:** a value of the form `"$NAME"`/`"${NAME}"` resolves from the
+  environment (e.g. `"team": "$DIRECTOR_TEAM"`) — keep secrets out of the committed file.
+- **Load-once (not hot-reload):** the config is read at process startup; edit it, and the
+  **next** run picks it up (we are episodic — a run drains and exits, so restart *is*
+  reload). A malformed block fails **loud at startup**, before any worker spawns — a wrong
+  team/state can never silently claim or transition the wrong tickets. An **absent** block
+  runs on the documented defaults.

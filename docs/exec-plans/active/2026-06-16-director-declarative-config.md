@@ -175,7 +175,11 @@ values resolve from the environment. `python3 plugin/scripts/check.py` is GREEN.
   GREEN at 374. Live-proved: `cd tmp && python3 -m director.orchestrator --mock --once`
   with **no `--team`** drained both demo tickets — team/concurrency/states all from a
   `.harness.json` `director` block (the headline "drop config, no flags" goal).
-- [ ] M3 — docs + cross-links
+- [x] (2026-06-16) M3 — docs + cross-links. DIRECTOR.md §11 (the `.harness.json`
+  `director` block: knobs, `python3 -m director.config`, precedence, `$VAR`,
+  load-once, fail-loud); spec gets the reverse link to symphony-parity-gap.md;
+  ARCHITECTURE.md `director/` invariant 5 ("deployment policy is declarative, not
+  code"). Gate GREEN at 374.
 
 ## Surprises & discoveries
 - 2026-06-16: `tests/` has no `__init__.py` — the gate runs `unittest discover -s

@@ -6,8 +6,10 @@ owner: harness
 # Director 선언적 설정 계약 (`.harness.json` `director` 블록)
 
 Symphony 정합 트랙. 원본 [Symphony SPEC](../symphony-original/SPEC.md) §5–6/§6.2
-(`WORKFLOW.md` = 정책의 무게중심)의 우리 대응물. 직전 hollistic gap analysis 에서
-사람이 고른 다음 수(세 축 중 **externalize policy**)를 spec 으로 떨군다. 부모
+(`WORKFLOW.md` = 정책의 무게중심)의 우리 대응물. 직전
+[Symphony parity gap analysis](../design-docs/symphony-parity-gap.md)(gap #4 =
+"WORKFLOW.md / §5–6 declarative contract")에서 사람이 고른 다음 수(세 축 중
+**externalize policy**)를 spec 으로 떨군다. 부모
 로드맵 [symphony-director-orchestration](2026-06-14-symphony-director-orchestration.md)
 의 Phase 4 슬라이스는 전부 shipped — 이건 그 위에 얹는 **새 능력**(portability),
 re-derivation 아님.
