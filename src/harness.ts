@@ -5,7 +5,7 @@ import { TaskStore } from "./tasks/store.js";
 import { createTaskMcpServer } from "./tasks/server.js";
 import { SwarmRuntime } from "./swarm/runtime.js";
 import { createSwarmMcpServer } from "./swarm/server.js";
-import { applyCoordinatorPersona } from "./swarm/coordinator.js";
+import { applyCoordinatorPersona, NATIVE_TASK_TOOLS } from "./swarm/coordinator.js";
 
 export interface HarnessDeps { query?: typeof sdkQuery; }
 
@@ -37,6 +37,9 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     tasks = swarm.tasks; // share the runtime's store with cc-tasks if enabled
     const existing = (options.mcpServers as Record<string, unknown>) ?? {};
     options.mcpServers = { ...existing, "cc-swarm": createSwarmMcpServer(swarm) };
+    // Disable native per-session Task tools so the shared cc-tasks store is authoritative (avoids split-brain).
+    const dis = (options.disallowedTools as string[] | undefined) ?? [];
+    options.disallowedTools = [...new Set([...dis, ...NATIVE_TASK_TOOLS])];
     if (so.coordinatorPersona) applyCoordinatorPersona(options, so.tools);
   }
 

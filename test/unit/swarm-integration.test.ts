@@ -13,6 +13,10 @@ describe("swarm harness wiring", () => {
     expect((h.options as any).mcpServers["cc-swarm"].name).toBe("cc-swarm");
     expect(h.swarm).toBeTruthy();
   });
+  it("disables native per-session Task tools so cc-tasks is authoritative (split-brain fix)", () => {
+    const h = createHarness({ swarm: true, cwd: dir() }, { query: fakeQuery as any });
+    expect((h.options as any).disallowedTools).toEqual(expect.arrayContaining(["TaskCreate", "TaskUpdate", "TodoWrite"]));
+  });
   it("coexists with taskTools (both servers present, shared store)", () => {
     const h = createHarness({ swarm: true, taskTools: true, cwd: dir() }, { query: fakeQuery as any });
     const servers = (h.options as any).mcpServers;

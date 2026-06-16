@@ -65,6 +65,7 @@ describe("SwarmRuntime", () => {
     const team = rt.createTeam("a");
     rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
     expect(seen.mcpServers["cc-tasks"]).toBeTruthy();   // teammate can claim via the task tools
+    expect(seen.disallowedTools).toEqual(expect.arrayContaining(["TaskCreate", "TaskUpdate", "TodoWrite"])); // native per-session tasks disabled
     await rt.tasks.create({ subject: "job" });
     const claimed = await new TaskStore({ dir: d, agentName: "w1" }).update(1, { status: "in_progress" });
     expect(claimed.owner).toBe("w1");                   // claims as itself over the shared file

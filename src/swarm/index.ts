@@ -6,7 +6,7 @@ export type { TeammateDeps } from "./teammate.js";
 export { SwarmRuntime } from "./runtime.js";
 export type { SwarmDeps } from "./runtime.js";
 export { createSwarmMcpServer, buildSwarmTools } from "./server.js";
-export { applyCoordinatorPersona, coordinatorTools, COORDINATOR_PROMPT } from "./coordinator.js";
+export { applyCoordinatorPersona, coordinatorTools, COORDINATOR_PROMPT, NATIVE_TASK_TOOLS } from "./coordinator.js";
 export { AsyncQueue } from "./asyncQueue.js";
 export { SwarmError } from "./types.js";
 export type { Message, MessageKind, TeammateSpec, SwarmOptions, QueryFn } from "./types.js";

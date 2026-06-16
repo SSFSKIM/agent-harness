@@ -2,6 +2,7 @@ import { MessageBus } from "./bus.js";
 import { TeamRegistry } from "./team.js";
 import type { Team } from "./team.js";
 import { TeammateSession } from "./teammate.js";
+import { NATIVE_TASK_TOOLS } from "./coordinator.js";
 import { TaskStore } from "../tasks/store.js";
 import { createTaskMcpServer } from "../tasks/server.js";
 import type { Task } from "../tasks/types.js";
@@ -70,7 +71,10 @@ export class SwarmRuntime {
       cwd: this.taskCwd, dir: this.taskDir, listId: this.taskListId,
       agentName: spec.name, onOwnerChange: this.notifyOwner,
     });
-    const options: Record<string, unknown> = { mcpServers: { "cc-tasks": createTaskMcpServer(teammateStore) } };
+    const options: Record<string, unknown> = {
+      mcpServers: { "cc-tasks": createTaskMcpServer(teammateStore) },
+      disallowedTools: [...NATIVE_TASK_TOOLS], // shared cc-tasks store is authoritative, not native per-session tasks
+    };
     if (spec.agent) options.model = spec.agent; // per-teammate model (30.9)
 
     // Construct first (side-effect-free); only commit registry/bus state if it succeeds.

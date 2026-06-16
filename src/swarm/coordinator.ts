@@ -8,6 +8,14 @@ export const COORDINATOR_PROMPT = [
   "implementation to teammates and integrate their results.",
 ].join(" ");
 
+/**
+ * Native (per-session) task tools disabled on swarm sessions so the shared `cc-tasks` store is
+ * authoritative. Native Task state is keyed by session_id (`~/.claude/tasks/<session_id>/`) and is NOT
+ * shared across peer query() sessions, so a teammate using native `TaskCreate` would create a task
+ * invisible to the team. See docs/parity/CORRECTIONS-2026-06-16-native-tools.md.
+ */
+export const NATIVE_TASK_TOOLS = ["TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TodoWrite"];
+
 /** Default coordinator tool whitelist (30.11): orchestration + tasks + read-only inspection. */
 export function coordinatorTools(): string[] {
   return [
