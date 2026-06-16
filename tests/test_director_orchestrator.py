@@ -624,5 +624,65 @@ class OrchestrationVisibilityTest(unittest.TestCase):
         self.assertIsNotNone(ctx["run"])
 
 
+class ReconcileMergeEnqueueTest(unittest.TestCase):
+    """M1 (activate-serialized-merge-pipeline): reconcile feeds the serialized merger —
+    a done worker that opened a PR enqueues a mergeRequest (R4 handoff, D-40)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+        self.board = orch.MockBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                                      "description": "d", "prompt": "p",
+                                      "state_id": "st_todo"}])
+        self.states = orch.resolve_states(self.board, "T")
+
+    def _reconcile(self, disp, ticket=None):
+        return orch.reconcile(self.board, ticket or {"id": "u1", "identifier": "D-1"},
+                              disp, 1, self.states, 1, queue_base=self.qbase,
+                              workspace_root=self.tmp / "wsr")
+
+    def _done(self, **outcome_extra):
+        return {"kind": "terminal",
+                "outcome": {"status": "done", "reason": "ok", **outcome_extra},
+                "turns": 1, "turn_id": "t"}
+
+    def _merge_reqs(self):
+        return [r for r in dq.read_pending(base=self.qbase) if r["kind"] == "mergeRequest"]
+
+    def test_done_with_pr_enqueues_a_merge_request(self):
+        out = self._reconcile(self._done(pr_url="http://pr/7", pr_branch="feat/x"))
+        self.assertEqual(out["summary"]["status"], "completed")
+        self.assertTrue(out["summary"]["merge_enqueued"])
+        pend = self._merge_reqs()
+        self.assertEqual(len(pend), 1)
+        self.assertEqual(pend[0]["ticket_id"], "u1")
+        self.assertEqual(pend[0]["payload"]["pr"], "http://pr/7")
+        self.assertEqual(pend[0]["payload"]["branch"], "feat/x")
+        self.assertTrue(pend[0]["workspace_path"].endswith("u1"))  # workspace_root/<id>
+
+    def test_done_without_pr_enqueues_nothing(self):
+        out = self._reconcile(self._done())
+        self.assertFalse(out["summary"]["merge_enqueued"])
+        self.assertEqual(self._merge_reqs(), [])
+
+    def test_blocked_with_pr_fields_still_does_not_enqueue(self):
+        # only `done` feeds the merge queue — blocked means the work didn't finish.
+        disp = {"kind": "terminal",
+                "outcome": {"status": "blocked", "reason": "x", "pr_url": "http://pr/7"},
+                "turns": 1, "turn_id": "t"}
+        self._reconcile(disp)
+        self.assertEqual(self._merge_reqs(), [])
+
+    def test_escalate_does_not_enqueue(self):
+        self._reconcile({"kind": "escalate", "reason": "taste", "turns": 1})
+        self.assertEqual(self._merge_reqs(), [])
+
+    def test_explicit_ticket_workspace_is_used(self):
+        orch.reconcile(self.board, {"id": "u1", "workspace": "/custom/ws"},
+                       self._done(pr_url="u", pr_branch="b"), 1, self.states, 1,
+                       queue_base=self.qbase)
+        self.assertEqual(self._merge_reqs()[0]["workspace_path"], "/custom/ws")
+
+
 if __name__ == "__main__":
     unittest.main()

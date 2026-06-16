@@ -60,8 +60,14 @@ fill these fields in prose:
 A clean, specific self-description lets the merge stay thin. Vague or empty ("did the
 work, tests pass") defeats the trust model — be concrete.
 
-## 4. Then finish
+## 4. Then finish — and hand off your PR
 
-Only after 1–3: `report_outcome(status="done", reason="…")`. If QA surfaced something you
-cannot resolve (a real blocker, or a product/taste decision), do NOT force done — end the
-turn asking, or report blocked/needs_human per the turn protocol.
+Only after 1–3: `report_outcome(status="done", reason="…", pr_url="<the PR url>",
+pr_branch="<the PR branch>")`. **Pass `pr_url` + `pr_branch`** — that is how your work
+reaches the serialized PR-merger: the orchestrator enqueues your PR to the merge queue,
+and a single merger lands it (rebase → integration gate → squash-merge), escalating only
+conflicts/red/taste. Do NOT merge the PR yourself (concurrent merges are unsafe — that is
+the merger's job). If you opened no PR, omit the fields.
+
+If QA surfaced something you cannot resolve (a real blocker, or a product/taste decision),
+do NOT force done — end the turn asking, or report blocked/needs_human per the turn protocol.

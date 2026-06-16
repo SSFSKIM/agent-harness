@@ -20,6 +20,7 @@ import sys
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
+import director.queue as dq
 from director import decider, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 from director.worker import autonomy
@@ -81,8 +82,35 @@ def dispatch(ticket: dict, **kwargs) -> dict:
                 "error": str(exc)}
 
 
+def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace_root,
+                         errs: list) -> bool:
+    """If a `done` worker opened a PR, enqueue it to the serialized PR-merger (R4).
+
+    The worker PROPOSES its PR via `report_outcome(done, pr_url=…, pr_branch=…)`; the
+    orchestrator EXECUTES the `mergeRequest` enqueue here (D-40 — workers never write the
+    Director queue themselves). Best-effort: an enqueue failure is recorded in `errs`
+    (→ summary `reconcile_error`), never raised (mirrors the board-write discipline). No
+    PR fields → nothing queued. The workspace path (where the PR branch lives, for the
+    land lane) is derived the same way `run._workspace_for` does, without a run.py edit.
+    Returns whether a mergeRequest was newly queued."""
+    pr_url = outcome.get("pr_url")
+    pr_branch = outcome.get("pr_branch")
+    if not (pr_url or pr_branch):
+        return False
+    ws = ticket.get("workspace")
+    if ws is None and workspace_root is not None:
+        ws = str(Path(workspace_root) / str(tid))
+    try:
+        return dq.append_merge_request(tid, pr=pr_url, branch=pr_branch,
+                                       workspace_path=ws, base=queue_base)
+    except Exception as exc:
+        errs.append(f"merge enqueue: {exc}")
+        return False
+
+
 def reconcile(board, ticket: dict, disp: dict, attempts: int,
-              states: dict, retry_budget: int) -> dict:
+              states: dict, retry_budget: int, *, queue_base=None,
+              workspace_root=None) -> dict:
     """EXECUTE a drive disposition onto the board. Returns {"retry": True} to ask
     run_once to re-dispatch (a `failed` disposition within budget), or
     {"summary": {...}} for a terminal outcome. This is the R4 redesign: the board
@@ -126,7 +154,10 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             set_state(states["done"])
             reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
             comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
-            summary = summarize("completed", "done")
+            # R4 handoff: a done worker that opened a PR feeds the serialized merger.
+            enqueued = _maybe_enqueue_merge(tid, ticket, outcome, queue_base,
+                                            workspace_root, errs)
+            summary = summarize("completed", "done", merge_enqueued=enqueued)
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
             final = "started"
@@ -254,7 +285,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                 ticket = futures.pop(fut)
                 tid = ticket["id"]
                 outcome = reconcile(board, ticket, fut.result(),
-                                    attempts[tid], states, retry_budget)
+                                    attempts[tid], states, retry_budget,
+                                    queue_base=queue_base, workspace_root=workspace_root)
                 if outcome.get("retry"):
                     attempts[tid] += 1
                     status.retrying(ticket, attempt=attempts[tid])

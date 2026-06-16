@@ -51,6 +51,13 @@ def report_outcome_spec() -> dict:
                     "type": "array", "items": {"type": "string"},
                     "description": "Ids of tickets you created (e.g. when blocked → "
                                    "decomposed into follow-ups)."},
+                "pr_url": {"type": "string",
+                           "description": "When status=done and you opened a PR for this "
+                                          "work, its URL — the orchestrator enqueues it "
+                                          "to the serialized PR-merger."},
+                "pr_branch": {"type": "string",
+                              "description": "The PR's branch name (so the merger can land "
+                                             "it). Include alongside pr_url on done."},
             },
         },
     }
@@ -75,6 +82,11 @@ def make_report_outcome_executor(sink: dict) -> Callable[[str, dict], dict]:
             "status": status,
             "reason": (arguments or {}).get("reason"),
             "spawned_ticket_ids": (arguments or {}).get("spawned_ticket_ids") or [],
+            # PR handoff (done → serialized merger): the worker PROPOSES its PR here;
+            # orchestrator.reconcile EXECUTES the mergeRequest enqueue (D-40). None when
+            # the worker opened no PR — reconcile then enqueues nothing.
+            "pr_url": (arguments or {}).get("pr_url"),
+            "pr_branch": (arguments or {}).get("pr_branch"),
         }
         return {"success": True, "output": "outcome recorded"}
     return execute

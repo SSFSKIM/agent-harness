@@ -116,7 +116,15 @@ process** (`python3 -m director.merger`) drains the queue, landing PRs one at a 
   `gh` PR roundtrip stays deferred (needs a remote — parent slice's note).
 
 ## Progress log
-- [ ] M1 — handoff (report_outcome PR fields + reconcile enqueue) + tests.
+- [x] (2026-06-16) M1 — handoff. `report_outcome` gained optional `pr_url`/`pr_branch`
+  (`director/worker/tools.py`: spec + executor captures into the sink outcome; rides the
+  existing `sink.get("outcome")` pass-through → disposition, `run.py` untouched).
+  `orchestrator.reconcile` (+ new `_maybe_enqueue_merge`): on terminal `done` carrying a PR,
+  enqueues a `mergeRequest` (best-effort → `errs`/`reconcile_error`; workspace derived inline as
+  `ticket.workspace or workspace_root/<id>`); `queue_base`+`workspace_root` threaded from
+  `_dispatch_wave`; summary gains `merge_enqueued`. `qa` skill §4 tells the worker to pass its PR
+  (+ "don't self-merge"). 5 tests: done+PR enqueues (pr/branch/workspace in payload), done-without-PR
+  / blocked-with-PR-fields / escalate enqueue none, explicit ticket workspace honored. Gate GREEN (298).
 - [ ] M2 — standalone event-woken `director.merger` process + tests.
 - [ ] M3 — end-to-end chain test + completion gate.
 
