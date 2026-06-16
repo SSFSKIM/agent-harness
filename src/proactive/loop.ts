@@ -31,6 +31,8 @@ export class ProactiveLoop {
     if (this.state !== "running") return;
     this.state = "paused";
     this.cancelPending();
+    // Signal the in-flight tick to abort; we do NOT drain it (unlike stop()) — the tick settles on
+    // its own and the `state === "running"` reschedule guard keeps it from re-arming while paused.
     if (this.inFlight) await this.deps.interrupt?.();
   }
 
