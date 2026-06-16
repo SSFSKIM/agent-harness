@@ -18,4 +18,10 @@ describe("daemon protocol", () => {
   it("DaemonError is an Error subclass", () => {
     expect(new DaemonError("x")).toBeInstanceOf(Error);
   });
+  it("spawn op accepts a restart policy and rejects an invalid one", () => {
+    const ok = daemonOp.parse({ op: "spawn", restart: "on-failure" });
+    if (ok.op === "spawn") expect(ok.restart).toBe("on-failure");
+    expect(daemonOp.parse({ op: "spawn" }).op).toBe("spawn"); // restart optional
+    expect(() => daemonOp.parse({ op: "spawn", restart: "sometimes" })).toThrow();
+  });
 });
