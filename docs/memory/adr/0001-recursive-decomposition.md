@@ -44,6 +44,10 @@ needed.
 
 - Do **not** add a meta-spec format/lint/tooling. Use product-design + execplan
   recursively; let the orchestrator own run-time fan-out.
-- A parent spec **declares** its decomposition + order; any roadmap/status is a
-  *derived view* of that (and of where each child ExecPlan lives — `active/` vs
-  `completed/`), never a separately hand-maintained tracker.
+- A parent spec **declares** its decomposition + order **as a structured field**
+  — a phase/slice tag per child (PEDAGOGY's `targetPhase`, Symphony's `Phase N`),
+  not scattered prose. Then any roadmap/status is a cheap *derived view*: a
+  group-by of that tag, plus where each child ExecPlan lives (`active/` vs
+  `completed/`), never a separately hand-maintained tracker. Tag the children at
+  design time and the roadmap is free — that is what makes the decomposition
+  intentional from the start rather than reconstructed later.
