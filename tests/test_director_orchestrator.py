@@ -791,5 +791,195 @@ class ActiveRunReconcileTest(unittest.TestCase):
         self.assertEqual(seen, [("cancelled", main_ident)])
 
 
+def _wait_for(cond, timeout=3.0, msg="condition not met in time"):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if cond():
+            return
+        time.sleep(0.005)
+    raise AssertionError(msg)
+
+
+_DONE = {"kind": "terminal", "outcome": {"status": "done"}, "turns": 1, "telemetry": {}}
+
+
+class DaemonLoopTest(unittest.TestCase):
+    """run_forever (daemon stage 2): the always-on tick loop. Each test drives it on a
+    background thread with an injected shutdown_event + install_signals=False + a fast
+    poll_interval, so the daemon is terminable without real signals."""
+
+    def _run_bg(self, board, fake, **kw):
+        shutdown, force, result = threading.Event(), threading.Event(), {}
+        states = orch.resolve_states(board, "T")
+
+        def go():
+            with mock.patch("director.orchestrator.dispatch", fake):
+                result["out"] = orch.run_forever(
+                    board, command=["x"], team="T", states=states,
+                    shutdown_event=shutdown, force_event=force, install_signals=False,
+                    poll_interval_s=0.02, **kw)
+        th = threading.Thread(target=go, daemon=True)
+        th.start()
+        return shutdown, force, th, result
+
+    def test_daemon_signal_action_first_drains_second_forces(self):
+        shutdown, force = threading.Event(), threading.Event()
+        orch._daemon_signal_action(shutdown, force)
+        self.assertTrue(shutdown.is_set())
+        self.assertFalse(force.is_set())  # 1st signal only requests graceful drain
+        orch._daemon_signal_action(shutdown, force)
+        self.assertTrue(force.is_set())   # 2nd escalates to force
+
+    def test_never_exits_on_empty_and_idle_does_not_busyspin(self):
+        # R1 + R7: an empty board keeps polling forever (does not exit on drained); the
+        # idle wait sleeps (no busy-spin) and a shutdown during idle returns promptly.
+        board = orch.MockBoard([])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            shutdown, force, th, result = self._run_bg(board, lambda *a, **k: _DONE, status=w)
+            try:
+                _wait_for(lambda: (ds.read_status(base=st) or {}).get("run", {}).get("polls", 0) >= 3,
+                          msg="daemon did not keep polling an empty board")
+                self.assertTrue(th.is_alive())  # R1: never exits on an empty/drained board
+                snap = ds.read_status(base=st)
+                self.assertEqual(snap["run"]["mode"], "daemon")
+                self.assertEqual(snap["run"]["phase"], "idle")
+                before = snap["run"]["polls"]
+                time.sleep(0.1)  # ~5 idle ticks at poll_interval 0.02 if sleeping
+                after = (ds.read_status(base=st) or {})["run"]["polls"]
+                self.assertLess(after - before, 200,  # a busy-spin would be many thousands
+                                "idle loop appears to busy-spin")
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+            self.assertFalse(th.is_alive())  # R7: prompt shutdown while idle
+
+    def test_bounded_claim_and_top_up_as_slot_frees(self):
+        # R3 (bounded claim) + R2 (top-up as a slot frees, not wave-drain).
+        board = orch.MockBoard([_issue("a"), _issue("b"), _issue("c")])
+        release = {tid: threading.Event() for tid in ("a", "b", "c")}
+        entered, lock = [], threading.Lock()
+
+        def fake(ticket, *, cancel_event=None, **kw):
+            tid = ticket["id"]
+            with lock:
+                entered.append(tid)
+            release[tid].wait(timeout=5.0)
+            return _DONE
+        shutdown, force, th, result = self._run_bg(board, fake, concurrency=2)
+        try:
+            _wait_for(lambda: len(entered) >= 2, msg="first two not dispatched")
+            time.sleep(0.1)  # prove the 3rd is NOT claimed up-front (bounded, R3)
+            with lock:
+                self.assertEqual(sorted(entered), ["a", "b"])
+            self.assertEqual(board.state_name("c"), "Todo")
+            self.assertEqual(
+                sum(1 for t in ("a", "b", "c") if board.state_name(t) == "In Progress"), 2)
+            release["a"].set()  # free a slot → top-up claims c while b still runs (R2)
+            _wait_for(lambda: board.state_name("c") == "In Progress",
+                      msg="c was not topped-up after a slot freed")
+            with lock:
+                self.assertIn("c", entered)
+            self.assertEqual(board.state_name("b"), "In Progress")  # b still running
+        finally:
+            for ev in release.values():
+                ev.set()
+            shutdown.set()
+            th.join(timeout=3.0)
+
+    def test_stuck_is_status_not_exit(self):
+        # R5: an all-blocked board (b blocked by a failed a) writes status.stuck and
+        # keeps polling — stuck is a heartbeat signal, never a termination.
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            fail = {"kind": "failed", "status": "failed", "turn_id": None, "turns": 0}
+            shutdown, force, th, result = self._run_bg(
+                board, lambda *a, **k: fail, retry_budget=0, status=w)
+            try:
+                _wait_for(lambda: (ds.read_status(base=st) or {}).get("stuck"),
+                          msg="stuck set never recorded")
+                snap = ds.read_status(base=st)
+                self.assertEqual([s["ticket"] for s in snap["stuck"]], ["B"])
+                self.assertEqual(snap["stuck"][0]["blocked_by"][0]["id"], "a")
+                self.assertTrue(th.is_alive())  # R5: stuck did NOT terminate the daemon
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_poll_failure_is_fail_soft(self):
+        # R8: a poll that raises is survived (not poll_failed-exit like the batch path);
+        # the daemon recovers and claims the ticket on a later poll.
+        class FlakyPoll(orch.MockBoard):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self.polls = 0
+
+            def list_ready_issues(self, team, ready_state_id):
+                self.polls += 1
+                if self.polls == 1:
+                    raise RuntimeError("network down")
+                return super().list_ready_issues(team, ready_state_id)
+
+        board = FlakyPoll([_issue("a")])
+        shutdown, force, th, result = self._run_bg(board, lambda *a, **k: _DONE)
+        try:
+            _wait_for(lambda: board.state_name("a") == "Done",
+                      msg="daemon did not recover from a poll failure")
+            self.assertTrue(th.is_alive())
+        finally:
+            shutdown.set()
+            th.join(timeout=2.0)
+
+    def test_shutdown_drains_in_flight(self):
+        # R6 (graceful): shutdown stops claiming and lets the in-flight worker finish.
+        board = orch.MockBoard([_issue("a")])
+        release, entered = threading.Event(), threading.Event()
+
+        def fake(ticket, *, cancel_event=None, **kw):
+            entered.set()
+            release.wait(timeout=5.0)
+            return _DONE
+        shutdown, force, th, result = self._run_bg(board, fake)
+        try:
+            _wait_for(entered.is_set, msg="worker never started")
+            shutdown.set()
+            time.sleep(0.1)
+            self.assertTrue(th.is_alive())   # still draining (worker not released)
+            release.set()
+            th.join(timeout=3.0)
+            self.assertFalse(th.is_alive())  # drained then exited
+            self.assertEqual(board.state_name("a"), "Done")
+            self.assertEqual(result["out"]["stopped_reason"], "shutdown")
+        finally:
+            release.set()
+            shutdown.set()
+            th.join(timeout=2.0)
+
+    def test_force_cancels_in_flight(self):
+        # R6 (force): a 2nd signal cancels in-flight workers via stage 1's cooperative
+        # cancel, so a long worker stops fast instead of being drained-for.
+        board = orch.MockBoard([_issue("a")])
+        entered = threading.Event()
+
+        def fake(ticket, *, cancel_event=None, **kw):
+            entered.set()
+            if cancel_event is not None and cancel_event.wait(timeout=5.0):
+                return {"kind": "cancelled", "reason": "reconciliation", "turns": 1,
+                        "telemetry": {}}
+            return _DONE
+        shutdown, force, th, result = self._run_bg(board, fake)
+        try:
+            _wait_for(entered.is_set, msg="worker never started")
+            shutdown.set()  # graceful: worker would otherwise block ~5s on its cancel_event
+            force.set()     # force: cancel all in-flight → worker returns fast
+            th.join(timeout=2.0)
+            self.assertFalse(th.is_alive())  # force-cancel beat the 5s block
+        finally:
+            shutdown.set()
+            force.set()
+            th.join(timeout=2.0)
+
+
 if __name__ == "__main__":
     unittest.main()

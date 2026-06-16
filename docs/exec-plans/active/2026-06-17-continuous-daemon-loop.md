@@ -281,6 +281,16 @@ minus the barrier."
   pure `_stuck_report` + routed `run_until_drained` through it. **No new behavior, no
   signature change.** Regression net: all 51 orchestrator tests pass byte-unchanged;
   full gate GREEN (389).
+- [x] (2026-06-17) M3 — `run_forever` daemon loop: bounded free-slot top-up, two-path
+  wait (`wait(futures,…)` busy / `shutdown_event.wait(_idle_wait_s())` idle), reap,
+  `reconcile_in_flight` on the stage-1 cadence, idle/heartbeat + stuck-as-status,
+  never-exit, claim-failed dedup, poll fail-soft (stderr surface), `_idle_wait_s` backoff
+  seam. Graceful shutdown built here too (coupled to the fn): `_daemon_signal_action`
+  (1st drain / 2nd force) + `_install_daemon_signals`; `_RunState(retain_results=False)`
+  + `attempts.pop` on terminal bound daemon memory. DaemonLoopTest: 7 tests for
+  R1/R2/R3/R5/R6(drain+force)/R7/R8 via injected events. Gate GREEN (396).
+  **Scope adjustment:** signal handling moved into M3 (it lives inside run_forever); M4
+  narrows to the CLI surface (`--daemon` routing) + DIRECTOR.md + a CLI-routing test.
 
 ## Surprises & discoveries
 
@@ -299,6 +309,17 @@ minus the barrier."
   + `max_ticks`; handler tested as a plain fn — no `os.kill` (flaky/process-global).
 - 2026-06-17: `_idle_wait_s(poll_interval_s)` is the single backoff seam (D-70);
   it returns the constant today and is the only thing gap #3 swaps.
+- 2026-06-17 (D-73, new): daemon memory is bounded by `_RunState(retain_results=False)`
+  (its durable output is the bounded `status.json` recent[], not an in-memory results
+  dict) + pruning `attempts` on terminal. The `claim_failed` set still grows, but only
+  on rare claim failures; retry-claim-with-backoff is deferred to gap #3 (the same seam).
+  This preempts the "unbounded memory in a forever loop" reliability concern.
+- 2026-06-17: signal handling implemented in M3 (it lives inside `run_forever`), via a
+  pure `_daemon_signal_action` (testable without real signals) + `_install_daemon_signals`
+  (main-thread only, restores prior handlers). M4 reduces to CLI routing + DIRECTOR.md.
+- 2026-06-17: poll failure is surfaced as a one-line JSON to stderr (daemon operational
+  log) and survived — a deliberate minimal surface; richer poll-failure visibility +
+  backoff is gap #3.
 
 ## Feedback (from completion gate)
 

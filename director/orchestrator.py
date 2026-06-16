@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 import threading
 import time
@@ -293,13 +294,18 @@ class _RunState:
     no lock and the StatusWriter stays a lock-free single writer (RELIABILITY R13)."""
 
     def __init__(self, *, board, states, status, retry_budget: int, concurrency: int,
-                 queue_base, workspace_root, **dispatch_kwargs):
+                 queue_base, workspace_root, retain_results: bool = True, **dispatch_kwargs):
         self.board = board
         self.states = states
         self.status = status or status_mod.NoopStatusWriter()
         self.retry_budget = retry_budget
         self.queue_base = queue_base
         self.workspace_root = workspace_root
+        # The batch wave RETURNS its results dict, so it retains every terminal summary.
+        # The daemon (run_forever) runs unbounded, so it does NOT retain (its durable
+        # output is the bounded status.json `recent[]`) — preventing an unbounded
+        # in-memory leak over a multi-week run.
+        self.retain_results = retain_results
         # Fixed per-worker dispatch kwargs (command/tools/posture/decide/timeouts/…);
         # `attempt` and `cancel_event` are added per submit. queue_base/workspace_root
         # are stored separately (reconcile needs them too), so they are NOT in here.
@@ -328,11 +334,12 @@ class _RunState:
 
     def _claim_failed(self, ticket, reason) -> None:
         tid = ticket["id"]
-        self.claim_failed.add(tid)
-        self.results[tid] = {"ticket": ticket.get("identifier") or tid,
-                             "status": "claim_failed", "final_state": "ready",
-                             "attempts": 0, "error": reason}
-        self.status.terminal(ticket, self.results[tid])
+        self.claim_failed.add(tid)  # daemon dedup: never re-claim a failed-claim ticket
+        row = {"ticket": ticket.get("identifier") or tid, "status": "claim_failed",
+               "final_state": "ready", "attempts": 0, "error": reason}
+        if self.retain_results:
+            self.results[tid] = row
+        self.status.terminal(ticket, row)
 
     def claim_and_submit(self, ticket, *, wave: int) -> bool:
         """Claim = mark-before-act (D-9): transition to `started` BEFORE spawning, so a
@@ -373,7 +380,9 @@ class _RunState:
                 self.submit(ticket)  # stays in_flight across the retry
             else:
                 self.in_flight.discard(tid)
-                self.results[tid] = outcome["summary"]
+                self.attempts.pop(tid, None)  # terminal — drop bookkeeping (daemon memory)
+                if self.retain_results:
+                    self.results[tid] = outcome["summary"]
                 self.status.terminal(ticket, outcome["summary"])
 
     def reconcile_in_flight(self) -> None:
@@ -526,6 +535,151 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
     if poll_error:
         out["error"] = poll_error
     return out
+
+
+def _idle_wait_s(poll_interval_s: float) -> float:
+    """How long the daemon sleeps before its next poll when fully idle (no workers
+    running). The single backoff SEAM (spec D-70): today it returns the constant poll
+    interval; gap #3 (exponential backoff on idle) is the ONLY thing that swaps this —
+    nothing else in the loop changes."""
+    return poll_interval_s
+
+
+def _daemon_signal_action(shutdown_event: threading.Event,
+                          force_event: threading.Event) -> None:
+    """One stop signal's effect, factored out so it is testable without real signals
+    (D-68): the 1st signal requests a graceful shutdown (stop claiming, drain in-flight);
+    a 2nd signal escalates to force (cancel every in-flight worker)."""
+    if shutdown_event.is_set():
+        force_event.set()
+    else:
+        shutdown_event.set()
+
+
+def _install_daemon_signals(shutdown_event: threading.Event,
+                            force_event: threading.Event):
+    """Install SIGTERM/SIGINT handlers that ONLY flip Events (a handler runs between
+    bytecodes on the MAIN thread, so flipping a `threading.Event` is the safe minimum —
+    no I/O, no locks; the StatusWriter single-writer invariant R13 is untouched). Returns
+    a `restore()` that reinstalls the prior handlers. Must be called on the main thread
+    (signal.signal's constraint) — production does; tests pass install_signals=False."""
+    def handler(signum, frame):
+        _daemon_signal_action(shutdown_event, force_event)
+    prev = {sig: signal.signal(sig, handler)
+            for sig in (signal.SIGTERM, signal.SIGINT)}
+
+    def restore():
+        for sig, h in prev.items():
+            signal.signal(sig, h)
+    return restore
+
+
+def run_forever(board, command: list[str], *, team: str, states: dict,
+                done_types=("completed",), concurrency: int = 3, queue_base=None,
+                workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
+                tools=None, tool_executor=None, install_skills: bool = False,
+                read_timeout_s: float = 30.0, timeout_s: float = 300.0, status=None,
+                approval_policy: str = "untrusted", sandbox: str = "workspace-write",
+                decide=decider.autonomous_decide, max_turns: int = run.DEFAULT_MAX_TURNS,
+                reconcile_interval_s: float = config.DEFAULTS["reconcile_interval_s"],
+                poll_interval_s: float = config.DEFAULTS["poll_interval_s"],
+                shutdown_event=None, force_event=None, install_signals: bool = True,
+                max_ticks: int | None = None) -> dict:
+    """The always-on daemon (gap #2): poll → claim ready work into free slots → keep
+    ticking forever, never exiting on a drained board (the Symphony identity). Unlike
+    the batch wave, this NEVER returns on its own — only a stop signal ends it.
+
+    Each tick (over one daemon-lifetime `_RunState`):
+      1. TOP UP — claim ≤ `concurrency - running` ready tickets (bounded top-up, D-64),
+         so the board's `In Progress` count equals the running-worker count and each poll
+         re-prioritizes. A poll that raises is fail-soft (D-69): skip top-up, survive.
+      2. WAIT — two-path (D-67): block on a worker completion up to `poll_interval_s` when
+         busy; sleep on the shutdown Event for `_idle_wait_s()` when idle (`wait([], …)`
+         returns instantly → would busy-spin).
+      3. REAP completed futures → reconcile (retry/terminal), the shared `_RunState.reap`.
+      4. RECONCILE in-flight on the `reconcile_interval_s` monotonic cadence (stage 1,
+         lifted unchanged).
+    When nothing runs and ready work is all blocked, the stuck set is a STATUS signal
+    (D-66), never a termination. Graceful shutdown (D-68): the 1st signal sets
+    `shutdown_event` (stop claiming, drain in-flight); a 2nd sets `force_event` (cancel
+    every in-flight worker via stage 1's cooperative cancel). `shutdown_event`/`force_event`
+    are injectable + `install_signals=False` + `max_ticks` so tests drive it without real
+    signals. Returns a light session summary `{stopped_reason, polls}` (the per-ticket
+    record lives in the bounded status.json, not an unbounded return dict)."""
+    shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
+    force_event = force_event if force_event is not None else threading.Event()
+    state = _RunState(board=board, states=states, status=status, retry_budget=retry_budget,
+                      concurrency=concurrency, queue_base=queue_base,
+                      workspace_root=workspace_root, retain_results=False, command=command,
+                      tools=tools, tool_executor=tool_executor, install_skills=install_skills,
+                      read_timeout_s=read_timeout_s, timeout_s=timeout_s,
+                      approval_policy=approval_policy, sandbox=sandbox, decide=decide,
+                      max_turns=max_turns)
+    restore = _install_daemon_signals(shutdown_event, force_event) if install_signals else None
+    done_set = set(done_types)
+    last_reconcile = time.monotonic()
+    forced = False
+    ticks = 0
+    try:
+        while True:
+            draining = shutdown_event.is_set()
+            if draining and not state.futures:
+                break  # stopped claiming and all in-flight drained → exit
+            if max_ticks is not None and ticks >= max_ticks:
+                break
+            ticks += 1
+            # 2nd signal → cancel every in-flight worker once (cooperative, stage 1).
+            if draining and force_event.is_set() and not forced:
+                forced = True
+                for ev in state.cancel_events.values():
+                    ev.set()
+
+            if not draining:
+                # TOP UP — bounded by free slots (D-64); poll fail-soft (D-69).
+                free = concurrency - len(state.futures)
+                blocked: list = []
+                if free > 0:
+                    try:
+                        ready = board.list_ready_issues(team, states["ready"])
+                    except Exception as exc:  # transient board error — survive, retry next tick
+                        ready = None
+                        print(json.dumps({"daemon": "poll_failed", "error": str(exc)}),
+                              file=sys.stderr)
+                    if ready is not None:
+                        eligible = eligible_tickets(ready, done_types=done_types)
+                        elig_ids = {t["id"] for t in eligible}
+                        claimable = [t for t in eligible if t["id"] not in state.in_flight
+                                     and t["id"] not in state.claim_failed]
+                        for ticket in claimable[:free]:
+                            state.claim_and_submit(ticket, wave=ticks)
+                        pending = [t for t in ready if t["id"] not in state.in_flight
+                                   and t["id"] not in state.claim_failed]
+                        blocked = [t for t in pending if t["id"] not in elig_ids]
+                state.status.polled(phase="active" if state.futures else "idle")
+                if not state.futures and blocked:  # stuck-as-status, NOT exit (D-66)
+                    state.status.stuck(_stuck_report(blocked, done_set))
+            else:
+                state.status.polled(phase="draining")
+
+            # WAIT — block on a completion when busy; sleep on the shutdown Event when
+            # idle (so a shutdown during idle wakes us immediately — no busy-spin, D-67).
+            if state.futures:
+                done, _ = wait(list(state.futures), timeout=poll_interval_s,
+                               return_when=FIRST_COMPLETED)
+                state.reap(done)
+            elif not draining:
+                shutdown_event.wait(_idle_wait_s(poll_interval_s))
+
+            now = time.monotonic()
+            if state.futures and now - last_reconcile >= reconcile_interval_s:
+                state.reconcile_in_flight()
+                last_reconcile = now
+        state.status.finished("shutdown")
+        return {"stopped_reason": "shutdown", "polls": ticks}
+    finally:
+        if restore is not None:
+            restore()
+        state.shutdown()
 
 
 class MockBoard:
