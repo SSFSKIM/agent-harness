@@ -33,7 +33,7 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
   if (config.swarm) {
     const so = config.swarm === true ? {} : config.swarm;
     const to = config.taskTools && config.taskTools !== true ? config.taskTools : {};
-    swarm = new SwarmRuntime({ query }, { cwd: config.cwd, taskOptions: to });
+    swarm = new SwarmRuntime({ query }, { cwd: config.cwd, taskOptions: to, permissions: so.permissions });
     tasks = swarm.tasks; // share the runtime's store with cc-tasks if enabled
     const existing = (options.mcpServers as Record<string, unknown>) ?? {};
     options.mcpServers = { ...existing, "cc-swarm": createSwarmMcpServer(swarm) };

@@ -29,4 +29,19 @@ describe("swarm harness wiring", () => {
     expect((h.options as any).systemPrompt.append).toContain("COORDINATOR");
     expect((h.options as any).allowedTools).toContain("mcp__cc-swarm__spawnTeammate");
   });
+  it("passes permissions config into the runtime broker", async () => {
+    let cut: any;
+    const fq = ({ prompt, options }: any) => {
+      if (options?.canUseTool) cut = options.canUseTool;
+      return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "ok" }; } })();
+    };
+    // custom allowlist proves the config flowed through to the runtime broker (Bash allowed, Read not).
+    const h = createHarness({ swarm: { permissions: { allow: ["Bash"] } }, cwd: dir() }, { query: fq as any });
+    const team = h.swarm!.createTeam("a");
+    h.swarm!.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
+    expect(typeof cut).toBe("function");
+    expect((await cut("Bash", {})).behavior).toBe("allow");
+    expect((await cut("Read", {})).behavior).toBe("deny");
+    await h.swarm!.disposeAll();
+  });
 });
