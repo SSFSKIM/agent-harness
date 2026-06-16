@@ -9,6 +9,11 @@ describe("resolveSandbox", () => {
     expect(resolveSandbox({ sandbox: true })).toEqual({ enabled: true });
   });
   it("passes object form through with defaults", () => {
-    expect(resolveSandbox({ sandbox: { network: true } })).toEqual({ enabled: true, network: true });
+    expect(resolveSandbox({ sandbox: { autoAllowBashIfSandboxed: true } }))
+      .toEqual({ enabled: true, autoAllowBashIfSandboxed: true });
+  });
+  it("forwards the SDK network settings object (not a boolean)", () => {
+    expect(resolveSandbox({ sandbox: { network: { allowLocalBinding: true } } }))
+      .toEqual({ enabled: true, network: { allowLocalBinding: true } });
   });
 });

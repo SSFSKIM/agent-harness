@@ -31,4 +31,15 @@ describe("resolveOptions", () => {
     expect(o.settingSources).toEqual([]);
     expect(o.systemPrompt.excludeDynamicSections).toBe(true);
   });
+  it("merges env over process.env so PATH/HOME/auth are not erased", () => {
+    // SDK `env` replaces the whole subprocess environment; resolveOptions must
+    // spread process.env so a single provider flag does not wipe inherited vars.
+    const o: any = resolveOptions({ provider: "bedrock" });
+    expect(o.env.CLAUDE_CODE_USE_BEDROCK).toBe("1");
+    expect(o.env.PATH).toBe(process.env.PATH);
+  });
+  it("does not set env (inherits process.env) when there are no overrides", () => {
+    const o: any = resolveOptions({});
+    expect(o.env).toBeUndefined();
+  });
 });

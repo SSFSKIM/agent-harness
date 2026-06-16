@@ -124,10 +124,21 @@ npm run typecheck    # tsc --noEmit
   `.claude/commands` discovery, `Explore` registration, checkpointing-enabled file creation). These
   auto-skip when `ANTHROPIC_API_KEY` is unset.
 
-> **Note on live `rewind`:** the SDK's `rewindFiles()` is a control-protocol request that needs an
-> *open* process transport (streaming-input mode). It cannot be called after a one-shot string-prompt
-> query completes. The `rewind → rewindFiles` wiring is verified in the unit suite; live mid-session
-> rewind is a Phase-2 (interactive/streaming) capability.
+> **Note on `rewind` and introspection:** the SDK's `rewindFiles()` and the `supported*()`
+> introspection methods are **control-protocol requests** that need an *open* process transport — call
+> them while a query is active (after `stream()` has started), not after a one-shot `run()` completes.
+> The `rewind → rewindFiles` wiring is verified in the unit suite; live mid-session rewind is a Phase-2
+> (interactive/streaming) capability.
+
+> **Note on `env`:** the SDK's `Options.env`, when set, **replaces** the subprocess environment
+> entirely (it is not merged with `process.env`). The harness therefore spreads `process.env` before
+> applying provider flags / overrides, so setting `provider`/`baseUrl`/`customHeaders`/`env` never
+> erases `PATH`/`HOME`/`ANTHROPIC_API_KEY`.
+
+> **Note on `settingSources` default:** the bundled `sdk.d.ts` (v0.3.178) documents that an omitted
+> `settingSources` loads *all* sources (matching the CLI) — newer than the Phase-0 "defaults to none"
+> premise. The harness sets `['user','project','local']` explicitly regardless, so it stays
+> CC-faithful across SDK-default drift.
 
 ## Where this fits
 

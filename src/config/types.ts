@@ -23,8 +23,9 @@ export interface HarnessConfig {
   toolPreset?: "claude_code" | "none";     // default claude_code
   toolAliases?: Record<string, string>;
   webFetchDomains?: { allow?: string[]; deny?: string[] };
-  // sandbox
-  sandbox?: boolean | { enabled?: boolean; network?: boolean; autoAllowBashIfSandboxed?: boolean };
+  // sandbox — `network` mirrors the SDK SandboxNetworkSettings object
+  // (allowedDomains/allowLocalBinding/allowUnixSockets/…), NOT a boolean.
+  sandbox?: boolean | { enabled?: boolean; network?: Record<string, unknown>; autoAllowBashIfSandboxed?: boolean };
   // provider
   provider?: "anthropic" | "bedrock" | "vertex" | "foundry";
   baseUrl?: string;

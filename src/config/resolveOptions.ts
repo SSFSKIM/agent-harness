@@ -28,7 +28,10 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   if (tools.disallowedTools) options.disallowedTools = tools.disallowedTools;
   if (tools.toolAliases) options.toolAliases = tools.toolAliases;
   if (sandbox) options.sandbox = sandbox;
-  if (Object.keys(env).length) options.env = env;
+  // SDK contract (sdk.d.ts): a provided `env` REPLACES the subprocess environment
+  // entirely — it is NOT merged with process.env. Spread process.env first so our
+  // provider flags/overrides augment (not erase) PATH/HOME/ANTHROPIC_API_KEY/etc.
+  if (Object.keys(env).length) options.env = { ...process.env, ...env };
   if (config.model) options.model = config.model;
   if (config.fallbackModel) options.fallbackModel = config.fallbackModel;
   if (config.maxTurns !== undefined) options.maxTurns = config.maxTurns;
