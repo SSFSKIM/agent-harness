@@ -190,10 +190,32 @@ client render).
   producer.
 
 ## Progress log
-- [ ] (2026-06-16) Plan authored against reconciled spec (base_commit b3a69d3).
-      Next: M1 build_view + tests.
+- [x] (2026-06-16) Plan authored against reconciled spec (base_commit b3a69d3).
+- [x] (2026-06-16) M1 — `build_view` pure core + `_summary_for` (kind-keyed, tolerant).
+      5 tests GREEN; telemetry pass-through confirmed in the view dict. Commit on master.
+- [x] (2026-06-16) M2 — `_Handler`/`_DashboardServer`/`serve`/`main`. `__getattr__`
+      funnels every verb into `_dispatch` (404/405/serve); 127.0.0.1 bind; 5 HTTP smoke
+      tests (port 0 + urllib) GREEN.
+- [x] (2026-06-16) M3 — full inline `PAGE` (dark CSS + vanilla JS poller). Renders all
+      five blocks + cost/usage telemetry; textContent-only (XSS-safe). Contract-marker
+      test GREEN.
+- [x] (2026-06-16) M4 — DIRECTOR.md §10 added; gate GREEN at 346; **live proof** via
+      /playwright-cli against a seeded run (tokens 26420, rate-limit, stuck, pending all
+      rendered; `updated` advanced 09:51:37→09:52:02 = live ~1s poll confirmed).
+- [ ] Completion gate: self-review diff + review-arch & review-reliability (standard).
 
 ## Surprises & discoveries
+- The renderer needed **no new computation** for telemetry: because `build_view` passes
+  `run`/`recent` through untouched, the producer's `codex_totals`/`rate_limits`/per-ticket
+  `tokens` simply flowed to the client. The entire "now render cost/usage" payoff was a
+  client-side display concern — vindicating the producer-before-renderer sequencing.
+- The browser auto-requests `/favicon.ico`; our deliberate "undefined route → 404"
+  contract returns 404, which Chrome logs as a console error. This is the spec behaving
+  correctly, NOT a bug — a localhost read-only instrument needs no favicon. Left as-is.
+- Pyright flags `self.server.status_dir` (handler's `server` is typed `BaseServer`) and
+  the `None`-typed `Content-Type` header in `assertIn`. Both are type-checker noise; the
+  gate runs lints + tests (not Pyright), and the runtime is correct. Stashing config on a
+  `_DashboardServer` subclass (vs monkey-attributes) keeps the SET side clean.
 
 ## Decision log
 - 2026-06-16: Build from the spec's "구체 계약" note paragraph (the authoritative

@@ -223,3 +223,27 @@ On a `runReport`:
 
 Run-level reporting is **watched-mode only** — un-watched (`--autonomous`) has no live you to
 pull, so no `runReport` is acted on (the run's outcome is read from `director.status` after).
+
+## 10. Watching a run live (the observability dashboard)
+
+§1/§8 are how *you* read the picture (`director.status`, on demand). This is how a **human**
+watches it directly — an ambient, read-only browser view they glance at without entering your
+session:
+
+```
+python3 -m director.dashboard            # http://127.0.0.1:8787/  (read-only)
+python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir>
+```
+
+It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status` +
+`director.queue` pending), re-polled ~1s in the browser (no SSE, no reload). The page renders
+the run header with **cost/usage** — cumulative tokens, runtime seconds, and the latest
+rate-limit (the Symphony-grade telemetry the producer now ships) — plus in-flight tickets
+(phase·attempt/wave), what is stuck and why, the recent-outcomes tail (✓/✗ + per-ticket
+tokens/session), and the pending Director queue (kind·ticket·summary). With no run it shows
+"no active run"; a torn/absent snapshot degrades to that too — visibility is never a gate.
+
+It is **read-only by design** (D-2/D-5): a pending `turnReview`/`mergeReview` is shown so the
+human *sees* it, but answering it still goes through **you** (§4/§7). The dashboard never
+writes — no act path in the browser. It binds `127.0.0.1` only (no LAN, no auth) and is a
+convenience instrument: a run is correct whether or not anyone is watching it.
