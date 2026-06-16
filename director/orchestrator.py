@@ -318,12 +318,20 @@ class _RunState:
         self.cancelled_states: dict = {} # tid -> observed external state name at cancel
         self.results: dict = {}          # tid -> terminal summary
         self.claim_failed: set = set()   # tids whose claim raised/returned False
+        # When the daemon force-stops (2nd signal), EVERY worker spawned thereafter —
+        # including a retry the reap path re-submits — must be born cancelled, else a
+        # worker that returned `failed`-within-budget during the force-drain would
+        # resurrect an uncancellable attempt and defeat the force-stop (review-reliability).
+        self.born_cancelled = False
 
     def submit(self, ticket) -> None:
         # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
         # (the prior attempt's event is discarded). The main thread sets it during
-        # reconciliation; the worker thread reads it (Event is thread-safe).
+        # reconciliation; the worker thread reads it (Event is thread-safe). Under a
+        # force-stop, the new worker is born already-cancelled so it stops immediately.
         ev = threading.Event()
+        if self.born_cancelled:
+            ev.set()
         self.cancel_events[ticket["id"]] = ev
         fut = self.pool.submit(
             dispatch, ticket, queue_base=self.queue_base, workspace_root=self.workspace_root,
@@ -619,6 +627,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     done_set = set(done_types)
     last_reconcile = time.monotonic()
     forced = False
+    poll_failing = False  # log a board-poll failure once on entry + once on recovery
     ticks = 0
     try:
         while True:
@@ -628,9 +637,12 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
             if max_ticks is not None and ticks >= max_ticks:
                 break
             ticks += 1
-            # 2nd signal → cancel every in-flight worker once (cooperative, stage 1).
+            # 2nd signal → cancel every in-flight worker once (cooperative, stage 1) AND
+            # mark the state so any retry re-submitted during the drain is born cancelled
+            # (else a `failed`-then-retried worker would escape the force-stop).
             if draining and force_event.is_set() and not forced:
                 forced = True
+                state.born_cancelled = True
                 for ev in state.cancel_events.values():
                     ev.set()
 
@@ -643,9 +655,14 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                         ready = board.list_ready_issues(team, states["ready"])
                     except Exception as exc:  # transient board error — survive, retry next tick
                         ready = None
-                        print(json.dumps({"daemon": "poll_failed", "error": str(exc)}),
-                              file=sys.stderr)
+                        if not poll_failing:  # log once on entry, not every tick (D-69)
+                            poll_failing = True
+                            print(json.dumps({"daemon": "poll_failed", "error": str(exc)}),
+                                  file=sys.stderr)
                     if ready is not None:
+                        if poll_failing:  # recovered — log the transition back
+                            poll_failing = False
+                            print(json.dumps({"daemon": "poll_recovered"}), file=sys.stderr)
                         eligible = eligible_tickets(ready, done_types=done_types)
                         elig_ids = {t["id"] for t in eligible}
                         claimable = [t for t in eligible if t["id"] not in state.in_flight
@@ -656,8 +673,10 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                                    and t["id"] not in state.claim_failed]
                         blocked = [t for t in pending if t["id"] not in elig_ids]
                 state.status.polled(phase="active" if state.futures else "idle")
-                if not state.futures and blocked:  # stuck-as-status, NOT exit (D-66)
-                    state.status.stuck(_stuck_report(blocked, done_set))
+                # Refresh the stuck heartbeat every poll so it tracks LIVE state (D-66):
+                # the blocked set only when fully idle, else cleared (work IS progressing —
+                # not stuck). Without the clear, a resolved stuck set lingers in status.json.
+                state.status.stuck(_stuck_report(blocked, done_set) if not state.futures else [])
             else:
                 state.status.polled(phase="draining")
 

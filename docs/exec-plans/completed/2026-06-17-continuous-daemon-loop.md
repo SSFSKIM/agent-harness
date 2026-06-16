@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-17
 owner: harness
 base_commit: 7091b0c
@@ -329,4 +329,59 @@ minus the barrier."
 
 ## Feedback (from completion gate)
 
+Both personas returned **SATISFIED**, no P1. Four P2s; three fixed in-gate (cheap +
+genuine correctness/hygiene), one tracked (needs gap #3).
+
+- **P2 (review-reliability) — force-stop defeatable by a retry. FIXED in-gate.** The 2nd
+  signal set every *current* `cancel_event` once, but `reap`'s retry path minted a fresh,
+  unset event — a `failed`-within-budget worker during the force-drain spawned an
+  uncancellable attempt-2. Fix: `_RunState.born_cancelled` (set by the force block) makes
+  `submit` pre-set the event, so retries during force are born cancelled. Test:
+  `test_force_cancels_a_retry_spawned_during_drain`.
+- **P2 (review-arch) — stale `stuck` heartbeat never cleared. FIXED in-gate.** The daemon
+  only ever *set* `status.stuck(...)`, so a resolved stuck set lingered in `status.json`
+  (operator sees phantom stuck). Fix: write the live stuck report every poll — the blocked
+  set when idle, else `[]` (work progressing). Test: `test_stuck_self_clears_when_work_resumes`.
+- **P2 (review-reliability) — unthrottled poll-failure log (~8.6k lines/day on a sustained
+  outage). FIXED in-gate.** Now logs once on entering the failing state + once on recovery
+  (`poll_failing` transition flag), instead of every tick.
+- **P2 (review-reliability) — `claim_failed` grows unbounded + transient-vs-permanent claim
+  failure not distinguished. TRACKED (tech-debt + gap #3).** Accepted in D-73 for this
+  slice; proper fix (TTL / backoff re-admission) is the gap #3 backoff work, which already
+  owns the `_idle_wait_s` seam.
+- **Proposed rules (both personas), TRACKED as doc-debt:** (1) cooperative-cancel must
+  cover re-submitted (retry) work — generalize mark-before-act to the retry edge; (2) a
+  daemon-lifetime exclusion set needs a liveness story (TTL/backoff or documented
+  restart-only recovery); (3) `_RunState` is the named sharing boundary between batch and
+  daemon (future loop modes route through it); (4) test-only unbounded-loop bounds
+  (`max_ticks`) may skip reconciliation — document as a director/ invariant.
+
 ## Outcomes & retrospective
+
+**Shipped:** the always-on daemon mode `run_forever` (`--daemon`), closing Symphony parity
+gap #2 (the identity gap). The orchestrator can now run as a long-lived service that polls
+forever, tops up free concurrency slots the moment they free (bounded claim — board
+`In Progress` == running), surfaces stuck-as-status without exiting, and stops gracefully
+(SIGTERM/SIGINT drain; 2nd signal force-cancels). The batch paths (`--once`,
+`run_until_drained`) are preserved byte-for-byte (R10).
+
+**The dividend landed as designed:** `_reconcile_in_flight` and the entire `cancel_event`
+plumbing + `kind=="cancelled"` reconcile branch lifted from stage 1 with **zero** signature
+change — the daemon's operator-stop and force-cancel are the same mechanism. The feared
+risk (the `_dispatch_wave` refactor) was contained by the regression net: all 51→58 batch
+tests stayed green across the `_RunState` extraction.
+
+**The real surprise** (vs the spec's expectation that the daemon was "`_dispatch_wave` minus
+the barrier"): the daemon has a genuinely *different claim discipline* (bounded top-up vs
+flood-claim), so it is its own loop sharing only the per-worker machinery — exactly what
+`_RunState` was shaped to allow. The other non-obvious correctness points were the
+`wait([], timeout=)` busy-spin trap (→ two-path wait) and the force-defeat-by-retry edge
+(found by review, fixed in-gate).
+
+**Proof:** full gate GREEN at **399 tests** (+14: config +2, status +2, orchestrator +10).
+Both review personas SATISFIED; 3 P2s fixed in-gate, 1 tracked.
+
+**Layers cleanly for gap #3:** `_idle_wait_s(poll_interval_s)` is the single seam exponential
+backoff swaps; the poll-failure throttle and `claim_failed` liveness both point at the same
+backoff work. The daemon never had to touch the stage-1 reconcile pieces — and stage 3 won't
+have to touch the daemon loop.

@@ -971,6 +971,61 @@ class DaemonLoopTest(unittest.TestCase):
             shutdown.set()
             th.join(timeout=2.0)
 
+    def test_force_cancels_a_retry_spawned_during_drain(self):
+        # review-reliability P2: a worker that returns failed (crash) as the force-stop
+        # lands must NOT resurrect an uncancellable retry — the re-submit is born cancelled.
+        board = orch.MockBoard([_issue("a")])
+        seen, lock = [], threading.Lock()
+
+        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
+            with lock:
+                seen.append(attempt)
+            cancelled = cancel_event is not None and cancel_event.wait(timeout=5.0)
+            if attempt == 1:
+                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
+                        "telemetry": {}}  # crashes (failed, not cancelled) under force
+            if cancelled:  # the retry stops fast ONLY if born cancelled (the fix)
+                return {"kind": "cancelled", "reason": "reconciliation", "turns": 1,
+                        "telemetry": {}}
+            return _DONE
+        shutdown, force, th, result = self._run_bg(board, fake)
+        try:
+            _wait_for(lambda: 1 in seen, msg="attempt 1 never started")
+            shutdown.set()
+            force.set()
+            th.join(timeout=2.0)
+            self.assertFalse(th.is_alive())  # born-cancelled retry stopped fast (< 5s block)
+            with lock:
+                self.assertIn(2, seen)       # the retry really was spawned during drain
+        finally:
+            shutdown.set()
+            force.set()
+            th.join(timeout=2.0)
+
+    def test_stuck_self_clears_when_work_resumes(self):
+        # review-arch P2: the stuck heartbeat tracks LIVE state — once blocked work
+        # becomes runnable, stuck clears (it is not a one-way latch in status.json).
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+
+            def fake(ticket, *, cancel_event=None, **kw):
+                if ticket["id"] == "a":
+                    return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 0}
+                return _DONE
+            shutdown, force, th, result = self._run_bg(board, fake, retry_budget=0, status=w)
+            try:
+                _wait_for(lambda: (ds.read_status(base=st) or {}).get("stuck"),
+                          msg="stuck never set")  # a failed → b blocked → stuck=[B]
+                board.update_issue_state("a", "st_done")  # operator unblocks b
+                _wait_for(lambda: board.state_name("b") == "Done",
+                          msg="b not picked up after unblock")
+                _wait_for(lambda: ds.read_status(base=st)["stuck"] == [],
+                          msg="stuck did not self-clear after work resumed")
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
     def test_force_cancels_in_flight(self):
         # R6 (force): a 2nd signal cancels in-flight workers via stage 1's cooperative
         # cancel, so a long worker stops fast instead of being drained-for.
