@@ -158,14 +158,28 @@ values resolve from the environment. `python3 plugin/scripts/check.py` is GREEN.
   cross-links resolve).
 
 ## Progress log
-- [ ] (2026-06-16) Plan created; base_commit 21d63c6, review_level standard.
-- [ ] M1 — config.py core + tests
+- [x] (2026-06-16) Plan created; base_commit 21d63c6, review_level standard.
+- [x] (2026-06-16) M1 — `director/config.py` (DEFAULTS, frozen DirectorConfig/
+  Posture/Paths/Merger, `$VAR` resolver, fail-loud/open validation, `python3 -m
+  director.config` surface) + `tests/test_director_config.py` (19 tests). Gate
+  GREEN at 368 tests. Refinement vs plan: paths are OPTIONAL overrides (None =
+  module built-in), so `run.DEFAULT_WORKSPACE_ROOT` stays in run.py — config.paths
+  layers on top, not a relocation (see Decision log).
 - [ ] M2 — constant relocation + main() wiring
 - [ ] M3 — docs + cross-links
 
 ## Surprises & discoveries
+- 2026-06-16: `tests/` has no `__init__.py` — the gate runs `unittest discover -s
+  tests`, so `python3 -m unittest tests.test_X` fails (ModuleNotFoundError); use
+  discovery (`-p 'test_director_config.py'`) to run one file.
 
 ## Decision log
+- 2026-06-16: **paths = optional overrides (None = module built-in), not a
+  relocation.** `config.DEFAULTS["paths"]` is all-None; the built-in workspace path
+  stays `run.DEFAULT_WORKSPACE_ROOT` and queue/status keep `_root(base=None)`. This
+  is less churn and behavior-preserving (matches the existing `--workspace-root`/
+  `--queue-dir`/`--status-dir` None-default flags). Only the scalar/states defaults
+  are owned by config; M2 aliases those.
 - 2026-06-16: **Approach A (config owns DEFAULTS; old constants alias it).** One
   source of truth, provably acyclic import graph (`config → policy` only).
 - 2026-06-16: **`team` not required by config; only `orchestrator.main` enforces
