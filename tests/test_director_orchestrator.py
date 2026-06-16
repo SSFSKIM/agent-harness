@@ -137,6 +137,32 @@ class RunOnceEndToEndTest(unittest.TestCase):
         self.assertTrue(all(answered))
 
 
+class TelemetryPersistenceTest(unittest.TestCase):
+    def test_run_once_persists_telemetry_to_status_snapshot(self):
+        # M3 end-to-end: a 2-ticket run over the `usage` mock scenario fills
+        # status.json with per-ticket tokens and a summed run aggregate — the whole
+        # producer path (app_server → drive → reconcile → StatusWriter).
+        board = orch.MockBoard.demo()  # u1, u2 ready
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as tmp:
+            sdir = Path(tmp) / "s"
+            w = ds.StatusWriter(base=sdir)
+            res = orch.run_once(board, command=[sys.executable, MOCK, "usage"],
+                                team="T", states=states, concurrency=2,
+                                workspace_root=Path(tmp) / "ws", status=w)
+            snap = ds.read_status(base=sdir)
+        assert snap is not None  # the run wrote it
+        self.assertEqual({r["status"] for r in res}, {"completed"})
+        # each ticket ran one turn → its own worker process reported absolute total 100
+        toks = [r["tokens"] for r in snap["recent"]]
+        self.assertEqual(len(toks), 2)
+        self.assertTrue(all(t == {"input": 60, "output": 40, "total": 100} for t in toks))
+        self.assertTrue(all(r["session_id"] for r in snap["recent"]))
+        # run aggregate = sum across the 2 tickets; runtime is a live non-negative aggregate
+        self.assertEqual(snap["run"]["codex_totals"]["total"], 200)
+        self.assertGreaterEqual(snap["run"]["codex_totals"]["seconds_running"], 0.0)
+
+
 class RunOnceConcurrencyTest(unittest.TestCase):
     def test_concurrency_cap_is_respected(self):
         # 5 ready tickets, cap 2: never more than 2 dispatch calls live at once.

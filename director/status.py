@@ -16,9 +16,12 @@ RELIABILITY R9) so a reader NEVER sees a torn snapshot.
 
 Snapshot schema (.claude/harness/director-status/status.json):
   {
-    "run":       {"started_at", "pass", "stopped_reason"},
+    "run":       {"started_at", "pass", "stopped_reason",
+                  "codex_totals": {"input", "output", "total", "seconds_running"},
+                  "rate_limits"},                          # Symphony-grade telemetry
     "in_flight": [{"ticket_id", "identifier", "phase", "attempt", "wave", "started_at"}],
-    "recent":    [{"ticket_id", "ticket", "status", "final_state", "attempts", "turns"}],  # bounded
+    "recent":    [{"ticket_id", "ticket", "status", "final_state", "attempts", "turns",
+                   "tokens": {"input","output","total"}|None, "session_id", "last_message"}],  # bounded
     "stuck":     [{"ticket", "blocked_by": [{"id", "state_type"}]}],
     "updated_at"
   }
@@ -39,6 +42,18 @@ RECENT_MAX = 20
 
 def _utcnow() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _elapsed(start_iso, now_iso) -> float:
+    """Seconds between two ISO-8601 timestamps, clamped at 0; 0.0 if either is
+    unparseable. Best-effort by contract — runtime accounting is instrumentation,
+    so a malformed timestamp yields 0, never an exception (telemetry never a gate)."""
+    try:
+        delta = (datetime.datetime.fromisoformat(now_iso)
+                 - datetime.datetime.fromisoformat(start_iso)).total_seconds()
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, delta)
 
 
 def _root(base: Path | str | None = None) -> Path:
@@ -84,6 +99,14 @@ class StatusWriter:
         self._in_flight: dict[str, dict] = {}
         self._recent: list[dict] = []
         self._stuck: list[dict] = []
+        # Run-level telemetry aggregate (Symphony §4.1.8/§13.5): cumulative tokens
+        # across terminated tickets, the wall-clock seconds of ENDED tickets (active
+        # tickets' elapsed is added live at snapshot), and the latest rate-limit
+        # payload seen. Each ticket contributes its absolute total once at terminal,
+        # so the sum never double-counts (drive already kept the per-ticket latest).
+        self._codex_totals: dict = {"input": 0, "output": 0, "total": 0}
+        self._seconds_ended: float = 0.0
+        self._rate_limits = None
         self.last_error: str | None = None
 
     # -- transitions (called by the orchestrator) ----------------------------
@@ -111,12 +134,30 @@ class StatusWriter:
 
     def terminal(self, ticket: dict, summary: dict) -> None:
         key = _ticket_key(ticket)
-        self._in_flight.pop(key, None)
+        entry = self._in_flight.pop(key, None)
+        # Per-ticket telemetry (plan M3), folded into the summary by reconcile. The
+        # recent row carries the ticket's final tokens/session/last_message; the run
+        # aggregate accumulates tokens (summed once per ticket — no double-count),
+        # the latest rate-limit payload, and this ticket's wall-clock seconds.
+        tel = summary.get("telemetry") or {}
+        tokens = tel.get("tokens")
+        if isinstance(tokens, dict):
+            for k in ("input", "output", "total"):
+                v = tokens.get(k)
+                if isinstance(v, int) and not isinstance(v, bool):
+                    self._codex_totals[k] += v
+        if tel.get("rate_limits") is not None:
+            self._rate_limits = tel["rate_limits"]
+        if entry is not None:
+            self._seconds_ended += _elapsed(entry.get("started_at"), self._now())
         self._recent.append({"ticket_id": key, "ticket": summary.get("ticket"),
                              "status": summary.get("status"),
                              "final_state": summary.get("final_state"),
                              "attempts": summary.get("attempts"),
-                             "turns": summary.get("turns")})  # R8: multi-turn visibility
+                             "turns": summary.get("turns"),  # R8: multi-turn visibility
+                             "tokens": tokens,
+                             "session_id": tel.get("session_id"),
+                             "last_message": tel.get("last_message")})
         if len(self._recent) > self._recent_max:
             self._recent = self._recent[-self._recent_max:]
         self._flush()
@@ -148,11 +189,21 @@ class StatusWriter:
         self._flush()
 
     def snapshot(self) -> dict:
-        return {"run": dict(self._run),
+        now = self._now()
+        # seconds_running is a LIVE aggregate at snapshot time (Symphony §13.5): the
+        # cumulative seconds of ended tickets plus each in-flight ticket's elapsed —
+        # no background ticking needed.
+        active = sum(_elapsed(e.get("started_at"), now)
+                     for e in self._in_flight.values())
+        run = dict(self._run)
+        run["codex_totals"] = {**self._codex_totals,
+                               "seconds_running": round(self._seconds_ended + active, 3)}
+        run["rate_limits"] = self._rate_limits
+        return {"run": run,
                 "in_flight": list(self._in_flight.values()),
                 "recent": list(self._recent),
                 "stuck": list(self._stuck),
-                "updated_at": self._now()}
+                "updated_at": now}
 
     def _flush(self) -> None:
         try:

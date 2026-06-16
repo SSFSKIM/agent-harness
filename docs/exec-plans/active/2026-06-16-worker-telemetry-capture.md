@@ -159,7 +159,14 @@ still green.
   last_message/rate_limits) to every disposition (terminal/escalate/stuck/failed). 2 new
   tests in test_director_drive.py (latest-absolute-not-sum: 200 over 2 turns, not 300;
   telemetry present without usage events). Gate GREEN (328).
-- [ ] M3 — orchestrator fold + status.py additive schema + run aggregate.
+- [x] (2026-06-16) M3 done — `reconcile` folds `disp.telemetry` into the summary;
+  `StatusWriter.terminal` records tokens/session_id/last_message on the recent[] row and
+  accumulates run aggregate (`_codex_totals` summed once per ticket; latest `_rate_limits`;
+  `_seconds_ended`); `snapshot()['run']` gains `codex_totals` (live `seconds_running` =
+  ended + Σ in_flight elapsed via tolerant `_elapsed`) + `rate_limits`. All additive.
+  **R7 url deferred** — board/linear `_to_ticket` doesn't carry `url` (GraphQL doesn't request
+  it); adding it is a separate board change. 3 status unit tests + 1 end-to-end orchestrator
+  test (2-ticket `usage` run → status.json recent[].tokens + summed codex_totals). Gate GREEN (332).
 - [ ] M4 — completion: full gate, backward-compat, R6 tolerance, live-pin.
 
 ## Surprises & discoveries
@@ -178,6 +185,12 @@ still green.
   docs/.harnessignore), so no security persona. Per CLAUDE.md, the completion-gate
   personas are run via `/codex:rescue --model gpt-5.5 --effort high`, falling back
   to the Claude `agent-harness:review-*` personas if codex is unavailable.
+
+- 2026-06-16: R7 `url` deep-link DEFERRED — verified `director/board/linear.py`
+  `_to_ticket` builds `{id,identifier,title,desc,prompt}` with no `url`, and the read
+  GraphQL query doesn't request it. Persisting a deep-link needs a board/linear change
+  (query `url` + carry it on the ticket); out of this slice's scope. The status schema is
+  ready to carry it the moment the ticket does.
 
 ## Feedback (from completion gate)
 

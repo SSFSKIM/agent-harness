@@ -97,13 +97,21 @@ def main():
             elif scenario == "usage":
                 # CUMULATIVE thread totals that rise per turn (turn n → total n*100).
                 # `total_token_usage` is the absolute-wrapper extract_usage prefers;
-                # the latest value (not a sum) is the ticket total (§13.5).
+                # the latest value (not a sum) is the ticket total (§13.5). Then a
+                # report_outcome(done) so an autonomous/orchestrated run terminates in
+                # one turn (a scripted decider can still drive ≥2 turns for the
+                # latest-absolute proof — the sink signal is just ignored there).
                 turn_n += 1
                 out({"method": "thread/tokenUsage/updated",
                      "params": {"total_token_usage": {"input_tokens": turn_n * 60,
                                                        "output_tokens": turn_n * 40,
                                                        "total_tokens": turn_n * 100}}})
-                complete_turn()
+                out({"id": REPORT_CALL_ID, "method": "item/tool/call",
+                     "params": {"tool": "report_outcome",
+                                "arguments": {"status": "done", "reason": "mock done"},
+                                "itemId": "item_r", "threadId": THREAD_ID,
+                                "turnId": TURN_ID}})
+                awaiting_tool = True
             else:
                 complete_turn()
         elif awaiting_approval and mid == APPROVAL_ID and ("result" in msg or "error" in msg):

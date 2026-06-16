@@ -122,6 +122,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     label = ticket.get("identifier") or tid
     kind = disp.get("kind")
     turns = disp.get("turns")
+    telemetry = disp.get("telemetry")  # Symphony-grade per-ticket telemetry (plan M3)
     errs: list[str] = []
 
     def set_state(state_id):
@@ -144,6 +145,8 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     def summarize(status, final_state, **extra):
         s = {"ticket": label, "status": status, "final_state": final_state,
              "attempts": attempts, "turns": turns}
+        if telemetry is not None:  # carry telemetry to the StatusWriter (recent[] + aggregate)
+            s["telemetry"] = telemetry
         s.update(extra)
         return s
 

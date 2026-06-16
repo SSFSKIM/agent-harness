@@ -75,6 +75,53 @@ class StatusWriterTest(unittest.TestCase):
         self.assertEqual(len(recent), 3)
         self.assertEqual([r["ticket_id"] for r in recent], ["u2", "u3", "u4"])
 
+    def _tel_summary(self, total, *, ident="DEMO-1", rate=None):
+        return {"ticket": ident, "status": "completed", "final_state": "done",
+                "attempts": 1, "turns": 2,
+                "telemetry": {"tokens": {"input": total // 2, "output": total // 2,
+                                         "total": total},
+                              "turn_count": 2, "session_id": "thr-turn",
+                              "last_message": "done", "rate_limits": rate}}
+
+    def test_terminal_records_telemetry_and_aggregates(self):
+        # M3: the recent[] row carries the ticket's tokens/session_id/last_message;
+        # the run aggregate gains codex_totals (+ live seconds_running) and the latest
+        # rate-limit payload.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1", "DEMO-1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1", "DEMO-1"), self._tel_summary(200, rate={"remaining": 5}))
+        snap = self._snap()
+        r = snap["recent"][0]
+        self.assertEqual(r["tokens"], {"input": 100, "output": 100, "total": 200})
+        self.assertEqual(r["session_id"], "thr-turn")
+        self.assertEqual(r["last_message"], "done")
+        ct = snap["run"]["codex_totals"]
+        self.assertEqual((ct["input"], ct["output"], ct["total"]), (100, 100, 200))
+        self.assertGreaterEqual(ct["seconds_running"], 0.0)
+        self.assertEqual(snap["run"]["rate_limits"], {"remaining": 5})
+
+    def test_codex_totals_sum_across_tickets_no_double_count(self):
+        # Each ticket contributes its absolute total ONCE → 100 + 200 = 300 (drive
+        # already collapsed each thread's stream to its latest absolute, §13.5).
+        w = ds.StatusWriter(base=self.base)
+        for tid, tot in (("u1", 100), ("u2", 200)):
+            t = _ticket(tid, f"D-{tid}")
+            w.claimed(t, wave=1, attempt=1)
+            w.terminal(t, self._tel_summary(tot, ident=tid))
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 300)
+
+    def test_terminal_without_telemetry_is_backward_compatible(self):
+        # A terminal with no telemetry (claim_failed / crash-path failed) → tokens
+        # None, aggregate untouched, snapshot still valid (R6 / additive).
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1"), {"ticket": "DEMO-1", "status": "completed",
+                                   "final_state": "done", "attempts": 1, "turns": 1})
+        snap = self._snap()
+        self.assertIsNone(snap["recent"][0]["tokens"])
+        self.assertEqual(snap["run"]["codex_totals"]["total"], 0)
+        self.assertIsNone(snap["run"]["rate_limits"])
+
     def test_flush_swallows_serialize_error_never_raises(self):
         # R3 contract: a status-write failure (here a non-serializable timestamp)
         # is recorded, never raised — visibility must never break dispatch.
