@@ -37,6 +37,13 @@ export class TeammateSession {
   /** End the underlying query and wait for the read-loop to finish. */
   async dispose(): Promise<void> { this.input.close(); await this.done; }
 
+  /** Transition the underlying query's permission mode (e.g. out of plan mode after approval).
+   * Guarded so the DI fake — which has no setPermissionMode — is a safe no-op. */
+  async setMode(mode: string): Promise<void> {
+    const q = this.q as any;
+    if (typeof q.setPermissionMode === "function") await q.setPermissionMode(mode);
+  }
+
   /** Graceful shutdown: let the current turn finish (dispose), THEN ack — so the shutdown
    * envelope is the teammate's last message and the coordinator never sees it mid-turn. */
   async shutdown(): Promise<void> {

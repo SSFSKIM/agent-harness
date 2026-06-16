@@ -66,6 +66,24 @@ describe("TeammateSession", () => {
     expect(bus.drain("coordinator").map((m) => m.kind)).toContain("shutdown");
     await s.dispose();
   });
+  it("setMode calls the query's setPermissionMode when present, and no-ops when absent", async () => {
+    const bus = new MessageBus();
+    const calls: string[] = [];
+    const fqWithMode = ({ prompt }: any) => {
+      const gen: any = (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
+      gen.setPermissionMode = async (m: string) => { calls.push(m); };
+      return gen;
+    };
+    const s = new TeammateSession({ name: "w1", teamId: "t1", prompt: "x" }, bus, { query: fqWithMode });
+    await s.setMode("acceptEdits");
+    expect(calls).toEqual(["acceptEdits"]);
+    await s.dispose();
+
+    // fake query without setPermissionMode → setMode resolves without throwing
+    const plain = new TeammateSession({ name: "w2", teamId: "t1", prompt: "x" }, bus, { query: fakeQuery });
+    await expect(plain.setMode("default")).resolves.toBeUndefined();
+    await plain.dispose();
+  });
   it("shutdown() emits a shutdown ack and ends the query", async () => {
     const bus = new MessageBus();
     let ended = false;
