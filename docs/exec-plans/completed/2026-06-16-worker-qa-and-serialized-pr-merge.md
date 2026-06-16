@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: a6d8537b392ab298e94663af2b437700f74a7d7e
