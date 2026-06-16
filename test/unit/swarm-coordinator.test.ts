@@ -18,4 +18,13 @@ describe("coordinator persona", () => {
     expect(options.systemPrompt).toEqual({ type: "preset", preset: "claude_code", append: COORDINATOR_PROMPT });
     expect(options.allowedTools).toEqual(["Read"]);
   });
+  it("whitelist includes the permission + shutdown tools", () => {
+    expect(coordinatorTools()).toEqual(expect.arrayContaining([
+      "mcp__cc-swarm__RespondPermission", "mcp__cc-swarm__ShutdownTeammate",
+    ]));
+  });
+  it("persona tells the coordinator to poll and answer permission requests", () => {
+    expect(COORDINATOR_PROMPT).toMatch(/CheckMessages/);
+    expect(COORDINATOR_PROMPT).toMatch(/permission/i);
+  });
 });

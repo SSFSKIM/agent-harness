@@ -6,6 +6,8 @@ export const COORDINATOR_PROMPT = [
   "Decompose the goal into durable tasks with TaskCreate (set blockedBy for dependencies); a teammate",
   "claims a task by setting it in_progress. Do the planning and integration yourself; delegate the",
   "implementation to teammates and integrate their results.",
+  "Poll CheckMessages regularly; answer any permission requests with RespondPermission, and stop a",
+  "teammate with ShutdownTeammate when its work is done.",
 ].join(" ");
 
 /**
@@ -21,6 +23,7 @@ export function coordinatorTools(): string[] {
   return [
     "mcp__cc-swarm__TeamCreate", "mcp__cc-swarm__TeamDelete", "mcp__cc-swarm__spawnTeammate",
     "mcp__cc-swarm__SendMessage", "mcp__cc-swarm__CheckMessages",
+    "mcp__cc-swarm__RespondPermission", "mcp__cc-swarm__ShutdownTeammate",
     "mcp__cc-tasks__TaskCreate", "mcp__cc-tasks__TaskUpdate", "mcp__cc-tasks__TaskGet", "mcp__cc-tasks__TaskList",
     "Read", "Grep", "Glob",
   ];
