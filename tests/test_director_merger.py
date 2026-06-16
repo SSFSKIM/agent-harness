@@ -104,6 +104,23 @@ class DrainSerializationTest(unittest.TestCase):
         results = merger.drain(base=self.base, driver=driver)
         self.assertEqual([r["result"] for r in results], ["escalated", "escalated"])
 
+    def test_surface_failure_leaves_request_pending(self):
+        # Review fix: surface BEFORE consume. If posting the mergeReview fails, the
+        # mergeRequest must stay pending (re-surfaced next pass), never silently consumed.
+        dq.append_merge_request("T1", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "conflict", "turns": 1}
+
+        orig = dq.append_merge_review
+        dq.append_merge_review = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io"))
+        try:
+            with self.assertRaises(RuntimeError):
+                merger.drain(base=self.base, driver=driver)
+        finally:
+            dq.append_merge_review = orig
+        self.assertEqual(len(merger.pending_merges(base=self.base)), 1)  # not consumed
+
     def test_driver_crash_is_failed_and_terminates(self):
         dq.append_merge_request("T1", base=self.base)
 
@@ -278,6 +295,15 @@ class MergerCliTest(unittest.TestCase):
     def test_main_once_empty_queue_is_noop(self):
         rc = merger.main(["--once", "--mock", "--queue-dir", str(self.tmp / "empty")])
         self.assertEqual(rc, 0)
+
+    def test_select_decider_watched_by_default_autonomous_when_flagged(self):
+        # R9/D-50: a watched merger routes land-lane turn-ends to the Director; only
+        # --autonomous / --mock use the code decider (no live Director to answer).
+        self.assertIs(merger.select_decider(autonomous=True, mock=False), autonomous_decide)
+        self.assertIs(merger.select_decider(autonomous=False, mock=True), autonomous_decide)
+        watched = merger.select_decider(autonomous=False, mock=False, queue_base=self.base)
+        self.assertIsNot(watched, autonomous_decide)   # the queue (Director) decider
+        self.assertTrue(callable(watched))
 
     def test_run_loop_once_drains_with_injected_driver(self):
         # run_loop(once=True) is the loop body: one drain pass then return 0.

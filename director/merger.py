@@ -30,7 +30,7 @@ from typing import Callable
 
 import director.queue as dq
 from director import run
-from director.decider import autonomous_decide
+from director.decider import autonomous_decide, make_queue_decider
 from director.worker import autonomy
 
 MERGE_REQUEST_KIND = "mergeRequest"
@@ -195,8 +195,12 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
                 break
             req = pend[0]  # FIFO — oldest queued PR first
             result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
-            _consume(req, result["result"], base=base)
+            # Surface BEFORE consume (review fix): if surfacing a non-merged PR fails or the
+            # process dies between the two, the request stays PENDING and is re-surfaced
+            # next drain (mergeReview dedupes on mergereview|<ticket>) — a failed merge is
+            # never silently dropped (R6). Consuming first would lose the escalation.
             result["escalated_to_director"] = _surface_escalation(req, result, base=base)
+            _consume(req, result["result"], base=base)
             results.append(result)
             processed += 1
     return results
@@ -215,6 +219,18 @@ def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
         if once:
             return 0
         time.sleep(poll)
+
+
+def select_decider(*, autonomous: bool, mock: bool, queue_base=None,
+                   turn_review_timeout: float = 300.0):
+    """The land lane's turn-end decider (mirrors orchestrator.main, R9/D-50). WATCHED is
+    the default: land-lane turn-ends (a conflict/taste question mid-merge) route to the
+    Director as `turnReview`, exactly like a worker's — the Director answers free-form.
+    `--autonomous` (un-watched) or `--mock` (no live Director to answer) use the code
+    decider, which self-resolves and escalates only terminal needs_human (→ mergeReview)."""
+    if autonomous or mock:
+        return autonomous_decide
+    return make_queue_decider(base=queue_base, timeout_s=turn_review_timeout)
 
 
 def _command(args) -> list[str]:
@@ -240,11 +256,20 @@ def main(argv=None) -> int:
     ap.add_argument("--mock-scenario", default="report",
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
+    ap.add_argument("--autonomous", action="store_true",
+                    help="un-watched: self-resolve land-lane turn-ends with the code decider "
+                         "(no live Director). Default routes turn-ends to the Director (R9)")
+    ap.add_argument("--turn-review-timeout", type=float, default=300.0,
+                    help="watched: how long the land lane waits for the Director to answer a "
+                         "turn-end before escalating (s)")
     ap.add_argument("--read-timeout", type=float, default=180.0,
                     help="per-event read timeout for a land turn (s); land agents think")
     args = ap.parse_args(argv)
+    decide = select_decider(autonomous=args.autonomous, mock=args.mock,
+                            queue_base=args.queue_dir,
+                            turn_review_timeout=args.turn_review_timeout)
     return run_loop(base=args.queue_dir, command=_command(args), poll=args.poll,
-                    once=args.once, decide=autonomous_decide, queue_base=args.queue_dir,
+                    once=args.once, decide=decide, queue_base=args.queue_dir,
                     approval_policy=autonomy.APPROVAL_POLICY, sandbox=autonomy.SANDBOX,
                     read_timeout_s=args.read_timeout)
 
