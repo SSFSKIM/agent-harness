@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: b3a69d3
@@ -202,7 +202,9 @@ client render).
 - [x] (2026-06-16) M4 — DIRECTOR.md §10 added; gate GREEN at 346; **live proof** via
       /playwright-cli against a seeded run (tokens 26420, rate-limit, stuck, pending all
       rendered; `updated` advanced 09:51:37→09:52:02 = live ~1s poll confirmed).
-- [ ] Completion gate: self-review diff + review-arch & review-reliability (standard).
+- [x] (2026-06-16) Completion gate: self-review caught + fixed a torn-queue tolerance
+      gap before review. review-arch SATISFIED; review-reliability NOT SATISFIED (1 P1)
+      → fixed → re-verify SATISFIED. Gate GREEN at 349. Slice complete.
 
 ## Surprises & discoveries
 - The renderer needed **no new computation** for telemetry: because `build_view` passes
@@ -232,5 +234,52 @@ client render).
   .harnessignore touched).
 
 ## Feedback (from completion gate)
+- **review-arch — SATISFIED.** Verified the Approach-B split, the `__getattr__` verb-funnel
+  (no 501 leaks), `_DashboardServer` over monkey-attributes, sibling-CLI consistency,
+  stdlib-only grain, spec fidelity (`/api/v1/state`, 404/405, envelope, pass-through
+  telemetry), and R5 blast radius. One P2 (mergeReview/mergeRequest summary joined all
+  keys vs the plan's "else" fallback) — **fixed in-gate** (commit adf5b1f).
+- **review-reliability — NOT SATISFIED → re-verify SATISFIED.** P1 (reproduced live): a
+  valid-but-non-dict `status.json` made `build_view` raise `AttributeError` (read_status
+  returns dict|None|**malformed**; `or {}` only handled None) → dropped connection +
+  stderr traceback, violating R3/R6. **Fixed** (isinstance coerce + test, adf5b1f). Two
+  P2s also fixed in-gate: a fail-soft `_dispatch` wrapper (handler bug → 500 envelope,
+  client disconnect → quiet drop, adf5b1f) and, on re-verify, widening the disconnect
+  catch to the full `OSError` family + `KeyError` in `_read_pending` so no socket-write
+  failure or keyless queue line can escape to stderr (commit 54cbf46).
+- **Deferred (doc-debt → tech-debt-tracker, non-blocking):** both reviewers proposed
+  promoting unwritten `director/*` host-architecture rules to a citable doc — (arch)
+  stdlib-only + explicit `base=` + new-listener-must-be-127.0.0.1/fixed-route/read-only +
+  the testability split; (reliability) generalize RELIABILITY.md R6 fail-open to
+  long-lived stdlib listeners (full client-disconnect errno family → quiet drop, never a
+  stderr traceback). Tracked rows added; composes with the prior telemetry-slice row.
 
 ## Outcomes & retrospective
+**Done, observable:** `python3 -m director.dashboard` serves a live read-only browser view
+on `127.0.0.1`; `GET /api/v1/state` returns the `build_view` JSON (Symphony-§13.7:
+`counts`+`generated_at`, pass-through telemetry), `GET /` the inline polling page,
+undefined→404, wrong-method→405, both as `{"error":{code,message}}`. **Live-proofed** via
+`/playwright-cli` against a seeded run: all five blocks plus the cost/usage telemetry
+(`26420 tok (in 26391 / out 29)`, runtime, `rate {primary:{used_percent:42}}`, recent row
+with per-ticket tokens/session) rendered, and the `updated` stamp advanced 09:51:37→09:52:02
+— the ~1s poll is genuinely live, no reload. Gate GREEN at 349 (14 dashboard tests). R5
+held: zero changes to `status.py`/`watch.py`/`orchestrator.py`/`queue`.
+
+**What worked:** the producer-before-renderer sequencing paid off exactly as the spec
+thesis predicted — because `build_view` passes `run`/`recent` through untouched, the
+telemetry the prior slice shipped flowed to the client with **no new computation**; "render
+cost/usage" was purely a display concern. Approach B's pure `build_view` made the whole
+logic surface unit-testable without a socket.
+
+**What the gate caught that I didn't:** the tolerance asymmetry. I hardened the torn-*queue*
+boundary in self-review but left the torn/garbage-*status* boundary half-guarded (`or {}` ≠
+type coercion), and shipped a handler with no fail-soft wrapper. The reliability persona
+reproduced both live. Lesson reinforced: `read_status`'s contract is **dict | None |
+malformed**, and a new I/O boundary (the first HTTP listener) needs an explicit fail-soft
+wrapper, not just per-call guards. The instrument now degrades — torn status, torn/keyless
+queue, a handler bug, or a client that closes mid-write all resolve to a well-formed
+response or a quiet drop; nothing reaches stderr or sinks the request thread.
+
+**Follow-ups (none blocking):** SSE upgrade if 1s polling feels laggy; the actionable
+dashboard (answering human-bound items in the UI) as a fenced separate slice; multi-run
+view; the two doc-debt rule promotions above.
