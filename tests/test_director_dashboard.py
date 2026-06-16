@@ -16,6 +16,10 @@ _FIXED_NOW = "2026-06-16T00:00:00+00:00"
 _PATH_STATE = "/api/v1/state"  # the versioned read-only data route (asserted as a literal)
 
 
+def _boom(*_a, **_k):
+    raise RuntimeError("boom")  # stand-in for any handler-internal bug
+
+
 def _ticket(tid, ident):
     return {"id": tid, "identifier": ident, "title": "t"}
 
@@ -105,6 +109,8 @@ class BuildViewTest(unittest.TestCase):
               "payload": {"command": ["rm", "-rf", "/tmp/cache"]}}, "rm -rf /tmp/cache"),
             ({"request_id": "b", "kind": "mergeReview",
               "payload": {"result": "escalated", "reason": "conflict"}}, "escalated conflict"),
+            ({"request_id": "b2", "kind": "mergeRequest",
+              "payload": {"pr": "#42", "branch": "feat/x"}}, "#42 feat/x"),  # else→pr/branch
             ({"request_id": "c", "kind": "fileChange",
               "payload": {"reason": "edit config"}}, "edit config"),
             ({"request_id": "d", "kind": "elicitation",
@@ -118,6 +124,17 @@ class BuildViewTest(unittest.TestCase):
         got = {p["request_id"]: p["summary"] for p in v["pending"]}
         for req, expected in cases:
             self.assertEqual(got[req["request_id"]], expected)
+
+    def test_valid_but_non_dict_status_json_yields_run_none(self):
+        # read_status returns dict|None|MALFORMED: a valid-but-non-dict status.json
+        # (a JSON list/string from a producer bug or hand-edit) comes back as-is, not
+        # None. build_view must coerce it to "no run", never raise AttributeError on
+        # .get (R3/R6 — a garbage-but-valid file is tolerated like a torn one).
+        self.status_dir.mkdir(parents=True, exist_ok=True)
+        (self.status_dir / "status.json").write_text('["not", "a", "dict"]', encoding="utf-8")
+        v = self._view()  # must not raise
+        self.assertIsNone(v["run"])
+        self.assertEqual(v["counts"]["in_flight"], 0)
 
     def test_torn_queue_degrades_to_empty_pending(self):
         # The queue is JSONL-appended (no atomic temp+replace) and shared across
@@ -203,6 +220,22 @@ class DashboardHTTPTest(unittest.TestCase):
         self._req("/", method="DELETE")
         code, _, _ = self._req(_PATH_STATE)
         self.assertEqual(code, 200)
+
+    def test_handler_fails_soft_to_500_envelope(self):
+        # A handler-internal bug (build_view raising) must degrade to a structured 500
+        # envelope the client JS already handles — never a dropped connection / stderr
+        # traceback (read-only instrument, never a gate). And the server stays up.
+        orig = dash.build_view
+        dash.build_view = _boom
+        try:
+            code, ctype, body = self._req(_PATH_STATE)
+        finally:
+            dash.build_view = orig
+        self.assertEqual(code, 500)
+        self.assertIn("application/json", ctype)
+        self.assertEqual(json.loads(body)["error"]["code"], 500)
+        # listener survived the bug — a subsequent good request still answers
+        self.assertEqual(self._req(_PATH_STATE)[0], 200)
 
     def test_page_wires_poller_and_telemetry(self):
         # The page is asserted by CONTRACT markers, not layout: it must poll the

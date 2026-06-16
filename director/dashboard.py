@@ -62,8 +62,11 @@ def _summary_for(kind, payload) -> str:
     if kind == "turnReview":
         return _clip(p.get("final_message"))
     if kind in ("mergeReview", "mergeRequest"):
-        parts = [str(p[k]) for k in ("result", "reason", "pr", "branch") if p.get(k)]
-        return _clip(" ".join(parts))
+        primary = [str(p[k]) for k in ("result", "reason") if p.get(k)]  # mergeReview
+        if primary:
+            return _clip(" ".join(primary))
+        fallback = [str(p[k]) for k in ("pr", "branch") if p.get(k)]  # mergeRequest
+        return _clip(" ".join(fallback))
     if kind == "commandApproval":
         cmd = p.get("command")
         if isinstance(cmd, list):
@@ -107,7 +110,12 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     missing or torn status.json makes `read_status` return None → `run: None` here
     (the page reads that as "no active run"), never an exception (spec R3/R6).
     """
-    snap = status.read_status(base=status_dir) or {}
+    # read_status guarantees dict|None|malformed: None when missing/unparseable, but ANY
+    # other valid JSON (a list/string/int from a producer bug or hand-edit) comes back
+    # as-is. Coerce a non-dict to "no run" so .get below can never raise (R3/R6: the view
+    # tolerates a garbage-but-valid status.json the same as a torn one — never a gate).
+    snap = status.read_status(base=status_dir)
+    snap = snap if isinstance(snap, dict) else {}
     in_flight = snap.get("in_flight", [])
     stuck = snap.get("stuck", [])
     recent = snap.get("recent", [])
@@ -223,6 +231,21 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
     def _dispatch(self):
+        # Fail-soft boundary: a read-only observability surface must NEVER drop the
+        # connection or dump a traceback to stderr (the silenced-log "quiet instrument"
+        # posture). A polling tab that closes mid-write → drop quietly; any other handler
+        # bug → a structured 500 the client JS already handles (catch → "fetch error").
+        try:
+            self._route()
+        except (BrokenPipeError, ConnectionResetError):
+            return  # the polling browser went away mid-write — nothing to report
+        except Exception:
+            try:
+                self._error(500, "internal error")
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    def _route(self):
         path = self.path.split("?", 1)[0]
         if path not in ("/", _STATE_PATH):
             return self._error(404, f"no such route: {path}")  # undefined → 404
