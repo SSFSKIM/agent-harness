@@ -18,7 +18,7 @@ from pathlib import Path
 
 from director import taxonomy
 from director.decider import autonomous_decide
-from director.worker import autonomy, tools as worker_tools
+from director.worker import autonomy, policy as worker_policy, tools as worker_tools
 from director.worker.app_server import AppServerClient
 from director.worker.approval import make_seam
 
@@ -74,16 +74,25 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
 
 
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
-             read_timeout_s, tool_executor, install_skills) -> AppServerClient:
+             read_timeout_s, tool_executor, install_skills,
+             worker_env: dict | None = None) -> AppServerClient:
     """Build (but do not start) the worker client for one ticket: resolve+create the
     workspace, optionally install the vendored skills, and wire the approval seam.
-    Shared by the single-turn `run_ticket` and the multi-turn `drive`."""
+    Shared by the single-turn `run_ticket` and the multi-turn `drive`.
+
+    Secure by construction: unless the caller passes an explicit `worker_env`, the
+    worker subprocess env is the **deny-by-default** construction from the host policy
+    (director/worker/policy.py) — a worker never inherits the Director's host secrets
+    (SECURITY.md T11, env-inheritance channel)."""
     ws = _workspace_for(ticket, workspace_root)
     if install_skills:
         install_workspace_skills(ws)
+    if worker_env is None:
+        worker_env = worker_policy.build_worker_env(worker_policy.load_worker_policy())
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
     return AppServerClient(command, cwd=ws, on_server_request=seam,
-                           tool_executor=tool_executor, read_timeout_s=read_timeout_s)
+                           tool_executor=tool_executor, read_timeout_s=read_timeout_s,
+                           env=worker_env)
 
 
 def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
@@ -188,8 +197,13 @@ def _command(args) -> list[str]:
         return [sys.executable, _MOCK, args.mock_scenario]
     # Both modes self-govern per-action (auto_review) AND get full network; the only
     # watched/un-watched difference is the turn-end decider. Exfil deferred (T11).
+    # `bash -c` (NOT `-lc`): a LOGIN shell would source the host's profile and re-inject
+    # env the deny-by-default boundary (Popen env=) just stripped — defeating it for any
+    # secret a user exports in ~/.profile etc. Non-login + `BASH_ENV` denied (not in the
+    # base) means the worker's env is exactly the constructed one. The base carries PATH,
+    # so codex still resolves (worker-secret-boundary M1, SECURITY.md T11).
     codex = autonomy.codex_command(args.codex)
-    return ["bash", "-lc", codex]
+    return ["bash", "-c", codex]
 
 
 def main(argv=None) -> int:

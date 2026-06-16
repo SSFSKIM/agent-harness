@@ -79,9 +79,14 @@ class AppServerClient:
                  on_event: Callable[[dict], None] | None = None,
                  on_server_request: Callable[[str, dict], object] | None = None,
                  tool_executor: Callable[[str, dict], dict] | None = None,
-                 read_timeout_s: float = 10.0):
+                 read_timeout_s: float = 10.0,
+                 env: dict | None = None):
         self.command = command
         self.cwd = str(cwd)
+        # The worker subprocess environment. `None` inherits the parent env (legacy /
+        # direct callers); the spawn seam (run._prepare) passes a deny-by-default env
+        # so a worker never inherits host secrets (director/worker/policy.py, T11).
+        self.env = env
         self.on_event = on_event or (lambda ev: None)
         self.on_server_request = on_server_request
         self.tool_executor = tool_executor
@@ -96,7 +101,7 @@ class AppServerClient:
         # and our buffer never disagree (a buffered readline would hide bytes
         # from select and stall the turn).
         self._proc = subprocess.Popen(
-            self.command, cwd=self.cwd,
+            self.command, cwd=self.cwd, env=self.env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, bufsize=0)
         return self

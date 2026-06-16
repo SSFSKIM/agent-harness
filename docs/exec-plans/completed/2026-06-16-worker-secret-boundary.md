@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 53a3e49325103aa694a9bc3715513711e804d635
@@ -149,10 +149,35 @@ the remaining residual in `docs/SECURITY.md` T11 (deferred to M2).
   module; lint_docs accepts the edits; tests pass with the new `.harness.json` present).
 
 ## Progress log
-- [ ] (2026-06-16) Plan created; base_commit recorded; creation-time self-review done.
-  Remaining: implement M1 → M2 → M3, then completion gate (targeted review).
+- [x] (2026-06-16) Plan created; base_commit recorded; creation-time self-review done (commit 3dd6540).
+- [x] (2026-06-16) M1 — `director/worker/policy.py`: `load_worker_policy` / `build_worker_env`
+  / `discover_root`. `tests/test_worker_policy.py` proves absent→empty, present→parsed,
+  malformed→raises.
+- [x] (2026-06-16) M2 — env threaded through the spawn seam (`app_server.AppServerClient.env`
+  → `Popen(env=)`; `run._prepare` builds deny-by-default by default). Unit test proves a
+  spawned subprocess lacks `SENTINEL_SECRET` but keeps `PATH`; **live smoke**: a real codex
+  worker completed a turn under the constructed env (created hello.txt, reported done) —
+  base is sufficient.
+- [x] (2026-06-16) M3 — dogfood `.harness.json worker_policy`; SECURITY.md T11 updated
+  (env-channel CLOSED, fs-read+egress residual restated); two tech-debt entries.
+- [x] (2026-06-16) Completion gate — GREEN (276 tests); codex targeted review (security +
+  arch); 2 P1s fixed + re-verified, 2 P2s resolved/tracked (see Feedback).
 
 ## Surprises & discoveries
+- **The boundary needed BOTH `Popen(env=)` AND a non-login shell.** Setting a
+  deny-by-default `Popen(env=...)` is necessary but not sufficient: the worker command was
+  `bash -lc <codex>`, and a **login** shell sources the host's profile (`~/.zprofile` etc.),
+  re-injecting env the boundary just stripped (a secret a user exports in their profile would
+  return). Caught by the codex review. Fixed in BOTH entry points (`run._command` AND
+  `orchestrator._command` — the orchestrator is the real DAG path). `bash -c` (non-login)
+  sources nothing: `/etc/profile` is login-only and `BASH_ENV` is denied (not in the base),
+  so the worker env is exactly the constructed one. Live-re-verified codex still runs.
+- **codex's file-based auth is what makes env-deny viable.** `~/.codex/.codex-global-state.json`
+  exists and `OPENAI_API_KEY` is absent from the env, so stripping the env does not break
+  codex auth (HOME is in the base) — the assumption that gated the whole approach, verified.
+- **A prefix in a security allowlist is fail-open.** The first cut allowed `LC_*` by prefix;
+  codex flagged that an `LC_<secret>` would slip through. Replaced with the enumerated finite
+  locale set — the allowlist is now purely name-based, no wildcard.
 
 ## Decision log
 - 2026-06-16: Backend fixed to **GCP Secret Manager** (not a pluggable abstraction) for
@@ -167,5 +192,30 @@ the remaining residual in `docs/SECURITY.md` T11 (deferred to M2).
   so per-domain enforcement requires the container's network namespace + proxy.
 
 ## Feedback (from completion gate)
+Targeted review = one adversarial codex pass (gpt-5.5, high effort) over the security
+live-exec surface + the host-contract architecture. Verdict on first pass:
+CHANGES-REQUESTED (2 P1). All resolved:
+- **P1 (login shell re-injects env)** — `bash -lc` → `bash -c` in `run._command` AND
+  `orchestrator._command`. Fixed + live-re-verified (real codex turn completes under the
+  non-login shell). The autonomy test now pins `["bash","-c",…]`.
+- **P1 (`LC_*` prefix fail-open)** — replaced the prefix with the enumerated POSIX/glibc
+  locale names in `_BASE_NAMES`; `_is_base` is now name-only. Regression test:
+  `LC_SECRET` is dropped while `LC_ALL` passes.
+- **P2 (`env=None` means inherit — a future direct `AppServerClient` caller could bypass)**
+  — no production direct caller today (the only construction is `run._prepare`); tracked in
+  tech-debt-tracker for when the API is next touched.
+- **P2 (stale `SECURITY.md` "watched → network OFF")** — corrected: posture/network are
+  identical in both modes; they differ only by the turn-end decider.
 
 ## Outcomes & retrospective
+**Done, observable:** a real codex worker spawned by the harness runs under a
+deny-by-default env — a `SENTINEL_SECRET`/`LINEAR_API_KEY` in the Director's env is provably
+absent from the worker (unit test), while the worker still completes a turn (live smoke).
+The allowed set is host-declared in `.harness.json worker_policy` (secret-agnostic,
+invariant 7). The **env-inheritance** exfil channel of T11 is closed; fs-wide read + egress
+remain (deferred to the container plan, M2 of the arc), and are restated as such in T11.
+**What carried the result:** the boundary is two parts — `Popen(env=)` AND a non-login
+shell; either alone leaks. Securing it at `_prepare` (not per-caller) makes every production
+path safe by construction. **Next in the arc:** the container plan (enforceable fs-read +
+egress; `network_allowlist` enforcement), then the GCP Secret-Manager vault-proxy
+(capability mediation; codex's own model key as an ephemeral/brokered token).

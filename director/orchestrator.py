@@ -431,8 +431,10 @@ def _command(args) -> list[str]:
         return [sys.executable, run._MOCK, args.mock_scenario]
     # Both modes self-govern per-action (auto_review) AND get full network; the only
     # watched/un-watched difference is the turn-end decider. Exfil deferred (T11).
+    # `bash -c` not `-lc`: a login shell would re-inject host profile env past the
+    # deny-by-default boundary (run._command has the full rationale; SECURITY.md T11).
     codex = autonomy.codex_command(args.codex)
-    return ["bash", "-lc", codex]
+    return ["bash", "-c", codex]
 
 
 def main(argv=None, *, board=None) -> int:

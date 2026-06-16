@@ -84,7 +84,9 @@ class CommandWrapTest(unittest.TestCase):
         for build in (run._command, orch._command):
             auton = build(self._ns(True))
             watched = build(self._ns(False))
-            expected = ["bash", "-lc", autonomy.codex_command("codex app-server")]
+            # `-c` not `-lc`: a login shell would re-inject host profile env past the
+            # deny-by-default worker-env boundary (worker-secret-boundary M1, T11).
+            expected = ["bash", "-c", autonomy.codex_command("codex app-server")]
             self.assertEqual(auton, expected)
             self.assertEqual(watched, expected)               # identical now
             self.assertIn("approvals_reviewer=auto_review", watched[2])

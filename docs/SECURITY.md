@@ -129,14 +129,29 @@ Grounding document for the review-security persona. Threats are numbered.
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
   **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
-  residual below now applies to **both** watched and un-watched, and is **deferred to a
-  single, holistic mitigation** rather than a per-mode network toggle — either egress
-  via a `network_proxy` domain allowlist, or removing host secrets from disk behind a
-  secret manager / env-injection proxy (tech-debt-tracker). Until that lands, BOTH
-  postures are safe ONLY where every reachable credential is throwaway. (An earlier cut
-  kept watched network-off — which would have let a blocked-network POST escalate to
-  `auto_review`'s exfil check — but the human chose full network for both, to fix the
-  exfil exposure once, properly, at the credential layer.)
+  residual below applies to **both** watched and un-watched, and is mitigated as a
+  **three-plan arc** (`docs/exec-plans/.../worker-secret-boundary` — M1, then container,
+  then a GCP Secret-Manager vault-proxy), not a per-mode network toggle. The exfil
+  threat has three channels; the arc closes them in order:
+    - **env-inheritance — CLOSED (M1, 2026-06-16).** The worker subprocess no longer
+      inherits the Director's environment: `director/worker/policy.py` constructs a
+      **deny-by-default** env (operational base + only the keys the host allows in
+      `<root>/.harness.json` `worker_policy.worker_env`), passed to `Popen(env=...)`.
+      Secret-agnostic by design (a host's secrets are unknowable to the harness;
+      ARCHITECTURE invariant 7). A host credential in the Director env (e.g.
+      `LINEAR_API_KEY`) is no longer handed to the worker via the environment.
+    - **fs-wide read & egress — OPEN (deferred to the container plan).** The on-disk
+      `.env` is still readable filesystem-wide, and a read secret can still be POSTed
+      out. `worker_policy.network_allowlist` is **declared, not yet enforced** — codex-cli
+      0.139.0 exposes only a boolean `sandbox_workspace_write.network_access` (probe-
+      confirmed: `allowed_domains`/`network_proxy`/… are rejected as unknown config), so
+      per-domain egress needs a container's network namespace + filtering proxy, not
+      codex config.
+  Until the container plan lands, BOTH postures are safe ONLY where every reachable
+  credential is throwaway. (An earlier cut kept watched network-off — which would have
+  let a blocked-network POST escalate to `auto_review`'s exfil check — but the human
+  chose full network for both, to fix the exfil exposure once, properly, at the
+  credential layer.)
   **Confirmed residual — credential exfiltration that BYPASSES T10 (live-probed,
   codex-cli 0.139.0):** `workspace-write` restricts *writes* to the workspace but
   NOT *reads* — a probe worker read a sentinel both via `../../../` traversal and by
@@ -174,5 +189,6 @@ Grounding document for the review-security persona. Threats are numbered.
   by the human (2026-06-15) after the live-probe above** — the `network_proxy` allowlist
   mitigation is tracked (tech-debt-tracker), not enabled. Verified live: an
   autonomous worker auto-ran an in-sandbox command with **zero** seam traffic.
-  `--autonomous` is opt-in (default = **watched**: same per-action self-governance,
-  network OFF — so no exfil vector); part of the live exec surface (status note).
+  `--autonomous` is opt-in (default = **watched**); posture and network are **identical**
+  in both modes (full outbound; they differ only by the turn-end decider — autonomy.py),
+  so the exfil residual above applies to both. Part of the live exec surface (status note).
