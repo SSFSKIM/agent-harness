@@ -94,6 +94,10 @@ class StatusWriterTest(unittest.TestCase):
         self.assertEqual(snap["run"]["stopped_reason"], "stuck")
         self.assertEqual(snap["stuck"][0]["ticket"], "DEMO-9")
         self.assertEqual(snap["stuck"][0]["blocked_by"][0]["state_type"], "started")
+        # review fix: a no-claim run (wave→stuck→finished, never claimed) still gets a
+        # run identity (started_at set at first wave), so two such runs don't collide in
+        # the runReport dedupe and a real stuck-from-start pull is never swallowed.
+        self.assertIsNotNone(snap["run"]["started_at"])
 
     def test_snapshot_is_always_valid_json_under_interleaved_reads(self):
         # A reader concurrent with a writer never parses a torn snapshot (R2) —

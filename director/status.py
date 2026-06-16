@@ -122,6 +122,13 @@ class StatusWriter:
         self._flush()
 
     def wave(self, pass_no: int) -> None:
+        # Run start = first wave (every run_once/run_until_drained calls wave() before any
+        # claim), so even a no-claim run (e.g. stuck-from-start, all blockers unmet) gets a
+        # non-None `started_at` — a stable run identity. Without it, two distinct no-claim
+        # runs share (None, stopped_reason) and a downstream dedupe (director.watch runReport)
+        # would swallow the second — losing a real "human needed to unblock" pull (review fix).
+        if self._run["started_at"] is None:
+            self._run["started_at"] = self._now()
         self._run["pass"] = pass_no
         self._flush()
 
