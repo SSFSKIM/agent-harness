@@ -95,7 +95,10 @@ def _read_pending(queue_dir) -> list[dict]:
     500-ing the view (R3 — visibility is a read-only instrument, never a gate)."""
     try:
         return dq.read_pending(base=queue_dir)
-    except (OSError, ValueError):  # ValueError covers json.JSONDecodeError (torn line)
+    except (OSError, ValueError, KeyError):
+        # ValueError: json.JSONDecodeError on a torn line. KeyError: read_pending does
+        # r["request_id"] per row, so a parseable line missing that key raises. Either
+        # way a malformed/concurrent queue degrades to "no pending", never a 500.
         return []
 
 
@@ -237,12 +240,15 @@ class _Handler(BaseHTTPRequestHandler):
         # bug → a structured 500 the client JS already handles (catch → "fetch error").
         try:
             self._route()
-        except (BrokenPipeError, ConnectionResetError):
-            return  # the polling browser went away mid-write — nothing to report
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return  # the polling browser went away mid-write — don't attempt a 2nd response
         except Exception:
+            # Any other handler bug → a structured 500. The 500-send itself may hit a dead
+            # socket (any OSError errno, not just EPIPE/ECONNRESET): swallow it — there is
+            # no peer left to tell, and nothing may reach socketserver.handle_error (stderr).
             try:
                 self._error(500, "internal error")
-            except (BrokenPipeError, ConnectionResetError):
+            except OSError:
                 pass
 
     def _route(self):

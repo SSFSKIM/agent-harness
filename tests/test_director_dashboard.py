@@ -144,9 +144,12 @@ class BuildViewTest(unittest.TestCase):
         _seed_run(self.status_dir)
         dq.append_request({"request_id": "ok", "ticket_id": "T1", "kind": "turnReview",
                            "payload": {"final_message": "fine"}}, base=self.queue_dir)
-        # simulate a torn trailing line mid-write
+        # a torn trailing line mid-write (json.JSONDecodeError) AND a parseable line
+        # missing request_id (read_pending does r["request_id"] -> KeyError): both must
+        # degrade to "no pending", never escape build_view.
         with open(self.queue_dir / "requests.jsonl", "a", encoding="utf-8") as f:
-            f.write('{"request_id": "torn", "kind": "turnRev')
+            f.write('{"kind": "turnReview"}\n')            # valid JSON, no request_id
+            f.write('{"request_id": "torn", "kind": "turnRev')  # torn trailing line
         v = self._view()
         self.assertEqual(v["pending"], [])  # tolerant: no crash, no partial garbage
         self.assertEqual(v["counts"]["pending"], 0)
