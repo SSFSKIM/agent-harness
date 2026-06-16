@@ -56,9 +56,10 @@ def answer_merge_review(request_id: str, disposition: dict, *, base=None,
                         answered_by: str = "director") -> None:
     """Mark a `mergeReview` HANDLED (removes it from the inbox). `disposition` records
     how the Director resolved the failed merge for the audit trail, e.g.
-    {"action": "requeue"|"abandon"|"human", "note": "…"}. Re-enqueuing the PR
-    (action=requeue) is a separate `queue.append_merge_request` call — the full
-    re-enqueue loop is a later refinement (spec Open Q)."""
+    {"action": "requeue"|"abandon"|"human", "note": "…"}. NOTE: `action=requeue` records
+    intent only — `append_merge_request` dedupes on `merge|<ticket>`, so automatic
+    re-enqueue under a fresh discriminant is part of the deferred re-enqueue loop (spec
+    Open Q); today the live resolutions are human / abandon (docs/DIRECTOR.md §7)."""
     dq.write_answer({"request_id": request_id, "answered_by": answered_by,
                      "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                      "merge_review_disposition": disposition}, base=base)

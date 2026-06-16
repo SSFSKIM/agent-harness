@@ -20,6 +20,9 @@ worker→enqueue call site are M3; the live serializer wire-pin is M4.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
+import os
 from typing import Callable
 
 import director.queue as dq
@@ -96,6 +99,33 @@ def pending_merges(base=None) -> list[dict]:
     return [r for r in dq.read_pending(base=base) if r.get("kind") == MERGE_REQUEST_KIND]
 
 
+@contextlib.contextmanager
+def _single_consumer_lock(base):
+    """Enforce R4's *single* PR-merger across processes (completion-gate review fix).
+
+    `drain` reads pending → drives `pend[0]` → consumes; the queue's atomicity covers
+    append/write but NOT this read-then-drive window, so two concurrent drains could pick
+    the SAME PR and merge it twice — exactly the concurrent-main thrash a merge QUEUE
+    exists to prevent (D-47). An exclusive, non-blocking `flock` makes single-consumer an
+    enforced invariant, not an assumption: a second concurrent drain fails loud. The lock
+    is held only for the drain and auto-releases on close / process death (crash-safe,
+    unlike a pidfile). flock is per open-file-description (BSD/Linux), so this also trips
+    a second drain inside one process."""
+    root = dq._root(base)
+    root.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(root / "merger.lock"), os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RuntimeError(
+                f"another PR-merger is already draining {root} — refusing a second "
+                f"concurrent drain (single-consumer, R4)")
+        yield
+    finally:
+        os.close(fd)  # releases the flock
+
+
 def _consume(req: dict, result: str, *, base=None, now=dq._now_iso) -> None:
     """Mark a merge request CONSUMED by writing its answer (removes it from pending).
     Always called after processing — including on escalate/failed — so the drain loop
@@ -118,11 +148,12 @@ def _surface_escalation(req: dict, result: dict, *, base=None) -> bool:
     disp = result.get("disposition") or {}
     payload = req.get("payload") or {}
     reason = disp.get("reason") or result.get("error") or disp.get("kind") or "merge failed"
-    dq.append_merge_review(
+    # Return the ACTUAL append result (review fix): a dedup (an open mergeReview already
+    # exists for this ticket-merge) means nothing NEW surfaced — don't claim it did.
+    return dq.append_merge_review(
         req.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
         result=result["result"], reason=reason, disposition=disp,
         workspace_path=req.get("workspace_path"), base=base)
-    return True
 
 
 def process_request(req: dict, *, driver: Callable = run.drive,
@@ -153,14 +184,15 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
     install_skills, posture, …) pass straight through to the land lane."""
     results: list[dict] = []
     processed = 0
-    while processed < max_merges:
-        pend = pending_merges(base=base)
-        if not pend:
-            break
-        req = pend[0]  # FIFO — oldest queued PR first
-        result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
-        _consume(req, result["result"], base=base)
-        result["escalated_to_director"] = _surface_escalation(req, result, base=base)
-        results.append(result)
-        processed += 1
+    with _single_consumer_lock(base):  # enforce single PR-merger (R4) before any drive
+        while processed < max_merges:
+            pend = pending_merges(base=base)
+            if not pend:
+                break
+            req = pend[0]  # FIFO — oldest queued PR first
+            result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
+            _consume(req, result["result"], base=base)
+            result["escalated_to_director"] = _surface_escalation(req, result, base=base)
+            results.append(result)
+            processed += 1
     return results

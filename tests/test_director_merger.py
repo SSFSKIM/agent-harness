@@ -1,4 +1,6 @@
+import fcntl
 import inspect
+import os
 import sys
 import tempfile
 import threading
@@ -111,6 +113,23 @@ class DrainSerializationTest(unittest.TestCase):
         self.assertEqual(results[0]["result"], "failed")
         self.assertIn("boom", results[0]["error"])
         self.assertEqual(merger.pending_merges(base=self.base), [])  # consumed → no loop
+
+    def test_concurrent_drain_is_refused(self):
+        # R4 (completion-gate fix): a second drain while one holds the single-consumer
+        # lock must fail loud, not race read-then-drive on the same PR.
+        dq.append_merge_request("T1", base=self.base)
+        root = dq._root(self.base)
+        root.mkdir(parents=True, exist_ok=True)
+        held = os.open(str(root / "merger.lock"), os.O_CREAT | os.O_WRONLY, 0o600)
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)  # simulate another live merger
+        try:
+            with self.assertRaises(RuntimeError):
+                merger.drain(base=self.base, driver=lambda *a, **k: _DONE)
+        finally:
+            os.close(held)  # release
+        # lock free again → drain proceeds normally
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE)
+        self.assertEqual(results[0]["result"], "merged")
 
     def test_max_merges_bounds_one_pass(self):
         for i in range(5):

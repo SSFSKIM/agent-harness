@@ -159,6 +159,28 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
   Director inbox helper + DIRECTOR.md 절차까지. (full 자동 re-enqueue 루프는 후속.)
 
 ## Feedback (from completion gate)
+Two codex reviewers (gpt-5.5, high effort) — spec-compliance + code-quality. Both
+verdicts: has-P1-issues. Triage + resolution:
+- **[P1] Concurrent-drain race** (both, conf 88/90) — `drain` read-then-drive isn't atomic;
+  two concurrent drains could merge the same PR (queue atomicity covers append/write only).
+  Single-consumer was *assumed*, not enforced (undermines D-47). **FIXED:** `merger._single_consumer_lock`
+  (non-blocking `flock` on `<queue>/merger.lock`, held for the drain, crash-safe) — a second
+  drain fails loud. New test `test_concurrent_drain_is_refused`.
+- **[P1] `_surface_escalation` returned True even when the append deduped** (quality, conf 94).
+  **FIXED:** it now returns the actual `append_merge_review` result — `escalated_to_director`
+  reflects whether a NEW review was posted.
+- **[P1/P2] `merge|<ticket>` / `mergereview|<ticket>` stale across retries → DIRECTOR.md "requeue"
+  can't work** (both). The full re-enqueue loop is *deferred* (spec Open Q), but M3 docs
+  overpromised it. **FIXED (docs honest, not deferred scope built):** DIRECTOR.md §7 + the
+  `answer_merge_review` docstring now state auto re-enqueue isn't wired (dedupe is one-open-per-
+  ticket by design); live resolutions are human/abandon until the deferred loop lands.
+- **[P1] Worker→`mergeRequest` enqueue handoff missing → R4 not end-to-end** (spec, conf 92).
+  This is the call site that feeds the (now-built, live-verified) merge pipeline. It was
+  *explicitly deferred* across M2/M3 (decision log) because it touches the worker
+  `report_outcome` schema + orchestrator `reconcile` (shared with the parallel
+  secret-boundary session). **DECISION (surfaced to human):** ship the mechanism; wire the
+  handoff as a follow-up (tracked) — R4's *mechanism* is complete and proven; R4's *end-to-end
+  auto-feed* awaits the call-site wiring. Gate GREEN (293) after fixes.
 
 ## Outcomes & retrospective
 **M1–M4 built; 292 host tests GREEN; M4 live-verified.** The slice closes the multi-turn
