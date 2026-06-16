@@ -1,0 +1,58 @@
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { AsyncQueue } from "./asyncQueue.js";
+import type { MessageBus } from "./bus.js";
+import type { MessageKind, QueryFn, TeammateSpec } from "./types.js";
+
+export interface TeammateDeps { query: QueryFn; }
+
+function userTurn(text: string): SDKUserMessage {
+  return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } as SDKUserMessage;
+}
+
+export class TeammateSession {
+  readonly name: string;
+  readonly teamId: string;
+  readonly done: Promise<void>;
+  private input = new AsyncQueue<SDKUserMessage>();
+  private q: AsyncIterable<any>;
+  private settleResolvers: (() => void)[] = [];
+
+  constructor(spec: TeammateSpec, private bus: MessageBus, deps: TeammateDeps, options?: Record<string, unknown>) {
+    this.name = spec.name;
+    this.teamId = spec.teamId;
+    this.bus.subscribe(this.name, (msg) => this.send(msg.body)); // incoming bus message → new turn
+    this.input.push(userTurn(spec.prompt));                      // seed turn
+    this.q = deps.query({ prompt: this.input, options });
+    this.done = this.readLoop();
+  }
+
+  /** Deliver a new user turn into this teammate's query. */
+  send(turn: string): void { this.input.push(userTurn(turn)); }
+
+  /** Resolves after the next turn settles (result + maybe idle emitted). */
+  settled(): Promise<void> { return new Promise((r) => this.settleResolvers.push(r)); }
+
+  /** End the underlying query and wait for the read-loop to finish. */
+  async dispose(): Promise<void> { this.input.close(); await this.done; }
+
+  private emit(kind: MessageKind, body: string): void {
+    this.bus.send("coordinator", { from: this.name, to: "coordinator", kind, body, ts: new Date().toISOString() });
+  }
+
+  private settle(): void {
+    const waiters = this.settleResolvers;
+    this.settleResolvers = [];
+    for (const w of waiters) w();
+  }
+
+  private async readLoop(): Promise<void> {
+    for await (const m of this.q) {
+      const mm = m as any;
+      if (mm.type === "result") {
+        this.emit("result", String(mm.result ?? ""));
+        if (this.input.pending === 0) this.emit("idle", "");
+        this.settle();
+      }
+    }
+  }
+}
