@@ -87,6 +87,40 @@ export class TaskStore {
     return TaskStore.LIVE_ORDER.indexOf(to) > TaskStore.LIVE_ORDER.indexOf(from); // forward only
   }
 
+  /** Replace task.blockedBy with `blockedBy`, keeping reverse `blocks` edges in sync and rejecting cycles. */
+  private setBlockedBy(data: StoreFile, task: Task, blockedBy: number[]): void {
+    for (const b of blockedBy) {
+      if (!data.tasks.some((t) => t.id === b)) throw new TaskError(`unknown blocker id ${b}`);
+    }
+    // A cycle forms if any new blocker `b` already depends (transitively) on `task`.
+    const reaches = (start: number, target: number): boolean => {
+      const seen = new Set<number>();
+      const stack = [start];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (cur === target) return true;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        const t = data.tasks.find((x) => x.id === cur);
+        if (t) stack.push(...t.blockedBy);
+      }
+      return false;
+    };
+    for (const b of blockedBy) {
+      if (b === task.id || reaches(b, task.id)) throw new TaskError(`dependency cycle via task ${b}`);
+    }
+    // Apply: drop task from old blockers no longer present, set new list, add reverse edges.
+    for (const t of data.tasks) {
+      const i = t.blocks.indexOf(task.id);
+      if (i >= 0 && !blockedBy.includes(t.id)) t.blocks.splice(i, 1);
+    }
+    task.blockedBy = [...blockedBy];
+    for (const b of blockedBy) {
+      const bt = data.tasks.find((t) => t.id === b)!;
+      if (!bt.blocks.includes(task.id)) bt.blocks.push(task.id);
+    }
+  }
+
   update(id: number, patch: TaskUpdatePatch): Promise<Task> {
     return this.run(() => {
       const data = this.load();
@@ -105,6 +139,7 @@ export class TaskStore {
       if (patch.description !== undefined) task.description = patch.description;
       if (patch.activeForm !== undefined) task.activeForm = patch.activeForm;
       if (patch.metadata !== undefined) task.metadata = patch.metadata;
+      if (patch.blockedBy !== undefined) this.setBlockedBy(data, task, patch.blockedBy);
 
       task.updatedAt = new Date().toISOString();
       this.save(data);
