@@ -1,0 +1,10 @@
+# Docs-relative subtrees content lints (D3 frontmatter / D5 links / D6 naming)
+# skip. One path prefix per line; `#` comments and blanks ignored. MANAGED_ROOTS
+# (design-docs, exec-plans, generated, memory, product-specs) and MANAGED_DOCS
+# can never be exempted here — the harness always governs its own tree.
+#
+# symphony-original/ — verbatim vendored OpenAI Symphony reference (SPEC.md,
+# README.md, WORKFLOW.md; Apache-2.0). Kept faithful as the RV4 contract oracle,
+# so it must NOT be reshaped to our frontmatter/kebab-case conventions. Exempted,
+# not rewritten. (Also .gitignored — local reference, mirroring the /tmp oracle.)
+symphony-original/

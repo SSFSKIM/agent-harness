@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+
+# Verbatim vendored OpenAI Symphony reference (Apache-2.0) — local oracle only,
+# mirroring the /tmp/symphony-research pattern. Lint-scoped via docs/.harnessignore.
+docs/symphony-original/
