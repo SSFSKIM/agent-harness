@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-16
 owner: review-reliability
 ---
 # RELIABILITY.md
@@ -55,3 +55,27 @@ cite them in findings.
   fingerprinted by name only (can under-block, never over-block). Two
   concurrent sessions in one repo may each block once for the same state
   (last-writer wins) — accepted.
+- **R12 — Telemetry/instrumentation extractors are total.** Any function that
+  parses an external or transient payload purely for observation (token usage,
+  rate limits, status/snapshot fields) must be a TOTAL function: return
+  `None`/`0`/empty on missing, wrong-shaped, or malformed input — never raise,
+  never block the primary path. Instrumentation is read-only observation, never
+  a gate: a producer whose real shape differs from the spec, or a torn read,
+  must degrade to "absent telemetry", not a crash and not a wrong value. Prefer
+  failing to *absent* over guessing, so an unverified boundary ships safe (the
+  fix is then one localized extractor change, with nothing downstream corrupted).
+  Canonical instances: `director/worker/app_server.py` `extract_usage` /
+  `extract_rate_limits`, `director/status.py` `read_status`,
+  `director/dashboard.py` `build_view` / `_read_pending`; mirrors the
+  `agent_message_text` idiom.
+- **R13 — Status/snapshot writers are lock-free single-writers.** The
+  orchestration `StatusWriter` (`director/status.py`) accumulates state on the
+  orchestrator's MAIN thread ONLY — claim/reconcile callbacks execute in the
+  `wait(FIRST_COMPLETED)` loop, not in worker-pool threads — so it deliberately
+  holds no lock. Its in-memory model must NEVER be mutated from a worker/pool
+  thread: a cross-thread write would race the snapshot flush and tear state, and
+  adding a lock to "fix" that trades the simple single-writer invariant for a
+  contention surface. Any live mid-turn accrual (the deferred Layer-2
+  in-flight-token follow-up) that wants per-event updates must MARSHAL them to
+  the main thread (e.g. drain at a turn/dispatch boundary), never reach into the
+  writer from an `on_event` callback.
