@@ -8,6 +8,10 @@ import { createTaskMcpServer } from "../tasks/server.js";
 import { NATIVE_TASK_TOOLS } from "../swarm/coordinator.js";
 import { ControlBridge } from "../bridge/control.js";
 import type { ControlFrame, ControlResponse } from "../bridge/types.js";
+import { ProactiveLoop } from "../proactive/loop.js";
+import { resolveProactiveConfig } from "../proactive/types.js";
+import type { ProactiveConfigInput, ProactiveStatus } from "../proactive/types.js";
+import { defaultIdleDetector } from "../proactive/prompts.js";
 
 export interface DaemonDeps { query: QueryFn; }
 
@@ -17,6 +21,7 @@ interface SpawnConfig { model?: string; restart: RestartPolicy; }
 export class DaemonSupervisor {
   tasks?: TaskStore; // shared cc-tasks store when `sharedTasks` is set (D3); public for inspection
   private pool = new Map<string, DaemonSession>();
+  private proactive = new Map<string, ProactiveLoop>(); // active heartbeats by session id (Phase 2 C)
   private configs = new Map<string, SpawnConfig>();   // per-session config, for re-creation on restart
   private registry: SessionRegistry;
   private seq = 0;
@@ -81,6 +86,8 @@ export class DaemonSupervisor {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
     }
+    const loop = this.proactive.get(id);
+    if (loop) await loop.pause();                     // human turn preempts the heartbeat
     this.registry.update(id, { status: "busy" });
     try {
       const r = await session.submit(prompt, onMessage);
@@ -89,6 +96,8 @@ export class DaemonSupervisor {
     } catch (e) {
       this.registry.update(id, { status: "errored" });
       throw e;
+    } finally {
+      if (loop && loop.status().state !== "stopped") loop.resume();
     }
   }
 
@@ -103,9 +112,48 @@ export class DaemonSupervisor {
     return ControlBridge.apply(session, frame);
   }
 
+  startProactive(id: string, config?: ProactiveConfigInput): ProactiveStatus {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) {
+      const rec = this.registry.get(id);
+      throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
+    }
+    if (this.proactive.has(id)) throw new DaemonError(`session ${id} already proactive`);
+    const loop = new ProactiveLoop(resolveProactiveConfig(config), {
+      runTurn: (p) => this.runProactiveTurn(id, p),
+      schedule: this.scheduleRestart,                 // reuse the injected scheduler
+      idleDetector: defaultIdleDetector,
+      interrupt: () => session.interrupt(),           // bridge.interrupt pauses an in-flight tick
+    });
+    this.proactive.set(id, loop);
+    loop.start();
+    return loop.status();
+  }
+
+  async stopProactive(id: string): Promise<{ ok: true }> {
+    const loop = this.proactive.get(id);
+    if (!loop) throw new DaemonError(`session ${id} is not proactive`);
+    await loop.stop("stopped");
+    this.proactive.delete(id);
+    return { ok: true };
+  }
+
+  proactiveStatus(id: string): ProactiveStatus | undefined { return this.proactive.get(id)?.status(); }
+
+  private runProactiveTurn(id: string, prompt: string): Promise<{ result: unknown }> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) {
+      const rec = this.registry.get(id);
+      throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
+    }
+    return session.submit(prompt, () => {});          // tick output discarded; result drives idleDetector
+  }
+
   async stop(id: string): Promise<void> {
     const session = this.pool.get(id);
     if (!session && !this.registry.get(id)) throw new DaemonError(`unknown session ${id}`);
+    const loop = this.proactive.get(id);
+    if (loop) { await loop.stop("session stopped"); this.proactive.delete(id); }
     this.stopping.add(id);                       // flag BEFORE dispose so the end hook won't restart
     this.cancelRestart(id);
     if (session) await session.dispose();
@@ -120,6 +168,8 @@ export class DaemonSupervisor {
     if (this.reaper) clearInterval(this.reaper);
     for (const cancel of this.restartCancels.values()) cancel();
     this.restartCancels.clear();
+    await Promise.all([...this.proactive.values()].map((l) => l.stop("shutdown")));
+    this.proactive.clear();
     await Promise.all([...this.pool].map(async ([id, s]) => { await s.dispose(); this.registry.remove(id); }));
     this.pool.clear();
     this.configs.clear();
@@ -128,7 +178,7 @@ export class DaemonSupervisor {
   /** Stop sessions whose last activity is older than the idle timeout. */
   async reapIdle(): Promise<void> {
     const cutoff = this.now() - this.idleTimeoutMs;
-    const stale = [...this.pool].filter(([, s]) => s.lastActiveAt < cutoff).map(([id]) => id);
+    const stale = [...this.pool].filter(([id, s]) => !this.proactive.has(id) && s.lastActiveAt < cutoff).map(([id]) => id);
     await Promise.all(stale.map((id) => this.stop(id)));
   }
 

@@ -273,4 +273,99 @@ describe("DaemonSupervisor", () => {
     await expect(sup.control(id, { type: "interrupt" })).rejects.toThrow(/is errored/);
     await sup.shutdown();
   });
+
+  // ---- Phase 2 C: proactive heartbeat ----
+  // A scheduler the test controls: capture pending tick callbacks, fire them on demand.
+  function captureSched() {
+    const pend: (() => void)[] = [];
+    const scheduleRestart = (fn: () => void) => { pend.push(fn); return () => {}; };
+    const fire = async () => { const fn = pend.pop(); if (fn) { fn(); await flush(); } };
+    return { scheduleRestart, fire };
+  }
+
+  it("startProactive: unknown id throws, double-start throws, returns running status", async () => {
+    const s = captureSched();
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), scheduleRestart: s.scheduleRestart });
+    expect(() => sup.startProactive("ghost")).toThrow(/unknown session/);
+    const id = sup.spawn();
+    expect(sup.startProactive(id, { intervalMs: 1000 })).toMatchObject({ state: "running", tickCount: 0 });
+    expect(() => sup.startProactive(id)).toThrow(/already proactive/);
+    await sup.shutdown();
+  });
+
+  it("a fired heartbeat tick submits the tickPrompt into the session", async () => {
+    const s = captureSched();
+    const seen: string[] = [];
+    const recordingQuery = ({ prompt }: any) => (async function* () {
+      for await (const t of prompt) { seen.push(t.message.content); yield { type: "result", result: "ok" }; }
+    })();
+    const sup = new DaemonSupervisor({ query: recordingQuery }, { dir: dir(), scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { tickPrompt: "HB", intervalMs: 1000 });
+    await s.fire();                                  // fire the first scheduled tick
+    expect(seen).toContain("HB");
+    expect(sup.proactiveStatus(id)!.tickCount).toBe(1);
+    await sup.shutdown();
+  });
+
+  it("submit auto-pauses the heartbeat and resumes it after the human turn", async () => {
+    const s = captureSched();
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { intervalMs: 1000 });
+    expect((await sup.submit(id, "hi", () => {})).result).toBe("ok:hi");
+    expect(sup.proactiveStatus(id)!.state).toBe("running"); // resumed, not stuck paused
+    await sup.shutdown();
+  });
+
+  it("submit does NOT resume a heartbeat that already self-stopped (lingers in the map)", async () => {
+    const s = captureSched();
+    const idleQuery = ({ prompt }: any) => (async function* () {
+      for await (const _t of prompt) yield { type: "result", result: "IDLE" };
+    })();
+    const sup = new DaemonSupervisor({ query: idleQuery }, { dir: dir(), scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { intervalMs: 1000, idleBackoff: { stopAfterIdle: 1 } });
+    await s.fire();                                  // one idle tick → loop self-stops
+    expect(sup.proactiveStatus(id)!.state).toBe("stopped");
+    await sup.submit(id, "hi", () => {});            // must not throw / must not resume
+    expect(sup.proactiveStatus(id)!.state).toBe("stopped");
+    await sup.shutdown();
+  });
+
+  it("stop(id) tears the heartbeat down before disposing the session", async () => {
+    const s = captureSched();
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { intervalMs: 1000 });
+    await sup.stop(id);
+    expect(sup.proactiveStatus(id)).toBeUndefined();
+    expect(sup.list()).toEqual([]);
+    await sup.shutdown();
+  });
+
+  it("stopProactive on a non-proactive session throws", async () => {
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir() });
+    const id = sup.spawn();
+    await expect(sup.stopProactive(id)).rejects.toThrow(/not proactive/);
+    await sup.shutdown();
+  });
+
+  it("reapIdle skips a session with an active heartbeat", async () => {
+    let t = 1000;
+    const s = captureSched();
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), idleTimeoutMs: 500, now: () => t, scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { intervalMs: 1000 });
+    t = 5000; await sup.reapIdle();                 // way past the timeout, but proactive → kept
+    expect(sup.list().map((x) => x.id)).toEqual([id]);
+    await sup.shutdown();
+  });
+
+  it("daemonOp accepts start_proactive (with/without config) and stop_proactive", () => {
+    expect(daemonOp.safeParse({ op: "start_proactive", id: "s1" }).success).toBe(true);
+    expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: 10 } }).success).toBe(true);
+    expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: "x" } }).success).toBe(false);
+    expect(daemonOp.safeParse({ op: "stop_proactive", id: "s1" }).success).toBe(true);
+  });
 });

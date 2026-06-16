@@ -71,6 +71,8 @@ export class DaemonServer {
         case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart }) }); sock.end(); break;
         case "list": send({ ok: true, sessions: this.supervisor.list() }); sock.end(); break;
         case "control": send(await this.supervisor.control(op.id, op.frame)); sock.end(); break;
+        case "start_proactive": send({ ok: true, status: this.supervisor.startProactive(op.id, op.config) }); sock.end(); break;
+        case "stop_proactive": send(await this.supervisor.stopProactive(op.id)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
         case "submit": {
           const r = await this.supervisor.submit(op.id, op.prompt, (m) => send({ type: "chunk", message: m }));

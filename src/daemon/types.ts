@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { controlFrame } from "../bridge/types.js";
+import { proactiveConfig } from "../proactive/types.js";
 
 export class DaemonError extends Error {}
 
@@ -38,6 +39,8 @@ const listOp = z.object({ op: z.literal("list") });
 const stopOp = z.object({ op: z.literal("stop"), id: z.string() });
 const shutdownOp = z.object({ op: z.literal("shutdown") });
 const controlOp = z.object({ op: z.literal("control"), id: z.string(), frame: controlFrame });
+const startProactiveOp = z.object({ op: z.literal("start_proactive"), id: z.string(), config: proactiveConfig.optional() });
+const stopProactiveOp = z.object({ op: z.literal("stop_proactive"), id: z.string() });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;
