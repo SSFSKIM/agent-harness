@@ -87,7 +87,14 @@ per-ticket, so a consumed merge can never be re-queued under the same id. Observ
   is the risk).
 
 ## Progress log
-- [ ] M1 — attempt discriminant + guidance plumbing.
+- [x] (2026-06-16) M1 — attempt discriminant + guidance plumbing. `append_merge_request` gained
+  `attempt:int=1`+`guidance` → id `merge|<t>|a<attempt>`, payload carries both; `append_merge_review`
+  gained `attempt:int=1` → id `mergereview|<t>|a<attempt>`, payload carries `attempt`.
+  `merger._surface_escalation` reads the request's attempt and passes it to the review;
+  `land_prompt` renders a "DIRECTOR GUIDANCE (retry attempt N)" block when `payload.guidance` is set.
+  Tests: attempt discriminates merge ids (attempt 1 vs 2 = 2 distinct requests; same attempt still
+  dedupes); land prompt shows guidance only on a guided retry; escalation review carries + discriminates
+  by attempt. Gate GREEN (307); existing reconcile/chain tests unaffected (attempt defaults to 1).
 - [ ] M2 — requeue_merge loop driver + DIRECTOR.md §7.
 - [ ] M3 — end-to-end loop test + completion gate.
 

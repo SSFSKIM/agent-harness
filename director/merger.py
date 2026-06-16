@@ -58,16 +58,30 @@ PR to land:
   pr: {pr}
   branch: {branch}
 The author's PR self-description (what was built, which reviews/tests they ran):
-{self_description}"""
+{self_description}{guidance}"""
+
+# Appended only on a guided retry (attempt 2+): the Director's directive from the
+# mergeReview the previous attempt raised. Rendered by land_prompt when present.
+_GUIDANCE_BLOCK = """
+
+DIRECTOR GUIDANCE (this is retry attempt {attempt} — a previous attempt escalated, and the
+Director answered with this directive; follow it):
+{guidance}"""
 
 
 def land_prompt(payload: dict) -> str:
-    """The land-lane prompt for one PR, framed from the merge request's payload."""
+    """The land-lane prompt for one PR, framed from the merge request's payload. On a
+    guided retry the Director's `guidance` (from `requeue_merge`) is rendered in so the
+    land agent follows the directive that resolved the prior escalation."""
     payload = payload or {}
+    guidance = (payload.get("guidance") or "").strip()
+    guidance_block = _GUIDANCE_BLOCK.format(
+        attempt=payload.get("attempt", 1), guidance=guidance) if guidance else ""
     return _LAND_PROMPT.format(
         pr=payload.get("pr") or "(see current branch)",
         branch=payload.get("branch") or "(current branch)",
         self_description=(payload.get("self_description") or "(none provided)").strip(),
+        guidance=guidance_block,
     )
 
 
@@ -152,12 +166,15 @@ def _surface_escalation(req: dict, result: dict, *, base=None) -> bool:
     disp = result.get("disposition") or {}
     payload = req.get("payload") or {}
     reason = disp.get("reason") or result.get("error") or disp.get("kind") or "merge failed"
-    # Return the ACTUAL append result (review fix): a dedup (an open mergeReview already
-    # exists for this ticket-merge) means nothing NEW surfaced — don't claim it did.
+    # Carry the attempt (default 1) into the mergeReview: the review id discriminates per
+    # attempt (a 2nd failed retry surfaces distinctly) and the Director's requeue reads it
+    # to bump attempt+1. Return the ACTUAL append result — a dedup means nothing NEW
+    # surfaced, so don't claim it did.
     return dq.append_merge_review(
         req.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
         result=result["result"], reason=reason, disposition=disp,
-        workspace_path=req.get("workspace_path"), base=base)
+        workspace_path=req.get("workspace_path"), attempt=payload.get("attempt", 1),
+        base=base)
 
 
 def process_request(req: dict, *, driver: Callable = run.drive,

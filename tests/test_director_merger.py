@@ -41,6 +41,26 @@ class MergeQueueTest(unittest.TestCase):
         self.assertEqual(req["payload"]["branch"], "feat/x")
         self.assertIn("built X", merger.land_prompt(req["payload"]))
 
+    def test_attempt_discriminates_merge_request_ids(self):
+        # The re-enqueue discriminant: same ticket, different attempt → distinct requests
+        # (a guided retry is NOT swallowed by the one-open-per-ticket dedupe).
+        self.assertTrue(dq.append_merge_request("T1", pr="p", attempt=1, base=self.base))
+        self.assertTrue(dq.append_merge_request("T1", pr="p", attempt=2,
+                                                guidance="rebase", base=self.base))
+        pend = merger.pending_merges(base=self.base)
+        self.assertEqual(len(pend), 2)
+        self.assertEqual({p["payload"]["attempt"] for p in pend}, {1, 2})
+        # …but a re-delivery of the SAME attempt still dedupes.
+        self.assertFalse(dq.append_merge_request("T1", pr="p", attempt=2, base=self.base))
+
+    def test_land_prompt_includes_director_guidance_on_retry(self):
+        p1 = merger.land_prompt({"pr": "x", "branch": "b", "attempt": 1})
+        self.assertNotIn("DIRECTOR GUIDANCE", p1)
+        p2 = merger.land_prompt({"pr": "x", "branch": "b", "attempt": 2,
+                                 "guidance": "rebase onto origin/main and re-run gate"})
+        self.assertIn("DIRECTOR GUIDANCE", p2)
+        self.assertIn("rebase onto origin/main", p2)
+
     def test_auto_respond_does_not_consume_merge_requests(self):
         # The fixed-policy approval responder must never answer (and thereby silently
         # consume) a merge request — only the serialized merger may drain it.
@@ -207,6 +227,17 @@ class MergeEscalationToDirectorTest(unittest.TestCase):
         self.assertEqual(reviews[0]["payload"]["pr"], 7)
         self.assertEqual(reviews[0]["payload"]["result"], "escalated")
         self.assertIn("conflict", reviews[0]["payload"]["reason"])
+
+    def test_escalation_review_carries_and_discriminates_by_attempt(self):
+        dq.append_merge_request("T1", pr=7, attempt=2, guidance="g", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "conflict", "turns": 1}
+
+        merger.drain(base=self.base, driver=driver)
+        rv = dmin.merge_reviews(base=self.base)[0]
+        self.assertEqual(rv["payload"]["attempt"], 2)            # carried for requeue
+        self.assertTrue(rv["request_id"].endswith("|a2"))        # distinct per attempt
 
     def test_failed_pr_also_surfaces_with_failed_result(self):
         dq.append_merge_request("T1", base=self.base)

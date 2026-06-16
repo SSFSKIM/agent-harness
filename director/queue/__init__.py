@@ -110,21 +110,26 @@ def _now_iso() -> str:
 def append_merge_request(ticket_id: str, *, pr=None, branch=None,
                          workspace_path: str | None = None,
                          self_description: str | None = None,
+                         guidance: str | None = None, attempt: int = 1,
                          created_at: str | None = None,
                          base: Path | str | None = None) -> bool:
     """Enqueue a PR-merge worklist item for the serialized merger to drain.
 
-    A worker that finished a ticket and opened a PR posts this; the merger pops it,
-    runs the `land` lane, and writes an answer to mark it consumed. The request_id is
-    `merge|<ticket_id>` so re-posting the same ticket's merge is idempotent (at-least-
-    once dedupe, R1/R4) — one impl ticket produces one PR in this model. Returns True
-    if newly queued, False if already present (same contract as append_request)."""
+    A worker that finished a ticket and opened a PR posts this (attempt 1); the merger
+    pops it, runs the `land` lane, and writes an answer to mark it consumed. The
+    request_id is `merge|<ticket_id>|a<attempt>` — the `attempt` discriminant lets the
+    Director RE-ENQUEUE a failed merge (attempt 2+) under a fresh id without the
+    one-open-per-ticket dedupe swallowing it (the re-enqueue loop), while a re-delivery
+    of the SAME attempt still dedupes (at-least-once, R1/R4). `guidance` is the Director's
+    directive for a guided retry (None on the first enqueue) — the merger renders it into
+    the land prompt. Returns True if newly queued, False if already present."""
     return append_request({
-        "request_id": f"merge|{ticket_id}",
+        "request_id": f"merge|{ticket_id}|a{attempt}",
         "ticket_id": ticket_id,
-        "session_id": f"{ticket_id}-merge",
+        "session_id": f"{ticket_id}-merge-a{attempt}",
         "kind": "mergeRequest",
-        "payload": {"pr": pr, "branch": branch, "self_description": self_description},
+        "payload": {"pr": pr, "branch": branch, "self_description": self_description,
+                    "guidance": guidance, "attempt": attempt},
         "workspace_path": workspace_path,
         "created_at": created_at or _now_iso(),
     }, base=base)
@@ -132,7 +137,7 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
 
 def append_merge_review(ticket_id: str, *, pr=None, branch=None, result: str,
                         reason: str | None = None, disposition: dict | None = None,
-                        workspace_path: str | None = None,
+                        workspace_path: str | None = None, attempt: int = 1,
                         created_at: str | None = None,
                         base: Path | str | None = None) -> bool:
     """Surface a PR that could not cleanly land to the Director (R6/R7).
@@ -140,18 +145,19 @@ def append_merge_review(ticket_id: str, *, pr=None, branch=None, result: str,
     The serialized merger posts this when a merge attempt ends non-`merged`
     (escalated/failed). The live Director reads it (director_min.merge_reviews),
     decides — give a directive / re-enqueue / escalate the taste to the human — and
-    answers it (director_min.answer_merge_review). It is the merger's ONLY escalation
-    channel: there is no merger→human path (single human surface, R7). request_id is
-    `mergereview|<ticket_id>` so at most one open merge-escalation per ticket-merge
-    exists at a time (no duplicate "PR X failed" spam); the full re-enqueue loop is a
-    later refinement (spec Open Q)."""
+    answers it (director_min.answer_merge_review / requeue_merge). It is the merger's
+    ONLY escalation channel: there is no merger→human path (single human surface, R7).
+    request_id is `mergereview|<ticket_id>|a<attempt>`: one open escalation PER ATTEMPT
+    (so a 2nd failed retry surfaces distinctly instead of being deduped away), while a
+    re-delivery of the same attempt's escalation still dedupes. `attempt` rides the
+    payload so the Director's requeue can bump it (`requeue_merge`)."""
     return append_request({
-        "request_id": f"mergereview|{ticket_id}",
+        "request_id": f"mergereview|{ticket_id}|a{attempt}",
         "ticket_id": ticket_id,
-        "session_id": f"{ticket_id}-mergereview",
+        "session_id": f"{ticket_id}-mergereview-a{attempt}",
         "kind": "mergeReview",
         "payload": {"pr": pr, "branch": branch, "result": result,
-                    "reason": reason, "disposition": disposition},
+                    "reason": reason, "disposition": disposition, "attempt": attempt},
         "workspace_path": workspace_path,
         "created_at": created_at or _now_iso(),
     }, base=base)
