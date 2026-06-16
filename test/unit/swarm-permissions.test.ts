@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import { PermissionBroker, DEFAULT_ALLOW } from "../../src/swarm/permissions.js";
 
 describe("PermissionBroker", () => {
-  it("allows read-only + cc-tasks tools by default", async () => {
+  it("allows read-only + cc-tasks tools by default, echoing updatedInput (SDK requires it)", async () => {
     const b = new PermissionBroker({});
-    expect((await b.decide("w1", "Read", {})).behavior).toBe("allow");
+    const r = await b.decide("w1", "Read", { file: "x" });
+    expect(r.behavior).toBe("allow");
+    expect((r as any).updatedInput).toEqual({ file: "x" }); // SDK rejects an allow without updatedInput
     expect((await b.decide("w1", "mcp__cc-tasks__TaskUpdate", {})).behavior).toBe("allow");
     expect(DEFAULT_ALLOW).toContain("Read");
   });

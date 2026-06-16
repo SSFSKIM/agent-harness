@@ -33,13 +33,15 @@ export class PermissionBroker {
 
   decide(teammate: string, tool: string, input: Record<string, unknown>): Promise<PermissionResult> {
     this.onRequest?.(teammate, { tool, input });
-    if (this.isAllowed(tool)) return Promise.resolve({ behavior: "allow" });
+    // The SDK validates PermissionResult at runtime: an 'allow' MUST carry updatedInput (a record),
+    // so echo the original input — a bare { behavior: "allow" } is rejected with a ZodError.
+    if (this.isAllowed(tool)) return Promise.resolve({ behavior: "allow", updatedInput: input });
     if (!this.escalate) return Promise.resolve({ behavior: "deny", message: `not permitted: ${tool}` });
     const { id, promise } = this.requests.create();
     this.onEscalate?.(teammate, tool, input, id);
     return promise.then((d) =>
       d.decision === "allow"
-        ? { behavior: "allow" }
+        ? { behavior: "allow", updatedInput: input }
         : { behavior: "deny", message: d.message ?? `denied: ${tool}` },
     );
   }
