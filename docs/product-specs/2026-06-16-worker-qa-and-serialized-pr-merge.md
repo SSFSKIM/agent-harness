@@ -40,15 +40,25 @@ Question **"un-watched terminal sanity-check"** 을 — *게이트가 아니라 
   올린다(사람 결정, 이 세션).
 - **multi-turn `drive` + Director decider 가 이미 "에이전트를 terminal 까지 몰고 turn-end 를
   Director 로 라우팅"하는 머신**을 제공 — 머지도 그 위에서 재사용 가능.
-- **불확실(ExecPlan PoC):** Codex 워커가 자기 샌드박스(workspace-write + /tmp, network ON)에서
-  **Playwright/e2e 를 실제로 돌릴 수 있나**(브라우저 바이너리 설치·헤드리스 실행).
+- **app-server 워커는 홈 `~/.codex/skills/*` 를 자동 발견한다**(라이브 확인) — 워커의 스킬 표면 =
+  홈 스킬 ∪ 하네스가 까는 워크스페이스 `.codex/skills`. config 의 `[[skills.config]]` 는 *비활성
+  오버라이드 목록*이라 playwright 류는 기본 활성. 워커가 `playwright`/`playwright-cli`/
+  `frontend-design`/`code-reviewer` 를 본다.
+- **Playwright/e2e 가 워커 샌드박스에서 실제로 된다 — 라이브 확인(추측 아님).** 하네스와 동일 launch
+  (`-c approvals_reviewer=auto_review -c sandbox_workspace_write.network_access=true`)로 워커가
+  **헤드리스 Chrome 을 in-sandbox 기동** → example.com 내비게이션 → DOM `<title>` 추출 성공,
+  seam 트래픽 0. ⇒ e2e/Playwright 를 **워커 self-QA 에 둘 수 있다**(호스트-통합으로 뺄 필요 없음).
+  단 self-host 머신 전제(playwright-cli + 브라우저 + 홈 스킬 존재) — 포팅 호스트는 미설치 가능 →
+  R1/QA 스킬은 **graceful fallback**(미설치 시 smoke/unit 까지)을 명시.
 
 ## Requirements (R1..R9 — 각 항목 사람이 검증 가능)
 
 - **R1 — 워커 self-QA 는 impl 개발 *절차*(게이트 아님).** impl taxonomy 템플릿이 워커에게
   terminal 전: (a) 호스트 게이트 green, (b) spec-compliance + code-quality self-review,
-  (c) **티켓에 맞는 task-specific 테스트 작성·실행**(smoke/e2e/Playwright 중 적절히), (d) PR 생성
-  을 *안내*한다. (검증: 한 impl 워커 런이 PR + 테스트를 산출하고, 절차 텍스트가 이 단계들을 명시.)
+  (c) **티켓에 맞는 task-specific 테스트 작성·실행**(smoke/e2e/Playwright 중 적절히 — UI 변경이면
+  `playwright`/`playwright-cli` 스킬로 e2e, 미설치 호스트면 smoke/unit 로 graceful fallback),
+  (d) PR 생성을 *안내*한다. (검증: 한 impl 워커 런이 PR + 테스트를 산출하고, 절차 텍스트가 이
+  단계들을 명시.)
 - **R2 — 워커 PR 은 구조화된 자기명세를 담는다**(PR body, prose): 어떤 spec/기능을 구현했나, 무슨
   리뷰(spec/code)를 했나, 무슨 테스트를 쓰고 결과는 어땠나. (검증: 워커가 만든 PR body 에 이
   필드들이 있다 — merger/사람이 머지 때 참고.)
@@ -123,8 +133,9 @@ merge queue (직렬) ── PR-merger(단일 소비자) ── 하나씩: rebase
 - **의존 PR 순서** — FIFO(ready 시각) + 매번 최신 main rebase; 아직 안 머지된 sibling 이 필요한 PR 은
   통합 게이트에서 실패 → 재큐/대기 또는 escalate(ExecPlan 에서 정제).
 - **머지 후 main red**(통합 게이트가 못 잡은 경우) → 후속 fix 티켓 또는 revert 판단(escalate).
-- **Playwright 샌드박스 불가**(PoC 결과 시) → e2e/Playwright 는 "merger/호스트 통합 단계"로 이동,
-  워커 self-QA 는 smoke/unit 까지(슬라이싱 조정).
+- **Playwright/e2e 미설치 호스트**(self-host 는 됨 — 라이브 확인; 포팅 호스트는 playwright-cli/
+  브라우저 없을 수 있음) → 워커 QA 스킬이 graceful fallback(smoke/unit). e2e 를 호스트-통합으로
+  뺄 필요는 없음(워커 샌드박스에서 실행됨).
 
 ## Non-goals (scope fence — YAGNI)
 
@@ -145,7 +156,8 @@ merge queue (직렬) ── PR-merger(단일 소비자) ── 하나씩: rebase
 - 못 푸는 충돌(또는 red 통합 게이트)인 PR → merger 가 **Director 큐로 escalate**, 조용히 머지 안 함(R6).
 - merger 와 Director 가 구분된 컴포넌트이고 merger 에 사람 직통 경로가 없음(R7, diff 로 확인).
 - **Live wire-pin:** 실제 워커가 self-QA + PR 생성 → merger 가 rebase + green 통합 체크 + squash-merge
-  로 main 에 랜딩 1회. + **Playwright-in-sandbox PoC 결과**(ExecPlan 첫 마일스톤).
+  로 main 에 랜딩 1회. (Playwright-in-sandbox PoC 는 **이미 통과** — 이 세션 라이브 확인; ExecPlan 은
+  e2e 작성·실행을 워커 절차에 엮는 것까지.)
 - merger 가 turn 머신을 새로 안 만들고 `drive`/decider 를 재사용(R9, diff 로 확인).
 - `python3 plugin/scripts/check.py` GREEN.
 
@@ -164,11 +176,15 @@ merge queue (직렬) ── PR-merger(단일 소비자) ── 하나씩: rebase
   레인에서 terminal 까지 driven; turn-end 라우팅 동일. 새 turn 머신 안 만듦(surface 최소). (자율 결정.)
 - **D-51 한 스펙(QA + PR-merge), ExecPlan 은 linked plan 으로 분할 가능.** self-QA→PR→직렬머지가 한
   파이프라인이라 응집도 높음; build 는 QA-절차 / merger 로 나눠도 됨. (사람, 이 세션.)
+- **D-52 e2e/Playwright 는 워커 self-QA 에 둔다(호스트-통합 아님) — 라이브 확인.** app-server 워커가
+  홈 `~/.codex/skills` 를 자동 발견하고 in-sandbox 헤드리스 Chrome 을 실제로 띄움(이 세션). 포팅
+  호스트 미설치 시 graceful fallback(smoke/unit). 이로써 스펙의 핵심 PoC 가 선제 통과. (자율 검증.)
 
 ## Open Questions
 
-- **Playwright/e2e 샌드박스 실행 가능성** → ExecPlan 첫 마일스톤 PoC(M1 처럼 라이브 검증; 결과가
-  e2e 를 워커 vs 호스트-통합 단계 중 어디 두는지 + 슬라이싱을 정함).
+- ~~Playwright/e2e 샌드박스 실행 가능성~~ → **해소(라이브 확인, 이 세션):** 워커가 in-sandbox 헤드리스
+  Chrome 기동·내비게이션 성공(seam 0). e2e 는 워커 self-QA 에 둔다. 남은 건 포팅 호스트 미설치
+  graceful fallback(R1)뿐.
 - **board 에 "merging" 상태가 필요한가**, 아니면 done(작업)+하류 머지로 충분한가 — 1차는 충분으로 보고
   (D-49), reporting 에서 merged-vs-done 구분이 필요해지면 재검토.
 - **의존 PR 머지 순서** — FIFO+rebase+게이트(+sibling 미머지면 escalate)로 시작, ExecPlan 에서 정제.
