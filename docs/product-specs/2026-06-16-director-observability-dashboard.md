@@ -13,6 +13,20 @@ Phase 5(optional)의 **observability surface**. 부모 spec:
 이 슬라이스가 그 미뤄둔 항목 중 **observability 만** 집어 짓는다 (공유 tracker / GitHub
 Issues 어댑터는 별도 — 이번 범위 밖, 사람 결정 2026-06-16).
 
+> **상태/재배치 (2026-06-16):** 이 renderer 는
+> [worker telemetry capture](2026-06-16-worker-telemetry-capture.md) **뒤로 재배치**됐다.
+> renderer richness 는 producer state 에 묶이므로(렌더러는 데이터의 하류), 먼저 telemetry 를
+> 풍부하게(토큰/런타임/rate-limit) 만들고 이 renderer 가 그 consumer 가 된다. 그때 이 뷰는
+> 구조 그림(in-flight/stuck/recent/pending)에 더해 비용/usage 까지 렌더한다.
+>
+> **Symphony 정렬(SPEC §13.7, Elixir Phoenix LiveView):** 이 spec 의 데이터 엔드포인트는
+> `GET /api/v1/state`(버전드 read-only 네임스페이스, 향후 `/api/v1/<ticket>` drill-down 여지),
+> 미정의 라우트→`404`·정의된 라우트의 잘못된 메서드→**`405`**, 에러는 `{"error":{"code",
+> "message"}}` 봉투, state payload 에 `counts`+`generated_at` 블록. 루프백 bind 기본 +
+> "dashboard MUST NOT be REQUIRED for correctness"(§13.4)는 우리 D-2/D-5 와 동일 — Symphony 가
+> 같은 자세를 명문화. `POST /api/v1/refresh` 는 Symphony 의 daemon poll 트리거라 우리 세션-구동
+> orchestrator 엔 비적용(N/A). (본문 §의 `/api/snapshot` 표기는 이 정렬로 대체.)
+
 기존 `director.status` 스냅샷 + `director.watch` 이벤트 스트림 위에 **사람이 브라우저에서
 런을 직접 들여다보는** read-only 뷰를 더한다. 오늘 사람은 Director 가 narrate 해줄 때만
 오케스트레이션을 본다(D-5); 이 뷰는 사람이 **수동적으로 직접** "지금 워커들이 뭘 하나"

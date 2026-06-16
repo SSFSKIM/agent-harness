@@ -58,11 +58,20 @@ owner: harness
   digest 를 작성해 `PushNotification` 으로 사람을 끌어들인다. terminal-only emit(중간 조기 pull
   defer), watched 전용, 코드는 리포트-가치 판단 0(DIRECTOR.md 절차). watch + doc 만 — orchestrator
   변경 0.
+- [Worker telemetry capture (Symphony-grade) into status.json](2026-06-16-worker-telemetry-capture.md)
+  — Phase 5 observability 트랙, **renderer 의 선행**. renderer richness 는 producer state 에
+  묶이므로 데이터를 먼저 풍부하게: Symphony 가 추적하는 운영 telemetry(per-ticket 토큰·
+  turn_count·session_id, run-level codex_totals·seconds_running·rate_limits; SPEC §4.1.6/
+  §4.1.8/§13.5)를 **턴/디스패치 경계**에서 포착해 `status.json` 에 영속. app_server 가 codex
+  스트림에서 usage 추출(tolerant, 없으면 None) → drive 가 per-ticket 누적(절대총량, anti-
+  double-count) → orchestrator 가 terminal 에서 기록 + run aggregate. status.py 변경은 additive
+  (lock-free 단일 writer 유지; 라이브 in-flight accrual = Layer 2 defer). §13.5 회계 규칙 채택.
 - [Director observability dashboard (라이브 read-only 웹 뷰)](2026-06-16-director-observability-dashboard.md)
   — Phase 5(optional)의 observability surface. visibility spec 이 미뤄둔 "라이브 dashboard /
   web observability"(line 208)를 회수: 기존 `director.status` 스냅샷 + `queue.read_pending`
-  위에 stdlib `http.server` 로 127.0.0.1 read-only 웹 뷰를 얹는다. `GET /api/snapshot` =
-  순수 `build_view(status_dir,queue_dir)` JSON(in-flight/stuck/recent/pending), 인라인
-  vanilla-JS 페이지가 ~1s 폴로 재렌더. read-only(act 는 Director 경유), 폴링(SSE 아님),
+  위에 stdlib `http.server` 로 127.0.0.1 read-only 웹 뷰를 얹는다. `GET /api/v1/state` =
+  순수 `build_view(status_dir,queue_dir)` JSON(in-flight/stuck/recent/pending + counts),
+  인라인 vanilla-JS 페이지가 ~1s 폴로 재렌더. read-only(act 는 Director 경유), 폴링(SSE 아님),
   current-run only, stdlib-only. 기존 모듈 변경 0 — 신규 `director/dashboard.py` + 테스트 +
-  DIRECTOR.md 절. (공유 tracker / GitHub Issues 어댑터는 범위 밖.)
+  DIRECTOR.md 절. (공유 tracker / GitHub Issues 어댑터는 범위 밖.) **재배치(2026-06-16): worker
+  telemetry capture 가 선행 — renderer 는 그 풍부해진 데이터의 consumer.**
