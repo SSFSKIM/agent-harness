@@ -167,9 +167,22 @@ still green.
   **R7 url deferred** — board/linear `_to_ticket` doesn't carry `url` (GraphQL doesn't request
   it); adding it is a separate board change. 3 status unit tests + 1 end-to-end orchestrator
   test (2-ticket `usage` run → status.json recent[].tokens + summed codex_totals). Gate GREEN (332).
-- [ ] M4 — completion: full gate, backward-compat, R6 tolerance, live-pin.
+- [x] (2026-06-16) M4 done — R6 tolerance test (mock `usage_bad` malformed event → turn
+  completes, usage None); live-pin against real codex-cli 0.139.0 (rate_limits CONFIRMED via
+  `account/rateLimits/updated`; token-event shape unobserved — account `usageLimitExceeded` —
+  tracked follow-up, R6 validated against real codex); 333 pre-existing+new tests GREEN.
+  Entering completion gate.
 
 ## Surprises & discoveries
+- 2026-06-16 (M4 live-pin, real codex-cli 0.139.0): codex emits rate limits as
+  `account/rateLimits/updated` with `params.rateLimits` (camelCase) — `extract_rate_limits`
+  captured it end-to-end (probe `EXTRACTED_RATE` populated). **rate_limits live-pinned ✓.**
+- 2026-06-16: the live turn hit `usageLimitExceeded` (account out of credits), so NO
+  token-usage event fired and `EXTRACTED_USAGE` was null. This **validated R6 against real
+  codex**: usage absent, rate_limits still captured, the turn did not crash, telemetry
+  degraded to null cleanly. The exact token-usage event method/fields for codex-cli 0.139.0
+  remain unobserved (couldn't run a token-consuming turn) → tracked follow-up; `extract_usage`
+  stays pinned to the SPEC §13.5 documented shapes + lenient matching, proven via the mock.
 
 ## Decision log
 - 2026-06-16: Chose boundary capture (Approach A) over on_event live-stream (B) —

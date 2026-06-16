@@ -94,6 +94,11 @@ def main():
                 # mid-turn failure (NOT a turn/start error): drive maps it to kind=failed.
                 out({"method": "turn/failed",
                      "params": {"turn": {"id": TURN_ID, "status": "failed"}}})
+            elif scenario == "usage_bad":
+                # a malformed usage notification (no recognizable token fields) must
+                # NOT crash the turn — extract_usage returns None, the turn completes (R6).
+                out({"method": "thread/tokenUsage/updated", "params": {"garbage": True}})
+                complete_turn()
             elif scenario == "usage":
                 # CUMULATIVE thread totals that rise per turn (turn n → total n*100).
                 # `total_token_usage` is the absolute-wrapper extract_usage prefers;

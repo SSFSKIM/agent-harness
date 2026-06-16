@@ -87,6 +87,16 @@ class AppServerClientTest(unittest.TestCase):
         self.assertIsNone(res["usage"])
         self.assertIsNone(res["rate_limits"])
 
+    def test_run_turn_survives_malformed_usage_event(self):
+        # R6: a malformed usage notification yields usage None and the turn STILL
+        # completes — telemetry is instrumentation, never a gate on the turn.
+        with _client("usage_bad") as c:
+            c.initialize()
+            tid = c.thread_start()
+            res = c.run_turn(tid, "x")
+        self.assertEqual(res["status"], "completed")
+        self.assertIsNone(res["usage"])
+
 
 class ExtractUsageTest(unittest.TestCase):
     def test_absolute_wrapper_any_event(self):
