@@ -37,8 +37,10 @@ MERGE_REQUEST_KIND = "mergeRequest"
 
 # Safety bound on one drain pass (mirrors the orchestrator's max_dispatched): a drain
 # should terminate because every item is consumed, but this guards a processing path
-# that somehow fails to consume from spinning forever.
-DEFAULT_MAX_MERGES = 200
+# that somehow fails to consume from spinning forever. Value owned by
+# config.DEFAULTS["merger"]["max_merges"] (single source); a host overrides via
+# .harness.json director.merger.max_merges (merger.main resolves the live value).
+DEFAULT_MAX_MERGES = config.DEFAULTS["merger"]["max_merges"]
 
 _LAND_PROMPT = """\
 You are the PR-MERGER landing ONE pull request. Follow the `land` skill exactly:

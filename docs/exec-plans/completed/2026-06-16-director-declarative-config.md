@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 21d63c6670683fd9c6bf8d421ce15668d3e98809
@@ -203,5 +203,54 @@ values resolve from the environment. `python3 plugin/scripts/check.py` is GREEN.
   for typed access and immutability of shared policy.
 
 ## Feedback (from completion gate)
+Both personas (review-arch + review-reliability) returned **SATISFIED**; no P1.
+- **P2 (review-arch, fixed in-gate):** `merger.py` `DEFAULT_MAX_MERGES = 200` was a
+  hardcoded literal duplicating `config.DEFAULTS["merger"]["max_merges"]` — a
+  silent-drift second source of truth (violates Approach A / ARCHITECTURE inv 5).
+  Fixed: aliased to `config.DEFAULTS["merger"]["max_merges"]` (commit in-gate). Gate
+  re-run GREEN at 374.
+- **Doc-debt (review-arch, → tracker):** the "every DEFAULTS-duplicated literal in
+  ANY director module (merger included) must alias it" discipline is enforced only by
+  per-slice enumeration; should be written into ARCHITECTURE invariant 5. Tracked.
+- **Doc-debt (review-reliability, → tracker):** the fail-open(absent)/fail-loud
+  (present-but-malformed) config-load posture is now a 3-instance pattern
+  (`gate_config`, `load_worker_policy`, `director.config`) with no numbered
+  RELIABILITY rule — promote-worthy (feedback-twice→promote). Tracked.
+- review-reliability minor note (no action): a `$VAR`-unset *optional* state
+  (`failed`/`blocked`) silently falls back to "no such state" rather than erroring —
+  consistent with the documented `null` semantics and fail-safe (under-acts, never
+  mis-claims). Accepted.
 
 ## Outcomes & retrospective
+**Shipped:** `director/config.py` (the `.harness.json` `director` block loader — the
+Symphony WORKFLOW.md analog), wired CLI > config > default into all three
+entrypoints. A host now tunes team / Linear-state-map / concurrency / worker posture /
+paths / merger knobs declaratively, with `$VAR` indirection, `python3 -m
+director.config` read-back, and fail-loud-before-spawn on a malformed block — no code
+or flag edits. Methodology (taxonomy templates, queue schema) stayed in code (D-56).
+
+**Proof:** gate GREEN at 374 tests (was 349; +25: 19 config unit + 6 wiring/
+precedence/fail-loud, plus the autonomy `_command` updates). Live: `cd tmp && python3
+-m director.orchestrator --mock --once` with **no `--team`** drained both demo tickets
+— team/concurrency/states all from a `.harness.json` `director` block (the headline
+"drop a config, no flags" goal). Both review personas SATISFIED.
+
+**What went well:** Approach A (config owns DEFAULTS, everyone reads config, config
+imports only `policy`+stdlib) kept the graph provably acyclic and made the alias
+trick behavior-preserving — the 349 prior tests passed unchanged, proving no-config
+runs are byte-identical. The pure `resolve_settings` gave the precedence its own
+unit-testable seam.
+
+**Surprises / refinements:** (1) `tests/` is namespace-discovered, not a package —
+run one file via `unittest discover -p`. (2) paths became optional *overrides* (None =
+module built-in) rather than a relocation, so `run.DEFAULT_WORKSPACE_ROOT` stayed put
+(less churn, behavior-preserving). (3) the merger was the one entrypoint the plan's
+constant-relocation list under-enumerated — caught at the gate (the P2 above).
+
+**QUALITY_SCORE.md:** untouched — the `director/` subsystem is not represented there
+(consistent with prior director slices; it grades the `plugin/` machine).
+
+**Follow-ups (tracker, none blocking):** promote the two doc-debt rules above (the
+alias discipline → ARCHITECTURE inv 5; the fail-open/fail-loud config-load posture →
+a numbered RELIABILITY rule). Both are the same kind of rule-promotion a later
+doc-pass/fork did for the telemetry & dashboard slices (R12–R14).
