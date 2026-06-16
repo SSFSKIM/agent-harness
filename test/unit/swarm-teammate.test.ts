@@ -56,4 +56,27 @@ describe("TeammateSession", () => {
     new TeammateSession({ name: "w1", teamId: "t1", prompt: "x" }, bus, { query: fq }, { model: "claude-haiku-4-5-20251001" });
     expect(seen).toEqual({ model: "claude-haiku-4-5-20251001" });
   });
+  it("maps a worker_shutting_down system message to a shutdown envelope", async () => {
+    const bus = new MessageBus();
+    const fq = ({ prompt }: any) => (async function* () {
+      for await (const t of prompt) { void t; yield { type: "system", subtype: "worker_shutting_down", reason: "host_exit" }; yield { type: "result", result: "x" }; }
+    })();
+    const s = new TeammateSession({ name: "w1", teamId: "t1", prompt: "go" }, bus, { query: fq });
+    await s.settled();
+    expect(bus.drain("coordinator").map((m) => m.kind)).toContain("shutdown");
+    await s.dispose();
+  });
+  it("shutdown() emits a shutdown ack and ends the query", async () => {
+    const bus = new MessageBus();
+    let ended = false;
+    const fq = ({ prompt }: any) => (async function* () {
+      try { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } } finally { ended = true; }
+    })();
+    const s = new TeammateSession({ name: "w1", teamId: "t1", prompt: "go" }, bus, { query: fq });
+    await s.settled();
+    bus.drain("coordinator");
+    await s.shutdown();
+    expect(bus.drain("coordinator").some((m) => m.kind === "shutdown")).toBe(true);
+    expect(ended).toBe(true);
+  });
 });

@@ -37,6 +37,12 @@ export class TeammateSession {
   /** End the underlying query and wait for the read-loop to finish. */
   async dispose(): Promise<void> { this.input.close(); await this.done; }
 
+  /** Graceful shutdown handshake: ack the coordinator, then end the query (current turn finishes first). */
+  async shutdown(): Promise<void> {
+    this.emit("shutdown", "");
+    await this.dispose();
+  }
+
   private emit(kind: MessageKind, body: string): void {
     this.bus.send("coordinator", { from: this.name, to: "coordinator", kind, body, ts: new Date().toISOString() });
   }
@@ -51,6 +57,7 @@ export class TeammateSession {
     try {
       for await (const m of this.q) {
         const mm = m as any;
+        if (mm.type === "system" && mm.subtype === "worker_shutting_down") this.emit("shutdown", String(mm.reason ?? ""));
         if (mm.type === "result") {
           this.emit("result", String(mm.result ?? ""));
           if (this.input.pending === 0) this.emit("idle", "");
