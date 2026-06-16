@@ -88,7 +88,14 @@ Design is the spec's (D-1..D-5); here only execution choices.
   the procedure + the emit mechanism test.)
 
 ## Progress log
-- [ ] M1 — watch run-terminal emit + tests.
+- [x] (2026-06-16) M1 — watch run-terminal emit. `director/watch.py`: `new_run_report(snapshot,
+  seen, kinds)` (emits a `runReport` when `run.stopped_reason` is non-None and `(started_at,reason)`
+  unseen + passes `--kinds`; tolerant of None/empty → None) + `_run_summary` (recent by-status +
+  stuck/in-flight counts) + `_emit_line` refactor; `main` gained `--status-dir` + a `run_seen` set
+  + a status pass after the queue pass (read_status tolerant). Docstring updated. 6 watch tests:
+  emit-once-per-run + new-run-re-emits, no-emit-until-terminal, tolerant of missing/empty, --kinds
+  excludes runReport, and a `main --once` test driving a real `StatusWriter` snapshot → runReport.
+  Gate GREEN (317).
 - [ ] M2 — DIRECTOR.md procedure + integration test + completion gate.
 
 ## Surprises & discoveries
