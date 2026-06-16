@@ -3,6 +3,7 @@ import { TeamRegistry } from "./team.js";
 import type { Team } from "./team.js";
 import { TeammateSession } from "./teammate.js";
 import { NATIVE_TASK_TOOLS } from "./coordinator.js";
+import { PermissionBroker } from "./permissions.js";
 import { TaskStore } from "../tasks/store.js";
 import { createTaskMcpServer } from "../tasks/server.js";
 import type { Task } from "../tasks/types.js";
@@ -19,6 +20,7 @@ export class SwarmRuntime {
   onPermissionRequest?: (teammate: string, request: unknown) => void;
   onHandshake?: (kind: string, payload: unknown) => void;
   private sessions = new Map<string, TeammateSession>();
+  private broker: PermissionBroker;
   private taskCwd?: string;
   private taskDir?: string;
   private taskListId?: string;
@@ -33,6 +35,19 @@ export class SwarmRuntime {
       listId: this.taskListId,
       agentName: opts.taskOptions?.agentName,
       onOwnerChange: this.notifyOwner,
+    });
+    this.broker = new PermissionBroker({
+      allow: opts.permissions?.allow,
+      escalate: opts.permissions?.escalateToCoordinator,
+      onRequest: (teammate, req) => this.onPermissionRequest?.(teammate, req),
+      onEscalate: (teammate, tool, input, requestId) => {
+        this.bus.send("coordinator", {
+          from: teammate, to: "coordinator", kind: "permission",
+          body: `${teammate} requests ${tool}`,
+          data: { requestId, teammate, tool, input },
+          ts: new Date().toISOString(),
+        });
+      },
     });
   }
 
@@ -74,6 +89,7 @@ export class SwarmRuntime {
     const options: Record<string, unknown> = {
       mcpServers: { "cc-tasks": createTaskMcpServer(teammateStore) },
       disallowedTools: [...NATIVE_TASK_TOOLS], // shared cc-tasks store is authoritative, not native per-session tasks
+      canUseTool: (tool: string, input: Record<string, unknown>) => this.broker.decide(spec.name, tool, input),
     };
     if (spec.agent) options.model = spec.agent; // per-teammate model (30.9)
 
@@ -97,6 +113,19 @@ export class SwarmRuntime {
   }
 
   checkMessages(): Message[] { return this.bus.drain("coordinator"); }
+
+  respondPermission(requestId: string, decision: "allow" | "deny", message?: string): boolean {
+    return this.broker.respond(requestId, decision, message);
+  }
+
+  async requestShutdown(name: string): Promise<void> {
+    const s = this.sessions.get(name);
+    if (!s) throw new SwarmError(`unknown teammate ${name}`);
+    this.onHandshake?.("shutdown", { name });
+    await s.shutdown();
+    this.sessions.delete(name);
+    this.bus.unregister(name);
+  }
 
   async disposeAll(): Promise<void> {
     await Promise.all(

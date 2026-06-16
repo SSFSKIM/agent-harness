@@ -90,4 +90,39 @@ describe("SwarmRuntime", () => {
     expect(seen.model).toBe("claude-haiku-4-5-20251001");
     return rt.disposeAll();
   });
+  it("wires canUseTool into teammate options; the broker allows/denies by policy", async () => {
+    let seen: any;
+    const fq = ({ prompt, options }: any) => { seen = options; return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })(); };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
+    const team = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
+    expect(typeof seen.canUseTool).toBe("function");
+    expect((await seen.canUseTool("Read", {})).behavior).toBe("allow");
+    expect((await seen.canUseTool("Bash", {})).behavior).toBe("deny");
+    return rt.disposeAll();
+  });
+  it("escalates a teammate permission to the coordinator inbox, resolved by respondPermission", async () => {
+    let cut: any;
+    const fq = ({ prompt, options }: any) => { cut = options.canUseTool; return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })(); };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() }, permissions: { escalateToCoordinator: true } });
+    const team = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
+    const decision = cut("Bash", { command: "ls" }); // teammate asks
+    const perm = rt.checkMessages().find((m) => m.kind === "permission");
+    expect(perm).toBeTruthy();
+    const requestId = (perm!.data as any).requestId;
+    expect(rt.respondPermission(requestId, "allow")).toBe(true);
+    expect((await decision).behavior).toBe("allow");
+    return rt.disposeAll();
+  });
+  it("requestShutdown emits a shutdown ack and unregisters the teammate", async () => {
+    const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
+    const team = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x" });
+    await rt.requestShutdown("w1");
+    expect(rt.checkMessages().some((m) => m.kind === "shutdown")).toBe(true);
+    expect(() => rt.sendMessage("w1", "hi")).toThrow(/unknown recipient/);
+    await expect(rt.requestShutdown("ghost")).rejects.toThrow(/unknown teammate/);
+  });
 });
