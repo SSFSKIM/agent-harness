@@ -77,4 +77,39 @@ export class TaskStore {
   get(id: number): Promise<Task | undefined> {
     return this.run(() => this.load().tasks.find((t) => t.id === id));
   }
+
+  private static readonly LIVE_ORDER: TaskStatus[] = ["pending", "in_progress", "completed"];
+
+  private canTransition(from: TaskStatus, to: TaskStatus): boolean {
+    if (from === to) return true;
+    if (from === "deleted") return false;
+    if (to === "deleted") return true;
+    return TaskStore.LIVE_ORDER.indexOf(to) > TaskStore.LIVE_ORDER.indexOf(from); // forward only
+  }
+
+  update(id: number, patch: TaskUpdatePatch): Promise<Task> {
+    return this.run(() => {
+      const data = this.load();
+      const task = data.tasks.find((t) => t.id === id);
+      if (!task) throw new TaskError(`unknown task id ${id}`);
+      if (task.status === "deleted") throw new TaskError(`task ${id} is deleted`);
+      const prevOwner = task.owner;
+
+      if (patch.status !== undefined && patch.status !== task.status) {
+        if (!this.canTransition(task.status, patch.status)) {
+          throw new TaskError(`illegal transition ${task.status}->${patch.status}`);
+        }
+        task.status = patch.status;
+      }
+      if (patch.subject !== undefined) task.subject = patch.subject;
+      if (patch.description !== undefined) task.description = patch.description;
+      if (patch.activeForm !== undefined) task.activeForm = patch.activeForm;
+      if (patch.metadata !== undefined) task.metadata = patch.metadata;
+
+      task.updatedAt = new Date().toISOString();
+      this.save(data);
+      if (task.owner !== prevOwner) this.onOwnerChange?.(task, prevOwner);
+      return task;
+    });
+  }
 }
