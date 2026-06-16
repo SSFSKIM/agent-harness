@@ -58,4 +58,27 @@ describe("TaskStore claim + ownership + list", () => {
     expect((await s.list()).length).toBe(5);
     expect((await s.create({ subject: "next" })).id).toBe(6); // ids never collided
   });
+  it("a deleted blocker no longer blocks or shows as a dependency", async () => {
+    const s = new TaskStore({ dir: dir(), agentName: "alice" });
+    await s.create({ subject: "blocker" });            // 1
+    await s.create({ subject: "work", blockedBy: [1] }); // 2
+    await expect(s.update(2, { status: "in_progress" })).rejects.toThrow(/blocked by/);
+    await s.update(1, { status: "deleted" });           // delete the blocker
+    const l = await s.list();
+    expect(l.find((t) => t.id === 2)?.blockedBy).toEqual([]); // no phantom blocker
+    expect((await s.update(2, { status: "in_progress" })).owner).toBe("alice"); // now claimable
+  });
+  it("two concurrent claims on one store serialize without corrupting state", async () => {
+    const s = new TaskStore({ dir: dir(), agentName: "alice" });
+    await s.create({ subject: "x" });
+    const results = await Promise.allSettled([
+      s.update(1, { status: "in_progress" }),
+      s.update(1, { status: "in_progress" }),
+    ]);
+    expect(results.every((r) => r.status === "fulfilled")).toBe(true); // same agent: claim + no-op
+    const t = await s.get(1);
+    expect(t?.status).toBe("in_progress");
+    expect(t?.owner).toBe("alice");
+    expect((await s.list()).length).toBe(1); // no duplication / corruption
+  });
 });

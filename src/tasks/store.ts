@@ -142,7 +142,8 @@ export class TaskStore {
         if (patch.status === "in_progress") {
           const unresolved = task.blockedBy.filter((b) => {
             const bt = data.tasks.find((t) => t.id === b);
-            return !bt || bt.status !== "completed";
+            // A blocker only blocks if it still exists and is neither completed nor deleted.
+            return !!bt && bt.status !== "completed" && bt.status !== "deleted";
           });
           if (unresolved.length) throw new TaskError(`blocked by unresolved tasks: ${unresolved.join(",")}`);
           task.owner = this.agentName; // claim
@@ -177,7 +178,8 @@ export class TaskStore {
           owner: t.owner,
           blockedBy: t.blockedBy.filter((b) => {
             const bt = data.tasks.find((x) => x.id === b);
-            return !!bt && bt.status !== "completed";
+            // Show only blockers that still exist and are neither completed nor deleted.
+            return !!bt && bt.status !== "completed" && bt.status !== "deleted";
           }),
         }));
     });
