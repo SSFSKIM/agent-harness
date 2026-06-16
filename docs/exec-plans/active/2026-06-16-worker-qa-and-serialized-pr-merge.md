@@ -83,7 +83,11 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
   escalate. (전체 gh PR 라운드트립은 원격 필요 — 별도/후속.)
 
 ## Progress log
-- [ ] M1 — self-QA 절차 + qa 스킬 + PR 자기명세.
+- [x] (2026-06-16) M1 — `taxonomy._IMPL_TEMPLATE` 에 self-QA(host gate·spec/code self-review·
+  task-specific 테스트 via `qa` 스킬·PR+자기명세) 절차 추가(게이트 아님; report_outcome(done) 전).
+  신규 `director/workspace_skills/qa/SKILL.md`(테스트 방법론 + Playwright/fallback + PR 자기명세
+  템플릿). 테스트: impl 프롬프트가 SELF-QA/qa/PR/report_outcome(done) 담음 + `qa/` 가 vendored
+  설치됨. (PR 자기명세는 push 스킬 대신 qa 스킬 + impl 템플릿에 둠 — push 는 generic 유지, 실행 선택.)
 - [ ] M2 — mergeRequest 큐 + merger.py(직렬 drive drain) + 테스트.
 - [ ] M3 — Director 머지 escalation 통합 + DIRECTOR.md.
 - [ ] M4 — scratch repo 라이브 직렬-머지 wire-pin.

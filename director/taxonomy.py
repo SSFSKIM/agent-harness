@@ -43,7 +43,16 @@ plugin/skills/execplan/SKILL.md (and docs/PLANS.md, docs/DESIGN.md): write a liv
 ExecPlan under docs/exec-plans/active/, implement it, keep
 `python3 plugin/scripts/check.py` GREEN, and run the completion gate. Split off
 additional impl child tickets (labeled impl, blocked_by {identifier}) only if the work
-is too large for one plan."""
+is too large for one plan.
+
+Before you finish — SELF-QA (your own responsibility; this is NOT a gate, and the
+PR-merger does only a thin integration check later): (1) keep the host gate GREEN;
+(2) self-review spec-compliance (does the build match the spec/ticket?) and code-quality;
+(3) write and run task-specific tests for what you built — follow the `qa` skill:
+smoke/unit always, plus end-to-end via `playwright`/`playwright-cli` for UI work (graceful
+fallback to smoke/unit where no browser is available); (4) open a PR with the `push` skill
+whose body states WHAT spec/feature you built, WHICH reviews you ran, and WHICH tests you
+wrote and their results — the PR-merger reads this. Only then call report_outcome(done)."""
 
 # institution-as-data: type -> stage workflow. child_types encodes the decomposition
 # policy (the pipeline planning -> {research,design} -> spec -> impl).

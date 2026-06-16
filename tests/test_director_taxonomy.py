@@ -83,6 +83,16 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("docs/exec-plans/", out)
         self.assertIn("check.py", out)
 
+    def test_impl_prompt_includes_self_qa_and_pr_procedure(self):
+        # M1: the impl worker is guided to self-QA (spec/code/tests) and open a PR with a
+        # self-description before done — a procedure, not a gate (spec R1/R2/D-46).
+        out = tax.compose_worker_prompt({"identifier": "X-5", "prompt": "build it",
+                                         "labels": ["impl"]})
+        self.assertIn("SELF-QA", out)
+        self.assertIn("qa", out)            # references the qa skill
+        self.assertIn("PR", out)            # open a PR with a self-description
+        self.assertIn("report_outcome(done)", out)
+
     def test_planning_prompt_decomposes(self):
         out = tax.compose_worker_prompt({"identifier": "X-4", "prompt": "ship feature",
                                          "labels": ["planning"]})
