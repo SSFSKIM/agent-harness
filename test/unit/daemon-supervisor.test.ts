@@ -60,4 +60,86 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
     expect(sup.list()).toEqual([]);
   });
+
+  // ---- D2 restart machinery ----
+  // flush pending microtasks/macrotasks so a dead session's done.then(handleSessionEnd) runs
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  // a query that dies immediately (yields nothing, returns) — simulates a crash
+  const dyingQuery = () => (async function* () { /* ends at once */ })();
+  // a query that works (one result per turn), ends only on dispose
+  const healthyQuery = ({ prompt }: any) => (async function* () { for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content }; })();
+
+  it("on-failure restarts a dead session into a working one (restarting → idle, count tracked)", async () => {
+    let calls = 0;
+    const fq = (a: any) => { calls++; return calls === 1 ? dyingQuery() : healthyQuery(a); };
+    let pending: (() => void) | undefined;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => { pending = undefined; }; };
+    const sup = new DaemonSupervisor({ query: fq }, { dir: dir(), restart: "on-failure", scheduleRestart });
+    const id = sup.spawn();
+    await flush();                                   // session 1 dies → handleSessionEnd schedules a restart
+    expect(sup.list()[0]).toMatchObject({ status: "restarting", restarts: 1 });
+    pending!();                                      // fire the restart
+    expect(sup.list()[0].status).toBe("idle");
+    expect(calls).toBe(2);
+    expect((await sup.submit(id, "hi", () => {})).result).toBe("ok:hi"); // restarted session works
+    await sup.shutdown();
+  });
+  it("gives up (errored) once maxRestarts is exceeded", async () => {
+    let pending: (() => void) | undefined;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => {}; };
+    const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir(), restart: "on-failure", maxRestarts: 1, scheduleRestart });
+    sup.spawn();
+    await flush();                                   // death 1 → restarts 1, restarting
+    expect(sup.list()[0]).toMatchObject({ status: "restarting", restarts: 1 });
+    pending!(); await flush();                       // restart → dies again → restarts 2 > 1 → errored
+    expect(sup.list()[0]).toMatchObject({ status: "errored", restarts: 2 });
+    await sup.shutdown();
+  });
+  it("default policy 'no' leaves a dead session errored and never schedules a restart", async () => {
+    let sched = 0;
+    const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir(), scheduleRestart: () => { sched++; return () => {}; } });
+    sup.spawn();
+    await flush();
+    expect(sup.list()[0].status).toBe("errored");
+    expect(sched).toBe(0);
+    await sup.shutdown();
+  });
+  it("INVARIANT: an intentional stop never triggers a restart", async () => {
+    let sched = 0;
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), restart: "on-failure", scheduleRestart: () => { sched++; return () => {}; } });
+    const id = sup.spawn();
+    await sup.stop(id);                              // dispose → end hook fires but id is in `stopping`
+    await flush();
+    expect(sched).toBe(0);
+    expect(sup.list()).toEqual([]);
+    await sup.shutdown();
+  });
+  it("INVARIANT: shutdown never triggers a restart", async () => {
+    let sched = 0;
+    const sup = new DaemonSupervisor({ query: healthyQuery }, { dir: dir(), restart: "on-failure", scheduleRestart: () => { sched++; return () => {}; } });
+    sup.spawn(); sup.spawn();
+    await sup.shutdown();
+    await flush();
+    expect(sched).toBe(0);
+  });
+  it("a stop during the restarting window cancels the pending restart", async () => {
+    let pending: (() => void) | undefined;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => {}; };
+    const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir(), restart: "on-failure", scheduleRestart });
+    const id = sup.spawn();
+    await flush();                                   // restarting, pending set
+    expect(sup.list()[0].status).toBe("restarting");
+    await sup.stop(id);                              // removes the record + config
+    if (pending) pending();                          // firing it now is a no-op (config gone)
+    expect(sup.list()).toEqual([]);
+    await sup.shutdown();
+  });
+  it("submit during the restarting window reports the status", async () => {
+    const scheduleRestart = () => () => {};          // never actually restarts
+    const sup = new DaemonSupervisor({ query: dyingQuery }, { dir: dir(), restart: "on-failure", scheduleRestart });
+    const id = sup.spawn();
+    await flush();
+    await expect(sup.submit(id, "x", () => {})).rejects.toThrow(/is restarting/);
+    await sup.shutdown();
+  });
 });
