@@ -43,3 +43,11 @@ owner: harness
   needs_human) 제안 → Director 가 집행·검수(watched) 또는 워커 신뢰·auto-continue(un-watched).
   코드는 done-ness 판단 0. multi-turn continuation feasibility live 검증(2턴/1thread 맥락 유지).
   Phase 2 reconcile 재설계, reporting/PR-merge 보다 선행.
+- [워커 self-QA + 직렬화된 PR-merge](2026-06-16-worker-qa-and-serialized-pr-merge.md)
+  — Phase 4 꼬리. 워커가 self-QA(spec-compliance + code-quality + task-specific 테스트)를 *절차*로
+  끝내고 PR+자기명세를 만든다(하드 게이트 아님 — minimal blocking gates; done 은 LLM 판단 유지).
+  done+QA 된 PR 은 *직렬화된 merge queue* 에 들어가 단일 PR-merger 가 하나씩 rebase→얇은 통합 체크
+  →squash-merge(`land`); 충돌/위험/taste 만 Director 경유(단일 인간 surface)로 escalate. 동시
+  머지 thrash 를 단일 소비자로 제거. merger 는 `drive`+decider 재사용(새 turn 머신 0). multi-turn
+  의 미뤄둔 "done-is-really-done" + visibility 의 "terminal sanity-check" 을 닫음. Playwright-in-
+  sandbox 실행 가능성은 ExecPlan PoC.
