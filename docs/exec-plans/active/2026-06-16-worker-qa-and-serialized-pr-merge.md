@@ -98,7 +98,19 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
   9개(FIFO·≤1 동시·escalate/stuck/blocked·크래시=failed·max_merges 바운드·idempotent·
   auto_respond skip·real `run.drive`+mock worker → merged). 게이트 GREEN(286).
   실행: `python3 -m unittest discover -s tests -p "test_director_merger.py"`.
-- [ ] M3 — Director 머지 escalation 통합 + DIRECTOR.md.
+- [x] (2026-06-16) M3 — Director 머지 escalation 통합 + DIRECTOR.md. `director/queue` 에
+  `mergeReview` kind + `append_merge_review` helper(merger→Director 단일 surface, R6/R7;
+  request_id `mergereview|<ticket>` 로 티켓당 1개 open). `director/merger.py`:
+  `_surface_escalation` — 비-merged 결과(escalated/failed)면 같은 큐에 `mergeReview` post,
+  fire-and-forget(직렬 큐 계속 흐름; PR 미머지 유지 — silent merge 아님), `drain` 결과에
+  `escalated_to_director` 플래그. `director_min`: `merge_reviews`(Director 머지 inbox) +
+  `answer_merge_review`(directive/requeue/abandon/human 기록) + `_NON_APPROVAL_KINDS` 에
+  `mergeReview` 추가(고정정책 responder skip). `docs/DIRECTOR.md` §7 신규(머지 escalation 처리:
+  mid-land turnReview vs terminal mergeReview, requeue/human/abandon), §5 watch 에 mergeReview
+  추가, 기존 §7→§8. 테스트 6개(escalate/failed surface·merged 안 함·R7 no-direct-human(drain
+  시그니처에 board/notify 없음 + _surface 가 append_merge_review 경유)·Director answer→inbox 비움·
+  auto_respond mergeReview skip). 게이트 GREEN(292).
+  실행: `python3 -m unittest discover -s tests -p "test_director_merger.py"`.
 - [ ] M4 — scratch repo 라이브 직렬-머지 wire-pin.
 
 ## Surprises & discoveries
@@ -116,6 +128,15 @@ Design 은 스펙이 소유(D-46..D-53) → 여기선 실행 선택만.
 - 2026-06-16 (M2): enqueue 호출부(워커 done+PR → mergeRequest) 와이어링은 M3(Director 통합)로
   — M2 는 helper 존재 + 머거 drain 만. 머거 decider 기본값=`autonomous_decide`(land 스킬이 충돌
   자체해소; needs_human 만 escalate), watched 는 호출부가 `make_queue_decider` 주입.
+- 2026-06-16 (M3): 두 escalation 경로 구분 — (1) mid-land turn-end 은 이미 watched decider 가
+  turnReview 로 Director 에 라우팅(M2 의 drive+decider 재사용), (2) terminal "못 랜딩" 은 신규
+  mergeReview 로 surface. 둘 다 Director 경유(단일 surface, R7).
+- 2026-06-16 (M3): mergeReview 는 fire-and-forget(머거 surface 후 큐 계속) — 사람 답을 블록하지
+  않아 직렬 큐가 안 막힘. Director 가 async 처리(requeue+directive/human/abandon). PR 미머지 유지
+  = silent merge 아님(R6). 티켓당 open mergeReview 1개(중복 알림 방지; 의도된 invariant).
+- 2026-06-16 (M3): enqueue 호출부(워커 done → mergeRequest)와 re-enqueue 루프(human guidance 후
+  재시도)는 여전히 deferred — 스펙 Open Q("merger 상시/이벤트", "의존 PR 순서"). M3 는 surface +
+  Director inbox helper + DIRECTOR.md 절차까지. (full 자동 re-enqueue 루프는 후속.)
 
 ## Feedback (from completion gate)
 

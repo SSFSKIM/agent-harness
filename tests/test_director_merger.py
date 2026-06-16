@@ -1,3 +1,4 @@
+import inspect
 import sys
 import tempfile
 import threading
@@ -143,6 +144,97 @@ class DrainWithRealDriveTest(unittest.TestCase):
         self.assertEqual(results[0]["result"], "merged")
         self.assertEqual(results[0]["disposition"]["outcome"]["status"], "done")
         self.assertEqual(merger.pending_merges(base=self.base), [])
+
+
+class MergeEscalationToDirectorTest(unittest.TestCase):
+    """M3: a PR that can't cleanly land surfaces to the Director via a mergeReview on
+    the SAME queue — the merger's only escalation channel (R6/R7)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def test_escalated_pr_surfaces_a_mergereview(self):
+        dq.append_merge_request("T1", pr=7, branch="feat/x", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "merge conflict in foo.py", "turns": 2}
+
+        results = merger.drain(base=self.base, driver=driver)
+        self.assertEqual(results[0]["result"], "escalated")
+        self.assertTrue(results[0]["escalated_to_director"])
+        reviews = dmin.merge_reviews(base=self.base)
+        self.assertEqual(len(reviews), 1)
+        self.assertEqual(reviews[0]["kind"], "mergeReview")
+        self.assertEqual(reviews[0]["ticket_id"], "T1")
+        self.assertEqual(reviews[0]["payload"]["pr"], 7)
+        self.assertEqual(reviews[0]["payload"]["result"], "escalated")
+        self.assertIn("conflict", reviews[0]["payload"]["reason"])
+
+    def test_failed_pr_also_surfaces_with_failed_result(self):
+        dq.append_merge_request("T1", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            raise RuntimeError("land lane crashed")
+
+        merger.drain(base=self.base, driver=driver)
+        reviews = dmin.merge_reviews(base=self.base)
+        self.assertEqual(len(reviews), 1)
+        self.assertEqual(reviews[0]["payload"]["result"], "failed")
+        self.assertIn("crashed", reviews[0]["payload"]["reason"])
+
+    def test_merged_pr_does_not_surface(self):
+        dq.append_merge_request("T1", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return _DONE
+
+        results = merger.drain(base=self.base, driver=driver)
+        self.assertFalse(results[0]["escalated_to_director"])
+        self.assertEqual(dmin.merge_reviews(base=self.base), [])  # nothing to surface
+
+    def test_merger_has_no_direct_human_path(self):
+        # R7 (structural): the merger talks to the human only THROUGH the Director queue.
+        # It takes no board/human handle, and an escalation's sole observable effect is
+        # the mergeReview queue write (verified above) — there is no other output channel.
+        params = set(inspect.signature(merger.drain).parameters)
+        self.assertNotIn("board", params)
+        self.assertNotIn("notify", params)
+        # the escalation surface IS the queue helper — assert that linkage exists
+        src = inspect.getsource(merger._surface_escalation)
+        self.assertIn("append_merge_review", src)
+
+    def test_director_answers_a_merge_review(self):
+        dq.append_merge_request("T1", pr=7, base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "red integration gate", "turns": 1}
+
+        merger.drain(base=self.base, driver=driver)
+        review = dmin.merge_reviews(base=self.base)[0]
+        dmin.answer_merge_review(review["request_id"],
+                                 {"action": "abandon", "note": "spin a fix ticket"},
+                                 base=self.base)
+        self.assertEqual(dmin.merge_reviews(base=self.base), [])  # handled → out of inbox
+        ans = dq.read_answer(review["request_id"], base=self.base)
+        self.assertEqual(ans["merge_review_disposition"]["action"], "abandon")
+
+    def test_auto_respond_does_not_consume_merge_reviews(self):
+        dq.append_merge_request("T1", base=self.base)
+
+        def driver(ticket, *, decide, **kw):
+            return {"kind": "escalate", "reason": "conflict", "turns": 1}
+
+        merger.drain(base=self.base, driver=driver)
+        stop = threading.Event()
+        th = threading.Thread(target=dmin.auto_respond,
+                              kwargs={"base": self.base, "stop": stop})
+        th.start()
+        time.sleep(0.1)
+        stop.set()
+        th.join(timeout=2)
+        # the fixed-policy responder must leave merge escalations for the live Director
+        self.assertEqual(len(dmin.merge_reviews(base=self.base)), 1)
 
 
 if __name__ == "__main__":

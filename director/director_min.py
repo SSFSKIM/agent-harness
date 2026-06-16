@@ -44,10 +44,31 @@ def answer_turn(request_id: str, disposition: dict, *, base=None,
                      "disposition": disposition}, base=base)
 
 
-# Kinds the fixed-policy responder must NOT touch: a `turnReview` needs a free-form
-# disposition (answer_turn), and a `mergeRequest` is the serialized merger's worklist
-# (answering it would silently consume the merge before the merger ever sees it).
-_NON_APPROVAL_KINDS = ("turnReview", "mergeRequest")
+def merge_reviews(base=None) -> list[dict]:
+    """Pending merge-escalations the serialized PR-merger raised (R6) — the merge half
+    of the Director's inbox (cf. `pending()` for approvals, `turnReview` for turn-ends).
+    Each payload carries {pr, branch, result, reason, disposition}; the Director reads
+    these per docs/DIRECTOR.md and resolves each (directive / re-enqueue / human)."""
+    return [r for r in dq.read_pending(base=base) if r.get("kind") == "mergeReview"]
+
+
+def answer_merge_review(request_id: str, disposition: dict, *, base=None,
+                        answered_by: str = "director") -> None:
+    """Mark a `mergeReview` HANDLED (removes it from the inbox). `disposition` records
+    how the Director resolved the failed merge for the audit trail, e.g.
+    {"action": "requeue"|"abandon"|"human", "note": "…"}. Re-enqueuing the PR
+    (action=requeue) is a separate `queue.append_merge_request` call — the full
+    re-enqueue loop is a later refinement (spec Open Q)."""
+    dq.write_answer({"request_id": request_id, "answered_by": answered_by,
+                     "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                     "merge_review_disposition": disposition}, base=base)
+
+
+# Kinds the fixed-policy responder must NOT touch: `turnReview` needs a free-form
+# disposition (answer_turn); `mergeRequest` is the serialized merger's worklist
+# (answering it would silently consume the merge); `mergeReview` is a merge-escalation
+# the live Director resolves with judgment (answer_merge_review), never a fixed accept.
+_NON_APPROVAL_KINDS = ("turnReview", "mergeRequest", "mergeReview")
 
 
 def auto_respond(base=None, decide: Callable[[dict], str] = lambda req: "accept",

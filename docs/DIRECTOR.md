@@ -125,14 +125,15 @@ You do not poll. Stand up the loop once, then let worker turn-ends **event-wake*
    ```
    python3 -m director.orchestrator --team <id>        # run_in_background
    ```
-2. **Arm a persistent Monitor on the turnReview queue** — `director.watch` emits one
-   line per newly-pending turn-end, so each becomes a session notification (no timer
-   poll on you; the polling lives in this subprocess):
+2. **Arm a persistent Monitor on the queue** — `director.watch` emits one line per
+   newly-pending request, so each becomes a session notification (no timer poll on you;
+   the polling lives in this subprocess). Watch both turn-ends and merge escalations:
    ```
-   python3 -m director.watch --kinds turnReview        # Monitor, persistent
+   python3 -m director.watch --kinds turnReview,mergeReview   # Monitor, persistent
    ```
-3. **On each event** (a `turnReview` JSON), read it + the `--request` join, then
-   `answer_turn` per §5 (reply / terminal / escalate). The blocked worker resumes.
+3. **On each event**, read it + the `--request` join, then act: a `turnReview` →
+   `answer_turn` per §4 (reply / terminal / escalate); a `mergeReview` → handle per §7.
+   The blocked worker resumes (or the merge escalation is resolved).
 4. **Surface genuine taste to the human via `PushNotification`** — that pulls the
    *human's* attention; everything non-taste you answer yourself.
 
@@ -153,7 +154,39 @@ to one holistic mitigation). The **only** difference is who answers turn ends:
   `director.status` is then for *monitoring* what the run did. The security boundary
   un-watched is Codex's sandbox + `auto_review` + the T10 Linear guardrail — not you.
 
-## 7. Reporting up
+## 7. Handling a merge escalation (the merger raised a PR)
+
+A worker's `done` finishes the *work*; landing that work on `main` is a **downstream**
+step a **separate** component owns — the serialized PR-merger (`director/merger.py`),
+not you (R7/R8). The merger lands ready PRs one at a time (rebase → integration gate →
+squash-merge). It is a distinct role on purpose: it owns the *integration boundary*,
+you own *execution oversight*. But it has **no line to the human** — when a PR cannot
+cleanly land, it escalates **to you**, the single human surface (R6).
+
+Two things can reach you from a merge:
+
+- **Mid-land turn-end (`turnReview`)** — the land agent paused mid-merge ("이 충돌 어떻게
+  풀까요?"). It arrives exactly like a worker turn-end and you answer it the same way
+  (§4): a content-bearing `reply` ("origin/main 쪽으로 맞춰라"), or `escalate` if it is a
+  taste/risk fork. Most conflict-resolution questions are yours to answer.
+- **Terminal merge escalation (`mergeReview`)** — the land lane *gave up*: an unresolvable
+  conflict, an integration gate that stays red, or a taste/risk call. `director_min.merge_reviews()`
+  lists these; each payload carries `{pr, branch, result, reason, disposition}`. Read it
+  (and the `--request` join), then resolve with `answer_merge_review(request_id, disposition)`:
+  - **Give a directive + re-enqueue** — `{"action": "requeue", "note": "<how to land it>"}`,
+    then `queue.append_merge_request(...)` again so the merger retries with your guidance.
+    Use when the fix is mechanical/settled (you know how to land it).
+  - **Escalate the taste to the human** — `{"action": "human", "note": "..."}` + a
+    `PushNotification`. Use for a genuine product/risk/irreversible call (the merge would
+    ship a direction you must not pick yourself). The PR stays unmerged; the ticket stays
+    done (work is done — R8); leave a comment on the ticket.
+  - **Abandon / defer** — `{"action": "abandon", "note": "..."}` when the PR should not
+    land as-is (spin a follow-up fix ticket instead).
+
+The taste-vs-handle line (§2) decides which. The merger never merges silently and never
+talks to the human directly — surfacing here is the whole point (R6/R7).
+
+## 8. Reporting up
 
 When you escalate (or the human asks "what's happening"), lead with the snapshot:
 in-flight tickets and their attempt/wave, anything stuck and why, recent outcomes.

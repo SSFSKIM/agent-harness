@@ -32,10 +32,12 @@ _APPEND_LOCK = threading.Lock()
 # (mapping lives in the worker seam); `turnReview` is a turn-end the watched Director
 # answers free-form (multi-turn slice — director.decider.make_queue_decider);
 # `mergeRequest` is a worklist item (not a question) the serialized PR-merger drains —
-# it has no blocking author; the merger writes an answer only to mark it CONSUMED
-# (worker-qa-and-serialized-pr-merge slice — director.merger).
+# it has no blocking author; the merger writes an answer only to mark it CONSUMED.
+# `mergeReview` is the merger→Director escalation surface (R6/R7): a PR that could not
+# cleanly land posts one so the live Director picks it up (single human surface — the
+# merger never contacts the human directly). (worker-qa-and-serialized-pr-merge.)
 REQUEST_KINDS = ("commandApproval", "fileChange", "userInput", "elicitation",
-                 "turnReview", "mergeRequest")
+                 "turnReview", "mergeRequest", "mergeReview")
 
 # Decisions the Director may return for an approval-style request.
 APPROVAL_DECISIONS = ("accept", "decline", "acceptForSession", "cancel")
@@ -123,6 +125,33 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
         "session_id": f"{ticket_id}-merge",
         "kind": "mergeRequest",
         "payload": {"pr": pr, "branch": branch, "self_description": self_description},
+        "workspace_path": workspace_path,
+        "created_at": created_at or _now_iso(),
+    }, base=base)
+
+
+def append_merge_review(ticket_id: str, *, pr=None, branch=None, result: str,
+                        reason: str | None = None, disposition: dict | None = None,
+                        workspace_path: str | None = None,
+                        created_at: str | None = None,
+                        base: Path | str | None = None) -> bool:
+    """Surface a PR that could not cleanly land to the Director (R6/R7).
+
+    The serialized merger posts this when a merge attempt ends non-`merged`
+    (escalated/failed). The live Director reads it (director_min.merge_reviews),
+    decides — give a directive / re-enqueue / escalate the taste to the human — and
+    answers it (director_min.answer_merge_review). It is the merger's ONLY escalation
+    channel: there is no merger→human path (single human surface, R7). request_id is
+    `mergereview|<ticket_id>` so at most one open merge-escalation per ticket-merge
+    exists at a time (no duplicate "PR X failed" spam); the full re-enqueue loop is a
+    later refinement (spec Open Q)."""
+    return append_request({
+        "request_id": f"mergereview|{ticket_id}",
+        "ticket_id": ticket_id,
+        "session_id": f"{ticket_id}-mergereview",
+        "kind": "mergeReview",
+        "payload": {"pr": pr, "branch": branch, "result": result,
+                    "reason": reason, "disposition": disposition},
         "workspace_path": workspace_path,
         "created_at": created_at or _now_iso(),
     }, base=base)

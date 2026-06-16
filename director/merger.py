@@ -100,10 +100,29 @@ def _consume(req: dict, result: str, *, base=None, now=dq._now_iso) -> None:
     """Mark a merge request CONSUMED by writing its answer (removes it from pending).
     Always called after processing — including on escalate/failed — so the drain loop
     makes progress and never re-processes the same PR (the no-infinite-loop guarantee).
-    The escalation itself is surfaced via the drain's return value (re-injection to the
-    Director is M3)."""
+    A non-merged result is also SURFACED to the Director (_surface_escalation)."""
     dq.write_answer({"request_id": req["request_id"], "answered_by": "merger",
                      "answered_at": now(), "merge_result": result}, base=base)
+
+
+def _surface_escalation(req: dict, result: dict, *, base=None) -> bool:
+    """If a PR did not cleanly merge, escalate it to the Director by posting a
+    `mergeReview` to the SAME queue (R6) — the merger's ONLY escalation channel, never
+    a direct line to the human (R7). Returns whether it surfaced (merged → False).
+
+    Fire-and-forget on purpose: the merger surfaces and moves on (the serial queue keeps
+    flowing); the Director acts on the mergeReview asynchronously (directive / re-enqueue
+    / human). The PR stays UNMERGED — surfacing is never a silent merge (R6)."""
+    if result.get("result") == "merged":
+        return False
+    disp = result.get("disposition") or {}
+    payload = req.get("payload") or {}
+    reason = disp.get("reason") or result.get("error") or disp.get("kind") or "merge failed"
+    dq.append_merge_review(
+        req.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
+        result=result["result"], reason=reason, disposition=disp,
+        workspace_path=req.get("workspace_path"), base=base)
+    return True
 
 
 def process_request(req: dict, *, driver: Callable = run.drive,
@@ -141,6 +160,7 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
         req = pend[0]  # FIFO — oldest queued PR first
         result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
         _consume(req, result["result"], base=base)
+        result["escalated_to_director"] = _surface_escalation(req, result, base=base)
         results.append(result)
         processed += 1
     return results
