@@ -32,7 +32,11 @@ from __future__ import annotations
 
 # thread/start params — the shared per-action posture for BOTH modes.
 APPROVAL_POLICY = "on-request"   # auto-run in-sandbox; review escalations (not `never`)
-SANDBOX = "workspace-write"      # FS-contained; .git/.codex forced read-only by Codex
+SANDBOX = "workspace-write"      # FS writes contained to the workspace. NOTE: `.git` IS
+#                                  writable here — live-probed (codex-cli 0.139.0): an
+#                                  in-sandbox worker's `git commit` lands. The older
+#                                  ".git read-only under workspace-write" assumption does
+#                                  NOT hold for this posture (matters for the threat model).
 
 # `-c` config overrides on the `codex app-server` launch command — both shared by
 # both modes (the only watched/un-watched difference is the turn-end decider).
