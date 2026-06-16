@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: 17dea43bb7e09cb5a3ff39c592927a85258d5dfe
@@ -116,5 +116,36 @@ per-ticket, so a consumed merge can never be re-queued under the same id. Observ
   prevents runaway re-queues.
 
 ## Feedback (from completion gate)
+One codex reviewer (review-reliability lens, gpt-5.5, high effort): one P1 + one P2, both
+fixed in-slice (same edit):
+- **[P1] `requeue_merge` answered/consumed the review BEFORE enqueueing** → an enqueue
+  failure would consume the escalation without queuing a retry (lost PR). Same ordering bug
+  class as the prior slice's `_consume`-before-surface. **FIXED:** enqueue the attempt+1
+  request FIRST, then answer; an enqueue raise leaves the review OPEN (retryable). New
+  `test_requeue_enqueue_failure_leaves_review_open`.
+- **[P2] double-requeue could diverge the audit note from the queued guidance** (the answer
+  was overwritten while the attempt+1 request deduped). **FIXED (same change):** a dedup is an
+  idempotent no-op (`{"requeued": False, "reason": "already_queued"}`) — it does NOT rewrite
+  the answer, so the first directive stands. New `test_requeue_is_idempotent_on_double_call`.
+Gate GREEN (312) after fixes.
 
 ## Outcomes & retrospective
+**The serialized-merge pipeline's last deferred item is closed.** The Director can now requeue
+an escalated PR with guidance: `requeue_merge(review, note=…)` re-enqueues at `attempt+1` (the
+`merge|<t>|a<n>` / `mergereview|<t>|a<n>` discriminant makes the retry a fresh request, not a
+dedupe-swallow), carrying the directive into the land prompt; the merger retries with it. The
+loop converges via one of three terminals — the merge succeeds, the Director abandons/escalates,
+or `max_attempts` (default 3) caps it (refuse + leave the review open, never a silent infinite
+retry). The attempt discriminant also retires the old re-escalation-dedup bug the earlier slices'
+reviewers flagged (a 2nd failed attempt now surfaces a distinct mergeReview).
+
+With this, the whole `worker-qa-and-serialized-pr-merge` capability is fully built, reviewed,
+and live-verified (M3 mechanical here; the prior slices' local-merge + full gh PR roundtrip
+wire-pins with real codex). The only remaining non-goal is the review-gated `land` path on a
+repo that actually has CI/Codex-review workflows — inherent to throwaway-repo testing, not a
+gap in this pipeline.
+
+Retro: the completion gate caught the **same act-before-consume ordering bug a second time**
+(merger `_consume`-before-surface last slice; `requeue_merge` answer-before-enqueue this slice).
+That recurrence is the signal — it's a general invariant for this codebase's queue interactions,
+worth holding as a pattern (do the durable side-effect, THEN consume the queue item).
