@@ -526,6 +526,21 @@ class MainCliTest(unittest.TestCase):
         self.assertEqual(board.state_name("a"), "Done")
         self.assertEqual(board.state_name("b"), "Done")  # continuous: A unblocks B
 
+    def test_main_daemon_routes_to_run_forever_with_resolved_poll_interval(self):
+        # --daemon routes to run_forever (not the batch paths); --poll-interval (CLI) wins
+        # over config/default. run_forever is mocked so the CLI test never loops forever
+        # or installs real signal handlers.
+        board = orch.MockBoard.demo()
+        with mock.patch("director.orchestrator.run_forever",
+                        return_value={"stopped_reason": "shutdown", "polls": 0}) as rf:
+            with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws:
+                rc = orch.main(["--team", "T", "--mock", "--daemon", "--poll-interval", "2",
+                                "--autonomous", "--queue-dir", q, "--workspace-root", ws,
+                                "--no-status"], board=board)
+        self.assertEqual(rc, 0)
+        rf.assert_called_once()
+        self.assertEqual(rf.call_args.kwargs["poll_interval_s"], 2.0)
+
     def test_main_writes_status_snapshot_to_status_dir(self):
         board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
         with tempfile.TemporaryDirectory() as q, tempfile.TemporaryDirectory() as ws, \

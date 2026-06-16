@@ -908,6 +908,14 @@ def main(argv=None, *, board=None) -> int:
         kwargs["workspace_root"] = Path(s["workspace_root"])
 
     command = _command(args, s["codex_command"], s["posture"])
+    if args.daemon:
+        # The always-on loop (gap #2): blocks until SIGTERM / double-SIGINT, then returns
+        # a session summary. Takes precedence over --once (both → daemon). Signal handlers
+        # install by default (main thread); --once/batch bounds (max_passes/dispatched)
+        # do not apply — the daemon is unbounded by design.
+        result = run_forever(board, command, poll_interval_s=s["poll_interval_s"], **kwargs)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
     if args.once:
         summaries = run_once(board, command, **kwargs)
         for summary in summaries:

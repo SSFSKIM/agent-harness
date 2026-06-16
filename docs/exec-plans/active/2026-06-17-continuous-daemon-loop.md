@@ -291,6 +291,12 @@ minus the barrier."
   R1/R2/R3/R5/R6(drain+force)/R7/R8 via injected events. Gate GREEN (396).
   **Scope adjustment:** signal handling moved into M3 (it lives inside run_forever); M4
   narrows to the CLI surface (`--daemon` routing) + DIRECTOR.md + a CLI-routing test.
+- [x] (2026-06-17) M4 — `main()` `--daemon` branch routes to `run_forever` with the
+  resolved `poll_interval_s` (precedence over `--once`; signal handlers install by default
+  on the main thread; batch bounds don't apply). DIRECTOR.md §12 "Running as a daemon"
+  (start/stop via SIGTERM·double-SIGINT, idle/active/stuck heartbeat, reconciliation still
+  applies). CLI-routing test (run_forever mocked → asserts `poll_interval_s=2.0`, CLI wins).
+  Gate GREEN (397).
 
 ## Surprises & discoveries
 

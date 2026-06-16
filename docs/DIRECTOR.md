@@ -272,3 +272,34 @@ stays in code — a host buys the harness's method, tunes only the deployment.
   reload). A malformed block fails **loud at startup**, before any worker spawns — a wrong
   team/state can never silently claim or transition the wrong tickets. An **absent** block
   runs on the documented defaults.
+
+## 12. Running as a daemon (the always-on loop)
+
+The default run (`run_until_drained`) and `--once` are **batch**: they drain the board's
+ready work and **exit**. `--daemon` is the third mode — the always-on service (Symphony's
+identity; spec `docs/product-specs/2026-06-17-continuous-daemon-loop.md`):
+
+```
+python3 -m director.orchestrator --team <id> --daemon
+python3 -m director.orchestrator --team <id> --daemon --poll-interval 10   # board-poll cadence (s)
+```
+
+- **It never exits on a drained board.** When the board empties it keeps polling every
+  `poll_interval_s` (config `director.poll_interval_s`, default 10), picking up a ticket the
+  moment a human adds one. It also tops up the moment a worker slot frees — it claims only as
+  many tickets `In Progress` as it can actually run (`concurrency`), so the board's
+  In-Progress count is honest, unlike a batch wave.
+- **Stopping it (the only way out):** `SIGTERM` or `Ctrl-C` (`SIGINT`) once → **graceful
+  drain**: it stops claiming and lets in-flight workers finish, then exits. A **second**
+  signal → **force**: it cancels every in-flight worker (the same cooperative stop the
+  operator triggers by moving a ticket out of In Progress) and exits fast. Use the second
+  signal when you don't want to wait for a long worker to finish.
+- **Reading its heartbeat** (in `director.status` / the §10 dashboard `run` block): `mode`
+  = `daemon`; `phase` = `active` (workers running), `idle` (nothing to do — keeps polling),
+  or `draining` (shutting down); `last_poll_at` / `polls` show it is alive and ticking. When
+  `phase` is `idle` **and** `stuck` is non-empty, every remaining ticket is blocked (a failed
+  blocker or a dependency cycle) — the daemon will not make progress until **you** unblock it
+  (move/fix a blocker). Unlike a batch run, "stuck" does **not** stop the daemon; it is a
+  signal for you to act, and the §9 run-report pull still surfaces it.
+- **Active-run reconciliation still applies** (it does in every mode): move a ticket out of
+  `In Progress` in Linear and its worker is stopped within `reconcile_interval_s`.
