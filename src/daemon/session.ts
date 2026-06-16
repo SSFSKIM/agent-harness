@@ -1,0 +1,53 @@
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { AsyncQueue } from "../swarm/asyncQueue.js";
+import type { QueryFn } from "../swarm/types.js";
+
+export interface DaemonSessionDeps { query: QueryFn; }
+
+function userTurn(text: string): SDKUserMessage {
+  return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } as SDKUserMessage;
+}
+
+interface Waiter { onMessage: (m: unknown) => void; resolve: (r: { result: unknown }) => void; }
+
+/** One long-lived query() session. A turn is submit(prompt,onMessage) → streamed messages → resolved result. */
+export class DaemonSession {
+  readonly id: string;
+  lastActiveAt: number;
+  private input = new AsyncQueue<SDKUserMessage>();
+  private q: AsyncIterable<unknown>;
+  private done: Promise<void>;
+  private waiters: Waiter[] = []; // FIFO: query emits one result per submitted turn, in order
+
+  constructor(id: string, deps: DaemonSessionDeps, options: Record<string, unknown>, private now: () => number = Date.now) {
+    this.id = id;
+    this.lastActiveAt = now();
+    this.q = deps.query({ prompt: this.input, options });
+    // A dead/errored query must not reject teardown (dispose awaits this).
+    this.done = this.readLoop().catch(() => {});
+  }
+
+  /** Run one turn; non-result messages stream to onMessage; resolves with the turn's result. */
+  submit(prompt: string, onMessage: (m: unknown) => void): Promise<{ result: unknown }> {
+    return new Promise((resolve) => {
+      this.waiters.push({ onMessage, resolve });
+      this.input.push(userTurn(prompt));
+    });
+  }
+
+  /** End the query (in-flight turn finishes) and wait for the read-loop. */
+  async dispose(): Promise<void> { this.input.close(); await this.done; }
+
+  private async readLoop(): Promise<void> {
+    try {
+      for await (const m of this.q) {
+        this.lastActiveAt = this.now();
+        const w = this.waiters[0];
+        if ((m as any).type === "result") { this.waiters.shift(); w?.resolve({ result: (m as any).result }); }
+        else w?.onMessage(m);
+      }
+    } finally {
+      for (const w of this.waiters.splice(0)) w.resolve({ result: undefined }); // release callers on teardown
+    }
+  }
+}
