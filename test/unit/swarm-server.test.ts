@@ -18,9 +18,16 @@ function toolMap(rt: SwarmRuntime) {
 const text = (r: any) => r.content[0].text;
 
 describe("cc-swarm MCP server", () => {
-  it("exposes the five tools", () => {
+  it("exposes the seven tools", () => {
     expect(Object.keys(toolMap(newRuntime())).sort())
-      .toEqual(["CheckMessages", "SendMessage", "TeamCreate", "TeamDelete", "spawnTeammate"]);
+      .toEqual(["CheckMessages", "RespondPermission", "SendMessage", "ShutdownTeammate", "TeamCreate", "TeamDelete", "spawnTeammate"]);
+  });
+  it("RespondPermission errors on an unknown request id; ShutdownTeammate on an unknown teammate", async () => {
+    const t = toolMap(newRuntime());
+    const bad = await t.RespondPermission.handler({ requestId: "nope", decision: "allow" }, {});
+    expect(bad.isError).toBe(true);
+    const badS = await t.ShutdownTeammate.handler({ name: "ghost" }, {});
+    expect(badS.isError).toBe(true);
   });
   it("createSwarmMcpServer returns an sdk server named cc-swarm", () => {
     const srv: any = createSwarmMcpServer(newRuntime());

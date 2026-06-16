@@ -1,6 +1,9 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SwarmRuntime } from "./runtime.js";
-import { teamCreateShape, teamDeleteShape, spawnTeammateShape, sendMessageShape, checkMessagesShape } from "./types.js";
+import {
+  teamCreateShape, teamDeleteShape, spawnTeammateShape, sendMessageShape, checkMessagesShape,
+  respondPermissionShape, shutdownTeammateShape,
+} from "./types.js";
 
 const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data) }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
@@ -26,6 +29,15 @@ export function buildSwarmTools(runtime: SwarmRuntime) {
     }),
     tool("CheckMessages", "Read and clear messages addressed to the coordinator.", checkMessagesShape, async () => {
       return ok(runtime.checkMessages());
+    }),
+    tool("RespondPermission", "Resolve a teammate's escalated permission request by id (allow/deny).", respondPermissionShape, async (a) => {
+      return runtime.respondPermission(a.requestId, a.decision, a.message)
+        ? ok({ resolved: a.requestId, decision: a.decision })
+        : fail(`unknown request ${a.requestId}`);
+    }),
+    tool("ShutdownTeammate", "Gracefully shut down a teammate (finish current turn, then stop).", shutdownTeammateShape, async (a) => {
+      try { await runtime.requestShutdown(a.name); return ok({ shutdown: a.name }); }
+      catch (e) { return fail((e as Error).message); }
     }),
   ];
 }
