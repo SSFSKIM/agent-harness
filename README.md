@@ -144,10 +144,47 @@ npm run typecheck    # tsc --noEmit
 > premise. The harness sets `['user','project','local']` explicitly regardless, so it stays
 > CC-faithful across SDK-default drift.
 
+## Task tools (Phase 2 · A1)
+
+Claude Code exposes a durable task list via four `Task*` tools the Agent SDK does not ship. Enable the
+harness's reproduction with `taskTools`:
+
+```ts
+const h = createHarness({ taskTools: true });            // or { dir, listId, agentName }
+await h.run("Use TaskCreate to add a task 'ship A1', then TaskList.");
+const tasks = await h.tasks!.list();                     // programmatic access to the same store
+```
+
+When enabled, `createHarness` registers an in-process MCP server (`"cc-tasks"`) exposing:
+
+| Tool | Behavior |
+|---|---|
+| `TaskCreate` | Add a `pending` task (`subject`, optional `description`/`activeForm`/`blockedBy`/`metadata`). |
+| `TaskUpdate` | Change fields/status/owner/dependencies by `id`. |
+| `TaskGet` | Fetch one task by `id`. |
+| `TaskList` | List non-deleted tasks, showing only *unresolved* blockers; filter by `status`/`owner`. |
+
+- **Durable store:** a file-backed JSON store at `<cwd>/.cc-harness/tasks/<listId>.json` (`listId`
+  default `"default"`), written atomically (temp + `rename`) with all read-modify-write serialized by an
+  async mutex. Survives reload.
+- **Status machine:** `pending → in_progress → completed`, plus `deleted` (terminal). Backward
+  transitions are rejected. Domain failures come back as `isError` tool results, so the model can react.
+- **Dependencies:** a `blocks`/`blockedBy` DAG with cycle rejection; claim is refused while any blocker
+  is unresolved.
+- **Ownership / claim:** moving a task to `in_progress` claims it for the calling `agentName` (a
+  compare-and-set — a different agent cannot take an owned task). An explicit `owner` change is a
+  reassignment.
+- **`harness.tasks`** exposes the `TaskStore` for programmatic use, and `TaskStoreOptions.onOwnerChange`
+  is the seam the Phase-2 swarm (A2) uses to push mailbox notifications without modifying A1.
+
+Deferred to later sub-projects: mailbox-notify on owner change (A2), `TodoWrite`, the verification-agent
+nudge, full `TaskCreated`/`TaskCompleted` user-hook dispatch, and multi-process file locking.
+
 ## Where this fits
 
-This package is **Phase 1** of replicating the Claude Code harness on the Agent SDK. It delivers the
-headless core (config bridges + `query()` loop wiring + verification). Phase 2 adds non-UI modes and
-backends (multi-agent coordinator, daemon/bridge/proactive, advanced config) around this core; Phase 3
-adds the interactive Ink TUI as a rendering layer over the message stream this core already produces.
-See `../docs/parity/roadmap.md`.
+This package is the CC→SDK harness. **Phase 1** delivered the headless core (config bridges + `query()`
+loop wiring + verification). **Phase 2** adds non-UI modes and backends around that core; its first
+sub-project (**A1 · Task tools**, above) is complete. Still to come in Phase 2: the multi-agent
+coordinator/swarm (A2), the mode backends (daemon/proactive/kairos/remote/bridge/voice), and advanced
+config/service verification. **Phase 3** adds the interactive Ink TUI as a rendering layer over the
+message stream this core already produces. See `../docs/parity/roadmap.md`.
