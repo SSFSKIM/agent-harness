@@ -73,7 +73,10 @@ reaped. We also lack the `fetch_issue_states_by_ids` adapter op (§11.1) this ne
 **2. We're a batch drainer, not a daemon (§6.2, §8.1) — the identity gap.**
 `run_until_drained` re-polls *within* a run but exits on "drained". Symphony ticks
 forever at `polling.interval_ms`, picking up tickets created later, indefinitely.
-The "long-running automation service" Symphony *is*, we are not.
+The "long-running automation service" Symphony *is*, we are not. → **daemon stage 2:
+`docs/product-specs/2026-06-17-continuous-daemon-loop.md`** (collapses both barriers
+into one continuous tick loop over a persistent running-map; adds the `run_forever`
+mode; lifts stage 1's reconcile/cancel pieces unchanged).
 
 > **The structural root of #1 and #2.** `_dispatch_wave` **blocks** on
 > `wait(FIRST_COMPLETED)` until the whole wave reaches terminal (the "wave

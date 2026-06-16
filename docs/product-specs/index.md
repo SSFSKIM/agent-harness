@@ -93,3 +93,12 @@ owner: harness
   episodic 모델); 부재 fail-open / malformed fail-loud(D-57, 첫 워커 spawn 전). 신규
   `director/config.py`(pure, explicit `root=`) + `python3 -m director.config` effective-config
   surface. gap analysis 가 고른 다음 수.
+- [연속 daemon 루프 (daemon stage 2)](2026-06-17-continuous-daemon-loop.md)
+  — Symphony 정합 daemon 묶음 2단계(gap #2 the identity gap, SPEC §6.2/§8.1). orchestrator
+  의 두 barrier(`_dispatch_wave` wave-barrier + `run_until_drained` pass-barrier→drained-exit)
+  를 **하나의 연속 tick 루프**로 접어, board 가 비어도 종료 않고 영원히 폴링하는 세 번째 모드
+  `run_forever`(daemon, `--daemon`)를 추가. 매 tick: free-slot bounded top-up(claim ≤ 빈 슬롯,
+  flood 아님) → wait(완료/`poll_interval_s`) → reap → stage 1 `_reconcile_in_flight`(무변경) →
+  idle/heartbeat. stuck 은 종료 아닌 status 신호; graceful shutdown(1차 drain·2차 cancel-all,
+  stage 1 cancel_event 재사용); poll/claim 실패 fail-soft. backoff(#3)는 `_idle_wait_s` seam 만.
+  배치 경로(`--once`/기본 drain)·stage 1 조각 전부 보존(설계 dividend). `poll_interval_s` knob.
