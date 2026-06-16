@@ -127,6 +127,36 @@ class DriveLoopTest(unittest.TestCase):
         self.assertEqual(disp["status"], "failed")
         self.assertEqual(disp["turns"], 1)
 
+    def test_telemetry_keeps_latest_absolute_across_turns(self):
+        # M2: the `usage` scenario emits rising CUMULATIVE totals (turn n → n*100).
+        # Over 2 turns drive keeps the LATEST absolute (200), NOT the sum (300) —
+        # §13.5 anti-double-count. session_id/turn_count/last_message also captured.
+        seq = iter(["reply", "terminal"])
+
+        def decider(ctx):
+            if next(seq) == "terminal":
+                return {"kind": "terminal", "outcome": {"status": "done", "reason": "ok"}}
+            return {"kind": "reply", "reply": "go"}
+
+        disp = run.drive(self._ticket(), command=_cmd("usage"), decide=decider,
+                         workspace_root=self.tmp / "wstel", max_turns=8)
+        self.assertEqual(disp["kind"], "terminal")
+        tel = disp["telemetry"]
+        self.assertEqual(tel["tokens"], {"input": 120, "output": 80, "total": 200})
+        self.assertEqual(tel["turn_count"], 2)
+        self.assertEqual(tel["session_id"], f"{disp['thread_id']}-{disp['turn_id']}")
+        self.assertEqual(tel["last_message"], "done")
+
+    def test_telemetry_present_without_usage_events(self):
+        # No usage notifications (report scenario) → tokens None, but the rest of the
+        # telemetry block is still populated (R6: absent ≠ broken).
+        disp = run.drive(self._ticket(), command=_cmd("report"),
+                         decide=autonomous_decide, workspace_root=self.tmp / "wstel2")
+        tel = disp["telemetry"]
+        self.assertIsNone(tel["tokens"])
+        self.assertEqual(tel["turn_count"], 1)
+        self.assertEqual(tel["session_id"], f"{disp['thread_id']}-{disp['turn_id']}")
+
 
 class AutonomousDeciderUnitTest(unittest.TestCase):
     def test_done_and_blocked_are_terminal(self):

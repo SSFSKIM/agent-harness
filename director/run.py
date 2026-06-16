@@ -132,7 +132,9 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
     and the per-turn disposition is owned by the injected `decide` (LLM/human in a
     watched run; the autonomous code decider un-watched) — never by this code (R4).
 
-    Returns the FINAL disposition, enriched with run facts:
+    Returns the FINAL disposition, enriched with run facts (incl. a `telemetry`
+    block — Symphony-grade per-ticket tokens/turn_count/session_id/last_message/
+    rate_limits — present on every kind, plan M2):
       {"kind": "terminal",  "outcome": {...}, "turns", "turn_id", "final_message", "thread_id"}
       {"kind": "escalate",  "reason": str, "outcome"?, "turns", ...}        # taste → human
       {"kind": "stuck",     "reason": "max_turns", "turns", ...}            # R6 bound
@@ -161,7 +163,20 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                       install_skills=install_skills)
     turns = 0
     turn_id = None
+    thread_id = None
     final_message = None
+    usage = None        # latest ABSOLUTE thread token totals (not a sum — §13.5)
+    rate_limits = None  # latest rate-limit payload seen
+
+    def _telemetry() -> dict:
+        # Symphony-grade per-ticket telemetry (plan M2), folded into every
+        # disposition via `base`. session_id = "<thread>-<turn>" (§4.1.6); tokens is
+        # the LATEST absolute thread total (codex reports cumulative totals, so the
+        # last value IS the ticket total — summing would double-count).
+        sid = f"{thread_id}-{turn_id}" if (thread_id and turn_id) else None
+        return {"tokens": usage, "turn_count": turns, "session_id": sid,
+                "last_message": final_message, "rate_limits": rate_limits}
+
     with client as c:
         c.initialize()
         thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
@@ -176,9 +191,14 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
             turn_id = result.get("turn_id")
             final_message = result.get("final_message")
+            if result.get("usage") is not None:        # keep latest absolute totals
+                usage = result["usage"]
+            if result.get("rate_limits") is not None:
+                rate_limits = result["rate_limits"]
             status = result.get("status")
             base = {"turns": turns, "turn_id": turn_id,
-                    "final_message": final_message, "thread_id": thread_id}
+                    "final_message": final_message, "thread_id": thread_id,
+                    "telemetry": _telemetry()}
             if status != "completed":  # turn/failed | turn/cancelled — not a disposition
                 return {"kind": "failed", "status": status, **base}
             disp = decide({"ticket": ticket, "turn_index": i, "status": status,
@@ -189,7 +209,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             # kind == "reply": continue the SAME thread with the directive (board untouched)
             input_text = disp.get("reply") or ""
     return {"kind": "stuck", "reason": "max_turns", "turns": turns,
-            "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id}
+            "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id,
+            "telemetry": _telemetry()}
 
 
 def _command(args) -> list[str]:

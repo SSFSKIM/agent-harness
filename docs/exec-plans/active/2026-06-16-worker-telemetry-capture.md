@@ -154,7 +154,11 @@ still green.
   app_server.py (tolerant, §13.5 absolute-totals, delta-ignored, lenient field names);
   `run_turn` returns `usage`/`rate_limits`; `_mock_app_server.py` `usage` scenario emits
   rising cumulative totals; 7 new tests in test_director_app_server.py. Gate GREEN (326).
-- [ ] M2 — drive per-ticket accumulation + disposition telemetry.
+- [x] (2026-06-16) M2 done — `drive` accumulates latest-absolute tokens + rate_limits
+  across turns and attaches a `telemetry` block (tokens/turn_count/session_id/
+  last_message/rate_limits) to every disposition (terminal/escalate/stuck/failed). 2 new
+  tests in test_director_drive.py (latest-absolute-not-sum: 200 over 2 turns, not 300;
+  telemetry present without usage events). Gate GREEN (328).
 - [ ] M3 — orchestrator fold + status.py additive schema + run aggregate.
 - [ ] M4 — completion: full gate, backward-compat, R6 tolerance, live-pin.
 
