@@ -125,7 +125,13 @@ process** (`python3 -m director.merger`) drains the queue, landing PRs one at a 
   `_dispatch_wave`; summary gains `merge_enqueued`. `qa` skill §4 tells the worker to pass its PR
   (+ "don't self-merge"). 5 tests: done+PR enqueues (pr/branch/workspace in payload), done-without-PR
   / blocked-with-PR-fields / escalate enqueue none, explicit ticket workspace honored. Gate GREEN (298).
-- [ ] M2 — standalone event-woken `director.merger` process + tests.
+- [x] (2026-06-16) M2 — standalone merger process. `director/merger.py` gained `run_loop`
+  (drain → exit on `once`, else poll+drain on pending, sleeping `--poll` — woken by work, no
+  busy-spin), `_command` (mock vs real codex posture), and `main()` → `python3 -m director.merger`
+  (`--once`/`--poll`/`--queue-dir`/`--codex`/`--mock`/`--read-timeout`; land lane shares the
+  Director `queue_base`; `flock` makes it the enforced single consumer). 3 tests: `--once --mock`
+  drains a seeded queue end-to-end (real CLI + run.drive + mock land worker → merged); `--once`
+  empty queue is a no-op rc 0; `run_loop(once=True)` with an injected driver drains FIFO. Gate GREEN (301).
 - [ ] M3 — end-to-end chain test + completion gate.
 
 ## Surprises & discoveries

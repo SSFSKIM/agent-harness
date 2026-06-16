@@ -256,5 +256,43 @@ class MergeEscalationToDirectorTest(unittest.TestCase):
         self.assertEqual(len(dmin.merge_reviews(base=self.base)), 1)
 
 
+class MergerCliTest(unittest.TestCase):
+    """M2 (activate-serialized-merge-pipeline): the standalone `python3 -m director.merger`
+    process drains the queue (the drain-runner; separate component from the Director)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def test_main_once_drains_seeded_queue_via_mock_worker(self):
+        # End-to-end through the real CLI + run.drive + mock land worker: a seeded PR is
+        # landed (report scenario → terminal done → merged) and the queue drains.
+        dq.append_merge_request("T1", pr="p", branch="b",
+                                workspace_path=str(self.tmp / "ws"), base=self.base)
+        rc = merger.main(["--once", "--mock", "--mock-scenario", "report",
+                          "--queue-dir", str(self.base)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(merger.pending_merges(base=self.base), [])  # drained + consumed
+
+    def test_main_once_empty_queue_is_noop(self):
+        rc = merger.main(["--once", "--mock", "--queue-dir", str(self.tmp / "empty")])
+        self.assertEqual(rc, 0)
+
+    def test_run_loop_once_drains_with_injected_driver(self):
+        # run_loop(once=True) is the loop body: one drain pass then return 0.
+        dq.append_merge_request("T1", base=self.base)
+        dq.append_merge_request("T2", base=self.base)
+        seen = []
+
+        def driver(ticket, *, decide, **kw):
+            seen.append(ticket["id"])
+            return _DONE
+
+        rc = merger.run_loop(base=self.base, command=["x"], once=True, driver=driver)
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen, ["merge-T1", "merge-T2"])      # serial, FIFO
+        self.assertEqual(merger.pending_merges(base=self.base), [])
+
+
 if __name__ == "__main__":
     unittest.main()

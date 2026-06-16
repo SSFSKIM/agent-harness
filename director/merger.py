@@ -20,14 +20,18 @@ worker→enqueue call site are M3; the live serializer wire-pin is M4.
 """
 from __future__ import annotations
 
+import argparse
 import contextlib
 import fcntl
 import os
+import sys
+import time
 from typing import Callable
 
 import director.queue as dq
 from director import run
 from director.decider import autonomous_decide
+from director.worker import autonomy
 
 MERGE_REQUEST_KIND = "mergeRequest"
 
@@ -196,3 +200,54 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
             results.append(result)
             processed += 1
     return results
+
+
+def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
+             decide: Callable = autonomous_decide, **drive_kwargs) -> int:
+    """The standalone merger's body: drain the merge queue, then either exit (`once`) or
+    keep watching for new PRs (the drain-runner; spec Open Q resolved to a standalone,
+    event-woken process — D-47/R7). `once` runs a single drain pass and returns (cron /
+    tests). Otherwise it polls the queue and drains whenever a `mergeRequest` is pending,
+    sleeping `poll` between checks — woken by work, never a busy-spin. Returns 0."""
+    while True:
+        if pending_merges(base=base):  # only take the flock + drive when there is work
+            drain(base=base, command=command, decide=decide, **drive_kwargs)
+        if once:
+            return 0
+        time.sleep(poll)
+
+
+def _command(args) -> list[str]:
+    if args.mock:
+        return [sys.executable, run._MOCK, args.mock_scenario]
+    # Real land agent: same self-governing posture as a worker (auto_review + network),
+    # wrapped in non-login bash (run._command has the env-boundary rationale, SECURITY T11).
+    return ["bash", "-c", autonomy.codex_command(args.codex)]
+
+
+def main(argv=None) -> int:
+    """`python3 -m director.merger` — the single serialized PR-merger process. Drains the
+    `mergeRequest` queue one PR at a time (the `flock` makes it the enforced sole consumer,
+    R4); escalations surface to the Director as `mergeReview` (R6/R7). It is a SEPARATE
+    component from the Director (which owns the human surface), per the design."""
+    ap = argparse.ArgumentParser(prog="director.merger")
+    ap.add_argument("--once", action="store_true",
+                    help="drain currently-pending PRs then exit (cron / tests)")
+    ap.add_argument("--poll", type=float, default=1.0, help="loop poll interval (s)")
+    ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
+    ap.add_argument("--codex", default="codex app-server", help="real land-agent command")
+    ap.add_argument("--mock", action="store_true", help="use the bundled fake app-server")
+    ap.add_argument("--mock-scenario", default="report",
+                    choices=["plain", "approval", "approval_done", "report",
+                             "tool", "turn_failed"])
+    ap.add_argument("--read-timeout", type=float, default=180.0,
+                    help="per-event read timeout for a land turn (s); land agents think")
+    args = ap.parse_args(argv)
+    return run_loop(base=args.queue_dir, command=_command(args), poll=args.poll,
+                    once=args.once, decide=autonomous_decide, queue_base=args.queue_dir,
+                    approval_policy=autonomy.APPROVAL_POLICY, sandbox=autonomy.SANDBOX,
+                    read_timeout_s=args.read_timeout)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
