@@ -1,12 +1,13 @@
 import { z } from "zod/v4";
 
-export type MessageKind = "text" | "task" | "result" | "idle";
+export type MessageKind = "text" | "task" | "result" | "idle" | "permission" | "shutdown";
 
 export interface Message {
   from: string;            // sender agent name
   to: string;              // recipient agent name ("coordinator" | teammate name)
   kind: MessageKind;
   body: string;
+  data?: Record<string, unknown>; // structured payload (e.g. permission requestId/tool/input)
   ts: string;              // ISO timestamp, stamped by the bus/session
 }
 
@@ -20,6 +21,7 @@ export interface TeammateSpec {
 export interface SwarmOptions {
   cwd?: string;
   taskOptions?: { dir?: string; listId?: string; agentName?: string };
+  permissions?: { allow?: string[]; escalateToCoordinator?: boolean };
 }
 
 /** Minimal structural type for the SDK `query` fn so units can be tested with a fake (DI). */
@@ -47,6 +49,16 @@ export const sendMessageShape = {
   kind: KIND.optional(),
 };
 export const checkMessagesShape = {};
+
+export interface PermissionDecision { decision: "allow" | "deny"; message?: string; }
+
+const DECISION = z.enum(["allow", "deny"]);
+export const respondPermissionShape = {
+  requestId: z.string(),
+  decision: DECISION,
+  message: z.string().optional(),
+};
+export const shutdownTeammateShape = { name: z.string() };
 
 export type TeamCreateInput = z.infer<z.ZodObject<typeof teamCreateShape>>;
 export type SpawnTeammateInput = z.infer<z.ZodObject<typeof spawnTeammateShape>>;

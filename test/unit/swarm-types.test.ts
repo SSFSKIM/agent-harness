@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import {
   SwarmError,
   teamCreateShape, teamDeleteShape, spawnTeammateShape, sendMessageShape, checkMessagesShape,
+  respondPermissionShape, shutdownTeammateShape,
 } from "../../src/swarm/types.js";
 
 describe("swarm types", () => {
@@ -22,5 +23,14 @@ describe("swarm types", () => {
     expect(z.object(teamCreateShape).parse({ name: "a" }).name).toBe("a");
     expect(z.object(teamDeleteShape).parse({ teamId: "team-1" }).teamId).toBe("team-1");
     expect(z.object(checkMessagesShape).parse({})).toEqual({});
+  });
+  it("respondPermissionShape requires requestId + a decision enum", () => {
+    const ok = z.object(respondPermissionShape).parse({ requestId: "req-1", decision: "allow", message: "ok" });
+    expect(ok.decision).toBe("allow");
+    expect(() => z.object(respondPermissionShape).parse({ requestId: "req-1", decision: "maybe" })).toThrow();
+  });
+  it("shutdownTeammateShape requires a name", () => {
+    expect(z.object(shutdownTeammateShape).parse({ name: "w1" }).name).toBe("w1");
+    expect(() => z.object(shutdownTeammateShape).parse({})).toThrow();
   });
 });
