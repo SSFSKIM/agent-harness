@@ -9,3 +9,5 @@ export { TaskStore, TaskError, createTaskMcpServer } from "./tasks/index.js";
 export type { Task, TaskStatus, TaskStoreOptions, TaskListItem } from "./tasks/index.js";
 export { SwarmRuntime, MessageBus, createSwarmMcpServer, SwarmError } from "./swarm/index.js";
 export type { Message, MessageKind, TeammateSpec, SwarmOptions } from "./swarm/index.js";
+export { DaemonSupervisor, DaemonServer, SessionRegistry, daemonRequest, daemonSocketPath, DaemonError } from "./daemon/index.js";
+export type { SessionRecord, SessionStatus, DaemonOptions } from "./daemon/index.js";
