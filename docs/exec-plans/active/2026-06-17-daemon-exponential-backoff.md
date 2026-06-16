@@ -216,6 +216,12 @@ read per tick, consistent ordering.
   `_pos_num` + resolve_settings + `--backoff-base`/`--backoff-cap` + run_forever params,
   unused until M2/M3; main() threads them). Tests: `BackoffHelperTest` (values + cap +
   n<1 clamp) + config precedence/defaults/validation. Gate GREEN (402).
+- [x] (2026-06-17) M2 — IDLE backoff: `_idle_wait_s(poll_interval_s, idle_streak, cap)` =
+  `_backoff_s(idle_streak+1, base=poll_interval_s, cap)`; run_forever `idle_streak` grows
+  per idle tick, resets to 0 in the busy branch. Poll-failure (C) subsumed (a failed poll
+  → idle path → backs off). Tests: `_idle_wait_s` curve unit test; `DaemonBackoffTest`
+  idle-streak-grows (spy on `_idle_wait_s`), resets-after-work, sustained-poll-failure-
+  backs-off-and-recovers. Gate GREEN (406).
 
 ## Surprises & discoveries
 

@@ -815,6 +815,13 @@ class BackoffHelperTest(unittest.TestCase):
         self.assertEqual(orch._backoff_s(99, base=2, cap=100), 100)  # capped
         self.assertEqual(orch._backoff_s(0, base=2, cap=100), 2)     # n<1 clamps to base
 
+    def test_idle_wait_grows_from_poll_interval(self):
+        # idle wait: streak 0 → poll_interval, doubling, capped at `cap`.
+        self.assertEqual(orch._idle_wait_s(0.02, 0, 1.0), 0.02)
+        self.assertEqual(orch._idle_wait_s(0.02, 1, 1.0), 0.04)
+        self.assertEqual(orch._idle_wait_s(0.02, 2, 1.0), 0.08)
+        self.assertEqual(orch._idle_wait_s(10.0, 9, 300.0), 300.0)  # capped
+
 
 def _wait_for(cond, timeout=3.0, msg="condition not met in time"):
     deadline = time.monotonic() + timeout
@@ -1059,6 +1066,87 @@ class DaemonLoopTest(unittest.TestCase):
             shutdown.set()
             force.set()
             th.join(timeout=2.0)
+
+
+class DaemonBackoffTest(unittest.TestCase):
+    """run_forever exponential backoff (daemon stage 3): retry / idle / claim back off
+    via `_backoff_s`. Same harness as DaemonLoopTest (bg thread + injected events +
+    install_signals=False); small backoff values keep it fast."""
+
+    def _run_bg(self, board, fake, **kw):
+        shutdown, force, result = threading.Event(), threading.Event(), {}
+        states = orch.resolve_states(board, "T")
+
+        def go():
+            with mock.patch("director.orchestrator.dispatch", fake):
+                result["out"] = orch.run_forever(
+                    board, command=["x"], team="T", states=states,
+                    shutdown_event=shutdown, force_event=force, install_signals=False,
+                    poll_interval_s=0.02, **kw)
+        th = threading.Thread(target=go, daemon=True)
+        th.start()
+        return shutdown, force, th, result
+
+    # -- IDLE backoff (B) ----------------------------------------------------
+    def test_idle_streak_grows_monotonically(self):
+        # the idle wait is called with a growing streak 0,1,2,… on consecutive idle ticks.
+        board = orch.MockBoard([])
+        calls = []
+
+        def spy(poll, streak, cap):
+            calls.append(streak)
+            return 0.001  # tiny real wait → fast test
+        with mock.patch("director.orchestrator._idle_wait_s", spy):
+            shutdown, force, th, result = self._run_bg(board, lambda *a, **k: _DONE)
+            try:
+                _wait_for(lambda: len(calls) >= 3, msg="idle waits not happening")
+                self.assertEqual(calls[:3], [0, 1, 2])  # exponential streak input (R4)
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_idle_streak_resets_after_work(self):
+        board = orch.MockBoard([])
+        calls = []
+
+        def spy(poll, streak, cap):
+            calls.append(streak)
+            return 0.001
+        with mock.patch("director.orchestrator._idle_wait_s", spy):
+            shutdown, force, th, result = self._run_bg(board, lambda *a, **k: _DONE)
+            try:
+                _wait_for(lambda: max(calls or [0]) >= 1, msg="idle streak did not grow")
+                n = len(calls)                    # capture BEFORE work (slice spans the reset)
+                board._issues["a"] = _issue("a")  # late work appears
+                _wait_for(lambda: board.state_name("a") == "Done", msg="late work not claimed")
+                # after work the idle streak resets → a fresh 0 appears in the idle calls
+                _wait_for(lambda: 0 in calls[n:], msg="idle streak did not reset after work")
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_sustained_poll_failure_backs_off_and_recovers(self):
+        # poll-failure (C) subsumed by idle backoff: the board raises for the first polls
+        # (daemon backs off via the idle path), then recovers and claims the ticket (R5).
+        class FlakyPoll(orch.MockBoard):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self.polls = 0
+
+            def list_ready_issues(self, team, ready_state_id):
+                self.polls += 1
+                if self.polls <= 3:
+                    raise RuntimeError("board down")
+                return super().list_ready_issues(team, ready_state_id)
+
+        board = FlakyPoll([_issue("a")])
+        shutdown, force, th, result = self._run_bg(board, lambda *a, **k: _DONE)
+        try:
+            _wait_for(lambda: board.state_name("a") == "Done",
+                      msg="did not recover from sustained poll failure")
+        finally:
+            shutdown.set()
+            th.join(timeout=3.0)
 
 
 if __name__ == "__main__":

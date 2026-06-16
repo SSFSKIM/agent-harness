@@ -553,12 +553,14 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
     return out
 
 
-def _idle_wait_s(poll_interval_s: float) -> float:
+def _idle_wait_s(poll_interval_s: float, idle_streak: int, cap: float) -> float:
     """How long the daemon sleeps before its next poll when fully idle (no workers
-    running). The single backoff SEAM (spec D-70): today it returns the constant poll
-    interval; gap #3 (exponential backoff on idle) is the ONLY thing that swaps this —
-    nothing else in the loop changes."""
-    return poll_interval_s
+    running). Exponential backoff on a quiet board (gap #3, the D-70 seam): the first
+    idle tick (streak 0) waits `poll_interval_s`, then doubles each consecutive idle tick
+    up to `cap` — `_backoff_s(idle_streak+1, base=poll_interval_s, cap=cap)`. A poll that
+    finds/claims work resets the streak to 0 (the caller). A failing poll lands here too
+    (futures empty → idle), so poll-failure backoff is subsumed (spec D-77)."""
+    return _backoff_s(idle_streak + 1, base=poll_interval_s, cap=cap)
 
 
 def _daemon_signal_action(shutdown_event: threading.Event,
@@ -638,6 +640,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     last_reconcile = time.monotonic()
     forced = False
     poll_failing = False  # log a board-poll failure once on entry + once on recovery
+    idle_streak = 0       # consecutive idle ticks → exponential idle-poll backoff (B)
     ticks = 0
     try:
         while True:
@@ -693,11 +696,13 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
             # WAIT — block on a completion when busy; sleep on the shutdown Event when
             # idle (so a shutdown during idle wakes us immediately — no busy-spin, D-67).
             if state.futures:
+                idle_streak = 0  # work is running → reset idle backoff (B)
                 done, _ = wait(list(state.futures), timeout=poll_interval_s,
                                return_when=FIRST_COMPLETED)
                 state.reap(done)
             elif not draining:
-                shutdown_event.wait(_idle_wait_s(poll_interval_s))
+                shutdown_event.wait(_idle_wait_s(poll_interval_s, idle_streak, backoff_cap_s))
+                idle_streak += 1  # consecutive idle tick → next idle wait doubles (cap)
 
             now = time.monotonic()
             if state.futures and now - last_reconcile >= reconcile_interval_s:
