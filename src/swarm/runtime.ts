@@ -121,10 +121,10 @@ export class SwarmRuntime {
   async requestShutdown(name: string): Promise<void> {
     const s = this.sessions.get(name);
     if (!s) throw new SwarmError(`unknown teammate ${name}`);
-    this.onHandshake?.("shutdown", { name });
     await s.shutdown();
     this.sessions.delete(name);
     this.bus.unregister(name);
+    this.onHandshake?.("shutdown", { name }); // fire after teardown completes (handshake done)
   }
 
   async disposeAll(): Promise<void> {

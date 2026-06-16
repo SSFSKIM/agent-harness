@@ -37,10 +37,11 @@ export class TeammateSession {
   /** End the underlying query and wait for the read-loop to finish. */
   async dispose(): Promise<void> { this.input.close(); await this.done; }
 
-  /** Graceful shutdown handshake: ack the coordinator, then end the query (current turn finishes first). */
+  /** Graceful shutdown: let the current turn finish (dispose), THEN ack — so the shutdown
+   * envelope is the teammate's last message and the coordinator never sees it mid-turn. */
   async shutdown(): Promise<void> {
-    this.emit("shutdown", "");
     await this.dispose();
+    this.emit("shutdown", "");
   }
 
   private emit(kind: MessageKind, body: string): void {
