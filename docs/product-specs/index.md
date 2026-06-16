@@ -75,3 +75,12 @@ owner: harness
   current-run only, stdlib-only. 기존 모듈 변경 0 — 신규 `director/dashboard.py` + 테스트 +
   DIRECTOR.md 절. (공유 tracker / GitHub Issues 어댑터는 범위 밖.) **재배치(2026-06-16): worker
   telemetry capture 가 선행 — renderer 는 그 풍부해진 데이터의 consumer.**
+- [Director 선언적 설정 계약 (`.harness.json` `director` 블록)](2026-06-16-director-declarative-config.md)
+  — Symphony 정합 트랙(SPEC §5–6/§6.2, `WORKFLOW.md` 대응). 코드+CLI 플래그에 흩어진
+  오케스트레이션 정책(team·states·concurrency·posture·paths·merger knob)을 `worker_policy`
+  와 **같은 `.harness.json`** 의 `director` 블록(stdlib json, YAML 아님)으로 외부화 →
+  "설정 하나 떨구면 어느 repo 에서나 도는" 하네스. methodology(템플릿/계약)는 코드 유지(D-56);
+  precedence CLI>config>default(D-58); `$VAR` indirection; load-once(daemon reload 아님 — D-55,
+  episodic 모델); 부재 fail-open / malformed fail-loud(D-57, 첫 워커 spawn 전). 신규
+  `director/config.py`(pure, explicit `root=`) + `python3 -m director.config` effective-config
+  surface. gap analysis 가 고른 다음 수.
