@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-16
 owner: harness
 base_commit: f406da02b9d9633fcad000a3e4123de8b808d775
@@ -147,5 +147,35 @@ process** (`python3 -m director.merger`) drains the queue, landing PRs one at a 
   — preserves R7 component separation; `flock` guard already makes it safe (human decision).
 
 ## Feedback (from completion gate)
+Two codex reviewers (gpt-5.5, high effort) — arch + reliability lenses. Both found one P1;
+both fixed in-slice (no P2s to track):
+- **[P1 arch] `main()` hard-wired `autonomous_decide`** → a watched merger could not route
+  land-lane turn-ends (mid-merge conflict/taste questions) to the Director, violating R9/D-50
+  (merger distinct, but Director owns taste routing). **FIXED:** `select_decider` (watched
+  default → `make_queue_decider`; `--autonomous`/`--mock` → code decider), mirroring
+  `orchestrator.main`; new `--autonomous`/`--turn-review-timeout` flags + a selection test.
+- **[P1 reliability] `_consume` ran before `_surface_escalation`** → a crash/raise in the
+  window dropped a failed merge silently (Director never sees it). **FIXED:** surface BEFORE
+  consume — a surface failure leaves the request pending, re-surfaced next drain (mergeReview
+  dedupes), never lost (R6); new `test_surface_failure_leaves_request_pending`.
+Gate GREEN (304) after fixes.
 
 ## Outcomes & retrospective
+**R4 is now mechanically end-to-end.** A worker proposes its PR via `report_outcome(done,
+pr_url, pr_branch)` → `orchestrator.reconcile` enqueues a `mergeRequest` (D-40: orchestrator
+executes) → a standalone, event-woken `python3 -m director.merger` drains it one PR at a time
+(`flock` single-consumer, R4), watched-by-default (land-lane turn-ends route to the Director,
+R9) and escalating terminal failures as `mergeReview` (R6/R7). The two ends the parent slice
+deferred are wired: handoff (M1) + drain-runner (M2), proven together by the M3 chain test.
+
+This activates the merge pipeline the parent slice built-but-left-inert: the merger is no
+longer a function nothing calls — it is a runnable separate component (R7) the Director's
+event loop can stand up alongside the orchestrator.
+
+Still deferred (tracked): the re-enqueue-after-Director-guidance loop (needs a fresh-id
+discriminant + the loop that calls it — spec Open Q); the full live `gh` PR roundtrip (needs
+a remote; the parent slice's M4 already proved the serializer mechanics live on a scratch repo).
+Retro: the completion gate earned its keep — both P1s were real (a silent-escalation-loss
+window and a missing watched-routing path) and neither showed up in the green gate; surfacing
+land-lane turn-ends to the Director (R9) is exactly the kind of design-fidelity a unit test
+won't catch.
