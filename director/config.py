@@ -57,6 +57,10 @@ DEFAULTS: dict = {
     # ticket states to stop a worker a human moved out of `started` (lower = faster
     # operator-stop, more tracker calls).
     "reconcile_interval_s": 15.0,
+    # daemon (run_forever, gap #2) poll cadence: how often the always-on loop re-polls
+    # the board for new ready work and ticks while idle (Symphony `polling.interval_ms`).
+    # Only used by `--daemon`; the batch paths ignore it.
+    "poll_interval_s": 10.0,
     "codex_command": "codex app-server",
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
                "auto_review": True, "network": True},
@@ -106,6 +110,7 @@ class DirectorConfig:
     read_timeout_s: float
     turn_review_timeout_s: float
     reconcile_interval_s: float
+    poll_interval_s: float
     codex_command: str
     posture: Posture
     paths: Paths
@@ -226,6 +231,8 @@ def _build(raw: dict) -> DirectorConfig:
                                                DEFAULTS["turn_review_timeout_s"]), "turn_review_timeout_s"),
         reconcile_interval_s=_pos_num(raw.get("reconcile_interval_s",
                                               DEFAULTS["reconcile_interval_s"]), "reconcile_interval_s"),
+        poll_interval_s=_pos_num(raw.get("poll_interval_s",
+                                         DEFAULTS["poll_interval_s"]), "poll_interval_s"),
         codex_command=codex_command, posture=posture, paths=paths, merger=merger)
 
 

@@ -574,6 +574,7 @@ def resolve_settings(args, cfg) -> dict:
         "read_timeout_s": _pick(args.read_timeout, cfg.read_timeout_s),
         "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
         "reconcile_interval_s": _pick(args.reconcile_interval, cfg.reconcile_interval_s),
+        "poll_interval_s": _pick(args.poll_interval, cfg.poll_interval_s),
         "codex_command": _pick(args.codex, cfg.codex_command),
         "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
@@ -645,6 +646,12 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--reconcile-interval", type=float, default=None,
                     help="active-run reconciliation cadence (s): how often in-flight "
                          "ticket states are re-read to stop externally-moved tickets")
+    ap.add_argument("--daemon", action="store_true",
+                    help="continuous always-on loop (run_forever): keep polling forever, "
+                         "never exit on drained; stop with SIGTERM / double-SIGINT")
+    ap.add_argument("--poll-interval", type=float, default=None,
+                    help="daemon (--daemon) board-poll cadence (s): how often new ready "
+                         "work is picked up and the idle loop ticks")
     args = ap.parse_args(argv)
 
     # Load + resolve config FIRST — a malformed .harness.json director block raises

@@ -270,7 +270,11 @@ minus the barrier."
   test; (d) full gate GREEN.
 
 ## Progress log
-- [ ] (2026-06-17) plan created; base_commit 7091b0c; spec committed 7091b0c.
+- [x] (2026-06-17) plan created; base_commit 7091b0c; spec committed 7091b0c.
+- [x] (2026-06-17) M1 — `poll_interval_s` config knob (DEFAULTS 10.0 + DirectorConfig
+  + `_pos_num` + resolve_settings + `--poll-interval`; `--daemon` flag declared, routed
+  in M4); status.py additive `run.mode/phase/last_poll_at/polls` + `polled()` writer.
+  Config 27 tests (+2), status 19 (+2); full gate GREEN.
 
 ## Surprises & discoveries
 

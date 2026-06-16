@@ -187,7 +187,8 @@ class WiringTest(unittest.TestCase):
                     failed_state=None, blocked_state=None, done_types=None,
                     concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
                     read_timeout=None, turn_review_timeout=None, reconcile_interval=None,
-                    codex=None, workspace_root=None, queue_dir=None, status_dir=None)
+                    poll_interval=None, codex=None, workspace_root=None, queue_dir=None,
+                    status_dir=None)
         base.update(over)
         return argparse.Namespace(**base)
 
@@ -224,6 +225,19 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(orchestrator.resolve_settings(self._args(), cfg)["reconcile_interval_s"], 3.0)
         s = orchestrator.resolve_settings(self._args(reconcile_interval=0.5), cfg)
         self.assertEqual(s["reconcile_interval_s"], 0.5)  # CLI overrides config
+
+    def test_poll_interval_resolves(self):
+        from director import orchestrator
+        cfg = config._build({"poll_interval_s": 4.0})
+        self.assertEqual(orchestrator.resolve_settings(self._args(), cfg)["poll_interval_s"], 4.0)
+        s = orchestrator.resolve_settings(self._args(poll_interval=0.25), cfg)
+        self.assertEqual(s["poll_interval_s"], 0.25)  # CLI overrides config
+
+    def test_poll_interval_default_and_validation(self):
+        self.assertEqual(config.defaults().poll_interval_s, 10.0)
+        _write(self.root, {"director": {"poll_interval_s": 0}})  # not positive
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
 
     def test_malformed_config_fails_before_dispatch(self):
         from director import orchestrator

@@ -160,6 +160,27 @@ class StatusWriterTest(unittest.TestCase):
         # the runReport dedupe and a real stuck-from-start pull is never swallowed.
         self.assertIsNotNone(snap["run"]["started_at"])
 
+    def test_heartbeat_fields_present_by_default(self):
+        # daemon heartbeat fields are additive: present on every snapshot with safe
+        # defaults even when polled() is never called (the batch paths) — back-compat.
+        w = ds.StatusWriter(base=self.base)
+        w.wave(1)  # any flush
+        run = self._snap()["run"]
+        self.assertIsNone(run["mode"])
+        self.assertIsNone(run["phase"])
+        self.assertIsNone(run["last_poll_at"])
+        self.assertEqual(run["polls"], 0)
+
+    def test_polled_records_daemon_heartbeat(self):
+        w = ds.StatusWriter(base=self.base)
+        w.polled(phase="idle")
+        w.polled(phase="active")
+        run = self._snap()["run"]
+        self.assertEqual(run["mode"], "daemon")
+        self.assertEqual(run["phase"], "active")   # latest phase
+        self.assertEqual(run["polls"], 2)          # monotonic count
+        self.assertIsNotNone(run["last_poll_at"])
+
     def test_snapshot_is_always_valid_json_under_interleaved_reads(self):
         # A reader concurrent with a writer never parses a torn snapshot (R2) —
         # atomic temp+os.replace guarantees the file is whole or absent.

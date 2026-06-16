@@ -95,7 +95,11 @@ class StatusWriter:
         self._root = _root(base)
         self._recent_max = recent_max
         self._now = now
-        self._run: dict = {"started_at": None, "pass": 0, "stopped_reason": None}
+        # `mode`/`phase`/`last_poll_at`/`polls` are the daemon (run_forever, gap #2)
+        # live heartbeat (additive): the batch paths never call `polled()` so they
+        # keep mode=None/phase=None — back-compatible for every existing reader.
+        self._run: dict = {"started_at": None, "pass": 0, "stopped_reason": None,
+                           "mode": None, "phase": None, "last_poll_at": None, "polls": 0}
         self._in_flight: dict[str, dict] = {}
         self._recent: list[dict] = []
         self._stuck: list[dict] = []
@@ -188,6 +192,19 @@ class StatusWriter:
 
     def finished(self, stopped_reason: str | None) -> None:
         self._run["stopped_reason"] = stopped_reason
+        self._flush()
+
+    def polled(self, *, phase: str, mode: str = "daemon") -> None:
+        """Daemon heartbeat (gap #2): record one tick's board poll — `mode`
+        (daemon|batch), `phase` (active|idle|draining|stopped), a fresh
+        `last_poll_at`, and a monotonic `polls` count. Called only by the daemon
+        loop on the MAIN tick thread, so the single-writer invariant (R13) holds —
+        like every other transition here. Additive: it touches only the new `run`
+        fields, never the in_flight/recent/stuck/aggregate state."""
+        self._run["mode"] = mode
+        self._run["phase"] = phase
+        self._run["last_poll_at"] = self._now()
+        self._run["polls"] += 1
         self._flush()
 
     # -- internals -----------------------------------------------------------
