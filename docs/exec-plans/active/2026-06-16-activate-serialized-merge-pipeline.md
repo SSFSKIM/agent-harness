@@ -132,7 +132,11 @@ process** (`python3 -m director.merger`) drains the queue, landing PRs one at a 
   Director `queue_base`; `flock` makes it the enforced single consumer). 3 tests: `--once --mock`
   drains a seeded queue end-to-end (real CLI + run.drive + mock land worker → merged); `--once`
   empty queue is a no-op rc 0; `run_loop(once=True)` with an injected driver drains FIFO. Gate GREEN (301).
-- [ ] M3 — end-to-end chain test + completion gate.
+- [x] (2026-06-16) M3 — end-to-end chain test (`EndToEndPipelineTest`): a done-with-PR
+  disposition → `orchestrator.reconcile` enqueues a `mergeRequest` → `merger.main(--once --mock)`
+  drains it (mock land worker → terminal done → merged) → queue empty. Proves R4 mechanically
+  end-to-end (worker proposes PR → orchestrator enqueues → merger lands); fails before M1/M2.
+  Gate GREEN (302). Completion gate next (standard: review-arch + review-reliability via codex).
 
 ## Surprises & discoveries
 

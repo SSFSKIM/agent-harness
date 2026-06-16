@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.queue as dq  # noqa: E402
 import director.director_min as dmin  # noqa: E402
 import director.merger as merger  # noqa: E402
+import director.orchestrator as orch  # noqa: E402
 import director.run as run  # noqa: E402
 from director.decider import autonomous_decide  # noqa: E402
 
@@ -291,6 +292,36 @@ class MergerCliTest(unittest.TestCase):
         rc = merger.run_loop(base=self.base, command=["x"], once=True, driver=driver)
         self.assertEqual(rc, 0)
         self.assertEqual(seen, ["merge-T1", "merge-T2"])      # serial, FIFO
+        self.assertEqual(merger.pending_merges(base=self.base), [])
+
+
+class EndToEndPipelineTest(unittest.TestCase):
+    """M3 (activate-serialized-merge-pipeline): R4 end-to-end with mocks — a done worker
+    that opened a PR flows through reconcile (enqueue) → the standalone merger (land) →
+    merged. Fails before M1 (reconcile wouldn't enqueue) and M2 (no merger.main)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def test_done_with_pr_flows_reconcile_to_merged(self):
+        board = orch.MockBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                                 "description": "d", "prompt": "p", "state_id": "st_todo"}])
+        states = orch.resolve_states(board, "T")
+        disp = {"kind": "terminal",
+                "outcome": {"status": "done", "reason": "ok",
+                            "pr_url": "http://pr/7", "pr_branch": "feat/x"},
+                "turns": 1, "turn_id": "t"}
+        # 1) orchestrator EXECUTES the enqueue from the worker's proposed PR (D-40).
+        out = orch.reconcile(board, {"id": "u1", "workspace": str(self.tmp / "ws")},
+                             disp, 1, states, 1, queue_base=self.base)
+        self.assertTrue(out["summary"]["merge_enqueued"])
+        self.assertEqual(len(merger.pending_merges(base=self.base)), 1)
+        # 2) the standalone merger drains it (mock land worker → terminal done → merged).
+        rc = merger.main(["--once", "--mock", "--mock-scenario", "report",
+                          "--queue-dir", str(self.base)])
+        self.assertEqual(rc, 0)
+        # 3) end-to-end: the PR landed → queue empty.
         self.assertEqual(merger.pending_merges(base=self.base), [])
 
 
