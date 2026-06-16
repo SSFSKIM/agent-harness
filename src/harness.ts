@@ -1,6 +1,8 @@
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 import type { HarnessConfig } from "./config/types.js";
 import { resolveOptions } from "./config/resolveOptions.js";
+import { TaskStore } from "./tasks/store.js";
+import { createTaskMcpServer } from "./tasks/server.js";
 
 export interface HarnessDeps { query?: typeof sdkQuery; }
 
@@ -14,11 +16,20 @@ export interface Harness {
   supportedCommands(): Promise<unknown>;
   supportedModels(): Promise<unknown>;
   supportedAgents(): Promise<unknown>;
+  tasks?: TaskStore;
 }
 
 export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}): Harness {
   const query = deps.query ?? sdkQuery;
   const options = resolveOptions(config);
+
+  let tasks: TaskStore | undefined;
+  if (config.taskTools) {
+    const opts = config.taskTools === true ? {} : config.taskTools;
+    tasks = new TaskStore({ cwd: config.cwd, dir: opts.dir, listId: opts.listId, agentName: opts.agentName });
+    const existing = (options.mcpServers as Record<string, unknown>) ?? {};
+    options.mcpServers = { ...existing, "cc-tasks": createTaskMcpServer(tasks) };
+  }
   // A Harness drives ONE query at a time; `active` tracks the most recent one.
   // Control methods (rewind/supported*) are SDK control requests that require an
   // OPEN transport (sdk.d.ts:2242, streaming mode) — call them while a query is
@@ -62,5 +73,6 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     supportedCommands: call("supportedCommands"),
     supportedModels: call("supportedModels"),
     supportedAgents: call("supportedAgents"),
+    tasks,
   };
 }

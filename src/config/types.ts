@@ -35,6 +35,8 @@ export interface HarnessConfig {
   includeBuiltinAgents?: boolean;          // default true
   // checkpointing / mcp / plugins
   enableFileCheckpointing?: boolean;       // default true
+  // task tools (Phase 2 A1): durable Task* MCP server
+  taskTools?: boolean | { dir?: string; listId?: string; agentName?: string };
   mcpServers?: Record<string, McpServerConfig>;
   plugins?: SdkPluginConfig[];
   // escape hatches

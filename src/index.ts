@@ -5,3 +5,5 @@ export type { HarnessConfig, SettingSource } from "./config/types.js";
 export { DEFAULTS } from "./config/types.js";
 export { BUILTIN_AGENTS } from "./config/agents.js";
 export { BUILTIN_OUTPUT_STYLES } from "./config/outputStyle.js";
+export { TaskStore, TaskError, createTaskMcpServer } from "./tasks/index.js";
+export type { Task, TaskStatus, TaskStoreOptions, TaskListItem } from "./tasks/index.js";
