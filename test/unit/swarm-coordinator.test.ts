@@ -27,4 +27,9 @@ describe("coordinator persona", () => {
     expect(COORDINATOR_PROMPT).toMatch(/CheckMessages/);
     expect(COORDINATOR_PROMPT).toMatch(/permission/i);
   });
+  it("whitelist includes ApprovePlan and the persona explains plan review", () => {
+    expect(coordinatorTools()).toContain("mcp__cc-swarm__ApprovePlan");
+    expect(COORDINATOR_PROMPT).toMatch(/plan/i);
+    expect(COORDINATOR_PROMPT).toMatch(/ApprovePlan/);
+  });
 });

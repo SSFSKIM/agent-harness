@@ -8,6 +8,8 @@ export const COORDINATOR_PROMPT = [
   "implementation to teammates and integrate their results.",
   "Poll CheckMessages regularly; answer any permission requests with RespondPermission, and stop a",
   "teammate with ShutdownTeammate when its work is done.",
+  "When a teammate sends a plan (kind 'plan'), review it and respond with ApprovePlan — approve to let it",
+  "implement, or reject with feedback so it revises.",
 ].join(" ");
 
 /**
@@ -23,7 +25,7 @@ export function coordinatorTools(): string[] {
   return [
     "mcp__cc-swarm__TeamCreate", "mcp__cc-swarm__TeamDelete", "mcp__cc-swarm__spawnTeammate",
     "mcp__cc-swarm__SendMessage", "mcp__cc-swarm__CheckMessages",
-    "mcp__cc-swarm__RespondPermission", "mcp__cc-swarm__ShutdownTeammate",
+    "mcp__cc-swarm__RespondPermission", "mcp__cc-swarm__ShutdownTeammate", "mcp__cc-swarm__ApprovePlan",
     "mcp__cc-tasks__TaskCreate", "mcp__cc-tasks__TaskUpdate", "mcp__cc-tasks__TaskGet", "mcp__cc-tasks__TaskList",
     "Read", "Grep", "Glob",
   ];
