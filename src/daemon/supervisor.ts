@@ -27,6 +27,7 @@ export class DaemonSupervisor {
   private restartCancels = new Map<string, () => void>(); // pending restart cancellers, by id
   private stopping = new Set<string>();                   // ids being intentionally torn down
   private shuttingDown = false;
+  private sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options factory (D3)
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
     this.registry = new SessionRegistry({ dir: opts.dir });
@@ -43,6 +44,7 @@ export class DaemonSupervisor {
       this.reaper = setInterval(() => { void this.reapIdle(); }, opts.reapEvery ?? 30_000);
       this.reaper.unref?.();
     }
+    this.sessionOptions = opts.sessionOptions;
   }
 
   spawn(opts: { model?: string; restart?: RestartPolicy } = {}): string {
@@ -107,7 +109,10 @@ export class DaemonSupervisor {
   // ---- restart machinery ----
 
   private makeSession(id: string, cfg: SpawnConfig): DaemonSession {
-    const session = new DaemonSession(id, { query: this.deps.query }, cfg.model ? { model: cfg.model } : {}, this.now);
+    const base = cfg.model ? { model: cfg.model } : {};
+    const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
+    const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
+    const session = new DaemonSession(id, { query: this.deps.query }, options, this.now);
     session.done.then(() => this.handleSessionEnd(id)).catch(() => {}); // end hook
     return session;
   }

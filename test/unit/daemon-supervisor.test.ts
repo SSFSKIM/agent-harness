@@ -9,6 +9,12 @@ const dir = () => mkdtempSync(join(tmpdir(), "cc-daemon-"));
 function fakeQuery({ prompt }: any) {
   return (async function* () { for await (const t of prompt) yield { type: "result", result: "did:" + t.message.content }; })();
 }
+function captureQuery(sink: any[]) {
+  return ({ prompt, options }: any) => {
+    sink.push(options);
+    return (async function* () { for await (const t of prompt) yield { type: "result", result: "did:" + t.message.content }; })();
+  };
+}
 
 describe("DaemonSupervisor", () => {
   it("spawn registers an idle record; submit flips busy→idle and returns the result", async () => {
@@ -142,6 +148,43 @@ describe("DaemonSupervisor", () => {
     const id = sup.spawn();
     await flush();
     await expect(sup.submit(id, "x", () => {})).rejects.toThrow(/is restarting/);
+    await sup.shutdown();
+  });
+
+  // ---- D3 generic sessionOptions seam ----
+  it("merges a sessionOptions factory into each session's options (model preserved)", async () => {
+    const cap: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(cap) }, {
+      dir: dir(),
+      sessionOptions: (id) => ({ mcpServers: { probe: {} }, marker: id }),
+    });
+    const id = sup.spawn({ model: "m1" });
+    expect(cap).toHaveLength(1);
+    expect(cap[0]).toMatchObject({ model: "m1", marker: id });
+    expect(cap[0].mcpServers).toHaveProperty("probe");
+    await sup.shutdown();
+  });
+  it("a restarted session receives fresh factory options too (compose with D2)", async () => {
+    const cap: any[] = [];
+    let calls = 0;
+    const fq = ({ prompt, options }: any) => {
+      cap.push(options); calls++;
+      if (calls === 1) return (async function* () { /* dies at once */ })();
+      return (async function* () { for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content }; })();
+    };
+    let pending: (() => void) | undefined;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => {}; };
+    const sup = new DaemonSupervisor({ query: fq }, {
+      dir: dir(), restart: "on-failure", scheduleRestart,
+      sessionOptions: () => ({ mcpServers: { "cc-tasks": {} } }),
+    });
+    sup.spawn();
+    await flush();                 // session 1 dies → restart scheduled
+    pending!();                    // fire restart → session 2 constructed
+    expect(cap).toHaveLength(2);
+    expect(cap[0].mcpServers).toHaveProperty("cc-tasks");
+    expect(cap[1].mcpServers).toHaveProperty("cc-tasks");
+    expect(cap[1].mcpServers).not.toBe(cap[0].mcpServers); // fresh object per session
     await sup.shutdown();
   });
 });
