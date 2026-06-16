@@ -31,7 +31,7 @@ from director.worker import autonomy
 # done/failed/blocked in `.harness.json` `director.states` (the CLI flags still win
 # over both). `failed`/`blocked` are OPTIONAL (None = no such state → leave the ticket
 # in `started` + comment).
-DEFAULT_STATE_NAMES = config.DEFAULTS["states"]
+DEFAULT_STATE_NAMES = dict(config.DEFAULTS["states"])  # copy — never alias the shared DEFAULTS
 
 
 def resolve_states(board, team: str, names: dict | None = None) -> dict:
