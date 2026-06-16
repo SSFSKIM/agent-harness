@@ -38,7 +38,7 @@ export interface HarnessConfig {
   // task tools (Phase 2 A1): durable Task* MCP server
   taskTools?: boolean | { dir?: string; listId?: string; agentName?: string };
   // swarm / coordinator (Phase 2 A2): peer teammate orchestration over an in-process bus
-  swarm?: boolean | { team?: string; coordinatorPersona?: boolean; tools?: string[]; permissions?: { allow?: string[]; escalateToCoordinator?: boolean } };
+  swarm?: boolean | { team?: string; coordinatorPersona?: boolean; tools?: string[]; permissions?: { allow?: string[]; escalateToCoordinator?: boolean; onPlanApproval?: "default" | "acceptEdits" | "auto" | "bypassPermissions" } };
   mcpServers?: Record<string, McpServerConfig>;
   plugins?: SdkPluginConfig[];
   // escape hatches

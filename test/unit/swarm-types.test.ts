@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 import {
   SwarmError,
   teamCreateShape, teamDeleteShape, spawnTeammateShape, sendMessageShape, checkMessagesShape,
-  respondPermissionShape, shutdownTeammateShape,
+  respondPermissionShape, shutdownTeammateShape, approvePlanShape,
 } from "../../src/swarm/types.js";
 
 describe("swarm types", () => {
@@ -32,5 +32,16 @@ describe("swarm types", () => {
   it("shutdownTeammateShape requires a name", () => {
     expect(z.object(shutdownTeammateShape).parse({ name: "w1" }).name).toBe("w1");
     expect(() => z.object(shutdownTeammateShape).parse({})).toThrow();
+  });
+  it("spawnTeammateShape accepts an optional plan flag", () => {
+    const ok = z.object(spawnTeammateShape).parse({ teamId: "team-1", name: "w1", prompt: "go", plan: true });
+    expect(ok.plan).toBe(true);
+    expect(z.object(spawnTeammateShape).parse({ teamId: "team-1", name: "w1", prompt: "go" }).plan).toBeUndefined();
+    expect(() => z.object(spawnTeammateShape).parse({ teamId: "team-1", name: "w1", prompt: "go", plan: "yes" })).toThrow();
+  });
+  it("approvePlanShape requires requestId + an approve/reject decision", () => {
+    const ok = z.object(approvePlanShape).parse({ requestId: "req-1", decision: "approve", feedback: "lgtm" });
+    expect(ok.decision).toBe("approve");
+    expect(() => z.object(approvePlanShape).parse({ requestId: "req-1", decision: "allow" })).toThrow();
   });
 });

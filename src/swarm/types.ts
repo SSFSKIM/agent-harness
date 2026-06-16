@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 
-export type MessageKind = "text" | "task" | "result" | "idle" | "permission" | "shutdown";
+export type MessageKind = "text" | "task" | "result" | "idle" | "permission" | "shutdown" | "plan";
 
 export interface Message {
   from: string;            // sender agent name
@@ -16,12 +16,15 @@ export interface TeammateSpec {
   teamId: string;
   agent?: string;          // per-teammate model hint (30.9); forwarded to the teammate query as options.model
   prompt: string;          // seed turn
+  plan?: boolean;          // spawn in plan mode → ExitPlanMode escalates to the coordinator (A2c)
 }
+
+export type PostApprovalMode = "default" | "acceptEdits" | "auto" | "bypassPermissions";
 
 export interface SwarmOptions {
   cwd?: string;
   taskOptions?: { dir?: string; listId?: string; agentName?: string };
-  permissions?: { allow?: string[]; escalateToCoordinator?: boolean };
+  permissions?: { allow?: string[]; escalateToCoordinator?: boolean; onPlanApproval?: PostApprovalMode };
 }
 
 /** Minimal structural type for the SDK `query` fn so units can be tested with a fake (DI). */
@@ -42,6 +45,7 @@ export const spawnTeammateShape = {
   name: z.string(),
   agent: z.string().optional(),
   prompt: z.string(),
+  plan: z.boolean().optional(),
 };
 export const sendMessageShape = {
   to: z.string(),
@@ -59,6 +63,15 @@ export const respondPermissionShape = {
   message: z.string().optional(),
 };
 export const shutdownTeammateShape = { name: z.string() };
+
+export interface PlanDecision { decision: "approve" | "reject"; feedback?: string; }
+
+const PLAN_DECISION = z.enum(["approve", "reject"]);
+export const approvePlanShape = {
+  requestId: z.string(),
+  decision: PLAN_DECISION,
+  feedback: z.string().optional(),
+};
 
 export type TeamCreateInput = z.infer<z.ZodObject<typeof teamCreateShape>>;
 export type SpawnTeammateInput = z.infer<z.ZodObject<typeof spawnTeammateShape>>;
