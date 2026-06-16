@@ -125,15 +125,16 @@ You do not poll. Stand up the loop once, then let worker turn-ends **event-wake*
    ```
    python3 -m director.orchestrator --team <id>        # run_in_background
    ```
-2. **Arm a persistent Monitor on the queue** — `director.watch` emits one line per
-   newly-pending request, so each becomes a session notification (no timer poll on you;
-   the polling lives in this subprocess). Watch both turn-ends and merge escalations:
+2. **Arm a persistent Monitor on the queue + status snapshot** — `director.watch` emits
+   one line per newly-pending request AND one `runReport` per run-level terminal, so each
+   becomes a session notification (no timer poll on you; the polling lives in this
+   subprocess). Watch turn-ends, merge escalations, and run-level reports:
    ```
-   python3 -m director.watch --kinds turnReview,mergeReview   # Monitor, persistent
+   python3 -m director.watch --kinds turnReview,mergeReview,runReport --status-dir <dir>   # Monitor, persistent
    ```
 3. **On each event**, read it + the `--request` join, then act: a `turnReview` →
-   `answer_turn` per §4 (reply / terminal / escalate); a `mergeReview` → handle per §7.
-   The blocked worker resumes (or the merge escalation is resolved).
+   `answer_turn` per §4 (reply / terminal / escalate); a `mergeReview` → handle per §7;
+   a `runReport` → report per §9. The blocked worker resumes (or the escalation/run is handled).
 4. **Surface genuine taste to the human via `PushNotification`** — that pulls the
    *human's* attention; everything non-taste you answer yourself.
 
@@ -195,3 +196,30 @@ talks to the human directly — surfacing here is the whole point (R6/R7).
 When you escalate (or the human asks "what's happening"), lead with the snapshot:
 in-flight tickets and their attempt/wave, anything stuck and why, recent outcomes.
 `python3 -m director.status` is that report's source of truth — don't narrate from memory.
+
+## 9. Run-level reporting (pull the human when a run ends)
+
+§8 is reporting *on demand*. This is the **proactive** counterpart: when an orchestration
+run reaches a terminal — `director.watch` emits a **`runReport`** (the run's `stopped_reason`
+went non-None: drained / stuck / max_passes / max_dispatched / poll_failed) — you decide
+whether the human should be **pulled in now**. The run-level report exists because human
+attention is the scarce resource: a long unattended run shouldn't require the human to keep
+checking; you pull them at the moments that warrant it, and stay quiet otherwise.
+
+On a `runReport`:
+1. **Read the picture** — `python3 -m director.status` (the runReport's `summary` is just a
+   teaser; the snapshot is the truth). Note the outcome, done/failed/blocked/escalated counts,
+   what is stuck and why, and any open merge escalations (§7).
+2. **Compose a digest** — a few lines a human can act on: what the run did, what (if anything)
+   needs them, and why. Ground it in `director.status`, not memory.
+3. **Decide the pull (the taste-vs-handle line, §2):**
+   - **`stuck` / `poll_failed` / a failure pattern you can't resolve** → a real "you're needed"
+     pull: `PushNotification` with the digest + the specific unblock the human owns (a failed
+     blocker, a cycle, a decision). This is the run-level analog of an escalation.
+   - **clean `drained`** → usually a quiet "run complete" — record it; push only if the human
+     asked to be told on completion (don't spend their attention on success).
+   - A failure *pattern* (many `failed`/high `attempts` across tickets) is **your judgment** from
+     the snapshot — code never flags it for you; that's why this is a procedure, not a gate.
+
+Run-level reporting is **watched-mode only** — un-watched (`--autonomous`) has no live you to
+pull, so no `runReport` is acted on (the run's outcome is read from `director.status` after).

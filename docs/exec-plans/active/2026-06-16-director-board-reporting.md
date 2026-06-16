@@ -96,7 +96,15 @@ Design is the spec's (D-1..D-5); here only execution choices.
   emit-once-per-run + new-run-re-emits, no-emit-until-terminal, tolerant of missing/empty, --kinds
   excludes runReport, and a `main --once` test driving a real `StatusWriter` snapshot → runReport.
   Gate GREEN (317).
-- [ ] M2 — DIRECTOR.md procedure + integration test + completion gate.
+- [x] (2026-06-16) M2 — DIRECTOR.md procedure + integration test. `docs/DIRECTOR.md`: §5 step 2
+  watch line gains `runReport` + `--status-dir` (and step 3 routes `runReport` → §9); new §9
+  "Run-level reporting (pull the human when a run ends)" — on a runReport: read `director.status`,
+  compose a digest, and decide the pull on the taste-vs-handle line (stuck/poll_failed/failure-pattern
+  = "you're needed" push; clean drained = quiet record; failure-pattern is the Director's judgment,
+  not code); watched-mode only. Integration test `OrchestratorToWatchIntegrationTest`: a real
+  `orchestrator.run_until_drained` (faked dispatch → drained) writes status.json → `watch --once
+  --status-dir` emits one runReport with `reason=="drained"`. Gate GREEN (318). Completion gate
+  (targeted: review-reliability via codex) next.
 
 ## Surprises & discoveries
 

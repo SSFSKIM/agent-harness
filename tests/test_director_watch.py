@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from unittest import mock  # noqa: E402
+import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.status as ds  # noqa: E402
 import director.watch as watch  # noqa: E402
@@ -119,6 +121,38 @@ class WatchMainTest(unittest.TestCase):
         self.assertEqual(ev["reason"], "drained")
         self.assertEqual(ev["run"]["stopped_reason"], "drained")
         self.assertEqual(ev["summary"]["by_status"], {"completed": 1})
+
+
+class OrchestratorToWatchIntegrationTest(unittest.TestCase):
+    def test_run_terminal_emits_runreport(self):
+        # M2: a real orchestrator run (finished() → status.json) makes watch emit a
+        # runReport whose reason matches the run's stopped_reason — the whole signal path.
+        sdir = Path(tempfile.mkdtemp()) / "s"
+        board = orch.MockBoard.demo()
+        states = orch.resolve_states(board, "T")
+
+        def fake_dispatch(ticket, **kw):
+            return {"kind": "terminal", "outcome": {"status": "done", "reason": "ok"},
+                    "turns": 1, "turn_id": "t"}
+
+        with mock.patch("director.orchestrator.dispatch", fake_dispatch):
+            result = orch.run_until_drained(board, ["x"], team="T", states=states,
+                                            status=ds.StatusWriter(base=sdir))
+        self.assertEqual(result["stopped_reason"], "drained")
+
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            watch.main(["--once", "--queue-dir", str(Path(tempfile.mkdtemp()) / "q"),
+                        "--status-dir", str(sdir), "--kinds", "runReport"])
+        finally:
+            sys.stdout = old
+        lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+        self.assertEqual(len(lines), 1)
+        ev = json.loads(lines[0])
+        self.assertEqual(ev["kind"], "runReport")
+        self.assertEqual(ev["reason"], "drained")
 
 
 if __name__ == "__main__":
