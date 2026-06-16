@@ -157,6 +157,19 @@ class DriveLoopTest(unittest.TestCase):
         self.assertEqual(tel["turn_count"], 1)
         self.assertEqual(tel["session_id"], f"{disp['thread_id']}-{disp['turn_id']}")
 
+    def test_drive_cancelled_between_turns(self):
+        # a pre-set cancel_event makes drive return the distinct `cancelled` disposition
+        # (release, NOT failed/retry) before running any turn (active-run-reconciliation).
+        import threading
+        ev = threading.Event()
+        ev.set()
+        disp = run.drive(self._ticket(), command=_cmd("plain"), decide=autonomous_decide,
+                         workspace_root=self.tmp / "wscxl", max_turns=8, cancel_event=ev)
+        self.assertEqual(disp["kind"], "cancelled")
+        self.assertEqual(disp["reason"], "reconciliation")
+        self.assertEqual(disp["turns"], 0)  # stopped before the first turn ran
+        self.assertIn("telemetry", disp)    # run facts still attached
+
 
 class AutonomousDeciderUnitTest(unittest.TestCase):
     def test_done_and_blocked_are_terminal(self):

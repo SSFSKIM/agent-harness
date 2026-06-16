@@ -153,5 +153,49 @@ class ExtractUsageTest(unittest.TestCase):
         self.assertIsNone(appsrv.extract_rate_limits({"other": 1}))
 
 
+class CancelTest(unittest.TestCase):
+    """Reconciliation cancel plumbing (active-run-reconciliation M2)."""
+
+    def test_turncancelled_is_not_appservererror(self):
+        # drive must distinguish a cancel (release, no retry) from a failure
+        # (retry-once), so the cancel exception is deliberately NOT an AppServerError.
+        self.assertFalse(issubclass(appsrv.TurnCancelled, appsrv.AppServerError))
+
+    def _sleeper(self, ev):
+        # a subprocess that never emits output → the read wait blocks until cancel
+        c = appsrv.AppServerClient([sys.executable, "-c", "import time; time.sleep(30)"],
+                                   cwd=tempfile.gettempdir(), read_timeout_s=10.0,
+                                   cancel_event=ev)
+        return c.start()
+
+    def test_wait_readable_raises_when_event_preset(self):
+        import threading
+        ev = threading.Event()
+        ev.set()
+        c = self._sleeper(ev)
+        try:
+            with self.assertRaises(appsrv.TurnCancelled):
+                c._wait_readable()
+        finally:
+            c.stop()
+
+    def test_wait_readable_interrupts_mid_wait(self):
+        import threading
+        import time
+        ev = threading.Event()
+        c = self._sleeper(ev)
+        timer = threading.Timer(0.3, ev.set)
+        timer.start()
+        try:
+            start = time.monotonic()
+            with self.assertRaises(appsrv.TurnCancelled):
+                c._wait_readable()
+            # interrupted within ~poll+0.3s — well before the 10s read_timeout (R4)
+            self.assertLess(time.monotonic() - start, 5.0)
+        finally:
+            timer.cancel()
+            c.stop()
+
+
 if __name__ == "__main__":
     unittest.main()

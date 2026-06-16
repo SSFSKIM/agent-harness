@@ -162,10 +162,22 @@ ticket is externally moved).
 - [x] (2026-06-16) M1 — `board.fetch_issue_states_by_ids` (linear module fn +
   `_ISSUE_STATES` query + LinearBoard method + MockBoard method; empty-ids → no call).
   3 new linear tests (normalize, empty-no-call, omit-unknown). Gate GREEN at 377.
-- [ ] M2 — cancellation plumbing (TurnCancelled + cancel_event)
+- [x] (2026-06-16) M2 — cancellation plumbing. `app_server.TurnCancelled` (standalone),
+  `AppServerClient(cancel_event=)` + `_wait_readable` (slice-polls `select` ≤0.5s,
+  checks the event mid-turn → raises; still enforces read_timeout_s). `run.drive(
+  cancel_event=)` threads it through `_prepare`, checks between turns, and wraps the
+  WHOLE `with client` body in `try/except TurnCancelled` → `{kind:"cancelled"}`. 4 tests
+  (drive between-turns cancel; app_server pre-set + mid-wait interrupt + not-AppServerError).
+  Gate GREEN at 381.
 - [ ] M3 — orchestrator reconciliation wiring + config knob
 
 ## Surprises & discoveries
+- 2026-06-16 (M2): a reconciliation cancel can land during the codex **handshake**
+  (`initialize`/`thread_start`), not just mid-turn — both call `_read_msg`→`_wait_readable`.
+  First cut wrapped only the turn loop, so a handshake-time `TurnCancelled` escaped →
+  `dispatch` would mark it failed→retry. Fix: wrap the ENTIRE `with client` body in
+  `try/except TurnCancelled`. (Caught by `test_drive_cancelled_between_turns` with a
+  pre-set event, which lands in `initialize`.)
 
 ## Decision log
 - 2026-06-16: **wait(timeout=) + main-thread reconcile, no reconciler thread** (D-60) —

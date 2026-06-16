@@ -19,7 +19,7 @@ from pathlib import Path
 from director import config, taxonomy
 from director.decider import autonomous_decide
 from director.worker import autonomy, policy as worker_policy, tools as worker_tools
-from director.worker.app_server import AppServerClient
+from director.worker.app_server import AppServerClient, TurnCancelled
 from director.worker.approval import make_seam
 
 DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
@@ -77,7 +77,7 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
 
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              read_timeout_s, tool_executor, install_skills,
-             worker_env: dict | None = None) -> AppServerClient:
+             worker_env: dict | None = None, cancel_event=None) -> AppServerClient:
     """Build (but do not start) the worker client for one ticket: resolve+create the
     workspace, optionally install the vendored skills, and wire the approval seam.
     Shared by the single-turn `run_ticket` and the multi-turn `drive`.
@@ -94,7 +94,7 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
     return AppServerClient(command, cwd=ws, on_server_request=seam,
                            tool_executor=tool_executor, read_timeout_s=read_timeout_s,
-                           env=worker_env)
+                           env=worker_env, cancel_event=cancel_event)
 
 
 def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
@@ -127,7 +127,7 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
           timeout_s: float = 300.0, read_timeout_s: float = 30.0,
           tools=None, tool_executor=None, install_skills: bool = False,
           approval_policy: str = "untrusted", sandbox: str = "workspace-write",
-          max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1) -> dict:
+          max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1, cancel_event=None) -> dict:
     """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
     until the worker is terminal (or `max_turns` is hit). This is the multi-turn
     slice's core: a ticket is a thread, a turn end is an *event* not a completion,
@@ -162,7 +162,7 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
     client = _prepare(ticket, command=command, queue_base=queue_base,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=combined,
-                      install_skills=install_skills)
+                      install_skills=install_skills, cancel_event=cancel_event)
     turns = 0
     turn_id = None
     thread_id = None
@@ -179,37 +179,55 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
         return {"tokens": usage, "turn_count": turns, "session_id": sid,
                 "last_message": final_message, "rate_limits": rate_limits}
 
+    def _cancelled() -> dict:
+        # Active-run reconciliation stopped this worker (its ticket left `started`).
+        # A DISTINCT disposition kind from "failed" so the orchestrator releases it
+        # without a retry (D-59/D-62); carries the run facts like every other return.
+        return {"kind": "cancelled", "reason": "reconciliation", "turns": turns,
+                "turn_id": turn_id, "final_message": final_message,
+                "thread_id": thread_id, "telemetry": _telemetry()}
+
     with client as c:
-        c.initialize()
-        thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
-                                   approval_policy=approval_policy, sandbox=sandbox)
-        # First turn: frame the ticket with the multi-turn terminal contract so the
-        # worker knows to call report_outcome at terminal (else un-watched it would
-        # loop to stuck). Later turns carry the decider's directive verbatim.
-        input_text = taxonomy.with_terminal_contract(ticket["prompt"])
-        for i in range(max_turns):
-            turns = i + 1
-            sink.pop("outcome", None)  # fresh terminal-signal slot for this turn
-            result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
-            turn_id = result.get("turn_id")
-            final_message = result.get("final_message")
-            if result.get("usage") is not None:        # keep latest absolute totals
-                usage = result["usage"]
-            if result.get("rate_limits") is not None:
-                rate_limits = result["rate_limits"]
-            status = result.get("status")
-            base = {"turns": turns, "turn_id": turn_id,
-                    "final_message": final_message, "thread_id": thread_id,
-                    "telemetry": _telemetry()}
-            if status != "completed":  # turn/failed | turn/cancelled — not a disposition
-                return {"kind": "failed", "status": status, **base}
-            disp = decide({"ticket": ticket, "turn_index": i, "status": status,
-                           "final_message": final_message, "outcome": sink.get("outcome"),
-                           "attempt": attempt})
-            if disp.get("kind") in ("terminal", "escalate"):
-                return {**disp, **base}
-            # kind == "reply": continue the SAME thread with the directive (board untouched)
-            input_text = disp.get("reply") or ""
+        # Wrap the WHOLE session: a reconciliation cancel can land during the handshake
+        # (initialize/thread_start) or mid-turn (run_turn) — both surface as TurnCancelled
+        # and must release, not fail-and-retry (D-59).
+        try:
+            c.initialize()
+            thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
+                                       approval_policy=approval_policy, sandbox=sandbox)
+            # First turn: frame the ticket with the multi-turn terminal contract so the
+            # worker knows to call report_outcome at terminal (else un-watched it would
+            # loop to stuck). Later turns carry the decider's directive verbatim.
+            input_text = taxonomy.with_terminal_contract(ticket["prompt"])
+            for i in range(max_turns):
+                # Between-turns cancel check (covers the gap while a watched decider was
+                # parked); mid-turn cancellation arrives as TurnCancelled from run_turn.
+                if cancel_event is not None and cancel_event.is_set():
+                    return _cancelled()
+                turns = i + 1
+                sink.pop("outcome", None)  # fresh terminal-signal slot for this turn
+                result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
+                turn_id = result.get("turn_id")
+                final_message = result.get("final_message")
+                if result.get("usage") is not None:        # keep latest absolute totals
+                    usage = result["usage"]
+                if result.get("rate_limits") is not None:
+                    rate_limits = result["rate_limits"]
+                status = result.get("status")
+                base = {"turns": turns, "turn_id": turn_id,
+                        "final_message": final_message, "thread_id": thread_id,
+                        "telemetry": _telemetry()}
+                if status != "completed":  # turn/failed | turn/cancelled — not a disposition
+                    return {"kind": "failed", "status": status, **base}
+                disp = decide({"ticket": ticket, "turn_index": i, "status": status,
+                               "final_message": final_message, "outcome": sink.get("outcome"),
+                               "attempt": attempt})
+                if disp.get("kind") in ("terminal", "escalate"):
+                    return {**disp, **base}
+                # kind == "reply": continue the SAME thread with the directive (board untouched)
+                input_text = disp.get("reply") or ""
+        except TurnCancelled:  # mid-turn reconciliation cancel (D-59) — release, no retry
+            return _cancelled()
     return {"kind": "stuck", "reason": "max_turns", "turns": turns,
             "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id,
             "telemetry": _telemetry()}

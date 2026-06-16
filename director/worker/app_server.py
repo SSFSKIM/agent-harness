@@ -42,6 +42,19 @@ class ReadTimeout(RuntimeError):
     """No output from the app-server within read_timeout_s."""
 
 
+class TurnCancelled(RuntimeError):
+    """The active turn was cancelled out-of-band (a reconciliation `cancel_event`
+    fired). DELIBERATELY not an `AppServerError` subclass — `director.run.drive`
+    must distinguish a cancel (→ no retry) from a genuine failure (→ retry-once),
+    so it catches this exception separately (active-run-reconciliation slice, D-59)."""
+
+
+# Max latency for observing a mid-turn `cancel_event`: the read wait polls `select`
+# in slices no longer than this, so a cancel is seen within ~_CANCEL_POLL_S even
+# inside a long turn (spec R4), while still enforcing the read_timeout_s budget.
+_CANCEL_POLL_S = 0.5
+
+
 def normalize_tool_result(result) -> dict:
     """Coerce a tool_executor return into the Codex dynamic-tool result shape
     {success, output, contentItems:[{type:"inputText", text}]} (confirmed against
@@ -173,7 +186,8 @@ class AppServerClient:
                  on_server_request: Callable[[str, dict], object] | None = None,
                  tool_executor: Callable[[str, dict], dict] | None = None,
                  read_timeout_s: float = 10.0,
-                 env: dict | None = None):
+                 env: dict | None = None,
+                 cancel_event=None):
         self.command = command
         self.cwd = str(cwd)
         # The worker subprocess environment. `None` inherits the parent env (legacy /
@@ -184,6 +198,10 @@ class AppServerClient:
         self.on_server_request = on_server_request
         self.tool_executor = tool_executor
         self.read_timeout_s = read_timeout_s
+        # Optional reconciliation cancel signal (threading.Event). When set, the read
+        # wait raises TurnCancelled so the orchestrator can stop a worker whose ticket
+        # a human moved out of `started` mid-flight (active-run-reconciliation, D-59).
+        self._cancel_event = cancel_event
         self._id = 0
         self._proc: subprocess.Popen | None = None
         self._rbuf = b""  # raw stdout bytes awaiting line framing
@@ -235,6 +253,26 @@ class AppServerClient:
         self._proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
         self._proc.stdin.flush()
 
+    def _wait_readable(self) -> None:
+        """Block until stdout is readable. Polls `select` in slices ≤ _CANCEL_POLL_S so
+        a mid-turn `cancel_event` is observed within ~that slice (raising TurnCancelled,
+        spec R4), while still enforcing read_timeout_s of total inactivity (raising
+        ReadTimeout). Equivalent to one `select(read_timeout_s)` when no cancel_event is
+        wired — just woken periodically to check the flag."""
+        assert self._proc and self._proc.stdout
+        waited = 0.0
+        while True:
+            if self._cancel_event is not None and self._cancel_event.is_set():
+                raise TurnCancelled("turn cancelled by reconciliation")
+            remaining = self.read_timeout_s - waited
+            if remaining <= 0:
+                raise ReadTimeout("no app-server output within read timeout")
+            slice_s = min(_CANCEL_POLL_S, remaining)
+            ready, _, _ = select.select([self._proc.stdout], [], [], slice_s)
+            if ready:
+                return
+            waited += slice_s
+
     def _read_msg(self) -> dict | None:
         """Next JSON message, or None at EOF. Frames lines from a raw byte buffer
         (no buffered readline) so select() governs exactly what we have read."""
@@ -247,9 +285,7 @@ class AppServerClient:
                 if not line:
                     continue
                 return json.loads(line.decode("utf-8"))
-            ready, _, _ = select.select([self._proc.stdout], [], [], self.read_timeout_s)
-            if not ready:
-                raise ReadTimeout("no app-server output within read timeout")
+            self._wait_readable()  # blocks until readable; raises ReadTimeout/TurnCancelled
             chunk = os.read(self._proc.stdout.fileno(), 65536)
             if not chunk:  # EOF — flush any trailing line
                 rest, self._rbuf = self._rbuf.strip(), b""
