@@ -151,6 +151,33 @@ class LinearWriteMethodsTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             linear.update_issue_state("u1", "s2", api_key="k", http_post=post)
 
+    def test_fetch_issue_states_by_ids_normalizes(self):
+        cap = {}
+        resp = {"data": {"issues": {"nodes": [
+            {"id": "u1", "state": {"id": "s2", "name": "Done", "type": "completed"}},
+            {"id": "u2", "state": {"id": "s1", "name": "In Progress", "type": "started"}}]}}}
+        out = linear.fetch_issue_states_by_ids(["u1", "u2"], api_key="k",
+                                               http_post=_capturing_post(cap, resp))
+        self.assertEqual(out["u1"], {"state_id": "s2", "state_name": "Done",
+                                     "state_type": "completed"})
+        self.assertEqual(out["u2"]["state_type"], "started")
+        self.assertEqual(cap["body"]["variables"], {"ids": ["u1", "u2"]})
+        self.assertIn("issues(filter:", cap["body"]["query"].replace(" ", ""))
+
+    def test_fetch_issue_states_by_ids_empty_makes_no_call(self):
+        def boom(url, data, headers):
+            raise AssertionError("http_post must not be called for empty ids")
+        self.assertEqual(linear.fetch_issue_states_by_ids([], api_key="k", http_post=boom), {})
+
+    def test_fetch_issue_states_by_ids_omits_unknown(self):
+        # an id absent from the response is simply not in the map (caller stays conservative)
+        resp = {"data": {"issues": {"nodes": [
+            {"id": "u1", "state": {"id": "s1", "name": "Todo", "type": "unstarted"}}]}}}
+        out = linear.fetch_issue_states_by_ids(["u1", "ghost"], api_key="k",
+                                               http_post=_capturing_post({}, resp))
+        self.assertIn("u1", out)
+        self.assertNotIn("ghost", out)
+
     def test_linear_board_binds_key_and_delegates(self):
         cap = {}
         resp = {"data": {"issues": {"nodes": []}}}

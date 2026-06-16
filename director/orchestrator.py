@@ -456,6 +456,19 @@ class MockBoard:
         sid = self._issues[issue_id]["state_id"]
         return next((n for n, v in self._states.items() if v["id"] == sid), sid)
 
+    def fetch_issue_states_by_ids(self, issue_ids) -> dict:
+        """Current {id: {state_id, state_name, state_type}} for the given ids present in
+        the board (active-run reconciliation read). Ids absent from the board are
+        omitted (the caller never cancels on missing data)."""
+        out: dict = {}
+        for iid in issue_ids:
+            iss = self._issues.get(iid)
+            if iss is None:
+                continue
+            out[iid] = {"state_id": iss["state_id"], "state_name": self.state_name(iid),
+                        "state_type": self._state_type(iid)}
+        return out
+
 
 def _build_board(args):
     if args.mock:

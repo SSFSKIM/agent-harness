@@ -159,7 +159,9 @@ ticket is externally moved).
 
 ## Progress log
 - [ ] (2026-06-16) Plan created; base_commit 6bb12b8, review_level standard.
-- [ ] M1 — board.fetch_issue_states_by_ids
+- [x] (2026-06-16) M1 — `board.fetch_issue_states_by_ids` (linear module fn +
+  `_ISSUE_STATES` query + LinearBoard method + MockBoard method; empty-ids → no call).
+  3 new linear tests (normalize, empty-no-call, omit-unknown). Gate GREEN at 377.
 - [ ] M2 — cancellation plumbing (TurnCancelled + cancel_event)
 - [ ] M3 — orchestrator reconciliation wiring + config knob
 

@@ -63,6 +63,14 @@ mutation DirectorComment($id: String!, $body: String!) {
 }
 """.strip()
 
+_ISSUE_STATES = """
+query DirectorIssueStates($ids: [ID!]) {
+  issues(filter: { id: { in: $ids } }) {
+    nodes { id state { id name type } }
+  }
+}
+""".strip()
+
 
 def load_api_key(env_path: str | Path = ".env") -> str | None:
     """LINEAR_API_KEY from the environment, falling back to a repo-root .env line."""
@@ -198,6 +206,33 @@ def comment_issue(issue_id: str, body: str, *, api_key: str | None = None,
     return bool((data.get("commentCreate") or {}).get("success"))
 
 
+def fetch_issue_states_by_ids(issue_ids, *, api_key: str | None = None,
+                              endpoint: str = DEFAULT_ENDPOINT,
+                              http_post: Callable[[str, bytes, dict], dict] = urllib_post
+                              ) -> dict[str, dict]:
+    """Current workflow state of each given issue id, as
+    `{id: {"state_id", "state_name", "state_type"}}` — the active-run reconciliation
+    read (Symphony §16.3). An **empty `issue_ids` makes NO API call** (returns `{}`;
+    Symphony §17.3 "empty fetch → no call"). Ids absent from the response are simply
+    not in the returned map — the caller treats an unknown id conservatively (never
+    cancels on missing data)."""
+    ids = list(issue_ids)
+    if not ids:
+        return {}
+    data = _post(_ISSUE_STATES, {"ids": ids},
+                 api_key=api_key, endpoint=endpoint, http_post=http_post)
+    nodes = ((data.get("issues") or {}).get("nodes")) or []
+    out: dict[str, dict] = {}
+    for n in nodes:
+        iid = n.get("id")
+        if iid is None:
+            continue
+        st = n.get("state") or {}
+        out[iid] = {"state_id": st.get("id"), "state_name": st.get("name"),
+                    "state_type": st.get("type")}
+    return out
+
+
 class LinearBoard:
     """Stateful board adapter binding auth + endpoint, exposing the orchestrator's
     read/claim/reconcile surface over the module functions. The orchestrator depends
@@ -225,3 +260,7 @@ class LinearBoard:
     def comment_issue(self, issue_id: str, body: str) -> bool:
         return comment_issue(issue_id, body, api_key=self.api_key,
                              endpoint=self.endpoint, http_post=self.http_post)
+
+    def fetch_issue_states_by_ids(self, issue_ids) -> dict[str, dict]:
+        return fetch_issue_states_by_ids(issue_ids, api_key=self.api_key,
+                                         endpoint=self.endpoint, http_post=self.http_post)
