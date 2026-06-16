@@ -51,3 +51,10 @@ owner: harness
   머지 thrash 를 단일 소비자로 제거. merger 는 `drive`+decider 재사용(새 turn 머신 0). multi-turn
   의 미뤄둔 "done-is-really-done" + visibility 의 "terminal sanity-check" 을 닫음. Playwright-in-
   sandbox 실행 가능성은 ExecPlan PoC.
+- [Director board reporting (run-level pull)](2026-06-16-director-board-reporting.md)
+  — Phase 4 로드맵의 "board 리포팅". 목적 = 사람 attention pull(내구성 기록 아님): unattended
+  watched 런이 종료 국면(drained/stuck/max/poll_failed)에 닿으면 `director.watch` 가 status
+  스냅샷을 tail 해 `runReport` 이벤트를 emit → event-woken Director 가 `director.status` 로
+  digest 를 작성해 `PushNotification` 으로 사람을 끌어들인다. terminal-only emit(중간 조기 pull
+  defer), watched 전용, 코드는 리포트-가치 판단 0(DIRECTOR.md 절차). watch + doc 만 — orchestrator
+  변경 0.
