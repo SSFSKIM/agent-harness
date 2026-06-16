@@ -115,6 +115,58 @@ describe("SwarmRuntime", () => {
     expect((await decision).behavior).toBe("allow");
     return rt.disposeAll();
   });
+  it("spawns a plan-mode teammate, escalates its ExitPlanMode plan, and approves it (mode transition + allow)", async () => {
+    const modes: string[] = [];
+    let cut: any;
+    const fq = ({ prompt, options }: any) => {
+      cut = options.canUseTool;
+      const gen: any = (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
+      gen.setPermissionMode = async (m: string) => { modes.push(m); };
+      return gen;
+    };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() }, permissions: { onPlanApproval: "acceptEdits" } });
+    const team = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "x", plan: true });
+
+    const decision = cut("ExitPlanMode", { plan: "# Plan\nship it", planFilePath: "/tmp/p.md" }); // teammate presents plan
+    const env = rt.checkMessages().find((m) => m.kind === "plan");
+    expect(env).toBeTruthy();
+    expect((env!.data as any).plan).toContain("ship it");
+    const requestId = (env!.data as any).requestId;
+
+    expect(await rt.respondPlan(requestId, "approve")).toBe(true);
+    expect(modes).toEqual(["acceptEdits"]);                 // transitioned to the configured post-approval mode
+    const r = await decision;
+    expect(r.behavior).toBe("allow");
+    expect((r as any).updatedInput).toEqual({ plan: "# Plan\nship it", planFilePath: "/tmp/p.md" });
+    await rt.disposeAll();
+  });
+  it("sets permissionMode:'plan' only for plan-mode teammates; respondPlan on an unknown id is false", async () => {
+    const seen: any[] = [];
+    const fq = ({ prompt, options }: any) => { seen.push(options); return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })(); };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
+    const t = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: t.id, name: "p1", prompt: "x", plan: true });
+    rt.spawnTeammate({ teamId: t.id, name: "n1", prompt: "x" });
+    expect(seen[0].permissionMode).toBe("plan");
+    expect(seen[1].permissionMode).toBeUndefined();
+    expect(await rt.respondPlan("req-nope", "approve")).toBe(false);
+    await rt.disposeAll();
+  });
+  it("a reject resolves the teammate's ExitPlanMode to deny with feedback", async () => {
+    let cut: any;
+    const fq = ({ prompt, options }: any) => { cut = options.canUseTool; return (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })(); };
+    const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });
+    const t = rt.createTeam("a");
+    rt.spawnTeammate({ teamId: t.id, name: "w1", prompt: "x", plan: true });
+    const decision = cut("ExitPlanMode", { plan: "bad plan" });
+    const id = (rt.checkMessages().find((m) => m.kind === "plan")!.data as any).requestId;
+    await rt.respondPlan(id, "reject", "needs tests");
+    const r = await decision;
+    expect(r.behavior).toBe("deny");
+    expect((r as any).message).toBe("needs tests");
+    await rt.disposeAll();
+  });
   it("requestShutdown emits a shutdown ack and unregisters the teammate", async () => {
     const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
     const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });

@@ -4,11 +4,12 @@ import type { Team } from "./team.js";
 import { TeammateSession } from "./teammate.js";
 import { NATIVE_TASK_TOOLS } from "./coordinator.js";
 import { PermissionBroker } from "./permissions.js";
+import { PlanApprovalBroker } from "./planApproval.js";
 import { TaskStore } from "../tasks/store.js";
 import { createTaskMcpServer } from "../tasks/server.js";
 import type { Task } from "../tasks/types.js";
 import { SwarmError } from "./types.js";
-import type { Message, MessageKind, QueryFn, SwarmOptions, TeammateSpec } from "./types.js";
+import type { Message, MessageKind, PostApprovalMode, QueryFn, SwarmOptions, TeammateSpec } from "./types.js";
 
 export interface SwarmDeps { query: QueryFn; }
 
@@ -21,6 +22,8 @@ export class SwarmRuntime {
   onHandshake?: (kind: string, payload: unknown) => void;
   private sessions = new Map<string, TeammateSession>();
   private broker: PermissionBroker;
+  private planBroker: PlanApprovalBroker;
+  private postApprovalMode: PostApprovalMode;
   private taskCwd?: string;
   private taskDir?: string;
   private taskListId?: string;
@@ -48,6 +51,19 @@ export class SwarmRuntime {
           ts: new Date().toISOString(),
         });
       },
+    });
+    this.postApprovalMode = opts.permissions?.onPlanApproval ?? "default";
+    this.planBroker = new PlanApprovalBroker({
+      onRequest: (teammate, req) => this.onPermissionRequest?.(teammate, req),
+      onEscalate: (teammate, plan, requestId) => {
+        this.bus.send("coordinator", {
+          from: teammate, to: "coordinator", kind: "plan",
+          body: plan,
+          data: { requestId, teammate, plan },
+          ts: new Date().toISOString(),
+        });
+      },
+      onApprove: async (name) => { await this.sessions.get(name)?.setMode(this.postApprovalMode); },
     });
   }
 
@@ -89,8 +105,12 @@ export class SwarmRuntime {
     const options: Record<string, unknown> = {
       mcpServers: { "cc-tasks": createTaskMcpServer(teammateStore) },
       disallowedTools: [...NATIVE_TASK_TOOLS], // shared cc-tasks store is authoritative, not native per-session tasks
-      canUseTool: (tool: string, input: Record<string, unknown>) => this.broker.decide(spec.name, tool, input),
+      canUseTool: (tool: string, input: Record<string, unknown>) =>
+        spec.plan && tool === "ExitPlanMode"
+          ? this.planBroker.requestApproval(spec.name, input)
+          : this.broker.decide(spec.name, tool, input),
     };
+    if (spec.plan) options.permissionMode = "plan"; // teammate plans first; ExitPlanMode → coordinator approval (A2c)
     if (spec.agent) options.model = spec.agent; // per-teammate model (30.9)
 
     // Construct first (side-effect-free); only commit registry/bus state if it succeeds.
@@ -116,6 +136,10 @@ export class SwarmRuntime {
 
   respondPermission(requestId: string, decision: "allow" | "deny", message?: string): boolean {
     return this.broker.respond(requestId, decision, message);
+  }
+
+  async respondPlan(requestId: string, decision: "approve" | "reject", feedback?: string): Promise<boolean> {
+    return this.planBroker.respond(requestId, decision, feedback);
   }
 
   async requestShutdown(name: string): Promise<void> {
