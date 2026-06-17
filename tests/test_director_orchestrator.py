@@ -988,37 +988,6 @@ class DaemonLoopTest(unittest.TestCase):
             shutdown.set()
             th.join(timeout=2.0)
 
-    def test_force_cancels_a_retry_spawned_during_drain(self):
-        # review-reliability P2: a worker that returns failed (crash) as the force-stop
-        # lands must NOT resurrect an uncancellable retry — the re-submit is born cancelled.
-        board = orch.MockBoard([_issue("a")])
-        seen, lock = [], threading.Lock()
-
-        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
-            with lock:
-                seen.append(attempt)
-            cancelled = cancel_event is not None and cancel_event.wait(timeout=5.0)
-            if attempt == 1:
-                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
-                        "telemetry": {}}  # crashes (failed, not cancelled) under force
-            if cancelled:  # the retry stops fast ONLY if born cancelled (the fix)
-                return {"kind": "cancelled", "reason": "reconciliation", "turns": 1,
-                        "telemetry": {}}
-            return _DONE
-        shutdown, force, th, result = self._run_bg(board, fake)
-        try:
-            _wait_for(lambda: 1 in seen, msg="attempt 1 never started")
-            shutdown.set()
-            force.set()
-            th.join(timeout=2.0)
-            self.assertFalse(th.is_alive())  # born-cancelled retry stopped fast (< 5s block)
-            with lock:
-                self.assertIn(2, seen)       # the retry really was spawned during drain
-        finally:
-            shutdown.set()
-            force.set()
-            th.join(timeout=2.0)
-
     def test_stuck_self_clears_when_work_resumes(self):
         # review-arch P2: the stuck heartbeat tracks LIVE state — once blocked work
         # becomes runnable, stuck clears (it is not a one-way latch in status.json).
@@ -1147,6 +1116,114 @@ class DaemonBackoffTest(unittest.TestCase):
         finally:
             shutdown.set()
             th.join(timeout=3.0)
+
+    # -- RETRY backoff (A) ---------------------------------------------------
+    def test_retry_is_delayed_by_backoff(self):
+        # a failed worker's re-dispatch waits ~backoff_base_s (not immediate, R2), and the
+        # daemon keeps ticking during the wait (main thread not blocked).
+        board = orch.MockBoard([_issue("a")])
+        seen, lock = [], threading.Lock()
+
+        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
+            with lock:
+                seen.append((attempt, time.monotonic()))
+            if attempt == 1:
+                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
+                        "telemetry": {}}
+            return _DONE
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            shutdown, force, th, result = self._run_bg(
+                board, fake, backoff_base_s=0.3, backoff_cap_s=10.0, status=w)
+            try:
+                _wait_for(lambda: any(a == 2 for a, _ in seen), msg="retry never dispatched")
+                with lock:
+                    a1 = next(t for a, t in seen if a == 1)
+                    a2 = next(t for a, t in seen if a == 2)
+                self.assertGreaterEqual(a2 - a1, 0.2)  # retry waited ~base (0.3), not immediate
+                self.assertGreater((ds.read_status(base=st) or {})["run"]["polls"], 1)  # ticked
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_pending_retry_holds_a_slot(self):
+        # R3/D-76: a pending-retry ticket counts against concurrency — with concurrency=1,
+        # a second ready ticket is NOT claimed while the first is in its retry backoff.
+        board = orch.MockBoard([_issue("a"), _issue("b")])
+        seen, lock = [], threading.Lock()
+
+        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
+            with lock:
+                seen.append(ticket["id"])
+            if ticket["id"] == "a" and attempt == 1:
+                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
+                        "telemetry": {}}
+            return _DONE
+        shutdown, force, th, result = self._run_bg(
+            board, fake, concurrency=1, backoff_base_s=0.3, backoff_cap_s=10.0)
+        try:
+            _wait_for(lambda: "a" in seen, msg="a not dispatched")
+            time.sleep(0.1)  # inside a's 0.3s backoff window
+            with lock:
+                self.assertNotIn("b", seen)  # the single slot is reserved by a's pending retry
+            _wait_for(lambda: board.state_name("b") == "Done",
+                      msg="b never claimed after a's retry resolved")
+        finally:
+            shutdown.set()
+            th.join(timeout=3.0)
+
+    def test_drain_abandons_pending_retry(self):
+        # R9/D-81: a graceful shutdown does NOT wait out a pending retry's backoff — it
+        # drains (futures empty) and exits, abandoning the retry (left In Progress).
+        board = orch.MockBoard([_issue("a")])
+        seen = []
+
+        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
+            seen.append(attempt)
+            if attempt == 1:
+                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
+                        "telemetry": {}}
+            return _DONE
+        shutdown, force, th, result = self._run_bg(
+            board, fake, backoff_base_s=5.0, backoff_cap_s=10.0)  # long backoff
+        try:
+            _wait_for(lambda: 1 in seen, msg="attempt 1 not dispatched")
+            shutdown.set()
+            th.join(timeout=2.0)
+            self.assertFalse(th.is_alive())  # exited promptly — did NOT wait the 5s backoff
+            self.assertNotIn(2, seen)        # the scheduled retry was abandoned
+        finally:
+            shutdown.set()
+            th.join(timeout=2.0)
+
+    def test_force_drain_abandons_a_failed_workers_retry(self):
+        # supersedes stage 2's `born_cancelled`: a worker that fails as a force-stop lands
+        # cannot resurrect an (uncancellable) retry — the daemon SCHEDULES retries and the
+        # drain abandons them (D-81), so attempt 2 never spawns and the force-stop is fast.
+        board = orch.MockBoard([_issue("a")])
+        seen = []
+
+        def fake(ticket, *, cancel_event=None, attempt=1, **kw):
+            seen.append(attempt)
+            if attempt == 1:
+                if cancel_event is not None:
+                    cancel_event.wait(timeout=5.0)  # blocks until force-cancelled…
+                return {"kind": "failed", "status": "failed", "turn_id": None, "turns": 1,
+                        "telemetry": {}}            # …then "crashes" (failed, not cancelled)
+            return _DONE
+        shutdown, force, th, result = self._run_bg(
+            board, fake, backoff_base_s=0.1, backoff_cap_s=10.0)
+        try:
+            _wait_for(lambda: 1 in seen, msg="attempt 1 not dispatched")
+            shutdown.set()
+            force.set()  # force-stop while attempt 1 runs
+            th.join(timeout=2.0)
+            self.assertFalse(th.is_alive())  # exited fast (running worker force-cancelled)
+            self.assertNotIn(2, seen)        # the retry was abandoned, never spawned
+        finally:
+            shutdown.set()
+            force.set()
+            th.join(timeout=2.0)
 
 
 if __name__ == "__main__":

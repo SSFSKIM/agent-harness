@@ -326,20 +326,12 @@ class _RunState:
         self.cancelled_states: dict = {} # tid -> observed external state name at cancel
         self.results: dict = {}          # tid -> terminal summary
         self.claim_failed: set = set()   # tids whose claim raised/returned False
-        # When the daemon force-stops (2nd signal), EVERY worker spawned thereafter —
-        # including a retry the reap path re-submits — must be born cancelled, else a
-        # worker that returned `failed`-within-budget during the force-drain would
-        # resurrect an uncancellable attempt and defeat the force-stop (review-reliability).
-        self.born_cancelled = False
 
     def submit(self, ticket) -> None:
         # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
         # (the prior attempt's event is discarded). The main thread sets it during
-        # reconciliation; the worker thread reads it (Event is thread-safe). Under a
-        # force-stop, the new worker is born already-cancelled so it stops immediately.
+        # reconciliation; the worker thread reads it (Event is thread-safe).
         ev = threading.Event()
-        if self.born_cancelled:
-            ev.set()
         self.cancel_events[ticket["id"]] = ev
         fut = self.pool.submit(
             dispatch, ticket, queue_base=self.queue_base, workspace_root=self.workspace_root,
@@ -377,11 +369,16 @@ class _RunState:
         self.submit(ticket)
         return True
 
-    def reap(self, done) -> None:
+    def reap(self, done, on_retry=None) -> None:
         """Execute each completed future's disposition: pop it, drop its cancel Event,
         reconcile (retry → re-submit within budget [stays in_flight], else terminal →
         results + status). The future result is the final word — a cancel Event that
-        fired on an already-finished worker is inert (no double processing)."""
+        fired on an already-finished worker is inert (no double processing).
+
+        `on_retry` is the single seam for daemon retry backoff (spec D-75): a retry within
+        budget calls `(on_retry or self.submit)(ticket)`. Default None → IMMEDIATE submit
+        — the batch wave is byte-unchanged. The daemon passes a hook that SCHEDULES the
+        re-dispatch after a backoff (the ticket stays in_flight, not in futures)."""
         for fut in done:
             ticket = self.futures.pop(fut)
             tid = ticket["id"]
@@ -393,7 +390,7 @@ class _RunState:
             if outcome.get("retry"):
                 self.attempts[tid] += 1
                 self.status.retrying(ticket, attempt=self.attempts[tid])
-                self.submit(ticket)  # stays in_flight across the retry
+                (on_retry or self.submit)(ticket)  # daemon defers (backoff); batch now
             else:
                 self.in_flight.discard(tid)
                 self.attempts.pop(tid, None)  # terminal — drop bookkeeping (daemon memory)
@@ -641,6 +638,16 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     forced = False
     poll_failing = False  # log a board-poll failure once on entry + once on recovery
     idle_streak = 0       # consecutive idle ticks → exponential idle-poll backoff (B)
+    pending_retry: dict = {}  # tid -> (ticket, retry_at) — scheduled retry backoff (A)
+
+    def schedule_retry(ticket):
+        # Retry backoff (A, §8.4): instead of re-dispatching now (the batch default), hold
+        # the ticket and re-submit after _backoff_s. `attempts` was just bumped in reap, so
+        # the first retry (attempts==2) waits `base`. The ticket stays in state.in_flight.
+        tid = ticket["id"]
+        delay = _backoff_s(state.attempts[tid] - 1, base=backoff_base_s, cap=backoff_cap_s)
+        pending_retry[tid] = (ticket, time.monotonic() + delay)
+
     ticks = 0
     try:
         while True:
@@ -650,18 +657,26 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
             if max_ticks is not None and ticks >= max_ticks:
                 break
             ticks += 1
-            # 2nd signal → cancel every in-flight worker once (cooperative, stage 1) AND
-            # mark the state so any retry re-submitted during the drain is born cancelled
-            # (else a `failed`-then-retried worker would escape the force-stop).
+            now = time.monotonic()  # one clock per tick (due-retry + reconcile cadence)
+            # 2nd signal → cancel every in-flight (running) worker once (cooperative,
+            # stage 1). A failed worker's retry can't escape the force-stop: the daemon
+            # SCHEDULES retries (not immediate) and the due-retry step is `not draining`-
+            # guarded, so a retry queued during the drain is abandoned, never resubmitted
+            # (D-81 — this supersedes stage 2's `born_cancelled`).
             if draining and force_event.is_set() and not forced:
                 forced = True
-                state.born_cancelled = True
                 for ev in state.cancel_events.values():
                     ev.set()
 
             if not draining:
-                # TOP UP — bounded by free slots (D-64); poll fail-soft (D-69).
-                free = concurrency - len(state.futures)
+                # DUE RETRIES (A): re-dispatch any pending whose backoff elapsed (now first
+                # so they count in futures below). Guarded by `not draining` — a shutdown
+                # abandons pending retries (D-81), left In Progress for board-as-truth.
+                for tid in [t for t, (_, at) in pending_retry.items() if at <= now]:
+                    state.submit(pending_retry.pop(tid)[0])  # → futures; already in_flight
+                # TOP UP — bounded by free slots MINUS pending retries (claimed/reserved,
+                # D-76): so the board's In-Progress count never exceeds `concurrency`.
+                free = concurrency - len(state.futures) - len(pending_retry)
                 blocked: list = []
                 if free > 0:
                     try:
@@ -699,15 +714,17 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 idle_streak = 0  # work is running → reset idle backoff (B)
                 done, _ = wait(list(state.futures), timeout=poll_interval_s,
                                return_when=FIRST_COMPLETED)
-                state.reap(done)
+                state.reap(done, on_retry=schedule_retry)  # failed→retry is SCHEDULED (A)
             elif not draining:
                 shutdown_event.wait(_idle_wait_s(poll_interval_s, idle_streak, backoff_cap_s))
                 idle_streak += 1  # consecutive idle tick → next idle wait doubles (cap)
 
-            now = time.monotonic()
-            if state.futures and now - last_reconcile >= reconcile_interval_s:
+            # FRESH clock here — the WAIT above can sleep a long time (idle backoff), so the
+            # tick-top `now` (used pre-wait for due-retry/claim) is stale for the cadence.
+            mono = time.monotonic()
+            if state.futures and mono - last_reconcile >= reconcile_interval_s:
                 state.reconcile_in_flight()
-                last_reconcile = now
+                last_reconcile = mono
         state.status.finished("shutdown")
         return {"stopped_reason": "shutdown", "polls": ticks}
     finally:

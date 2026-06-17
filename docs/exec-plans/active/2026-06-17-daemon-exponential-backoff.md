@@ -222,8 +222,27 @@ read per tick, consistent ordering.
   → idle path → backs off). Tests: `_idle_wait_s` curve unit test; `DaemonBackoffTest`
   idle-streak-grows (spy on `_idle_wait_s`), resets-after-work, sustained-poll-failure-
   backs-off-and-recovers. Gate GREEN (406).
+- [x] (2026-06-17) M3 — RETRY backoff: `_RunState.reap(done, on_retry=None)` hook (default
+  immediate submit = batch unchanged); run_forever `pending_retry` map + `schedule_retry`
+  (retry_at = now + `_backoff_s(attempts-1, base, cap)`) + `not draining`-guarded DUE-RETRY
+  step + slot accounting `free = concurrency − futures − pending_retry`; `now` at tick top
+  for pre-wait checks, fresh clock post-WAIT for the reconcile cadence. **Removed stage-2's
+  now-dead `born_cancelled`** (superseded — see Surprises); rewrote its test. Tests:
+  retry-is-delayed, pending-retry-holds-a-slot, drain-abandons-pending-retry, force-drain-
+  abandons-retry; `RunOnceRetryTest` + all batch tests stay green (R7). Gate GREEN (409).
 
 ## Surprises & discoveries
+- (M3) M3's scheduled-retry + `not draining`-guarded due-retry (D-81) **supersedes stage
+  2's `born_cancelled`** force-defeat-by-retry fix: a failed daemon worker's retry is now
+  *scheduled* and *abandoned on drain* — it can't be resubmitted during a force-stop at
+  all, so `born_cancelled` (which pre-set the cancel Event on submit-during-force) became
+  unreachable dead code (no `submit` runs during drain). Removed it; rewrote the stage-2
+  `test_force_cancels_a_retry_spawned_during_drain` into `DaemonBackoffTest.
+  test_force_drain_abandons_a_failed_workers_retry` (asserts the stronger guarantee:
+  attempt 2 never spawns). A clean case of a later slice removing an earlier fix's *cause*.
+- (M3) The reconcile cadence must read a FRESH clock AFTER the WAIT (idle backoff can sleep
+  minutes) — the tick-top `now` (for pre-wait due-retry/claim-readmit) is stale by then.
+  Two clock reads per tick is correct; the plan's "one now per tick" was an oversimplification.
 
 ## Decision log
 - 2026-06-17: Chose Approach **A** (`reap(on_retry=None)` hook) — minimal, regression-safe
