@@ -25,7 +25,9 @@ autonomous in the middle.** Realized as two **ordered** child slices (this is a
 parent decomposition per [[0001-recursive-decomposition]]):
 
 1. **Worker operating-protocol depth** (Symphony-parity gap #5) — *the
-   precondition.* Harvest `docs/symphony-original/WORKFLOW.md`'s stage-agnostic
+   precondition.* Spec:
+   `docs/product-specs/2026-06-17-worker-operating-protocol.md`. Harvest
+   `docs/symphony-original/WORKFLOW.md`'s stage-agnostic
    disciplines (single-workpad-as-source-of-truth, reproduction-first,
    acceptance-criteria mirroring, the **PR feedback sweep**, no-scope-creep,
    revert-proof-edits) into a shared worker-protocol preamble (sibling to

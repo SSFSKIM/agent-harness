@@ -112,3 +112,12 @@ owner: harness
   retry **불변**(reap `on_retry=` 훅의 기본; regression net). knob `backoff_base_s`(10s)/
   `backoff_cap_s`(300s). Symphony per-completion 재-check 은 NON-GOAL(active-run reconciliation 이
   충족). 이 슬라이스로 **daemon 트랙(gap #1/#2/#3) CLOSED**.
+- [Worker operating-protocol depth (graduated-autonomy slice 1)](2026-06-17-worker-operating-protocol.md)
+  — [ADR 0002](../memory/adr/0002-graduated-autonomy.md) 의 선행 슬라이스, Symphony 정합 gap #5.
+  원본 [`WORKFLOW.md`](../symphony-original/WORKFLOW.md) 의 stage-agnostic 운영 규율을 **수확**
+  (파일 포팅 아님): 공유 `WORKER_PROTOCOL` preamble(단일 살아있는 source-of-truth + no-scope-creep→
+  typed child)을 `TERMINAL_CONTRACT` 와 같은 first-turn seam(`drive`)에 주입 → 모든 dispatch 경로;
+  impl 템플릿 enrichment(reproduction-first · acceptance 미러링 · temp-proof revert · **PR feedback
+  sweep** pre-handoff+on-arrival). 척추 = `WORKFLOW.md` 줄별 keep/adapt/reject triage(보드-쓰기 소유·
+  직렬 merger·`report_outcome`·5 typed stage 에 대고). 워커-프롬프트 only — `decider.py`(slice 2)·
+  보드 소유·merger 불변. graduated-autonomy 의 *worker-autonomy enabler*.
