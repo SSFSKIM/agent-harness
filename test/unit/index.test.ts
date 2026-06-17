@@ -13,5 +13,7 @@ describe("public API", () => {
     expect(typeof api.getSessionInfo).toBe("function");
     expect(typeof api.createContextMcpServer).toBe("function");
     expect(typeof api.summarizeUsage).toBe("function");
+    expect(typeof api.createCompactMcpServer).toBe("function");
+    expect(typeof api.parseCompactOutcome).toBe("function");
   });
 });

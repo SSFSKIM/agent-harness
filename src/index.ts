@@ -17,3 +17,5 @@ export { listSessions, getSessionMessages, getSessionInfo } from "./sessions/ind
 export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts } from "./sessions/index.js";
 export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/index.js";
 export type { RawContextUsage, ContextUsageSummary, QueryHolder } from "./context/index.js";
+export { createCompactMcpServer, parseCompactOutcome, COMPACT_TOOL } from "./compaction/index.js";
+export type { CompactHolder, CompactOutcome } from "./compaction/index.js";
