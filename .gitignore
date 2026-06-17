@@ -7,3 +7,7 @@ __pycache__/
 # Verbatim vendored OpenAI Symphony reference (Apache-2.0) — local oracle only,
 # mirroring the /tmp/symphony-research pattern. Lint-scoped via docs/.harnessignore.
 docs/symphony-original/
+
+# Local educational article (beginner walkthrough of the harness + orchestration);
+# not a governed repo deliverable — kept local only.
+/EDUCATION.md
