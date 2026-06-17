@@ -6,6 +6,7 @@ import { DaemonSupervisor } from "./daemon/supervisor.js";
 import { DaemonServer } from "./daemon/server.js";
 import { daemonRequest } from "./daemon/client.js";
 import { daemonSocketPath } from "./daemon/paths.js";
+import { KairosAssistant } from "./kairos/index.js";
 
 async function readStdin(): Promise<string | undefined> {
   if (process.stdin.isTTY) return undefined;
@@ -53,8 +54,29 @@ async function daemonCli(args: string[]): Promise<boolean> {
   return false;
 }
 
+/** `cc-harness assistant [--cwd dir] [--model m] [--allow-bypass] ["<seed>"]` — run an autonomous assistant. */
+async function runAssistant(args: string[]): Promise<void> {
+  let cwd: string | undefined, model: string | undefined, allowBypass = false, seed: string | undefined;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--cwd") cwd = args[++i];
+    else if (a === "--model") model = args[++i];
+    else if (a === "--allow-bypass") allowBypass = true;
+    else if (!a.startsWith("--") && seed === undefined) seed = a;
+  }
+  const posture = allowBypass ? { permissionMode: "bypassPermissions", allowBypass: true } : undefined;
+  const k = new KairosAssistant({ query: sdkQuery }, { cwd, model, posture });
+  await k.start(seed);
+  console.error(`cc-harness assistant running (session ${k.status().sessionId}); Ctrl-C to stop`);
+  await new Promise<void>((resolve) => {
+    const onSig = async () => { await k.stop().catch(() => {}); resolve(); };
+    process.on("SIGINT", onSig); process.on("SIGTERM", onSig);
+  });
+}
+
 async function main() {
   if (await daemonCli(process.argv.slice(2))) return;
+  if (process.argv[2] === "assistant") { await runAssistant(process.argv.slice(2)); return; }
   const { prompt: argPrompt, config } = parseArgs(process.argv.slice(2));
   const stdin = await readStdin();
   const prompt = composePrompt(argPrompt, stdin);
