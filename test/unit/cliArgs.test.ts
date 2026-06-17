@@ -14,4 +14,10 @@ describe("cli args", () => {
   it("composePrompt uses stdin alone when no arg prompt", () => {
     expect(composePrompt(undefined, "just stdin")).toBe("just stdin");
   });
+  it("parses --resume and --no-persist", () => {
+    const a = parseArgs(["continue the task", "--resume", "sess-123", "--no-persist"]);
+    expect(a.prompt).toBe("continue the task");
+    expect(a.config.resume).toBe("sess-123");
+    expect(a.config.persistSession).toBe(false);
+  });
 });

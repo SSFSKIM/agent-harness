@@ -12,6 +12,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     else if (a === "--permission-mode") config.permissionMode = argv[++i] as any;
     else if (a === "--max-turns") config.maxTurns = Number(argv[++i]);
     else if (a === "--cwd") config.cwd = argv[++i];
+    else if (a === "--resume") config.resume = argv[++i];
+    else if (a === "--no-persist") config.persistSession = false;
     else if (a === "--no-project-context") config.disableProjectContext = true;
     else if (a === "--sandbox") config.sandbox = true;
     else if (!a.startsWith("--") && prompt === undefined) prompt = a;
