@@ -160,9 +160,10 @@ def with_terminal_contract(prompt: str) -> str:
 WORKER_PROTOCOL = """\
 These hold for every stage, on every turn:
 - Single living source of truth. Your stage's output doc (research digest, design doc, \
-product-spec, or ExecPlan) is the ONE source of truth for your plan and progress. \
+product-spec, or ExecPlan) is the canonical home for your plan and progress narrative. \
 Maintain it in place as you work — check items off and record decisions and surprises \
-the moment they happen. Do not scatter status across separate Linear comments or notes.
+the moment they happen, and keep that single canonical progress note rather than \
+fragmenting it across many separate notes or comments.
 - No scope-creep. If you discover meaningful work outside this ticket's scope, do NOT \
 expand the ticket. File a separate typed child ticket (labeled with the right stage, \
 blocked_by/related to this one as appropriate) using the linear skill, note it, then \
