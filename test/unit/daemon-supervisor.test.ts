@@ -436,6 +436,34 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
   });
 
+  it("auto-restart RESUMES the captured session_id (context intact, not fresh)", async () => {
+    const cap: any[] = [];
+    let calls = 0;
+    const fq = ({ prompt, options }: any) => {
+      cap.push(options); calls++;
+      if (calls === 1) return (async function* () {            // life 1: capture an id, take one turn, then crash
+        yield { type: "system", subtype: "init", session_id: "sdk-X" };
+        for await (const t of prompt) { yield { type: "result", result: "did:" + t.message.content }; return; }
+      })();
+      return (async function* () {                             // life 2 (restart): healthy
+        yield { type: "system", subtype: "init", session_id: "sdk-X" };
+        for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content };
+      })();
+    };
+    let pending: (() => void) | undefined;
+    const scheduleRestart = (fn: () => void) => { pending = fn; return () => {}; };
+    const sup = new DaemonSupervisor({ query: fq }, { dir: dir(), restart: "on-failure", scheduleRestart });
+    const id = sup.spawn();
+    expect((await sup.submit(id, "hi", () => {})).result).toBe("did:hi");
+    expect(sup.list()[0].sessionId).toBe("sdk-X");             // persisted from the turn (Task 1)
+    await flush();                                             // life-1 query returned → handleSessionEnd schedules restart
+    expect(sup.list()[0].status).toBe("restarting");
+    pending!();                                                // fire the restart
+    expect(cap[1].resume).toBe("sdk-X");                       // restart RESUMES the captured id, not fresh
+    expect(sup.list()[0].status).toBe("idle");
+    await sup.shutdown();
+  });
+
   it("spawn({resume}) threads resume into the new session's options", async () => {
     const sink: any[] = [];
     const sup = new DaemonSupervisor({ query: captureQuery(sink) }, { dir: dir() });
@@ -455,7 +483,10 @@ describe("DaemonSupervisor", () => {
     expect(calls).toEqual([["list", { cwd: "/p", limit: 3 }], ["msgs", "sess-9", { cwd: "/p" }]]);
     await sup.shutdown();
   });
-  it("auto-restart re-creates the session WITHOUT resume (stays fresh)", async () => {
+  it("auto-restart is fresh ONLY when no session_id was captured (graceful degradation)", async () => {
+    // dies before emitting any init frame → no sessionId captured → no transcript to resume → fresh.
+    // (Restart resumes the CAPTURED sdk id, NOT the spawn-time resume hint — so the prior 'sess-prior'
+    // hint is intentionally not carried into the restart.)
     const sink: any[] = [];
     const dying = ({ options }: any) => { sink.push(options); return (async function* () {})(); };
     const sup = new DaemonSupervisor({ query: dying }, {
@@ -464,9 +495,9 @@ describe("DaemonSupervisor", () => {
     });
     sup.spawn({ resume: "sess-prior", restart: "on-failure" });
     await new Promise((r) => setTimeout(r, 20)); // let the death→restart cascade drain
-    expect(sink[0].resume).toBe("sess-prior");                        // initial spawn carried resume
+    expect(sink[0].resume).toBe("sess-prior");                        // initial spawn carried the resume hint
     expect(sink.length).toBeGreaterThanOrEqual(2);                   // it restarted at least once
-    expect(sink.slice(1).every((o) => o.resume === undefined)).toBe(true); // restarts are fresh
+    expect(sink.slice(1).every((o) => o.resume === undefined)).toBe(true); // no captured id → fresh restart
     await sup.shutdown();
   });
 });

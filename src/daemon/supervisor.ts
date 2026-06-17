@@ -217,7 +217,7 @@ export class DaemonSupervisor {
 
   private makeSession(id: string, cfg: SpawnConfig, resume?: string): DaemonSession {
     const base: Record<string, unknown> = cfg.model ? { model: cfg.model } : {};
-    if (resume) base.resume = resume;                        // initial spawn only; restart() omits it (stays fresh)
+    if (resume) base.resume = resume;                        // spawn hint or captured sdk session id (restart resumes the captured id)
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
     const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
     const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool, compactTool: this.compactTool });
@@ -245,7 +245,8 @@ export class DaemonSupervisor {
   private restart(id: string): void {
     this.restartCancels.delete(id);
     if (this.shuttingDown || this.stopping.has(id) || !this.configs.has(id)) return; // stopped during backoff
-    this.pool.set(id, this.makeSession(id, this.configs.get(id)!));
+    const resume = this.registry.get(id)?.sessionId;       // resume the CAPTURED sdk session (context intact); fresh if none
+    this.pool.set(id, this.makeSession(id, this.configs.get(id)!, resume));
     this.registry.update(id, { status: "idle", lastActiveAt: this.now() });
   }
 
