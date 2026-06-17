@@ -15,6 +15,24 @@ function captureQuery(sink: any[]) {
   return ({ prompt, options }: any) => { sink.push(options); return (async function* () { for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content }; })(); };
 }
 
+// records every turn's content; the "/compact" turn emits status+boundary then a result.
+function compactQuery(seen: string[]) {
+  return ({ prompt }: any) => (async function* () {
+    for await (const t of prompt) {
+      const text = t.message.content; seen.push(text);
+      if (text === "/compact") {
+        yield { type: "system", subtype: "status", status: "compacting" };
+        yield { type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 1000, post_tokens: 200 } };
+        yield { type: "system", subtype: "status", status: null, compact_result: "success" };
+        yield { type: "result", subtype: "success", result: "compacted" };
+      } else yield { type: "result", subtype: "success", result: "did:" + text };
+    }
+  })();
+}
+function captureQuery2(sink: any[]) {
+  return ({ prompt, options }: any) => { sink.push(options); return (async function* () { for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content }; })(); };
+}
+
 describe("DaemonSession", () => {
   it("submit streams non-result messages then resolves with the turn result", async () => {
     const chunks: any[] = [];
@@ -82,6 +100,33 @@ describe("DaemonSession", () => {
     const sink: any[] = [];
     const s = new DaemonSession("s-plain", { query: captureQuery(sink) }, {});
     expect(sink[0].mcpServers).toBeUndefined();
+    await s.dispose();
+  });
+  it("compact() injects /compact and returns the parsed outcome", async () => {
+    const seen: string[] = [];
+    const s = new DaemonSession("s-c", { query: compactQuery(seen) }, {});
+    const outcome = await s.compact();
+    expect(outcome).toEqual({ ok: true, result: "success", error: undefined, preTokens: 1000, postTokens: 200 });
+    expect(seen).toEqual(["/compact"]);
+    await s.dispose();
+  });
+  it("requestCompaction fires exactly one /compact at the turn boundary; FIFO stays intact", async () => {
+    const seen: string[] = [];
+    const s = new DaemonSession("s-i", { query: compactQuery(seen) }, {});
+    s.requestCompaction();                                  // tool sets intent before the turn
+    const r1 = await s.submit("hello", () => {});
+    expect(r1.result).toBe("did:hello");                   // human turn gets ITS OWN result, not "compacted"
+    const r2 = await s.submit("world", () => {});
+    expect(r2.result).toBe("did:world");                   // next human turn NOT mis-resolved by the /compact result
+    await s.dispose();
+    expect(seen).toEqual(["hello", "/compact", "world"]);  // exactly one /compact, ordered between the two human turns
+  });
+  it("contextTool + compactTool both merge their servers into the query options", async () => {
+    const sink: any[] = [];
+    const s = new DaemonSession("s-both", { query: captureQuery2(sink) }, {}, Date.now, { contextTool: true, compactTool: true });
+    expect((sink[0].mcpServers as any)["cc-context"]).toBeTruthy();
+    expect((sink[0].mcpServers as any)["cc-compact"]).toBeTruthy();
+    expect(sink[0].allowedTools).toEqual(expect.arrayContaining(["mcp__cc-context__GetContextUsage", "mcp__cc-compact__RequestCompaction"]));
     await s.dispose();
   });
 });
