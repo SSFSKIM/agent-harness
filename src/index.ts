@@ -13,3 +13,5 @@ export { DaemonSupervisor, DaemonServer, SessionRegistry, daemonRequest, daemonS
 export type { SessionRecord, SessionStatus, DaemonOptions } from "./daemon/index.js";
 export { KairosAssistant, createBriefMcpServer, stdoutBriefSink, applyAssistantPersona, resolveAssistantPosture } from "./kairos/index.js";
 export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig } from "./kairos/index.js";
+export { listSessions, getSessionMessages, getSessionInfo } from "./sessions/index.js";
+export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts } from "./sessions/index.js";

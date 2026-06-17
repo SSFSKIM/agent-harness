@@ -8,5 +8,8 @@ describe("public API", () => {
     expect(api.BUILTIN_AGENTS).toBeTruthy();
     expect(api.BUILTIN_OUTPUT_STYLES).toBeTruthy();
     expect(typeof api.resumeHarness).toBe("function");
+    expect(typeof api.listSessions).toBe("function");
+    expect(typeof api.getSessionMessages).toBe("function");
+    expect(typeof api.getSessionInfo).toBe("function");
   });
 });
