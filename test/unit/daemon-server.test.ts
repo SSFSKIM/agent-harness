@@ -42,6 +42,25 @@ describe("DaemonServer over a real UDS", () => {
     await daemonRequest(sock, { op: "shutdown" });
     await server.closed;
   });
+  it("fork op over UDS: captures sessionId on a turn, forks, replies { ok, id, sessionId }", async () => {
+    const d = tmp();
+    const sock = join(d, "sock");
+    const initFakeQuery = ({ prompt }: any) => (async function* () {
+      for await (const t of prompt) { yield { type: "system", subtype: "init", session_id: "sdk-src" }; yield { type: "result", result: "did:" + t.message.content }; }
+    })();
+    const sup = new DaemonSupervisor({ query: initFakeQuery, forkSession: async (sid: string) => ({ sessionId: "fork-" + sid }) }, { dir: join(d, "sessions") });
+    const server = new DaemonServer(sup, sock);
+    await server.listen();
+    const id = (await daemonRequest(sock, { op: "spawn" }))[0].id;
+    await daemonRequest(sock, { op: "submit", id, prompt: "hi" }, () => {});   // capture sessionId
+    const fork = await daemonRequest(sock, { op: "fork", id });
+    expect(fork[0].ok).toBe(true);
+    expect(fork[0].sessionId).toBe("fork-sdk-src");
+    expect(fork[0].id).not.toBe(id);
+    await daemonRequest(sock, { op: "shutdown" });
+    await server.closed;
+  });
+
   it("refuses to start a second daemon on a live socket", async () => {
     const d = tmp();
     const sock = join(d, "sock");

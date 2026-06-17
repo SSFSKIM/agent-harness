@@ -13,12 +13,14 @@ import { resolveProactiveConfig } from "../proactive/types.js";
 import type { ProactiveConfigInput, ProactiveStatus } from "../proactive/types.js";
 import { defaultIdleDetector } from "../proactive/prompts.js";
 import { listSessions, getSessionMessages } from "../sessions/reader.js";
+import { forkSession } from "../sessions/fork.js";
 import type { CompactOutcome } from "../compaction/server.js";
 
 export interface DaemonDeps {
   query: QueryFn;
   listSessions?: (opts?: Parameters<typeof listSessions>[0]) => Promise<unknown[]>;
   getSessionMessages?: (id: string, opts?: Parameters<typeof getSessionMessages>[1]) => Promise<unknown[]>;
+  forkSession?: (id: string, opts?: Parameters<typeof forkSession>[1]) => Promise<{ sessionId: string }>;
 }
 
 interface SpawnConfig { model?: string; restart: RestartPolicy; }
@@ -137,6 +139,19 @@ export class DaemonSupervisor {
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
     }
     return session.compact();
+  }
+
+  async fork(id: string): Promise<{ id: string; sessionId: string }> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) {
+      const rec = this.registry.get(id);
+      throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
+    }
+    const sourceSdkId = session.sessionId;   // Spec 1 capture; a live session has it after its first turn
+    if (!sourceSdkId) throw new DaemonError(`session ${id} has no session_id yet (take a turn first)`);
+    const { sessionId } = await (this.deps.forkSession ?? forkSession)(sourceSdkId);
+    const handle = this.spawn({ model: this.configs.get(id)?.model, resume: sessionId }); // new daemon session on the branch
+    return { id: handle, sessionId };
   }
 
   startProactive(id: string, config?: ProactiveConfigInput): ProactiveStatus {

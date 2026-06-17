@@ -47,6 +47,7 @@ const stopProactiveOp = z.object({ op: z.literal("stop_proactive"), id: z.string
 const sessionsOp = z.object({ op: z.literal("sessions"), cwd: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() });
 const messagesOp = z.object({ op: z.literal("messages"), id: z.string(), cwd: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() });
 const compactOp = z.object({ op: z.literal("compact"), id: z.string() });
+const forkOp = z.object({ op: z.literal("fork"), id: z.string() });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp, forkOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;

@@ -38,6 +38,12 @@ function initQuery(sid: string) {
     }
   })();
 }
+// captures each session's options into `sink` AND emits an init frame so Session captures sessionId
+function captureInitQuery(sink: any[], sid: string) {
+  return ({ prompt, options }: any) => { sink.push(options); return (async function* () {
+    for await (const t of prompt) { yield { type: "system", subtype: "init", session_id: sid }; yield { type: "result", result: "did:" + t.message.content }; }
+  })(); };
+}
 
 describe("DaemonSupervisor", () => {
   it("spawn registers an idle record; submit flips busy→idle and returns the result", async () => {
@@ -417,6 +423,28 @@ describe("DaemonSupervisor", () => {
     sup.spawn();
     expect((sink[0].mcpServers as any)["cc-compact"]).toBeTruthy();
     expect(sink[0].allowedTools).toContain("mcp__cc-compact__RequestCompaction");
+    await sup.shutdown();
+  });
+
+  it("daemonOp accepts a fork op", () => {
+    expect(daemonOp.safeParse({ op: "fork", id: "s1" }).success).toBe(true);
+    expect(daemonOp.safeParse({ op: "fork" }).success).toBe(false);
+  });
+  it("fork mints a new session resuming the fork id; rejects pre-turn and unknown ids", async () => {
+    const sink: any[] = [];
+    const forked: string[] = [];
+    const fakeFork = async (sourceId: string) => { forked.push(sourceId); return { sessionId: "fork-of-" + sourceId }; };
+    const sup = new DaemonSupervisor({ query: captureInitQuery(sink, "sdk-src"), forkSession: fakeFork }, { dir: dir() });
+    const id = sup.spawn({ model: "m1" });
+    await expect(sup.fork(id)).rejects.toThrow(/no session_id yet/);   // no turn taken → nothing to fork
+    await sup.submit(id, "hi", () => {});                              // captures "sdk-src"
+    const res = await sup.fork(id);
+    expect(forked).toEqual(["sdk-src"]);                                // forked from the captured id, not a hint
+    expect(res.sessionId).toBe("fork-of-sdk-src");
+    expect(res.id).not.toBe(id);                                       // a fresh daemon handle
+    expect(sink[sink.length - 1].resume).toBe("fork-of-sdk-src");      // new session resumes the fork id
+    expect(sink[sink.length - 1].model).toBe("m1");                    // inherits the source's model
+    await expect(sup.fork("ghost")).rejects.toThrow(/unknown session/);
     await sup.shutdown();
   });
 

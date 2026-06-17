@@ -74,6 +74,7 @@ export class DaemonServer {
         case "messages": send({ ok: true, messages: await this.supervisor.getPersistedMessages(op.id, { cwd: op.cwd, limit: op.limit, offset: op.offset }) }); sock.end(); break;
         case "control": send(await this.supervisor.control(op.id, op.frame)); sock.end(); break;
         case "compact": send({ ok: true, outcome: await this.supervisor.compact(op.id) }); sock.end(); break;
+        case "fork": send({ ok: true, ...await this.supervisor.fork(op.id) }); sock.end(); break;
         case "start_proactive": send({ ok: true, status: this.supervisor.startProactive(op.id, op.config) }); sock.end(); break;
         case "stop_proactive": send(await this.supervisor.stopProactive(op.id)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
