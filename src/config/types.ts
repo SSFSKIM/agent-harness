@@ -39,6 +39,9 @@ export interface HarnessConfig {
   resume?: string;                         // SDK session_id to reload prior context
   persistSession?: boolean;                // default SDK-true; false = ephemeral (no disk persistence)
   sessionStore?: SessionStore;             // BYO transcript-mirror backend (advanced; pure passthrough)
+  // compaction (Spec B): tune/disable the SDK's native auto-compaction (these are SDK Settings fields)
+  autoCompactEnabled?: boolean;            // false disables the native ~167k safety net
+  autoCompactWindow?: number;              // tokens of headroom before auto-compaction
   // task tools (Phase 2 A1): durable Task* MCP server
   taskTools?: boolean | { dir?: string; listId?: string; agentName?: string };
   // swarm / coordinator (Phase 2 A2): peer teammate orchestration over an in-process bus
