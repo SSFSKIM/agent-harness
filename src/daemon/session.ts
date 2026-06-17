@@ -52,10 +52,19 @@ export class DaemonSession implements ControllableSession {
     return fn.apply(this.q, args);
   }
 
+  private callQValue(name: string): Promise<unknown> {
+    const fn = (this.q as any)[name];
+    if (typeof fn !== "function") return Promise.reject(new Error(`unsupported: ${name}`));
+    return fn.apply(this.q);
+  }
+
   async setModel(model?: string): Promise<void> { this.assertRunning(); await this.callQ("setModel", model); }
   async setPermissionMode(mode: string): Promise<void> { this.assertRunning(); await this.callQ("setPermissionMode", mode); }
   async setMaxThinkingTokens(maxTokens: number | null): Promise<void> { this.assertRunning(); await this.callQ("setMaxThinkingTokens", maxTokens); }
   async interrupt(): Promise<void> { await this.callQ("interrupt"); } // benign no-op when idle; unsupported if absent
+
+  async getContextUsage(): Promise<unknown> { this.assertRunning(); return this.callQValue("getContextUsage"); }
+  async accountInfo(): Promise<unknown> { this.assertRunning(); return this.callQValue("accountInfo"); }
 
   async capabilities(): Promise<{ models: unknown[]; commands: unknown[]; mcpServers: unknown[] }> {
     const q = this.q as any;

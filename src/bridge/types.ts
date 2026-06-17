@@ -7,6 +7,8 @@ export interface ControllableSession {
   setPermissionMode?(mode: string): Promise<void>;
   setMaxThinkingTokens?(maxTokens: number | null): Promise<void>;
   interrupt?(): Promise<void>;
+  getContextUsage?(): Promise<unknown>;
+  accountInfo?(): Promise<unknown>;
   capabilities(): Promise<{ models: unknown[]; commands: unknown[]; mcpServers: unknown[] }>;
 }
 
@@ -19,6 +21,8 @@ export const controlFrame = z.discriminatedUnion("type", [
   z.object({ type: z.literal("set_permission_mode"), mode: permissionMode }),
   z.object({ type: z.literal("set_thinking"), maxTokens: z.number().nullable() }),
   z.object({ type: z.literal("interrupt") }),
+  z.object({ type: z.literal("context_usage") }),
+  z.object({ type: z.literal("account_info") }),
 ]);
 export type ControlFrame = z.infer<typeof controlFrame>;
 

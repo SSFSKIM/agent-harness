@@ -44,9 +44,19 @@ describe("ControlBridge", () => {
     expect(controlFrame.safeParse({ type: "nope" }).success).toBe(false);
     expect(controlFrame.safeParse({ type: "set_model", model: "x" }).success).toBe(true);
     expect(controlFrame.safeParse({ type: "set_permission_mode", mode: "bogus" }).success).toBe(false);
+    expect(controlFrame.safeParse({ type: "context_usage" }).success).toBe(true);
+    expect(controlFrame.safeParse({ type: "account_info" }).success).toBe(true);
   });
   it("normalizes a non-Error rejection to a string", async () => {
     const s = fakeSession([], { setModel: async () => { throw "boom-string"; } });
     expect(await ControlBridge.apply(s, { type: "set_model", model: "x" })).toEqual({ ok: false, error: "boom-string" });
+  });
+  it("context_usage / account_info return their payloads", async () => {
+    const s = fakeSession([], { getContextUsage: async () => ({ totalTokens: 7 }), accountInfo: async () => ({ apiProvider: "anthropic" }) });
+    expect(await ControlBridge.apply(s, { type: "context_usage" })).toEqual({ ok: true, usage: { totalTokens: 7 } });
+    expect(await ControlBridge.apply(s, { type: "account_info" })).toEqual({ ok: true, account: { apiProvider: "anthropic" } });
+  });
+  it("reports unsupported when context_usage method is absent", async () => {
+    expect(await ControlBridge.apply(fakeSession([]), { type: "context_usage" })).toEqual({ ok: false, error: "unsupported: getContextUsage" });
   });
 });

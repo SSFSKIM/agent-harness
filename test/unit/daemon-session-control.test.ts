@@ -13,6 +13,8 @@ function controllableQuery(calls: any[]) {
       supportedModels: async () => [{ value: "m1", displayName: "M1" }],
       supportedCommands: async () => [{ name: "help" }],
       mcpServerStatus: async () => [{ name: "cc-tasks" }],
+      getContextUsage: async () => ({ totalTokens: 11 }),
+      accountInfo: async () => ({ apiProvider: "anthropic" }),
     });
   };
 }
@@ -44,5 +46,12 @@ describe("DaemonSession control surface", () => {
     const s = new DaemonSession("s3", { query: bareQuery }, {});
     await expect(s.setModel("x")).rejects.toThrow(/unsupported: setModel/);
     await s.dispose();
+  });
+  it("getContextUsage/accountInfo delegate to the Query and reject once ended", async () => {
+    const s = new DaemonSession("s4", { query: controllableQuery([]) }, {});
+    expect(await s.getContextUsage()).toEqual({ totalTokens: 11 });
+    expect(await s.accountInfo()).toEqual({ apiProvider: "anthropic" });
+    await s.dispose();
+    await expect(s.getContextUsage()).rejects.toThrow(/not running/);
   });
 });

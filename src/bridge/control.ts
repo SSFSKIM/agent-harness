@@ -19,6 +19,10 @@ export class ControlBridge {
         return ControlBridge.call(session.setMaxThinkingTokens, "setMaxThinkingTokens", session, frame.maxTokens);
       case "interrupt":
         return ControlBridge.call(session.interrupt, "interrupt", session);
+      case "context_usage":
+        return ControlBridge.payload(session.getContextUsage, "getContextUsage", session, "usage");
+      case "account_info":
+        return ControlBridge.payload(session.accountInfo, "accountInfo", session, "account");
     }
   }
 
@@ -30,6 +34,21 @@ export class ControlBridge {
   ): Promise<ControlResponse> {
     if (typeof method !== "function") return { ok: false, error: `unsupported: ${name}` };
     try { await method.apply(self, args); return { ok: true }; }
+    catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { ok: false, error: message };
+    }
+  }
+
+  // Like call(), but the method returns a value surfaced under `key` (mirrors the initialize payload).
+  private static async payload(
+    method: (() => Promise<unknown>) | undefined,
+    name: string,
+    self: ControllableSession,
+    key: string,
+  ): Promise<ControlResponse> {
+    if (typeof method !== "function") return { ok: false, error: `unsupported: ${name}` };
+    try { return { ok: true, [key]: await method.apply(self) }; }
     catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { ok: false, error: message };
