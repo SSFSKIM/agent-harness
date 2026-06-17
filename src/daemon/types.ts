@@ -12,6 +12,7 @@ export interface SessionRecord {
   daemonPid: number;
   status: SessionStatus;
   model?: string;
+  sessionId?: string;      // the SDK session_id (captured from Session.sessionId), for durable resume (Spec 2)
   createdAt: number;
   lastActiveAt: number;
   restarts?: number;       // count of automatic restarts (D2)

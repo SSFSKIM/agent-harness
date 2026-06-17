@@ -101,7 +101,7 @@ export class DaemonSupervisor {
     this.registry.update(id, { status: "busy" });
     try {
       const r = await session.submit(prompt, onMessage);
-      this.registry.update(id, { status: "idle", lastActiveAt: session.lastActiveAt });
+      this.registry.update(id, { status: "idle", lastActiveAt: session.lastActiveAt, ...(session.sessionId ? { sessionId: session.sessionId } : {}) });
       return r;
     } catch (e) {
       this.registry.update(id, { status: "errored" });

@@ -29,6 +29,15 @@ function controllableQuery(calls: any[]) {
     });
   };
 }
+// emits a system/init frame (carrying session_id) then a result, per turn — so Session captures sessionId
+function initQuery(sid: string) {
+  return ({ prompt }: any) => (async function* () {
+    for await (const t of prompt) {
+      yield { type: "system", subtype: "init", session_id: sid };
+      yield { type: "result", result: "did:" + t.message.content };
+    }
+  })();
+}
 
 describe("DaemonSupervisor", () => {
   it("spawn registers an idle record; submit flips busy→idle and returns the result", async () => {
@@ -416,6 +425,15 @@ describe("DaemonSupervisor", () => {
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: 10 } }).success).toBe(true);
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: "x" } }).success).toBe(false);
     expect(daemonOp.safeParse({ op: "stop_proactive", id: "s1" }).success).toBe(true);
+  });
+
+  it("submit persists the captured SDK session_id onto the record", async () => {
+    const sup = new DaemonSupervisor({ query: initQuery("sdk-abc") }, { dir: dir() });
+    const id = sup.spawn();
+    expect(sup.list()[0].sessionId).toBeUndefined();   // unknown before the first turn
+    await sup.submit(id, "hi", () => {});
+    expect(sup.list()[0].sessionId).toBe("sdk-abc");   // captured from the turn's init frame + persisted
+    await sup.shutdown();
   });
 
   it("spawn({resume}) threads resume into the new session's options", async () => {
