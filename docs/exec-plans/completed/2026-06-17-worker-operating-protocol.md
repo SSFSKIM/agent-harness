@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-17
 owner: harness
 base_commit: a42b90d
@@ -176,4 +176,51 @@ How to inject the stage-agnostic preamble at the single first-turn seam:
 
 ## Feedback (from completion gate)
 
+Gate GREEN (414 tests). Self-review: clean — diff matches the plan, the on-arrival
+"(below)" is an intentional forward-reference to sweep step (5). Both `standard`
+personas **SATISFIED**, no P1, no P2:
+- **review-arch** — verified layer law, all five `director/` invariants, the R9
+  scope fence (`decider.py`/`merger.py` byte-empty diff), and the three taste
+  decisions (delegating seam, protocol scoping, repo-doc source-of-truth) against
+  ADR 0002. Two **proposed rule additions** (non-blocking, no written rule
+  violated) → tracked as doc-debt (tech-debt-tracker, 2026-06-17): (1) write down
+  `run.drive` as THE single first-turn framing seam (an ARCHITECTURE.md `director/`
+  invariant); (2) a DESIGN.md taste rule for worker-prompt protocol text
+  (terse / stage-agnostic-preamble-vs-stage-template). Not fixed in-gate — below
+  P2, and feedback-once; promote on recurrence.
+- **review-reliability** — confirmed the rewire preserves the first-turn framing
+  contract (prompt-first, `report_outcome`/`TERMINAL_CONTRACT` present → no
+  loop-to-stuck), `with_terminal_contract` is byte-unchanged (R8), and the PR
+  feedback sweep loop is **bounded** by `drive`'s `max_turns=8` cap + the
+  `report_outcome(blocked/needs_human)` escape when PR channels are unreachable —
+  no unbounded wedge. No proposed rules (prompt-only change touches no new failure
+  mode beyond R6/R8).
+
 ## Outcomes & retrospective
+
+**Shipped.** Every worker's first-turn prompt now carries a stage-agnostic
+`WORKER_PROTOCOL` preamble (single living source-of-truth + no-scope-creep→typed
+child) injected at one seam (`frame_first_turn` in `run.drive`, covering
+orchestrator/run.main/direct-drive), and the `impl` template additionally drives
+reproduction-first, acceptance mirroring (non-negotiable), temp-proof revert, and
+the PR feedback sweep (pre-handoff + on-arrival). All R1–R9 met; +4 tests
+(414 total); gate GREEN; `decider.py`/`merger.py` byte-unchanged.
+
+**What went to plan.** Approach B (new seam delegating to an untouched
+`with_terminal_contract`) kept the pinned terminal-contract test byte-green and
+the terminal-block format un-duplicated — the R8 regression net held with zero
+churn to the shared seam. The triage's hard call (source-of-truth = repo doc, not
+a Linear-comment workpad) was validated by review-arch as the right
+board-ownership-consistent adaptation.
+
+**The notable insight.** The slice was *smaller than `WORKFLOW.md`'s length
+suggested*: much of its value already lives in our skills (the impl template
+already says "follow execplan/qa/push"), so the genuine net-new was only the
+cross-cutting disciplines no skill captured. Naming that up front (spec triage)
+kept the build from re-inlining what we already factor into skills.
+
+**This is graduated-autonomy slice 1 of 2 (ADR 0002).** It earns the worker trust
+that **slice 2 (selective-escalation decider)** will spend — graduating
+`decider.py` from the binary watched/`--autonomous` into a dial that auto-continues
+the routine and wakes the Director only on the §2 taste/risk subset. Slice 2 is
+the natural next move; not started here.
