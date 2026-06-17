@@ -15,3 +15,5 @@ export { KairosAssistant, createBriefMcpServer, stdoutBriefSink, applyAssistantP
 export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig } from "./kairos/index.js";
 export { listSessions, getSessionMessages, getSessionInfo } from "./sessions/index.js";
 export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts } from "./sessions/index.js";
+export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/index.js";
+export type { RawContextUsage, ContextUsageSummary, QueryHolder } from "./context/index.js";

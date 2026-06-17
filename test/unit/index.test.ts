@@ -11,5 +11,7 @@ describe("public API", () => {
     expect(typeof api.listSessions).toBe("function");
     expect(typeof api.getSessionMessages).toBe("function");
     expect(typeof api.getSessionInfo).toBe("function");
+    expect(typeof api.createContextMcpServer).toBe("function");
+    expect(typeof api.summarizeUsage).toBe("function");
   });
 });
