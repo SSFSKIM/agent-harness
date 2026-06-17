@@ -44,6 +44,7 @@ export class DaemonSupervisor {
   private stopping = new Set<string>();                   // ids being intentionally torn down
   private shuttingDown = false;
   private sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options factory (D3)
+  private contextTool: boolean;
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
     this.registry = new SessionRegistry({ dir: opts.dir });
@@ -55,6 +56,7 @@ export class DaemonSupervisor {
     this.backoffMs = opts.backoffMs ?? 500;
     this.maxBackoffMs = opts.maxBackoffMs ?? 30_000;
     this.scheduleRestart = opts.scheduleRestart ?? ((fn, ms) => { const t = setTimeout(fn, ms); (t as any).unref?.(); return () => clearTimeout(t); });
+    this.contextTool = opts.contextTool ?? false;
     this.registry.reapStale(); // clear records orphaned by a prior crash
     if (this.idleTimeoutMs > 0) {
       this.reaper = setInterval(() => { void this.reapIdle(); }, opts.reapEvery ?? 30_000);
@@ -206,7 +208,7 @@ export class DaemonSupervisor {
     if (resume) base.resume = resume;                        // initial spawn only; restart() omits it (stays fresh)
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
     const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
-    const session = new DaemonSession(id, { query: this.deps.query }, options, this.now);
+    const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool });
     session.done.then(() => this.handleSessionEnd(id)).catch(() => {}); // end hook
     return session;
   }

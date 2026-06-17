@@ -30,6 +30,7 @@ export interface DaemonOptions {
   scheduleRestart?: (fn: () => void, ms: number) => () => void; // returns a canceller (testing seam)
   sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options merged over { model } (D3)
   sharedTasks?: boolean | { dir?: string; listId?: string };       // wire a shared cc-tasks store into every session (D3)
+  contextTool?: boolean;   // daemon-wide: expose the cc-context GetContextUsage tool to every session's agent (D6)
 }
 
 // NDJSON op protocol (one request per client connection).

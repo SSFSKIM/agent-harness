@@ -378,6 +378,15 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
   });
 
+  it("contextTool option wires cc-context into every spawned session", async () => {
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(sink) }, { dir: dir(), contextTool: true });
+    sup.spawn();
+    expect((sink[0].mcpServers as any)["cc-context"]).toBeTruthy();
+    expect(sink[0].allowedTools).toContain("mcp__cc-context__GetContextUsage");
+    await sup.shutdown();
+  });
+
   it("daemonOp accepts start_proactive (with/without config) and stop_proactive", () => {
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1" }).success).toBe(true);
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: 10 } }).success).toBe(true);

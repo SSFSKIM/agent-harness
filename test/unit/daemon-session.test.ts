@@ -11,6 +11,10 @@ function fakeQuery({ prompt }: any) {
   })();
 }
 
+function captureQuery(sink: any[]) {
+  return ({ prompt, options }: any) => { sink.push(options); return (async function* () { for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content }; })(); };
+}
+
 describe("DaemonSession", () => {
   it("submit streams non-result messages then resolves with the turn result", async () => {
     const chunks: any[] = [];
@@ -66,5 +70,18 @@ describe("DaemonSession", () => {
     await s.submit("x", () => {});
     await s.dispose();
     expect(ended).toBe(true);
+  });
+  it("contextTool (5th ctor arg) merges the cc-context server + allowed tool into options", async () => {
+    const sink: any[] = [];
+    const s = new DaemonSession("s-ctx", { query: captureQuery(sink) }, {}, Date.now, { contextTool: true });
+    expect((sink[0].mcpServers as any)["cc-context"]).toBeTruthy();
+    expect(sink[0].allowedTools).toContain("mcp__cc-context__GetContextUsage");
+    await s.dispose();
+  });
+  it("no contextTool → options reach the query untouched (no cc-context)", async () => {
+    const sink: any[] = [];
+    const s = new DaemonSession("s-plain", { query: captureQuery(sink) }, {});
+    expect(sink[0].mcpServers).toBeUndefined();
+    await s.dispose();
   });
 });
