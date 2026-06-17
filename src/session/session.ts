@@ -19,13 +19,13 @@ interface Waiter { onMessage: (m: unknown) => void; resolve: (r: { result: unkno
 export class Session implements ControllableSession {
   lastActiveAt: number;
   readonly done: Promise<void>;            // resolves when the read-loop ends (query disposed or died)
-  protected input = new AsyncQueue<SDKUserMessage>();
-  protected q: AsyncIterable<unknown>;
-  protected waiters: Waiter[] = [];        // FIFO: query emits one result per submitted turn, in order
-  protected ended = false;
-  protected compactRequested = false;      // set by the cc-compact tool; fires one /compact at the next boundary
-  protected now: () => number;
-  protected label: string;                 // used only in error messages
+  private input = new AsyncQueue<SDKUserMessage>();
+  private q: AsyncIterable<unknown>;
+  private waiters: Waiter[] = [];          // FIFO: query emits one result per submitted turn, in order
+  private ended = false;
+  private compactRequested = false;        // set by the cc-compact tool; fires one /compact at the next boundary
+  private now: () => number;
+  private label: string;                   // used only in error messages
   private _sessionId?: string;             // captured from the first system/init frame
 
   constructor(deps: SessionDeps, options: Record<string, unknown>, sessionOpts: SessionOpts = {}) {
