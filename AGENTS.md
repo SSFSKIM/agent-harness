@@ -18,11 +18,13 @@ Deep truth lives in `docs/` — follow the pointers.
    style. New knowledge pages: the `docs-tree` skill decides where they live.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
-5. **Review.** Always self-review. Two QA reviews — **spec-compliance** then
-   **code-quality** — run at *every* ExecPlan completion (always-on, regardless of
-   `review_level`); `review_level` governs only the additional *risk personas*
-   (arch/reliability/security) dispatched at the level the plan calls for
-   (`execplan`). Security review is reserved for the live exec surface.
+5. **Review.** Always self-review. A conditional **behavioral check** (run the plan's
+   acceptance + a smoke/E2E pass for any runnable surface; web → `playwright-cli`)
+   precedes the reviews. Two QA reviews — **spec-compliance** then **code-quality** —
+   run at *every* ExecPlan completion (always-on, regardless of `review_level`);
+   `review_level` governs only the additional *risk personas* (arch/reliability/security)
+   dispatched at the level the plan calls for (`execplan`). Security review is reserved
+   for the live exec surface.
 
 ## Map
 

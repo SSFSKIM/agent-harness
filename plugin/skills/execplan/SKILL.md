@@ -38,18 +38,24 @@ Method and template live in `docs/PLANS.md` — read it first.
 
 ## Completion gate (the PR-boundary equivalent)
 1. Run the gate (command in `docs/design-docs/agent-harness.md`) — must be GREEN.
-2. **Self-review first**: read the full diff
+2. **Behavioral check (conditional).** If the work has a runnable surface — a CLI flow,
+   a service, or a UI — actually run the plan's behavioral acceptance and a smoke /
+   end-to-end pass, and capture the output; drive a web surface with the `playwright-cli`
+   skill (`/playwright-cli`). If the deliverable is pure docs / methodology with nothing
+   to run, record **N/A + a one-line why** in the plan — "no behavioral QA" is a recorded
+   decision, never a silent omission.
+3. **Self-review**: read the full diff
    (`git diff <base_commit from plan frontmatter>..HEAD`) against the plan's
    Goal; fix what you would flag.
-3. **Always-on QA review (EVERY ExecPlan, independent of `review_level`):** dispatch
+4. **Always-on QA review (EVERY ExecPlan, independent of `review_level`):** dispatch
    **review-spec-compliance** first — did the diff build exactly the spec/plan
    (nothing missing, nothing extra, no misread requirement)? Only if it returns
    SATISFIED, dispatch **review-code-quality** — is the diff clean, decomposed,
    tested, maintainable? (Quality matters only once the right thing was built; a
    NOT-SATISFIED compliance verdict is a P1 — fix, rerun gate, re-review before
    quality.) These two run on every completion; `review_level` does NOT gate them.
-4. Spend the plan's **risk-budget** persona review (`review_level` governs ONLY these):
-   - `none`: no risk personas (step 3 still runs — it is unconditional).
+5. Spend the plan's **risk-budget** persona review (`review_level` governs ONLY these):
+   - `none`: no risk personas (step 4 still runs — it is unconditional).
    - `targeted`: dispatch only the persona(s) matching the risk touched
      (architecture/design, reliability/runtime, or security live exec surface).
    - `standard`: dispatch **review-arch** and **review-reliability** in parallel.
@@ -58,16 +64,16 @@ Method and template live in `docs/PLANS.md` — read it first.
      `.claude/lints/` (host commands that run on commit), or
      `docs/.harnessignore` (lint scoping). The rest of the threat model guards
      the disabled memory loop — SECURITY.md is deferred; see its status note.
-   Every reviewer (step 3 and step 4) gets the same prompt shape:
+   Every reviewer (step 4 and step 5) gets the same prompt shape:
    "Review the diff for ExecPlan <slug>. Run `git diff <base_commit>..HEAD`
    (substitute the actual SHA from the plan's frontmatter) to see it. Read
    your grounding doc first. Output P1/P2 findings with file:line and a
    Verdict."
    (Task tool subagent_type is plugin-namespaced: `agent-harness:review-spec-compliance`,
    `agent-harness:review-code-quality`, `agent-harness:review-arch`, etc.)
-5. Process findings (steps 3 + 4): P1 → fix now, rerun gate from step 1.
+6. Process findings (steps 4 + 5): P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
    `docs/exec-plans/tech-debt-tracker.md`.
-6. All verdicts SATISFIED → fill Outcomes & retrospective, set
+7. All verdicts SATISFIED → fill Outcomes & retrospective, set
    `status: completed`, `git mv` the file to `docs/exec-plans/completed/`,
    update `docs/QUALITY_SCORE.md` if grades changed, commit.

@@ -129,6 +129,11 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
 - **Acceptance is provable behavior.** State the command and the output to
   expect; a new test must fail before the change and pass after. Prove the
   change beyond "it compiles".
+- **Behavioral check is conditional (completion gate).** When the deliverable has a
+  runnable surface (a CLI flow, service, or UI), the completion gate actually runs the
+  plan's behavioral acceptance + a smoke/end-to-end pass — a web surface via the
+  `playwright-cli` skill — and captures the output. Pure docs/methodology records N/A +
+  a one-line why; never a silent skip.
 - **Idempotent and recoverable.** Write steps safe to re-run; for a risky,
   destructive, or migration step, give a retry or rollback path.
 - **Full paths and the why.** Name files by full repo-relative path; embed the
