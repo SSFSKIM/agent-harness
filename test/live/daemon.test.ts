@@ -88,4 +88,43 @@ live("live daemon (real SDK)", () => {
     await daemonRequest(sock, { op: "shutdown" });
     await server.closed;
   }, 120_000);
+
+  it("proactive heartbeat self-wakes a real session (a tick fires with no human turn)", async () => {
+    const d = mkdtempSync(join(tmpdir(), "cc-daemon-proactive-"));
+    const sock = join(d, "sock");
+    const sup = new DaemonSupervisor({ query }, { dir: join(d, "sessions"), sharedTasks: { dir: join(d, "tasks") } });
+    const server = new DaemonServer(sup, sock);
+    await server.listen();
+    const id = (await daemonRequest(sock, { op: "spawn" }))[0].id;
+
+    // A tick with an OBSERVABLE side effect: create a task, then report IDLE. High stopAfterIdle so it keeps ticking.
+    const started = (await daemonRequest(sock, {
+      op: "start_proactive", id,
+      config: {
+        tickPrompt: "Use the TaskCreate tool to create a task with subject HEARTBEAT_TICK. Then reply with exactly IDLE.",
+        intervalMs: 1500,
+        idleBackoff: { stopAfterIdle: 100 },
+      },
+    }))[0];
+    expect(started.ok).toBe(true);
+    expect(started.status.state).toBe("running");
+
+    // No human submits at all — if a tick fires, the shared store gains a HEARTBEAT_TICK task.
+    const sawTick = await new Promise<boolean>((resolve) => {
+      const t0 = Date.now();
+      const poll = async () => {
+        const items = await sup.tasks!.list();
+        if (items.some((t) => /HEARTBEAT_TICK/i.test(t.subject))) return resolve(true);
+        if (Date.now() - t0 > 60_000) return resolve(false);
+        setTimeout(poll, 2000);
+      };
+      void poll();
+    });
+    expect(sawTick).toBe(true); // a real heartbeat tick ran with no human in the loop
+
+    // Clean teardown of the control plane.
+    expect((await daemonRequest(sock, { op: "stop_proactive", id }))[0].ok).toBe(true);
+    await daemonRequest(sock, { op: "shutdown" });
+    await server.closed;
+  }, 120_000);
 });
