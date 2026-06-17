@@ -303,3 +303,15 @@ python3 -m director.orchestrator --team <id> --daemon --poll-interval 10   # boa
   signal for you to act, and the §9 run-report pull still surfaces it.
 - **Active-run reconciliation still applies** (it does in every mode): move a ticket out of
   `In Progress` in Linear and its worker is stopped within `reconcile_interval_s`.
+- **Exponential backoff** (daemon only; Symphony §8.4): the daemon does not hammer on
+  failure or idleness — three things back off on a shared `min(base·2^(n-1), cap)` curve
+  (`--backoff-base`, default 10s; `--backoff-cap`, default 300s). (1) **Retry** — a failed
+  worker is re-dispatched after the backoff, not immediately (the slot it holds counts
+  against `concurrency` while it waits, so the board never shows more `In Progress` than
+  are really running). (2) **Idle poll** — a quiet (or unreachable) board is polled less
+  and less often, up to the cap, and snaps back to `poll_interval_s` the moment work
+  appears. (3) **Claim** — a ticket whose claim write is rejected is retried after the
+  backoff rather than abandoned for the run. A graceful shutdown does **not** wait out a
+  pending retry's backoff — it drains running workers and exits, leaving the retry's ticket
+  `In Progress` for the next run to pick up. The batch modes (`--once`/default) are
+  unaffected: they retry immediately.

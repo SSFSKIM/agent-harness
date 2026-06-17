@@ -230,6 +230,12 @@ read per tick, consistent ordering.
   now-dead `born_cancelled`** (superseded — see Surprises); rewrote its test. Tests:
   retry-is-delayed, pending-retry-holds-a-slot, drain-abandons-pending-retry, force-drain-
   abandons-retry; `RunOnceRetryTest` + all batch tests stay green (R7). Gate GREEN (409).
+- [x] (2026-06-17) M4 — CLAIM re-admission: run_forever `claim_retry_at`/`claim_fails`
+  locals; before top-up, re-admit (discard from `state.claim_failed`) tids whose backoff
+  elapsed; on a failed claim bump `claim_fails` + set `claim_retry_at = now + _backoff_s(...)`;
+  on success pop both (bounded — only failing tids; D-79). DIRECTOR.md §12 backoff paragraph
+  (retry/idle/claim curve, knobs, drain interaction, batch unaffected). Test:
+  claim-failure-re-admitted-after-backoff (transient rejection recovers). Gate GREEN (410).
 
 ## Surprises & discoveries
 - (M3) M3's scheduled-retry + `not draining`-guarded due-retry (D-81) **supersedes stage

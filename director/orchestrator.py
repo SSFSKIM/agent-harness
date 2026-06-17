@@ -639,6 +639,8 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     poll_failing = False  # log a board-poll failure once on entry + once on recovery
     idle_streak = 0       # consecutive idle ticks → exponential idle-poll backoff (B)
     pending_retry: dict = {}  # tid -> (ticket, retry_at) — scheduled retry backoff (A)
+    claim_retry_at: dict = {}  # tid -> when a claim-failed ticket may be re-admitted (D)
+    claim_fails: dict = {}     # tid -> consecutive claim-failure count (exponential input)
 
     def schedule_retry(ticket):
         # Retry backoff (A, §8.4): instead of re-dispatching now (the batch default), hold
@@ -679,6 +681,12 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 free = concurrency - len(state.futures) - len(pending_retry)
                 blocked: list = []
                 if free > 0:
+                    # CLAIM RE-ADMISSION (D, D-79): a claim that failed is excluded only
+                    # until its backoff elapses — re-admit due ones (transient board hiccup
+                    # recovers; a permanent failure just retries at most every `cap`).
+                    for tid in [t for t in state.claim_failed
+                                if now >= claim_retry_at.get(t, now)]:
+                        state.claim_failed.discard(tid)
                     try:
                         ready = board.list_ready_issues(team, states["ready"])
                     except Exception as exc:  # transient board error — survive, retry next tick
@@ -696,7 +704,14 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                         claimable = [t for t in eligible if t["id"] not in state.in_flight
                                      and t["id"] not in state.claim_failed]
                         for ticket in claimable[:free]:
-                            state.claim_and_submit(ticket, wave=ticks)
+                            tid = ticket["id"]
+                            if state.claim_and_submit(ticket, wave=ticks):
+                                claim_fails.pop(tid, None)       # success → clear claim backoff
+                                claim_retry_at.pop(tid, None)
+                            else:  # failed claim → schedule a backed-off re-admission (D)
+                                claim_fails[tid] = claim_fails.get(tid, 0) + 1
+                                claim_retry_at[tid] = now + _backoff_s(
+                                    claim_fails[tid], base=backoff_base_s, cap=backoff_cap_s)
                         pending = [t for t in ready if t["id"] not in state.in_flight
                                    and t["id"] not in state.claim_failed]
                         blocked = [t for t in pending if t["id"] not in elig_ids]

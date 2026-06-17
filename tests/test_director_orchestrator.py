@@ -1196,6 +1196,33 @@ class DaemonBackoffTest(unittest.TestCase):
             shutdown.set()
             th.join(timeout=2.0)
 
+    # -- claim RE-ADMISSION (D) ----------------------------------------------
+    def test_claim_failure_is_re_admitted_after_backoff(self):
+        # D/D-79: a claim that fails is excluded only until its backoff elapses, then
+        # re-admitted — a transient board rejection recovers (not a lifetime exclusion).
+        class FlakyClaim(orch.MockBoard):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                self.claim_writes = 0
+
+            def update_issue_state(self, issue_id, state_id):
+                if state_id == "st_prog":  # the claim write (Todo → In Progress)
+                    self.claim_writes += 1
+                    if self.claim_writes <= 2:
+                        return False  # transient claim rejection (twice)
+                return super().update_issue_state(issue_id, state_id)
+
+        board = FlakyClaim([_issue("a")])
+        shutdown, force, th, result = self._run_bg(
+            board, lambda *a, **k: _DONE, backoff_base_s=0.05, backoff_cap_s=2.0)
+        try:
+            _wait_for(lambda: board.state_name("a") == "Done",
+                      msg="claim-failed ticket never re-admitted + claimed")
+            self.assertGreaterEqual(board.claim_writes, 3)  # 2 rejected + 1 successful claim
+        finally:
+            shutdown.set()
+            th.join(timeout=3.0)
+
     def test_force_drain_abandons_a_failed_workers_retry(self):
         # supersedes stage 2's `born_cancelled`: a worker that fails as a force-stop lands
         # cannot resurrect an (uncancellable) retry — the daemon SCHEDULES retries and the
