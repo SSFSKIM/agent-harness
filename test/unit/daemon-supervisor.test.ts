@@ -387,6 +387,30 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
   });
 
+  it("compact(id) delegates to the session and rejects unknown ids", async () => {
+    const seen: string[] = [];
+    const cq = ({ prompt }: any) => (async function* () {
+      for await (const t of prompt) {
+        const text = t.message.content; seen.push(text);
+        if (text === "/compact") { yield { type: "system", subtype: "status", status: null, compact_result: "success" }; yield { type: "result", result: "c" }; }
+        else yield { type: "result", result: "did:" + text };
+      }
+    })();
+    const sup = new DaemonSupervisor({ query: cq }, { dir: dir() });
+    const id = sup.spawn();
+    expect(await sup.compact(id)).toEqual({ ok: true, result: "success", error: undefined, preTokens: undefined, postTokens: undefined });
+    await expect(sup.compact("ghost")).rejects.toThrow(/unknown session/);
+    await sup.shutdown();
+  });
+  it("compactTool option wires cc-compact into every spawned session", async () => {
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(sink) }, { dir: dir(), compactTool: true });
+    sup.spawn();
+    expect((sink[0].mcpServers as any)["cc-compact"]).toBeTruthy();
+    expect(sink[0].allowedTools).toContain("mcp__cc-compact__RequestCompaction");
+    await sup.shutdown();
+  });
+
   it("daemonOp accepts start_proactive (with/without config) and stop_proactive", () => {
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1" }).success).toBe(true);
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: 10 } }).success).toBe(true);

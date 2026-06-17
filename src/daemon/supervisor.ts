@@ -13,6 +13,7 @@ import { resolveProactiveConfig } from "../proactive/types.js";
 import type { ProactiveConfigInput, ProactiveStatus } from "../proactive/types.js";
 import { defaultIdleDetector } from "../proactive/prompts.js";
 import { listSessions, getSessionMessages } from "../sessions/reader.js";
+import type { CompactOutcome } from "../compaction/server.js";
 
 export interface DaemonDeps {
   query: QueryFn;
@@ -45,6 +46,7 @@ export class DaemonSupervisor {
   private shuttingDown = false;
   private sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options factory (D3)
   private contextTool: boolean;
+  private compactTool: boolean;
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
     this.registry = new SessionRegistry({ dir: opts.dir });
@@ -57,6 +59,7 @@ export class DaemonSupervisor {
     this.maxBackoffMs = opts.maxBackoffMs ?? 30_000;
     this.scheduleRestart = opts.scheduleRestart ?? ((fn, ms) => { const t = setTimeout(fn, ms); (t as any).unref?.(); return () => clearTimeout(t); });
     this.contextTool = opts.contextTool ?? false;
+    this.compactTool = opts.compactTool ?? false;
     this.registry.reapStale(); // clear records orphaned by a prior crash
     if (this.idleTimeoutMs > 0) {
       this.reaper = setInterval(() => { void this.reapIdle(); }, opts.reapEvery ?? 30_000);
@@ -125,6 +128,15 @@ export class DaemonSupervisor {
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
     }
     return ControlBridge.apply(session, frame);
+  }
+
+  async compact(id: string): Promise<CompactOutcome> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) {
+      const rec = this.registry.get(id);
+      throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
+    }
+    return session.compact();
   }
 
   startProactive(id: string, config?: ProactiveConfigInput): ProactiveStatus {
@@ -208,7 +220,7 @@ export class DaemonSupervisor {
     if (resume) base.resume = resume;                        // initial spawn only; restart() omits it (stays fresh)
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
     const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
-    const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool });
+    const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool, compactTool: this.compactTool });
     session.done.then(() => this.handleSessionEnd(id)).catch(() => {}); // end hook
     return session;
   }

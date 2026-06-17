@@ -36,4 +36,7 @@ describe("daemon protocol", () => {
     if (m.op === "messages") expect(m.id).toBe("sess-1");
     expect(() => daemonOp.parse({ op: "messages" })).toThrow(); // id required
   });
+  it("parses a compact op", () => {
+    expect(daemonOp.parse({ op: "compact", id: "sess-1" })).toEqual({ op: "compact", id: "sess-1" });
+  });
 });

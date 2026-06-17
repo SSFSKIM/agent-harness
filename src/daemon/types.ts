@@ -31,6 +31,7 @@ export interface DaemonOptions {
   sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options merged over { model } (D3)
   sharedTasks?: boolean | { dir?: string; listId?: string };       // wire a shared cc-tasks store into every session (D3)
   contextTool?: boolean;   // daemon-wide: expose the cc-context GetContextUsage tool to every session's agent (D6)
+  compactTool?: boolean;   // daemon-wide: expose the cc-compact RequestCompaction tool to every session's agent (Spec B)
 }
 
 // NDJSON op protocol (one request per client connection).
@@ -44,6 +45,7 @@ const startProactiveOp = z.object({ op: z.literal("start_proactive"), id: z.stri
 const stopProactiveOp = z.object({ op: z.literal("stop_proactive"), id: z.string() });
 const sessionsOp = z.object({ op: z.literal("sessions"), cwd: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() });
 const messagesOp = z.object({ op: z.literal("messages"), id: z.string(), cwd: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() });
+const compactOp = z.object({ op: z.literal("compact"), id: z.string() });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;
