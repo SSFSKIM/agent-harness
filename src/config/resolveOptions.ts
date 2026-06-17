@@ -45,5 +45,6 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   if (config.resume) options.resume = config.resume;
   if (config.persistSession !== undefined) options.persistSession = config.persistSession;
   if (config.sessionStore) options.sessionStore = config.sessionStore;
+  if (config.hooks) options.hooks = config.hooks;
   return { ...options, ...(config.extraOptions ?? {}) };
 }

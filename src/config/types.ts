@@ -1,4 +1,5 @@
 import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig, SessionStore } from "@anthropic-ai/claude-agent-sdk";
+import type { HooksMap } from "../hooks/types.js";
 
 export type SettingSource = "user" | "project" | "local";
 
@@ -48,6 +49,10 @@ export interface HarnessConfig {
   swarm?: boolean | { team?: string; coordinatorPersona?: boolean; tools?: string[]; permissions?: { allow?: string[]; escalateToCoordinator?: boolean; onPlanApproval?: "default" | "acceptEdits" | "auto" | "bypassPermissions" } };
   // context introspection (domain 6, agent-facing): expose a GetContextUsage MCP tool to the model
   contextTool?: boolean;
+  // hooks (domain 8): programmatic SDK hooks (Partial<Record<HookEvent, HookCallbackMatcher[]>>).
+  // Build with the src/hooks builders + mergeHooks. NOTE: SessionStart/SessionEnd do NOT fire via
+  // this programmatic path (verified) — no builder exists for them; raw passthrough is the user's choice.
+  hooks?: HooksMap;
   mcpServers?: Record<string, McpServerConfig>;
   plugins?: SdkPluginConfig[];
   // escape hatches

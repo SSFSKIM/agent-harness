@@ -66,4 +66,10 @@ describe("resolveOptions", () => {
     expect((resolveOptions({ persistSession: true }) as any).persistSession).toBe(true);
     expect(resolveOptions({})).not.toHaveProperty("persistSession");
   });
+  it("passes config.hooks through to options.hooks, omits when absent", () => {
+    const hooks = { PostToolUse: [{ hooks: [async () => ({})] }] };
+    const o: any = resolveOptions({ hooks });
+    expect(o.hooks).toBe(hooks);
+    expect(resolveOptions({})).not.toHaveProperty("hooks");
+  });
 });
