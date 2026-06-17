@@ -362,6 +362,22 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
   });
 
+  it("reapIdle DOES reap a session whose heartbeat has self-stopped", async () => {
+    let t = 1000;
+    const s = captureSched();
+    const idleQuery = ({ prompt }: any) => (async function* () {
+      for await (const _t of prompt) yield { type: "result", result: "IDLE" };
+    })();
+    const sup = new DaemonSupervisor({ query: idleQuery }, { dir: dir(), idleTimeoutMs: 500, now: () => t, scheduleRestart: s.scheduleRestart });
+    const id = sup.spawn();
+    sup.startProactive(id, { intervalMs: 1000, idleBackoff: { stopAfterIdle: 1 } });
+    await s.fire();                                  // one idle tick → loop self-stops
+    expect(sup.proactiveStatus(id)!.state).toBe("stopped");
+    t = 5000; await sup.reapIdle();                 // self-stopped heartbeat must NOT exempt → reaped
+    expect(sup.list()).toEqual([]);
+    await sup.shutdown();
+  });
+
   it("daemonOp accepts start_proactive (with/without config) and stop_proactive", () => {
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1" }).success).toBe(true);
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: 10 } }).success).toBe(true);

@@ -71,8 +71,8 @@ export class ProactiveLoop {
     this.pending = undefined;
     if (this.state !== "running") return;
     let delay = this.cfg.intervalMs;
-    this.inFlight = this.deps.runTurn(this.cfg.tickPrompt);
     try {
+      this.inFlight = this.deps.runTurn(this.cfg.tickPrompt); // inside try: a sync throw becomes error-backoff, not an unhandled rejection
       const { result } = await this.inFlight;
       this.tickCount++;
       if (this.deps.idleDetector(result)) {

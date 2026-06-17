@@ -178,7 +178,11 @@ export class DaemonSupervisor {
   /** Stop sessions whose last activity is older than the idle timeout. */
   async reapIdle(): Promise<void> {
     const cutoff = this.now() - this.idleTimeoutMs;
-    const stale = [...this.pool].filter(([id, s]) => !this.proactive.has(id) && s.lastActiveAt < cutoff).map(([id]) => id);
+    const stale = [...this.pool].filter(([id, s]) => {
+      const loop = this.proactive.get(id);
+      const heartbeatActive = loop !== undefined && loop.status().state !== "stopped";
+      return !heartbeatActive && s.lastActiveAt < cutoff;
+    }).map(([id]) => id);
     await Promise.all(stale.map((id) => this.stop(id)));
   }
 

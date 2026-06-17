@@ -121,6 +121,19 @@ describe("ProactiveLoop — error backoff", () => {
     await h.sched.fire();                 // error 2 → stop
     expect(h.loop.status()).toMatchObject({ state: "stopped", reason: "error", errorCount: 2 });
   });
+
+  it("a SYNCHRONOUSLY-throwing runTurn is caught as error-backoff (loop never wedges)", async () => {
+    const h = harness(
+      { intervalMs: 100, errorBackoff: { factor: 2, maxIntervalMs: 10_000, stopAfterErrors: 2 } },
+      { runTurn: () => { throw new Error("sync boom"); } }, // NOT async: throws synchronously
+    );
+    h.loop.start();
+    await h.sched.fire();                 // must be caught → error 1, backoff 200 (not wedged / not unhandled)
+    expect(h.loop.status().errorCount).toBe(1);
+    expect(h.sched.lastDelay()).toBe(200);
+    await h.sched.fire();                 // error 2 → stop
+    expect(h.loop.status()).toMatchObject({ state: "stopped", reason: "error", errorCount: 2 });
+  });
 });
 
 describe("ProactiveLoop — pause / resume", () => {
