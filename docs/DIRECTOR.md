@@ -307,8 +307,9 @@ python3 -m director.orchestrator --team <id> --daemon --poll-interval 10   # boa
   failure or idleness — three things back off on a shared `min(base·2^(n-1), cap)` curve
   (`--backoff-base`, default 10s; `--backoff-cap`, default 300s). (1) **Retry** — a failed
   worker is re-dispatched after the backoff, not immediately (the slot it holds counts
-  against `concurrency` while it waits, so the board never shows more `In Progress` than
-  are really running). (2) **Idle poll** — a quiet (or unreachable) board is polled less
+  against `concurrency` while it waits — a pending retry shows `In Progress` though no
+  worker is running for it, so the board never shows more `In Progress` than `concurrency`
+  allows). (2) **Idle poll** — a quiet (or unreachable) board is polled less
   and less often, up to the cap, and snaps back to `poll_interval_s` the moment work
   appears. (3) **Claim** — a ticket whose claim write is rejected is retried after the
   backoff rather than abandoned for the run. A graceful shutdown does **not** wait out a

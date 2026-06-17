@@ -715,6 +715,15 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                         pending = [t for t in ready if t["id"] not in state.in_flight
                                    and t["id"] not in state.claim_failed]
                         blocked = [t for t in pending if t["id"] not in elig_ids]
+                        # GC dead claim-backoff state (D-79 bound): a transient-claim-failed
+                        # tid that has since LEFT the board (human moved/deleted it) is no
+                        # longer in `ready` nor in_flight, so its backoff bookkeeping is dead
+                        # — drop it, else it leaks for the daemon's lifetime (review P2).
+                        live = {t["id"] for t in ready} | state.in_flight
+                        for tid in [t for t in claim_fails if t not in live]:
+                            claim_fails.pop(tid, None)
+                            claim_retry_at.pop(tid, None)
+                            state.claim_failed.discard(tid)
                 state.status.polled(phase="active" if state.futures else "idle")
                 # Refresh the stuck heartbeat every poll so it tracks LIVE state (D-66):
                 # the blocked set only when fully idle, else cleared (work IS progressing —

@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-17
 owner: harness
 base_commit: c78dce4
@@ -264,4 +264,60 @@ read per tick, consistent ordering.
 
 ## Feedback (from completion gate)
 
+Both personas **SATISFIED**, no P1. Both **independently** found the same P2 (highest-
+confidence signal); fixed in-gate. Two more tracked as doc-debt.
+
+- **P2 (review-arch AND review-reliability, same finding) — `claim_fails`/`claim_retry_at`
+  slow leak. FIXED in-gate.** The maps were popped only on a *successful* claim; a ticket
+  that transient-claim-failed once and then *left the board* (human moved/deleted it) was
+  never popped — leaking for the daemon's lifetime, contradicting the spec's own D-79
+  "bounded" claim. Fix: each successful poll, GC any claim-backoff tid not in
+  `ready ∪ in_flight` (it has left the board → its backoff state is dead). Verified by
+  inspection + both reviewers + the existing `test_claim_failure_is_re_admitted_after_backoff`
+  still exercises the maps (the GC is memory hygiene with no behavioral signature, so no
+  dedicated test).
+- **P2 (review-reliability) — DIRECTOR.md §12 imprecise wording. FIXED in-gate.** "the
+  board never shows more In Progress than are really running" was wrong (a pending-retry
+  ticket IS In Progress but not running) → reworded to "never more In Progress than
+  `concurrency` allows".
+- **Proposed rules (both personas), TRACKED as doc-debt:** (1) every daemon-lifetime map
+  keyed by ticket id must be evicted when the ticket leaves the relevant set (not only on
+  the success path) — the general form of the leak above + the stage-2 `retain_results`/
+  `attempts`-pop precedents; promote to a numbered RELIABILITY rule. (2) `_RunState` is
+  *the* named batch/daemon sharing boundary and a force-stop's "no new worker during a
+  drain" is now a structural guarantee (superseding `born_cancelled`) — promote the two
+  load-bearing stage-2 daemon rules (parked at tech-debt-tracker) to ARCHITECTURE.md now
+  that the daemon track is closed. (3) reconciliation reach = `futures` only, so a
+  `pending_retry` ticket is human-cancel-blind until its retry submits (accepted short
+  window, board-as-truth converges) — codify as accepted-staleness.
+
 ## Outcomes & retrospective
+
+**Shipped:** exponential backoff (Symphony §8.4) for the daemon — closing parity gap #3 and
+the **entire daemon track** (gaps #1 reconciliation / #2 continuous loop / #3 backoff). One
+`_backoff_s(n,base,cap)` helper powers three behaviors: a failed worker retries after a
+growing delay (scheduled, never blocking the main thread); a quiet/unreachable board is
+polled less and less often (idle backoff, with poll-failure subsumed); a transient claim
+rejection recovers via backed-off re-admission instead of lifetime exclusion. Batch paths
+keep immediate retry, byte-unchanged (the `reap(on_retry=None)` default + the green batch
+suite are the proof).
+
+**The cleanest moment of the slice** was M3 *removing* stage-2's `born_cancelled` fix: the
+scheduled-retry + drain-abandon design (D-81) closes the force-defeat-by-retry hole at its
+*cause* (no worker spawns during a drain at all), making the earlier symptom-patch dead
+code. A later slice subsuming an earlier fix — and the diff is net-simpler for it.
+
+**Two design corrections surfaced mid-build** (recorded in Surprises): the reconcile cadence
+needs a *fresh post-WAIT clock* (the plan's "one `now` per tick" was wrong — idle backoff can
+sleep minutes); and the completion gate's two independent reviewers converged on the same
+claim-map leak (the spec's D-79 "bounded" claim held only for the success exit, not the
+left-the-board exit) — fixed in-gate with a GC against the live set.
+
+**Proof:** full gate GREEN at **410 tests** (+11: config +2, `_backoff_s`/`_idle_wait_s` unit
++2, `DaemonBackoffTest` +7, minus the rewritten stage-2 force test). Both review personas
+SATISFIED; 2 P2s fixed in-gate, 3 rule-promotions tracked.
+
+**Track status:** daemon track CLOSED. Symphony parity now: gaps #1–#4 done; only **gap #5
+(agent operating-protocol depth — the `WORKFLOW.md` body / richer per-stage templates)**
+remains, on the separate worker-protocol track. The `_backoff_s` seam and the `_RunState`
+sharing boundary are the durable artifacts a future loop-mode change inherits.
