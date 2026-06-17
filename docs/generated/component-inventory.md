@@ -15,6 +15,8 @@
 | agent | doc-gardener | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden-rule devi | plugin/agents/doc-gardener.md |
 | agent | dreamer | Memory consolidation persona (CONSOLIDATE). Dispatch via the dream skill to compress recent session  | plugin/agents/dreamer.md |
 | agent | review-arch | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the diff rang | plugin/agents/review-arch.md |
+| agent | review-code-quality | Code-quality review persona — always-on at every ExecPlan completion gate, after spec-compliance. Ve | plugin/agents/review-code-quality.md |
 | agent | review-reliability | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1  | plugin/agents/review-reliability.md |
 | agent | review-security | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1 in  | plugin/agents/review-security.md |
+| agent | review-spec-compliance | Spec-compliance review persona — always-on at every ExecPlan completion gate. Verifies the diff buil | plugin/agents/review-spec-compliance.md |
 | hook | Stop | runs `tidy_stop.py` | plugin/hooks/hooks.json |

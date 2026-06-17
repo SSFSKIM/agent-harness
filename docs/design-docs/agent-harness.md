@@ -55,6 +55,8 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | agent | `review-arch` | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the |
 | agent | `review-reliability` | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Gro |
 | agent | `review-security` | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Ground |
+| agent | `review-spec-compliance` | Spec-compliance review persona — always-on at every ExecPlan completion gate. Built exact |
+| agent | `review-code-quality` | Code-quality review persona — always-on at every ExecPlan completion gate, after spec-com |
 
 ## Docs placement
 

@@ -47,10 +47,14 @@ derived view of them. No higher-order spec system is needed — run-time fan-out
 the ticket DAG, not a doc subsystem (see `docs/memory/adr/0001-recursive-decomposition.md`).
 
 ## Review budget
-- `none` — gate + self-review only. Small, low-risk, mechanically checked work.
-- `targeted` — gate + self-review + the persona(s) matching the risk touched.
-- `standard` — gate + self-review + review-arch and review-reliability.
-- `full` — gate + self-review + all relevant personas, including security.
+Two reviews are **always-on** — they run at every ExecPlan completion regardless of the
+level below: **spec-compliance** (did the diff build exactly the spec/plan — nothing
+missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
+`review_level` governs ONLY the additional *risk personas*:
+- `none` — gate + self-review + the two always-on QA reviews; no risk personas.
+- `targeted` — + the risk persona(s) matching the risk touched.
+- `standard` — + review-arch and review-reliability.
+- `full` — + all relevant personas, including review-security.
 
 ## Template (copy into docs/exec-plans/active/YYYY-MM-DD-<slug>.md)
 

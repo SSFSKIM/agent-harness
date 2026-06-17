@@ -115,9 +115,19 @@ personas. Observable definition of done:
   diff — the first live use validates them on their own change.
 
 ## Progress log
-- [ ] M1 — two agent files
-- [ ] M2 — wire into gate (SKILL.md + PLANS.md)
-- [ ] M3 — coverage + inventory + GREEN + dogfood
+- [x] (2026-06-17) M1 — created `plugin/agents/review-spec-compliance.md` (read code
+  not report; missing/extra/misunderstood vs the linked spec R1..Rn else plan
+  Goal/acceptance) + `plugin/agents/review-code-quality.md` (grounded in DESIGN.md +
+  core-beliefs; decomposition/file-growth/error-at-real-boundaries/tests-verify-real;
+  Critical→P1, Important+Minor→P2). Both emit the exact review-arch P1/P2/Proposed/Verdict block.
+- [x] (2026-06-17) M2 — execplan SKILL.md completion gate: new step 3 (always-on
+  spec-compliance → code-quality-if-compliance-SATISFIED), risk personas demoted to
+  step 4 governed by `review_level` only; renumbered process/finalize. PLANS.md
+  Review-budget reframed (two QA reviews always-on; `review_level` governs only risk
+  personas, `none` still runs the QA pair).
+- [x] (2026-06-17) M3 — catalogued both agents in docs/design-docs/agent-harness.md;
+  regenerated docs/generated/component-inventory.md (both agents present);
+  `python3 plugin/scripts/check.py` GREEN. Dogfood review in the completion gate below.
 
 ## Surprises & discoveries
 
