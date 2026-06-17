@@ -1,4 +1,4 @@
-export { createHarness } from "./harness.js";
+export { createHarness, resumeHarness } from "./harness.js";
 export type { Harness, HarnessDeps, RunResult } from "./harness.js";
 export { resolveOptions } from "./config/resolveOptions.js";
 export type { HarnessConfig, SettingSource } from "./config/types.js";

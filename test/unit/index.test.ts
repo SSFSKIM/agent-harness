@@ -7,5 +7,6 @@ describe("public API", () => {
     expect(typeof api.resolveOptions).toBe("function");
     expect(api.BUILTIN_AGENTS).toBeTruthy();
     expect(api.BUILTIN_OUTPUT_STYLES).toBeTruthy();
+    expect(typeof api.resumeHarness).toBe("function");
   });
 });

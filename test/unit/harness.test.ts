@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createHarness } from "../../src/harness.js";
+import { createHarness, resumeHarness } from "../../src/harness.js";
 
 function fakeQuery({ prompt, options }: any) {
   const q: any = (async function* () {
@@ -36,5 +36,13 @@ describe("createHarness", () => {
     const h = createHarness({}, { query: fakeQuery });
     const it = h.stream("ping"); await it.next(); // start a query
     expect(await h.rewind("u1")).toEqual({ restored: "u1" });
+  });
+  it("resumeHarness sets options.resume to the given session id", () => {
+    const h = resumeHarness("sess-xyz", {}, { query: fakeQuery });
+    expect((h.options as any).resume).toBe("sess-xyz");
+  });
+  it("createHarness without resume leaves options.resume unset", () => {
+    const h = createHarness({}, { query: fakeQuery });
+    expect((h.options as any).resume).toBeUndefined();
   });
 });

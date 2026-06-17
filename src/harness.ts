@@ -96,3 +96,11 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     swarm,
   };
 }
+
+/** Resume a prior session by id: a thin wrapper over createHarness with `resume` set.
+ *  Stateless — the returned handle applies `sessionId` to EVERY run() it makes, so the idiomatic
+ *  use is ONE continuation run per handle; thread the returned run().sessionId forward for the next
+ *  turn (for linear multi-turn, prefer the daemon's long-lived session). */
+export function resumeHarness(sessionId: string, config: HarnessConfig = {}, deps?: HarnessDeps): Harness {
+  return createHarness({ ...config, resume: sessionId }, deps);
+}
