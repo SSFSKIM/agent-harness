@@ -15,6 +15,15 @@ plus `DIRECTOR.md`/`ARCHITECTURE.md`. This is the reference the Symphony-parity
 track cites; it is observational (what differs and why), not a roadmap — the
 chosen next move lives in its own spec (see "Derived work" below).
 
+> **Strategic update (2026-06-17).** This doc's "neither bet is ahead" stance and
+> its gap-#5-as-output-quality framing are **narrowed by
+> [ADR 0002 — graduated autonomy](../memory/adr/0002-graduated-autonomy.md)**: we
+> now deliberately take Symphony's autonomy bet on the *middle* (Director →
+> exception-handler) and *worker-autonomy* axes, while **keeping** our board-ownership
+> + serialized merger (those are correctness wins, not human-in-loop artifacts). Gap
+> #5 is reclassified there as the *worker-autonomy enabler*, not just output quality.
+> Read this doc as the observational comparison; read ADR 0002 for the chosen stance.
+
 ## The headline: a different bet, not a worse one
 
 Symphony and our Director solve the same problem with opposite philosophies.
@@ -110,7 +119,13 @@ rich, battle-tested agent protocol: the single `## Codex Workpad` comment as
 source-of-truth, reproduction-first, acceptance-criteria mirroring, the **PR
 feedback sweep**, and the explicit Human Review / Rework lifecycle. Our per-stage
 templates in `taxonomy.py` are a few sentences each. This is the lever for worker
-*output quality*.
+*output quality* — and, per
+[ADR 0002](../memory/adr/0002-graduated-autonomy.md), the **precondition for
+graduated autonomy**: the worker protocol must be rich enough to run unsupervised
+before the Director can step back from judging every turn-end. Harvest the
+stage-agnostic disciplines into a shared worker-protocol preamble; do **not** port
+`WORKFLOW.md` as a file (its lifecycle steps assume the worker owns the board +
+self-merge — the two axes ADR 0002 rejects).
 
 **Lesser/adapter-level gaps:** `board/linear.py` lacks `fetch_issue_states_by_ids`
 (§11.1, ties to #1), pagination (§11.2), and startup terminal-workspace cleanup
