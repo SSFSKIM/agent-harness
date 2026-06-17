@@ -925,9 +925,12 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--status-dir", default=None,
                     help="orchestration-status dir override (default: .claude/harness/director-status)")
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched: use the code turn-end decider (no live Director "
-                         "answers turn ends). Per-action self-governance (on-request + "
-                         "auto_review) and full network are shared with the watched default")
+                    help="no-agent: self-resolve turn-ends with the code turn-end decider — "
+                         "the --mock/CI/truly-detached niche (no judging agent). The default "
+                         "routes turn-ends to the Director: a human-attended session OR a "
+                         "lights-out daemon, same queue path (DIRECTOR.md §6). Per-action "
+                         "self-governance (on-request + auto_review) and full network are "
+                         "shared across all modes")
     ap.add_argument("--read-timeout", type=float, default=None,
                     help="per-event read timeout for a worker turn (s); raise for slow "
                          "real codex workers that think >30s mid-turn")
