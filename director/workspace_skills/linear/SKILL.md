@@ -181,30 +181,6 @@ query IssueDetails($id: String!) {
 }
 ```
 
-### Query team workflow states for an issue
-
-Use this before changing issue state when you need the exact `stateId`:
-
-```graphql
-query IssueTeamStates($id: String!) {
-  issue(id: $id) {
-    id
-    team {
-      id
-      key
-      name
-      states {
-        nodes {
-          id
-          name
-          type
-        }
-      }
-    }
-  }
-}
-```
-
 ### Edit an existing comment
 
 Use `commentUpdate` through `linear_graphql`:
@@ -372,8 +348,9 @@ mutation FileUpload(
   queries.
 - Prefer the narrowest issue lookup that matches what you already know:
   key -> identifier search -> internal id.
-- For state transitions, fetch team states first and use the exact `stateId`
-  instead of hardcoding names inside mutations.
+- Do not transition issue state. Lifecycle-state writes are the orchestrator's
+  (`issueUpdate` is not in your allowlist and will be refused) — propose your
+  terminal state with `report_outcome` instead.
 - Prefer `attachmentLinkGitHubPR` over a generic URL attachment when linking a
   GitHub PR to a Linear issue.
 - Do not introduce new raw-token shell helpers for GraphQL access.

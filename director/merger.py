@@ -282,8 +282,10 @@ def main(argv=None) -> int:
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched: self-resolve land-lane turn-ends with the code decider "
-                         "(no live Director). Default routes turn-ends to the Director (R9)")
+                    help="no-agent: self-resolve land-lane turn-ends with the code decider — "
+                         "the --mock/CI/truly-detached niche (no judging agent). Default routes "
+                         "turn-ends to the Director (a human-attended session OR a lights-out "
+                         "daemon — same queue path, DIRECTOR.md §6); R9")
     ap.add_argument("--turn-review-timeout", type=float, default=None,
                     help="watched: how long the land lane waits for the Director to answer a "
                          "turn-end before escalating (s)")

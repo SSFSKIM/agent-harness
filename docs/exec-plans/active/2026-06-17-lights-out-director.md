@@ -195,5 +195,19 @@ consistency are the touched risk).
   path with a daemon answerer (ADR 0003 / spec R1); slice work is doc + 2 small edits.
 
 ## Feedback (from completion gate)
+- **review-arch (targeted), 2026-06-17 — initial verdict NOT SATISFIED → resolved.**
+  - **P1 (fixed now):** `linear/SKILL.md` still instructed state transitions in two
+    places that contradicted the new "Do NOT transition issue state yourself" section
+    (R7) — the usage-rule "For state transitions, fetch team states first…" (rewritten
+    to "Do not transition issue state… propose via report_outcome") and the "Query team
+    workflow states… before changing issue state" lookup section (removed — it existed
+    only to support the now-refused write). Grep confirms only do-NOT guidance remains.
+  - **P2 (partially fixed, rest deferred):** the `--autonomous` help text still used the
+    old binary framing in `merger.py` (fixed → no-agent/`--mock`-CI niche) and
+    `orchestrator.py` (deferred to tech-debt — contended file, see tracker). The
+    authoritative three-mode reframe lives in DIRECTOR.md §6, which landed.
+  - **P2 (doc-debt, deferred):** §2's fail-safe verb "escalate" vs §13/PRINCIPLES "park"
+    — consistent in mechanism (park = distinct-reason escalate); a one-clause pointer in
+    §2 could pre-empt confusion. Non-blocking.
 
 ## Outcomes & retrospective
