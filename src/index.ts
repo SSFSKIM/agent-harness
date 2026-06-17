@@ -19,3 +19,5 @@ export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/
 export type { RawContextUsage, ContextUsageSummary, QueryHolder } from "./context/index.js";
 export { createCompactMcpServer, parseCompactOutcome, COMPACT_TOOL } from "./compaction/index.js";
 export type { CompactHolder, CompactOutcome } from "./compaction/index.js";
+export { openSession, resumeSession, Session } from "./session/index.js";
+export type { OpenSessionConfig, SessionDepsInput, SessionDeps, SessionOpts } from "./session/index.js";
