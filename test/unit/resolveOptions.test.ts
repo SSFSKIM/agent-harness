@@ -52,4 +52,18 @@ describe("resolveOptions", () => {
     const o: any = resolveOptions({});
     expect(o.env).toBeUndefined();
   });
+  it("threads resume and sessionStore when set, omits them otherwise", () => {
+    const store = { append: async () => {}, load: async () => null } as any;
+    const o: any = resolveOptions({ resume: "sess-abc", sessionStore: store });
+    expect(o.resume).toBe("sess-abc");
+    expect(o.sessionStore).toBe(store);
+    const bare: any = resolveOptions({});
+    expect(bare).not.toHaveProperty("resume");
+    expect(bare).not.toHaveProperty("sessionStore");
+  });
+  it("emits persistSession for true and false, omits when undefined", () => {
+    expect((resolveOptions({ persistSession: false }) as any).persistSession).toBe(false);
+    expect((resolveOptions({ persistSession: true }) as any).persistSession).toBe(true);
+    expect(resolveOptions({})).not.toHaveProperty("persistSession");
+  });
 });

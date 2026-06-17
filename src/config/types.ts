@@ -1,4 +1,4 @@
-import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig, SessionStore } from "@anthropic-ai/claude-agent-sdk";
 
 export type SettingSource = "user" | "project" | "local";
 
@@ -35,6 +35,10 @@ export interface HarnessConfig {
   includeBuiltinAgents?: boolean;          // default true
   // checkpointing / mcp / plugins
   enableFileCheckpointing?: boolean;       // default true
+  // session persistence — the SDK persists transcripts to ~/.claude/projects by default
+  resume?: string;                         // SDK session_id to reload prior context
+  persistSession?: boolean;                // default SDK-true; false = ephemeral (no disk persistence)
+  sessionStore?: SessionStore;             // BYO transcript-mirror backend (advanced; pure passthrough)
   // task tools (Phase 2 A1): durable Task* MCP server
   taskTools?: boolean | { dir?: string; listId?: string; agentName?: string };
   // swarm / coordinator (Phase 2 A2): peer teammate orchestration over an in-process bus
