@@ -10,6 +10,8 @@ function fakeQuery({ prompt, options }: any) {
   q.__options = options;
   q.rewindFiles = async (id: string) => ({ restored: id });
   q.supportedCommands = async () => [{ name: "clear" }];
+  q.getContextUsage = async () => ({ totalTokens: 42 });
+  q.accountInfo = async () => ({ apiProvider: "anthropic" });
   return q;
 }
 
@@ -44,5 +46,15 @@ describe("createHarness", () => {
   it("createHarness without resume leaves options.resume unset", () => {
     const h = createHarness({}, { query: fakeQuery });
     expect((h.options as any).resume).toBeUndefined();
+  });
+  it("getContextUsage()/accountInfo() delegate to the active query", async () => {
+    const h = createHarness({}, { query: fakeQuery });
+    const it = h.stream("ping"); await it.next(); // start a query
+    expect(await h.getContextUsage()).toEqual({ totalTokens: 42 });
+    expect(await h.accountInfo()).toEqual({ apiProvider: "anthropic" });
+  });
+  it("getContextUsage() throws before a query starts", async () => {
+    const h = createHarness({}, { query: fakeQuery });
+    await expect(h.getContextUsage()).rejects.toThrow(/start a query first/);
   });
 });
