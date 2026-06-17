@@ -43,4 +43,15 @@ describe("KairosAssistant orchestration", () => {
     await expect(k.start()).rejects.toThrow(/already started/);
     await k.stop();
   });
+
+  it("stop() before start() is a no-op and does not suppress a later teardown", async () => {
+    let disposed = false;
+    const query = ((arg: any) => (async function* () { for await (const _ of arg.prompt) { /* swallow */ } disposed = true; })()) as any;
+    const k = new KairosAssistant({ query }, { proactive: { intervalMs: 999_999 } });
+    await k.stop();                                  // before start: clean no-op, must not latch
+    await k.start();
+    expect(k.status().proactive?.state).toBe("running");
+    await k.stop();                                  // must actually tear the session down now
+    expect(disposed).toBe(true);                     // session was disposed (no leak)
+  });
 });

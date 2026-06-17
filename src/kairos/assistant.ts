@@ -55,7 +55,7 @@ export class KairosAssistant {
   }
 
   async stop(): Promise<void> {
-    if (this.stopped) return;        // idempotent
+    if (this.stopped || !this.id) return; // nothing started, or already stopped → no-op (no latch before start)
     this.stopped = true;
     await this.sup.shutdown();        // stops the heartbeat loop + disposes the session
   }
