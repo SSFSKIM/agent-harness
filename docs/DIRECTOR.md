@@ -78,6 +78,8 @@ forcing past a blocker, `siblings_in_flight`/`recent_for_ticket` showing systemi
 
 **Fail-safe default:** if you genuinely can't tell whether it's taste, escalate. Human
 time is scarce, but a wrong autonomous taste call costs more than one escalation.
+(Running lights-out, with no human to escalate *to*, this same fail-safe is the §13
+**park** — a distinctly-worded escalate that holds the ticket for the async human.)
 
 ## 3. Why the join matters — worked example
 
