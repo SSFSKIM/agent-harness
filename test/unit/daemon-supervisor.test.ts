@@ -392,6 +392,18 @@ describe("DaemonSupervisor", () => {
     expect(sink[0].resume).toBe("sess-prior");
     await sup.shutdown();
   });
+  it("listPersistedSessions / getPersistedMessages delegate to the injected reader", async () => {
+    const calls: any[] = [];
+    const sup = new DaemonSupervisor({
+      query: fakeQuery,
+      listSessions: async (o: any) => { calls.push(["list", o]); return [{ sessionId: "s1" }]; },
+      getSessionMessages: async (id: string, o: any) => { calls.push(["msgs", id, o]); return [{ uuid: "u1" }]; },
+    }, { dir: dir() });
+    expect(await sup.listPersistedSessions({ cwd: "/p", limit: 3 })).toEqual([{ sessionId: "s1" }]);
+    expect(await sup.getPersistedMessages("sess-9", { cwd: "/p" })).toEqual([{ uuid: "u1" }]);
+    expect(calls).toEqual([["list", { cwd: "/p", limit: 3 }], ["msgs", "sess-9", { cwd: "/p" }]]);
+    await sup.shutdown();
+  });
   it("auto-restart re-creates the session WITHOUT resume (stays fresh)", async () => {
     const sink: any[] = [];
     const dying = ({ options }: any) => { sink.push(options); return (async function* () {})(); };

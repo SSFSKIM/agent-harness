@@ -29,4 +29,11 @@ describe("daemon protocol", () => {
     if (ok.op === "spawn") expect(ok.resume).toBe("sess-9");
     expect(daemonOp.parse({ op: "spawn" }).op).toBe("spawn"); // resume optional
   });
+  it("sessions and messages ops parse with optional scope/pagination", () => {
+    expect(daemonOp.parse({ op: "sessions" }).op).toBe("sessions");
+    expect(daemonOp.parse({ op: "sessions", cwd: "/p", limit: 10, offset: 5 }).op).toBe("sessions");
+    const m = daemonOp.parse({ op: "messages", id: "sess-1", cwd: "/p" });
+    if (m.op === "messages") expect(m.id).toBe("sess-1");
+    expect(() => daemonOp.parse({ op: "messages" })).toThrow(); // id required
+  });
 });

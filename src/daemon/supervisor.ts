@@ -12,8 +12,13 @@ import { ProactiveLoop } from "../proactive/loop.js";
 import { resolveProactiveConfig } from "../proactive/types.js";
 import type { ProactiveConfigInput, ProactiveStatus } from "../proactive/types.js";
 import { defaultIdleDetector } from "../proactive/prompts.js";
+import { listSessions, getSessionMessages } from "../sessions/reader.js";
 
-export interface DaemonDeps { query: QueryFn; }
+export interface DaemonDeps {
+  query: QueryFn;
+  listSessions?: (opts?: Parameters<typeof listSessions>[0]) => Promise<unknown[]>;
+  getSessionMessages?: (id: string, opts?: Parameters<typeof getSessionMessages>[1]) => Promise<unknown[]>;
+}
 
 interface SpawnConfig { model?: string; restart: RestartPolicy; }
 
@@ -102,6 +107,14 @@ export class DaemonSupervisor {
   }
 
   list(): SessionRecord[] { return this.registry.list(); }
+
+  // Persisted on-disk transcripts (SDKSessionInfo / SessionMessage) — DISTINCT from list() (live registry).
+  listPersistedSessions(opts: { cwd?: string; limit?: number; offset?: number } = {}): Promise<unknown[]> {
+    return (this.deps.listSessions ?? listSessions)(opts);
+  }
+  getPersistedMessages(id: string, opts: { cwd?: string; limit?: number; offset?: number } = {}): Promise<unknown[]> {
+    return (this.deps.getSessionMessages ?? getSessionMessages)(id, opts);
+  }
 
   async control(id: string, frame: ControlFrame): Promise<ControlResponse> {
     const session = this.pool.get(id);
