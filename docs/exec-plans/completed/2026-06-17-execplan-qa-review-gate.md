@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-17
 owner: harness
 base_commit: 35d4d1fdf5dee4d469e0c6209a1a78ec0ce03343
@@ -130,6 +130,14 @@ personas. Observable definition of done:
   `python3 plugin/scripts/check.py` GREEN. Dogfood review in the completion gate below.
 
 ## Surprises & discoveries
+- **Agent-registry staleness:** an agent `.md` created mid-session is NOT dispatchable
+  by `subagent_type` until the next session — the registry loads at session start.
+  `agent-harness:review-spec-compliance` returned "not found" when dispatched this
+  session. The files are correct (review-arch confirmed the format; both appear in the
+  regenerated inventory + coverage doc) and WILL dispatch next session. The dogfood was
+  therefore run via `general-purpose` agents carrying the exact rubric from each agent
+  file (functionally identical: same rubric, same diff, same P1/P2/Verdict contract).
+  Implication: the always-on gate is fully live from the NEXT ExecPlan onward.
 
 ## Decision log
 - 2026-06-17: chose gate-step over a separate `/qa` skill — a separate skill is
@@ -138,5 +146,34 @@ personas. Observable definition of done:
   constraint for the execplan QA agents; the global CLAUDE.md note stays untouched.
 
 ## Feedback (from completion gate)
+Dogfood — the new gate run on its own change:
+- **review-arch (targeted):** SATISFIED, no P1/P2. Proposed (→ tech-debt): DESIGN.md's
+  "1 persona ↔ 1 grounding doc" phrasing is now imprecise (code-quality grounds in two
+  docs; spec-compliance in per-plan specs); `subagent_type`↔filename has no lint.
+- **review-spec-compliance (via general-purpose; registry-stale):** SATISFIED, no
+  P1/P2 — all 5 Goal DoD items + 3 milestone acceptances verified against the files.
+- **review-code-quality (via general-purpose):** SATISFIED, no P1. Two **P2 doc-drift**
+  findings — `AGENTS.md` §Review and `ARCHITECTURE.md` REVIEW data-flow still described
+  review as `review_level`-only — **fixed now** (one clause each: the always-on QA pair
+  precedes the risk personas). Proposed (→ tech-debt): harness-init seed templates
+  (`plans-md.md`/`agents-md.md`) still carry the old framing — host-customizable by
+  design, so deliberately left.
 
 ## Outcomes & retrospective
+**Shipped:** two always-on review agents — `review-spec-compliance` ("built exactly the
+spec/plan?") and `review-code-quality` ("is it well-built?") — adapted from superpowers
+into our `P1/P2/Proposed/Verdict` contract, wired into the execplan completion gate as an
+**unconditional** step 3 (compliance → code-quality-if-SATISFIED) ahead of the
+`review_level` risk personas (step 4). `docs/PLANS.md`, `AGENTS.md`, and `ARCHITECTURE.md`
+reframed so the QA pair is always-on and `review_level` governs only the risk personas;
+both agents catalogued + the component inventory regenerated.
+
+**Result:** every future ExecPlan now gets "did you build the spec?" + "is the code
+good?" unconditionally, on top of the risk-budgeted personas — closing the methodology
+gap that let a completion run only `review-arch`. Gate GREEN; all three completion
+reviews SATISFIED. The gate was dogfooded on its own change.
+
+**Caveat:** mid-session registry staleness meant the two new agents were exercised via
+`general-purpose` carrying their rubric this session; they dispatch by `subagent_type`
+from the next session on (see Surprises). The standing tech-debt items are doc-debt
+follow-ups (DESIGN.md grounding phrasing; harness-init seed-template framing).

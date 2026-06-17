@@ -93,11 +93,13 @@ point rightward at skills — the most actionable instruction wins.
 3. **CONSOLIDATE** *(manual; no automatic input while IMPRINT is off)* —
    `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
    knowledge/limitations/openq/adr directly → `check.py` green terminates.
-4. **REVIEW** — `execplan` completion gate → self-review → spend the plan's
-   `review_level` budget (`none`, `targeted`, `standard`, `full`). Review
-   personas are grounded 1:1 in docs for taste/contract authority, but may flag
-   demonstrable bugs with concrete evidence. review-security is dispatched only
-   when the diff touches the live exec surface (hooks / `.harness.json` /
+4. **REVIEW** — `execplan` completion gate → self-review → always-on
+   **spec-compliance** then **code-quality** review (every ExecPlan) → spend the
+   plan's `review_level` budget for the *risk personas* (`none`, `targeted`,
+   `standard`, `full`). Review personas are grounded 1:1 in docs for taste/contract
+   authority, but may flag demonstrable bugs with concrete evidence. review-security
+   is dispatched only when the diff touches the live exec surface (hooks /
+   `.harness.json` /
    `.harnessignore`; the rest of SECURITY.md is dormant with the disabled memory
    loop — deferred 2026-06-13) → iterate until satisfied.
 5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
