@@ -33,7 +33,7 @@ export interface DaemonOptions {
 }
 
 // NDJSON op protocol (one request per client connection).
-const spawnOp = z.object({ op: z.literal("spawn"), model: z.string().optional(), restart: z.enum(["no", "on-failure"]).optional() });
+const spawnOp = z.object({ op: z.literal("spawn"), model: z.string().optional(), restart: z.enum(["no", "on-failure"]).optional(), resume: z.string().optional() });
 const submitOp = z.object({ op: z.literal("submit"), id: z.string(), prompt: z.string() });
 const listOp = z.object({ op: z.literal("list") });
 const stopOp = z.object({ op: z.literal("stop"), id: z.string() });

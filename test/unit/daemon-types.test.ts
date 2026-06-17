@@ -24,4 +24,9 @@ describe("daemon protocol", () => {
     expect(daemonOp.parse({ op: "spawn" }).op).toBe("spawn"); // restart optional
     expect(() => daemonOp.parse({ op: "spawn", restart: "sometimes" })).toThrow();
   });
+  it("spawn op accepts an optional resume session id", () => {
+    const ok = daemonOp.parse({ op: "spawn", resume: "sess-9" });
+    if (ok.op === "spawn") expect(ok.resume).toBe("sess-9");
+    expect(daemonOp.parse({ op: "spawn" }).op).toBe("spawn"); // resume optional
+  });
 });

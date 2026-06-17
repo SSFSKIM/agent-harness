@@ -384,4 +384,26 @@ describe("DaemonSupervisor", () => {
     expect(daemonOp.safeParse({ op: "start_proactive", id: "s1", config: { intervalMs: "x" } }).success).toBe(false);
     expect(daemonOp.safeParse({ op: "stop_proactive", id: "s1" }).success).toBe(true);
   });
+
+  it("spawn({resume}) threads resume into the new session's options", async () => {
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureQuery(sink) }, { dir: dir() });
+    sup.spawn({ resume: "sess-prior" });
+    expect(sink[0].resume).toBe("sess-prior");
+    await sup.shutdown();
+  });
+  it("auto-restart re-creates the session WITHOUT resume (stays fresh)", async () => {
+    const sink: any[] = [];
+    const dying = ({ options }: any) => { sink.push(options); return (async function* () {})(); };
+    const sup = new DaemonSupervisor({ query: dying }, {
+      dir: dir(), restart: "on-failure", maxRestarts: 1,
+      scheduleRestart: (fn) => { fn(); return () => {}; },
+    });
+    sup.spawn({ resume: "sess-prior", restart: "on-failure" });
+    await new Promise((r) => setTimeout(r, 20)); // let the death→restart cascade drain
+    expect(sink[0].resume).toBe("sess-prior");                        // initial spawn carried resume
+    expect(sink.length).toBeGreaterThanOrEqual(2);                   // it restarted at least once
+    expect(sink.slice(1).every((o) => o.resume === undefined)).toBe(true); // restarts are fresh
+    await sup.shutdown();
+  });
 });

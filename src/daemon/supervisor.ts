@@ -69,12 +69,12 @@ export class DaemonSupervisor {
     }
   }
 
-  spawn(opts: { model?: string; restart?: RestartPolicy } = {}): string {
+  spawn(opts: { model?: string; restart?: RestartPolicy; resume?: string } = {}): string {
     if (this.pool.size >= this.maxSessions) throw new DaemonError(`max sessions (${this.maxSessions}) reached`);
     const id = `sess-${++this.seq}`;
     const cfg: SpawnConfig = { model: opts.model, restart: opts.restart ?? this.restartPolicy };
     this.configs.set(id, cfg);
-    this.pool.set(id, this.makeSession(id, cfg));
+    this.pool.set(id, this.makeSession(id, cfg, opts.resume));
     const t = this.now();
     this.registry.register({ id, daemonPid: process.pid, status: "idle", model: opts.model, createdAt: t, lastActiveAt: t });
     return id;
@@ -188,8 +188,9 @@ export class DaemonSupervisor {
 
   // ---- restart machinery ----
 
-  private makeSession(id: string, cfg: SpawnConfig): DaemonSession {
-    const base = cfg.model ? { model: cfg.model } : {};
+  private makeSession(id: string, cfg: SpawnConfig, resume?: string): DaemonSession {
+    const base: Record<string, unknown> = cfg.model ? { model: cfg.model } : {};
+    if (resume) base.resume = resume;                        // initial spawn only; restart() omits it (stays fresh)
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
     const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
     const session = new DaemonSession(id, { query: this.deps.query }, options, this.now);
