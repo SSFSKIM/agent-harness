@@ -51,6 +51,20 @@ owner: harness
   머지 thrash 를 단일 소비자로 제거. merger 는 `drive`+decider 재사용(새 turn 머신 0). multi-turn
   의 미뤄둔 "done-is-really-done" + visibility 의 "terminal sanity-check" 을 닫음. Playwright-in-
   sandbox 실행 가능성은 ExecPlan PoC.
+- [Lights-out Director — Core Principle 레이어 · park 계약 · board comment · issueUpdate ceiling](2026-06-17-lights-out-director.md)
+  — [ADR 0002](../memory/adr/0002-graduated-autonomy.md) slice 2, [ADR 0003](../memory/adr/0003-lights-out-director.md)
+  reframe 위에 빌드. mode bit 을 (Director 有無)×(human 有無) 두 축으로 분리 — "autonomous"
+  가 *human 부재*(Director-only, daemon 이 큐 응답)로 재바인딩되고 pure-code `autonomous_decide`
+  는 no-agent(`--mock`/CI) niche 로 후퇴(새 orchestrator flag 0 — 누가 응답하느냐로 실현).
+  신규 `docs/PRINCIPLES.md`(인간의 decision-taste 외부화 — Director 가 fork 에서 인간 판단을
+  *시뮬레이션*; Claude 가 관찰된 패턴으로 seed) + `DIRECTOR.md` lights-out 절차(hard-blocker→park /
+  mechanical→decide+log / taste→PRINCIPLES 참조→infer-or-park; 판별자 = taste-vs-mechanical, hard
+  floor = 가드레일 아키텍처) + §2 outward-facing 조항 수정. park = 기존 `escalate` 경로 재사용
+  (구분 가능한 comment + In Progress 유지 + async 인간 surface), audit = disposition 에 principle
+  citation. 2b: 워커가 **단일** canonical 진행 comment 유지(`WORKER_PROTOCOL` 확장). 2c:
+  `issueUpdate` 를 worker allowlist 에서 제거 + linear SKILL.md state-transition 지시 제거(직렬화
+  orchestrator state-write 단일화). Daemonized Claude Code 런타임은 별도 트랙(범위 밖);
+  no-headless 메모리 NOT superseded.
 - [Director board reporting (run-level pull)](2026-06-16-director-board-reporting.md)
   — Phase 4 로드맵의 "board 리포팅". 목적 = 사람 attention pull(내구성 기록 아님): unattended
   watched 런이 종료 국면(drained/stuck/max/poll_failed)에 닿으면 `director.watch` 가 status
