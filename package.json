@@ -3,8 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "cc-harness": "./src/cli.ts" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": { "cc-harness": "./dist/cli.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=18" },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepack": "npm run build",
+    "verify:pack": "node scripts/verify-package.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",

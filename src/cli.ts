@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 import { parseArgs, composePrompt } from "./cliArgs.js";
 import { createHarness } from "./harness.js";
