@@ -64,6 +64,12 @@ async function runAssistant(args: string[]): Promise<void> {
     else if (a === "--allow-bypass") allowBypass = true;
     else if (!a.startsWith("--") && seed === undefined) seed = a;
   }
+  if (allowBypass && process.env.KAIROS_ALLOW_BYPASS !== "1") {
+    console.error("refusing --allow-bypass: autonomous bypassPermissions grants this self-driving agent ungated tool access.\n" +
+      "Set KAIROS_ALLOW_BYPASS=1 to confirm you accept the risk, and prefer running inside a sandbox (container/VM/--sandbox).");
+    process.exit(2);
+  }
+  if (allowBypass) console.error("WARNING: --allow-bypass active — tools run WITHOUT the permission classifier. Use only in a trusted/sandboxed environment.");
   const posture = allowBypass ? { permissionMode: "bypassPermissions", allowBypass: true } : undefined;
   const k = new KairosAssistant({ query: sdkQuery }, { cwd, model, posture });
   await k.start(seed);
