@@ -60,6 +60,18 @@ export class Session implements ControllableSession {
     return this.enqueueTurn(prompt, onMessage);
   }
 
+  /** Convenience: run one turn as an async generator. Yields the turn's streamed (non-result) messages,
+   *  then a terminal { type:"result", result } (or { type:"error", error } if the turn rejects). Sugar over submit. */
+  async *stream(prompt: string): AsyncGenerator<unknown> {
+    const out = new AsyncQueue<unknown>();
+    const done = this.submit(prompt, (m) => out.push(m)).then(
+      (r) => out.push({ type: "result", result: r.result }),
+      (e) => out.push({ type: "error", error: (e as Error).message }),
+    ).finally(() => out.close());
+    for await (const m of out) yield m;
+    await done;
+  }
+
   /** Inject `/compact` as a turn (its own FIFO waiter) and return the structured outcome. */
   async compact(): Promise<CompactOutcome> {
     this.assertRunning();

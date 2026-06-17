@@ -138,4 +138,19 @@ describe("Session", () => {
     await s.dispose();
     expect(seen).toEqual(["hello", "/compact", "world"]);
   });
+  it("stream yields the turn's messages then a terminal result frame", async () => {
+    const s = new Session({ query: fakeQuery }, {});
+    const seen: any[] = [];
+    for await (const m of s.stream("hi")) seen.push(m);
+    expect(seen.map((m: any) => m.type)).toEqual(["assistant", "result"]);
+    expect(seen[seen.length - 1]).toEqual({ type: "result", result: "did:hi" });
+    await s.dispose();
+  });
+  it("stream yields a terminal error frame when the turn rejects (session ended)", async () => {
+    const s = new Session({ query: fakeQuery }, {}, { label: "x" });
+    await s.dispose();
+    const seen: any[] = [];
+    for await (const m of s.stream("hi")) seen.push(m);
+    expect(seen).toEqual([{ type: "error", error: "x is not running" }]);
+  });
 });
