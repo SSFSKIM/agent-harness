@@ -22,18 +22,19 @@ live("live kairos (real SDK)", () => {
       },
     });
     await k.start();
-
-    const sawBrief = await new Promise<boolean>((resolve) => {
-      const t0 = Date.now();
-      const poll = () => {
-        if (briefs.some((b) => /HEARTBEAT_BRIEF/.test(b.text))) return resolve(true);
-        if (Date.now() - t0 > 90_000) return resolve(false);
-        setTimeout(poll, 2000);
-      };
-      poll();
-    });
-    expect(sawBrief).toBe(true); // a real autonomous tick delivered a Brief, no human in the loop
-
-    await k.stop();
+    try {
+      const sawBrief = await new Promise<boolean>((resolve) => {
+        const t0 = Date.now();
+        const poll = () => {
+          if (briefs.some((b) => /HEARTBEAT_BRIEF/.test(b.text))) return resolve(true);
+          if (Date.now() - t0 > 90_000) return resolve(false);
+          setTimeout(poll, 2000);
+        };
+        poll();
+      });
+      expect(sawBrief).toBe(true); // a real autonomous tick delivered a Brief, no human in the loop
+    } finally {
+      await k.stop();
+    }
   }, 120_000);
 });

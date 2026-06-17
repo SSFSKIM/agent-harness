@@ -67,10 +67,11 @@ async function runAssistant(args: string[]): Promise<void> {
   const posture = allowBypass ? { permissionMode: "bypassPermissions", allowBypass: true } : undefined;
   const k = new KairosAssistant({ query: sdkQuery }, { cwd, model, posture });
   await k.start(seed);
-  console.error(`cc-harness assistant running (session ${k.status().sessionId}); Ctrl-C to stop`);
   await new Promise<void>((resolve) => {
-    const onSig = async () => { await k.stop().catch(() => {}); resolve(); };
+    let stopping = false;
+    const onSig = async () => { if (stopping) return; stopping = true; await k.stop().catch(() => {}); resolve(); };
     process.on("SIGINT", onSig); process.on("SIGTERM", onSig);
+    console.error(`cc-harness assistant running (session ${k.status().sessionId}); Ctrl-C to stop`);
   });
 }
 
