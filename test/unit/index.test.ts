@@ -18,5 +18,6 @@ describe("public API", () => {
     expect(typeof api.openSession).toBe("function");
     expect(typeof api.resumeSession).toBe("function");
     expect(typeof api.Session).toBe("function");
+    expect(typeof api.forkSession).toBe("function");
   });
 });
