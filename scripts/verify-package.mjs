@@ -13,14 +13,18 @@ const root = process.cwd();
 const run = (file, args, opts = {}) => execFileSync(file, args, { stdio: "inherit", ...opts });
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
-// 1. build + pack (prepack also builds; the explicit build keeps the step legible)
+// 1. build + pack. prepack rebuilds; the explicit build keeps the step legible.
+//    Take the tarball name from npm's own --json output rather than reconstructing
+//    it — scoped names don't follow `${name}-${version}.tgz`.
 run("npm", ["run", "build"]);
-run("npm", ["pack"]);
-const tarball = join(root, `${pkg.name}-${pkg.version}.tgz`);
-assert(existsSync(tarball), `expected tarball ${pkg.name}-${pkg.version}.tgz not found`);
+const packOut = execFileSync("npm", ["pack", "--json"], { cwd: root }).toString();
+const tarball = join(root, JSON.parse(packOut.slice(packOut.indexOf("[")))[0].filename);
 
 const dir = mkdtempSync(join(tmpdir(), "cc-harness-verify-"));
 try {
+  // assert inside try so a name miss never leaks the tarball (cleanup is in finally)
+  assert(existsSync(tarball), `npm pack reported a tarball that is not on disk: ${tarball}`);
+
   // 2. install the tarball into a throwaway project
   run("npm", ["init", "-y"], { cwd: dir, stdio: "ignore" });
   run("npm", ["install", tarball], { cwd: dir });
@@ -44,7 +48,9 @@ try {
   // 5. bin smoke: exists, non-empty, node shebang
   const bin = join(pkgDir, "dist", "cli.js");
   assert(existsSync(bin), "installed bin dist/cli.js missing");
-  const firstLine = readFileSync(bin, "utf8").split("\n", 1)[0];
+  const binSrc = readFileSync(bin, "utf8");
+  assert(binSrc.length > 0, "installed bin dist/cli.js is empty");
+  const firstLine = binSrc.split("\n", 1)[0];
   assert(firstLine === "#!/usr/bin/env node", `bin shebang wrong: ${JSON.stringify(firstLine)}`);
 
   console.log("verify-package: PASS");
