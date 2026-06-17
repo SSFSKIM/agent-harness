@@ -195,10 +195,13 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             c.initialize()
             thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
                                        approval_policy=approval_policy, sandbox=sandbox)
-            # First turn: frame the ticket with the multi-turn terminal contract so the
-            # worker knows to call report_outcome at terminal (else un-watched it would
-            # loop to stuck). Later turns carry the decider's directive verbatim.
-            input_text = taxonomy.with_terminal_contract(ticket["prompt"])
+            # First turn: frame the ticket with the stage-agnostic WORKER PROTOCOL
+            # (operating disciplines) + the multi-turn TURN PROTOCOL (terminal contract)
+            # so the worker self-governs and knows to call report_outcome at terminal
+            # (else un-watched it would loop to stuck). This single seam covers every
+            # dispatch path (orchestrator, run.main, direct-drive). Later turns carry the
+            # decider's directive verbatim.
+            input_text = taxonomy.frame_first_turn(ticket["prompt"])
             for i in range(max_turns):
                 # Between-turns cancel check (covers the gap while a watched decider was
                 # parked); mid-turn cancellation arrives as TurnCancelled from run_turn.

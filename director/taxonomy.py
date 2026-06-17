@@ -8,6 +8,10 @@ types it decomposes into, and the prompt template the orchestrator wraps a worke
 ticket in. Routing is a pure function (`compose_worker_prompt`); decomposition is
 worker-driven (the template INSTRUCTS the worker to create typed children — RV1),
 and 3a's DAG sequences the result. See docs/product-specs/2026-06-14-dev-stage-taxonomy.md.
+
+Beyond the per-stage template, every worker's FIRST-turn prompt is framed
+(`frame_first_turn`) with two stage-agnostic blocks: the `WORKER_PROTOCOL` operating
+disciplines and the `TERMINAL_CONTRACT` (graduated-autonomy slice 1, gap #5; ADR 0002).
 """
 from __future__ import annotations
 
@@ -45,6 +49,17 @@ ExecPlan under docs/exec-plans/active/, implement it, keep
 additional impl child tickets (labeled impl, blocked_by {identifier}) only if the work
 is too large for one plan.
 
+If the ticket has a PR already attached when you start (rework/feedback loop), run the
+PR FEEDBACK SWEEP (below) FIRST and address it before any new feature work.
+
+Reproduction-first: before changing code, reproduce and capture the current
+behavior/issue signal (a command + its output, or a deterministic behavior) and record
+it in the ExecPlan Notes so the fix target is explicit. If the ticket carries
+`Validation`/`Test Plan`/`Testing` sections, mirror them into the ExecPlan as
+non-negotiable acceptance checkboxes and execute them before done. Temporary local proof
+edits to validate an assumption are fine, but revert every such proof edit before commit
+and document it in the ExecPlan.
+
 Before you finish — SELF-QA (your own responsibility; this is NOT a gate, and the
 PR-merger does only a thin integration check later): (1) keep the host gate GREEN;
 (2) self-review spec-compliance (does the build match the spec/ticket?) and code-quality;
@@ -52,7 +67,13 @@ PR-merger does only a thin integration check later): (1) keep the host gate GREE
 smoke/unit always, plus end-to-end via `playwright`/`playwright-cli` for UI work (graceful
 fallback to smoke/unit where no browser is available); (4) open a PR with the `push` skill
 whose body states WHAT spec/feature you built, WHICH reviews you ran, and WHICH tests you
-wrote and their results — the PR-merger reads this. Only then call report_outcome(done)."""
+wrote and their results — the PR-merger reads this; (5) PR FEEDBACK SWEEP — after opening
+the PR and before report_outcome(done), gather the PR's checks and every comment channel
+(top-level comments, inline review comments, bot reviews, review summaries via `gh`) and
+treat each actionable item as blocking until it is addressed by a code/test/docs change
+OR an explicit, justified pushback reply on that thread; re-run validation after changes
+and repeat the sweep until nothing actionable is outstanding and checks are green. Only
+then call report_outcome(done)."""
 
 # institution-as-data: type -> stage workflow. child_types encodes the decomposition
 # policy (the pipeline planning -> {research,design} -> spec -> impl).
@@ -127,6 +148,35 @@ def with_terminal_contract(prompt: str) -> str:
     """Append the multi-turn TERMINAL CONTRACT to a worker's first-turn prompt, so the
     worker knows it must call `report_outcome` when (and only when) its work ends."""
     return f"{prompt}\n\n---\nTURN PROTOCOL\n{TERMINAL_CONTRACT}"
+
+
+# The stage-agnostic WORKER OPERATING PROTOCOL injected into every worker's first-turn
+# prompt (graduated-autonomy slice 1, gap #5). These two disciplines hold for ALL five
+# stages; the four impl-specific disciplines (reproduction-first, acceptance mirroring,
+# temp-proof revert, PR feedback sweep) live in _IMPL_TEMPLATE, not here. Harvested from
+# docs/symphony-original/WORKFLOW.md's stage-agnostic craft (NOT its lifecycle/board
+# steps — our orchestrator/merger own those). See docs/memory/adr/0002-graduated-autonomy.md
+# + docs/product-specs/2026-06-17-worker-operating-protocol.md.
+WORKER_PROTOCOL = """\
+These hold for every stage, on every turn:
+- Single living source of truth. Your stage's output doc (research digest, design doc, \
+product-spec, or ExecPlan) is the ONE source of truth for your plan and progress. \
+Maintain it in place as you work — check items off and record decisions and surprises \
+the moment they happen. Do not scatter status across separate Linear comments or notes.
+- No scope-creep. If you discover meaningful work outside this ticket's scope, do NOT \
+expand the ticket. File a separate typed child ticket (labeled with the right stage, \
+blocked_by/related to this one as appropriate) using the linear skill, note it, then \
+stay on the current scope."""
+
+
+def frame_first_turn(prompt: str) -> str:
+    """Frame a worker's FIRST-turn prompt with the two stage-agnostic protocol blocks
+    every dispatch path needs: the WORKER PROTOCOL (operating disciplines) then the TURN
+    PROTOCOL (terminal contract). Injected once in `run.drive`, so the orchestrator,
+    run.main, and direct-drive callers all receive it via the single seam. Delegates the
+    terminal block to `with_terminal_contract` (kept byte-stable)."""
+    framed = f"{prompt}\n\n---\nWORKER PROTOCOL\n{WORKER_PROTOCOL}"
+    return with_terminal_contract(framed)
 
 
 def ticket_type(ticket: dict) -> str | None:

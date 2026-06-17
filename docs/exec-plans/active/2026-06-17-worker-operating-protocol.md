@@ -142,7 +142,24 @@ How to inject the stage-agnostic preamble at the single first-turn seam:
   milestone is the pre-completion-gate checkpoint.
 
 ## Progress log
-- [ ] (2026-06-17) plan created; base_commit a42b90d, review_level standard.
+- [x] (2026-06-17) plan created; base_commit a42b90d, review_level standard.
+- [x] (2026-06-17) M1 done. Added `WORKER_PROTOCOL` (2 cross-stage disciplines) +
+  `frame_first_turn` (delegates to untouched `with_terminal_contract`) in
+  `director/taxonomy.py`; rewired the single seam at `director/run.py:201`. Tests:
+  `WorkerProtocolTest` (3) added — failed before (AttributeError), green after.
+  `unittest discover -p 'test_director_taxonomy*'` → 16 OK. `with_terminal_contract`
+  byte-unchanged (R8).
+- [x] (2026-06-17) M2 done. `_IMPL_TEMPLATE` gains reproduction-first (R4),
+  acceptance mirroring as non-negotiable (R5), temp-proof revert (R6), and the PR
+  feedback sweep — pre-handoff step (5) + on-arrival ("if a PR is already attached…
+  run the sweep FIRST") (R7); existing SELF-QA + push-PR block kept verbatim. New
+  test `test_impl_prompt_includes_the_four_operating_disciplines` failed before,
+  green after; existing impl/self-QA tests still pass.
+- [x] (2026-06-17) M3 done. `taxonomy.py` module docstring gains a one-line mention
+  of `frame_first_turn` + `WORKER_PROTOCOL`. Scope fence verified: `git diff
+  a42b90d..HEAD` (incl. working tree) touches only `taxonomy.py`, `run.py`,
+  `tests/test_director_taxonomy.py`, and this plan; `decider.py`/`merger.py` diff is
+  empty. Full gate `check.py` GREEN.
 
 ## Surprises & discoveries
 

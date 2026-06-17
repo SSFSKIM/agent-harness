@@ -22,6 +22,36 @@ class TerminalContractTest(unittest.TestCase):
         self.assertIn("TURN PROTOCOL", out)
 
 
+class WorkerProtocolTest(unittest.TestCase):
+    """The stage-agnostic WORKER PROTOCOL preamble + the single first-turn framing
+    seam (graduated-autonomy slice 1, spec R1/R2/R3 + regression R8)."""
+
+    def test_preamble_names_the_two_cross_stage_disciplines(self):
+        p = tax.WORKER_PROTOCOL.lower()
+        # (1) single living source-of-truth, maintained in place, not scattered
+        self.assertIn("source of truth", p)
+        self.assertIn("in place", p)
+        # (2) no scope-creep -> file a typed child ticket
+        self.assertIn("scope", p)
+        self.assertIn("child", p)
+
+    def test_frame_first_turn_carries_both_blocks_in_order(self):
+        out = tax.frame_first_turn("do the thing")
+        self.assertTrue(out.startswith("do the thing"))      # prompt comes first
+        self.assertIn("WORKER PROTOCOL", out)                # operating disciplines
+        self.assertIn("TURN PROTOCOL", out)                  # terminal contract (delegated)
+        self.assertIn("report_outcome", out)
+        # WORKER PROTOCOL precedes TURN PROTOCOL (spec ordering)
+        self.assertLess(out.index("WORKER PROTOCOL"), out.index("TURN PROTOCOL"))
+
+    def test_with_terminal_contract_is_byte_unchanged_by_the_new_seam(self):
+        # R8 strict: the new seam delegates to an UNTOUCHED with_terminal_contract,
+        # so framing only the terminal block still yields exactly the old shape.
+        out = tax.with_terminal_contract("x")
+        self.assertNotIn("WORKER PROTOCOL", out)             # it adds only TURN PROTOCOL
+        self.assertIn("TURN PROTOCOL", out)
+
+
 class RegistryTest(unittest.TestCase):
     def test_all_five_types_present(self):
         self.assertEqual(set(tax.TAXONOMY), {"planning", "research", "design", "spec", "impl"})
@@ -91,6 +121,25 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("SELF-QA", out)
         self.assertIn("qa", out)            # references the qa skill
         self.assertIn("PR", out)            # open a PR with a self-description
+        self.assertIn("report_outcome(done)", out)
+
+    def test_impl_prompt_includes_the_four_operating_disciplines(self):
+        # M2 (slice 1, gap #5): the impl worker is guided through reproduction-first
+        # (R4), acceptance mirroring (R5), temp-proof revert (R6), and the PR feedback
+        # sweep — pre-handoff + on-arrival (R7).
+        out = tax.compose_worker_prompt({"identifier": "X-6", "prompt": "fix it",
+                                         "labels": ["impl"]})
+        low = out.lower()
+        self.assertIn("reproduce", low)                 # R4 reproduction-first
+        self.assertIn("validation", low)                # R5 ticket-provided section
+        self.assertIn("non-negotiable", low)            # R5 mirrored as non-negotiable
+        self.assertIn("revert", low)                    # R6 temp proof edits reverted
+        self.assertIn("proof", low)                     # R6
+        self.assertIn("feedback sweep", low)            # R7 PR feedback sweep
+        self.assertIn("inline", low)                    # R7 all channels incl. inline review
+        self.assertIn("already attached", low)          # R7 on-arrival path
+        # the existing self-QA + PR block must remain intact (worker-qa spec)
+        self.assertIn("SELF-QA", out)
         self.assertIn("report_outcome(done)", out)
 
     def test_planning_prompt_decomposes(self):
