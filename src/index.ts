@@ -11,3 +11,5 @@ export { SwarmRuntime, MessageBus, createSwarmMcpServer, SwarmError } from "./sw
 export type { Message, MessageKind, TeammateSpec, SwarmOptions } from "./swarm/index.js";
 export { DaemonSupervisor, DaemonServer, SessionRegistry, daemonRequest, daemonSocketPath, DaemonError } from "./daemon/index.js";
 export type { SessionRecord, SessionStatus, DaemonOptions } from "./daemon/index.js";
+export { KairosAssistant, createBriefMcpServer, stdoutBriefSink, applyAssistantPersona, resolveAssistantPosture } from "./kairos/index.js";
+export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig } from "./kairos/index.js";
