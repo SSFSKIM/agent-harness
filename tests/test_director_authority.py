@@ -110,7 +110,15 @@ class AuthorizeTest(unittest.TestCase):
         self.assertTrue(auth.authorize("{ issues { id } }")["allowed"])
 
     def test_allowlisted_mutation_allowed(self):
-        self.assertTrue(auth.authorize('mutation { issueUpdate(id:"x", input:{stateId:"s"}) { success } }')["allowed"])
+        self.assertTrue(auth.authorize('mutation { issueCreate(input:{title:"t"}) { success } }')["allowed"])
+
+    def test_issue_update_refused_orchestrator_owns_state(self):
+        # ADR 0003 / slice 2c: the worker may not write lifecycle state — issueUpdate
+        # is out of the default allowlist (the orchestrator owns claim/reconcile). The
+        # worker proposes terminal state via report_outcome instead.
+        out = auth.authorize('mutation { issueUpdate(id:"x", input:{stateId:"s"}) { success } }')
+        self.assertFalse(out["allowed"])
+        self.assertIn("issueUpdate", out["reason"])
 
     def test_destructive_mutation_denied_and_named(self):
         out = auth.authorize('mutation { issueDelete(id: "x") { success } }')
@@ -118,7 +126,8 @@ class AuthorizeTest(unittest.TestCase):
         self.assertIn("issueDelete", out["reason"])
 
     def test_mixed_mutation_denied_if_any_blocked(self):
-        out = auth.authorize("mutation { issueUpdate(id:1){id} issueArchive(id:2){id} }")
+        # one allowlisted (issueCreate) + one blocked (issueArchive) → whole op refused
+        out = auth.authorize("mutation { issueCreate(input:{}){id} issueArchive(id:2){id} }")
         self.assertFalse(out["allowed"])
         self.assertIn("issueArchive", out["reason"])
 
@@ -141,10 +150,13 @@ class AuthorizeTest(unittest.TestCase):
 
 class DefaultAllowlistTest(unittest.TestCase):
     def test_default_allowlist_is_the_worker_set(self):
+        # issueUpdate is intentionally NOT here (slice 2c) — lifecycle state is the
+        # orchestrator's; the worker proposes terminal state via report_outcome.
         self.assertEqual(auth.DEFAULT_MUTATION_ALLOWLIST, frozenset({
-            "issueCreate", "issueUpdate", "commentCreate", "commentUpdate",
+            "issueCreate", "commentCreate", "commentUpdate",
             "issueRelationCreate", "attachmentLinkURL", "attachmentLinkGitHubPR",
             "fileUpload"}))
+        self.assertNotIn("issueUpdate", auth.DEFAULT_MUTATION_ALLOWLIST)
 
     def test_every_default_mutation_authorizes(self):
         for m in auth.DEFAULT_MUTATION_ALLOWLIST:

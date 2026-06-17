@@ -35,6 +35,21 @@ class WorkerProtocolTest(unittest.TestCase):
         self.assertIn("scope", p)
         self.assertIn("child", p)
 
+    def test_preamble_names_single_board_progress_comment(self):
+        # slice 2b: ONE canonical board comment, stable marker, edit-in-place not a second
+        p = tax.WORKER_PROTOCOL
+        self.assertIn("## 🤖 Worker Progress", p)   # the stable find-or-create marker
+        low = p.lower()
+        self.assertIn("one comment", low)            # single, not fragmented
+        self.assertIn("commentcreate", low)
+        self.assertIn("commentupdate", low)
+
+    def test_preamble_says_worker_proposes_state_not_sets_it(self):
+        # slice 2c reinforcement at the prompt level: the worker never transitions state
+        low = tax.WORKER_PROTOCOL.lower()
+        self.assertIn("report_outcome", low)
+        self.assertIn("issueupdate", low)            # named as not-the-worker's
+
     def test_frame_first_turn_carries_both_blocks_in_order(self):
         out = tax.frame_first_turn("do the thing")
         self.assertTrue(out.startswith("do the thing"))      # prompt comes first

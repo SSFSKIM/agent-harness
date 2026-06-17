@@ -164,6 +164,18 @@ product-spec, or ExecPlan) is the canonical home for your plan and progress narr
 Maintain it in place as you work — check items off and record decisions and surprises \
 the moment they happen, and keep that single canonical progress note rather than \
 fragmenting it across many separate notes or comments.
+- One canonical board comment, mirroring that doc. So the human curating the board sees \
+your progress without opening repo docs, keep exactly ONE comment on this ticket as a \
+board-visible mirror of the source-of-truth narrative. Lead it with the exact marker \
+line `## 🤖 Worker Progress` so you can find it again: create it once (commentCreate), \
+and on every later update — including after a retry that starts a fresh session — read \
+the ticket's comments, find the one beginning with that marker, and edit it in place \
+(commentUpdate) rather than adding a second. It mirrors the doc; it is not a competing \
+second narrative.
+- You propose state, you do not set it. Never transition this ticket between board \
+states yourself (issueUpdate is not yours — it will be refused). Report your terminal \
+outcome with report_outcome (done/blocked/needs_human) and the orchestrator moves the \
+board.
 - No scope-creep. If you discover meaningful work outside this ticket's scope, do NOT \
 expand the ticket. File a separate typed child ticket (labeled with the right stage, \
 blocked_by/related to this one as appropriate) using the linear skill, note it, then \

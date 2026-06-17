@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-15
+last_verified: 2026-06-17
 owner: harness
 ---
 # DIRECTOR.md — the Director operating manual
@@ -66,10 +66,13 @@ documented decision, a routine input derivable from the repo); a mechanical fail
 retry-once will absorb; an approval routine for this ticket's stage.
 
 **Escalate to the human (taste)** when it is genuinely a judgment call: a
-product-direction / taste fork not covered by docs (the request asks you to *choose a
-direction*, not execute a settled one); an irreversible / outward-facing action beyond
-the guardrail's reach (publishing, merging, deleting external state) — the human owns
-those even if allowlisted; **a pattern the context reveals** — `ticket.attempt ≥ 2` and
+product-direction / taste fork not covered by docs or `PRINCIPLES.md` (the request asks
+you to *choose a direction*, not execute a settled one); the **taste embedded in** an
+outward-facing action — *not the act itself*: you may perform mechanical merges,
+publishes, and conflict resolutions within the guardrails (the Codex sandbox, the
+authority allowlist, and the serialized merger are the hard safety floor — ADR 0003),
+and escalate only when the act carries a genuine product/taste/risk choice (e.g. which
+conflicting version is canonical); **a pattern the context reveals** — `ticket.attempt ≥ 2` and
 the request is destructive, a non-empty `stuck` list with a request that looks like
 forcing past a blocker, `siblings_in_flight`/`recent_for_ticket` showing systemic failure.
 
@@ -142,18 +145,28 @@ This makes a real Director answer every turn end without a human watching and wi
 headless spawn — the session is woken exactly when a worker needs input. The code
 decider (§6) is only for the truly-detached case (no session at all).
 
-## 6. Watched vs un-watched (the only real difference)
+## 6. The three modes (who answers turn ends)
 
-Posture is **identical** in both modes — per-action self-governance (`on-request` +
+Posture is **identical** across modes — per-action self-governance (`on-request` +
 `auto_review`) AND full network are shared (SECURITY T11; the exfil residual is deferred
-to one holistic mitigation). The **only** difference is who answers turn ends:
+to one holistic mitigation). ADR 0003 splits the old binary along two axes — *is a
+Director (judging agent) present?* × *is the human present?* — so the **only** real
+difference is **who answers turn ends**:
 
-- **watched** (default) — **you** answer each `turnReview` (§4/§5).
-- **`--autonomous`** — the code decider (`director.decider.autonomous_decide`) trusts the
-  worker's terminal proposal and otherwise replies "use your best judgment and continue"
-  — **no `turnReview` reaches the queue**, so un-watched there is nothing here to answer.
-  `director.status` is then for *monitoring* what the run did. The security boundary
-  un-watched is Codex's sandbox + `auto_review` + the T10 Linear guardrail — not you.
+- **attended** (watched, default) — a **human-attended** session is the Director; **you**
+  answer each `turnReview` (§4/§5). Human present.
+- **lights-out** — a **Daemonized Claude Code** is the Director: same posture, same queue
+  path (`make_queue_decider`), it answers `turnReview` with the same taste-vs-handle
+  judgment (§2) augmented by the §13 procedure. **No new orchestrator flag** — it *is* the
+  watched queue path with a daemon on the answering end. Human absent but async-reachable;
+  the daemon parks the residual it cannot resolve (§13). (The daemon runtime is a separate
+  track; `make_queue_decider` already routes to "whoever is the Director.")
+- **no-agent** (`--autonomous`) — no judging agent at all: the code decider
+  (`director.decider.autonomous_decide`) trusts the worker's terminal proposal and
+  otherwise replies "use your best judgment and continue" — **no `turnReview` reaches the
+  queue**. This is the `--mock` / CI / truly-detached niche (§5); `director.status` is then
+  for *monitoring*. The security boundary is Codex's sandbox + `auto_review` + the T10
+  Linear guardrail — not a judge.
 
 ## 7. Handling a merge escalation (the merger raised a PR)
 
@@ -316,3 +329,38 @@ python3 -m director.orchestrator --team <id> --daemon --poll-interval 10   # boa
   pending retry's backoff — it drains running workers and exits, leaving the retry's ticket
   `In Progress` for the next run to pick up. The batch modes (`--once`/default) are
   unaffected: they retry immediately.
+
+## 13. Running lights-out (human absent, Director present)
+
+Lights-out is §6's middle mode: you are a Daemonized Claude Code, judging every turn-end
+with the **same** taste-vs-handle line (§2), but the human is not watching — only
+async-reachable. The job is unchanged; what changes is that you can no longer hand a fork
+to a human in the moment, so for a fork you cannot trivially auto-continue, decide by this
+procedure:
+
+1. **Hard blocker?** (missing auth/secret/resource, an external dependency down) →
+   **park "awaiting human"** — you cannot proceed regardless of judgment.
+2. Otherwise, **is the call taste or mechanical?**
+   - **Technical / mechanical** (most merges, conflict resolution, branch publish,
+     refactors, approach A-vs-B) → **decide and continue**, and log the call. You usually
+     know better than the human here; do not wake them. The hard safety floor is the
+     guardrail architecture (sandbox / authority allowlist / serialized merger), not your
+     timidity — act freely *within* it.
+   - **Taste / opinion / product-direction** → **consult `docs/PRINCIPLES.md`** (the
+     human's externalized decision-taste):
+     - it determines the call with confidence → **decide and log, citing the principle**
+       (put the citation in the disposition `reason` so it renders into the board comment
+       — your autonomous-taste audit trail);
+     - it is silent or ambiguous → **park "awaiting human."**
+
+**Parking** is a turn-end `escalate` disposition with a `reason` that marks it as
+*awaiting a human taste/blocker decision* (distinct from a generic escalation): the ticket
+stays visible (In Progress), the board comment records why, and you `PushNotification` the
+async human (§5.4). The parked set is what `director.status` shows as escalated/still
+In Progress; the human drains it by giving you a directive, which you apply as the next
+turn's `reply` (the ordinary answer path — no new mechanism).
+
+**Fail-safe stays conservative:** when you genuinely cannot tell whether a fork is taste,
+**park** and log your reasoning (PRINCIPLES P8). A wrong autonomous taste call costs more
+than one escalation; the log is how the human teaches you, and how `PRINCIPLES.md` sharpens
+so the parked set shrinks over time.

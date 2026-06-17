@@ -30,7 +30,7 @@ class LinearToolTest(unittest.TestCase):
     def test_graphql_errors_is_failure(self):
         # allowlisted mutation so it reaches the (mocked) server, which returns errors
         ex = _executor({"errors": [{"message": "bad mutation"}]})
-        r = ex("linear_graphql", {"query": "mutation { issueUpdate(id: 1) { id } }"})
+        r = ex("linear_graphql", {"query": "mutation { issueCreate(input:{title:\"t\"}) { id } }"})
         self.assertFalse(r["success"])
         self.assertIn("bad mutation", r["output"])
 
@@ -75,7 +75,7 @@ class GuardrailWiringTest(unittest.TestCase):
     def test_allowed_mutation_reaches_post(self):
         calls = []
         ex = self._counting_executor(calls)
-        r = ex("linear_graphql", {"query": "mutation { issueUpdate(id: 1) { id } }"})
+        r = ex("linear_graphql", {"query": "mutation { issueCreate(input:{title:\"t\"}) { id } }"})
         self.assertTrue(r["success"])
         self.assertEqual(calls, [1])
 

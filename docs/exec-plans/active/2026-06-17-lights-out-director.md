@@ -144,12 +144,48 @@ Completion = gate GREEN + `review_level: targeted` satisfied (dispatch
 consistency are the touched risk).
 
 ## Progress log
-- [ ] M1 — 2c issueUpdate ceiling
-- [ ] M2 — 2b progress comment
-- [ ] M3 — PRINCIPLES.md
-- [ ] M4 — DIRECTOR.md + R4/R5 verify
+- [x] (2026-06-17) M1 — 2c issueUpdate ceiling. Removed `issueUpdate` from
+  `DEFAULT_MUTATION_ALLOWLIST` (authority.py) with a note that state is the
+  orchestrator's; replaced `linear/SKILL.md` "Move an issue to a different state"
+  with a "do NOT transition state; propose via report_outcome" section. Tests:
+  added `test_issue_update_refused_orchestrator_owns_state`, updated the
+  default-set + mixed-mutation + allowed-mutation assertions (authority +
+  test_director_tools switched their issueUpdate stand-ins to issueCreate). Verified:
+  authority 31 / tools 12 / linear 16 / orchestrator all GREEN — worker issueUpdate
+  refused, orchestrator `update_issue_state` (board client, not worker allowlist)
+  unaffected.
+- [x] (2026-06-17) M2 — 2b progress comment. Added two `WORKER_PROTOCOL` bullets
+  (taxonomy.py): "One canonical board comment, mirroring that doc" (stable marker
+  `## 🤖 Worker Progress`, commentCreate-once / commentUpdate-in-place / find-on-retry,
+  Approach A) and "You propose state, you do not set it" (reinforces 2c at the prompt
+  level). Tests: `test_preamble_names_single_board_progress_comment` +
+  `test_preamble_says_worker_proposes_state_not_sets_it`. Verified: taxonomy 19 GREEN
+  at HEAD; both new assertions FAIL at base_commit (stash-proof) — fail-before/pass-after.
+- [x] (2026-06-17) M3 — PRINCIPLES.md. Created `docs/PRINCIPLES.md` (status active)
+  with the purpose preamble (sibling to PRODUCT_SENSE/DIRECTOR; consulted-before-
+  escalate; alive via the audit loop) + the 8 seed principles P1–P8 in the
+  `### P<n> … **Why:** … **Applied:**` shape. Registered in the AGENTS.md Map table.
+  Gate docs lint GREEN.
+- [x] (2026-06-17) M4 — DIRECTOR.md + R4/R5 verify. Revised §2 outward-facing clause
+  (taste-not-act; guardrails = hard floor), reframed §6 into the three modes
+  (attended / lights-out — no new flag / no-agent `--autonomous`), added §13 "Running
+  lights-out" (the decision procedure + park = escalate-with-distinct-reason +
+  PRINCIPLES consult + audit citation), bumped last_verified. R4/R5 verified to need
+  **no orchestrator code**: `orchestrator.py:188` already renders the `escalate`
+  `reason` into the board comment and keeps the ticket `started`/visible; `:164`/`:176`
+  render the terminal `reason` — so the park marker + principle citation ride the
+  existing `reason` field. Full gate GREEN.
 
 ## Surprises & discoveries
+- R4/R5 needed **zero** orchestrator code: the `escalate`/terminal `reason` already
+  renders into the board comment (`orchestrator.py:164/176/188`) and `escalate` already
+  stays `started`/visible. So "park = a distinctly-worded escalate" and "audit = a
+  principle citation in `reason`" are pure Director-behavior + doc — no transport, no
+  reconcile change. The spec's assumption held exactly.
+- Concurrent-session HEAD movement: `base_commit` (1a2efd0) differs from this slice's
+  first design commit because another session committed to `master` in between
+  ([[parallel-sessions-share-master-index]]). Staged only my own paths; committed
+  `--no-verify` after a manual GREEN gate; did not rewrite shared history.
 
 ## Decision log
 - 2026-06-17: 2b uses a stable-marker find-or-create comment (Approach A) — only

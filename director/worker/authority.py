@@ -29,8 +29,11 @@ import re
 # the worker's legitimate job. Destructive ops (delete/archive/batch) are absent →
 # default-deny refuses them. Overridable at executor construction.
 DEFAULT_MUTATION_ALLOWLIST: frozenset[str] = frozenset({
-    "issueCreate",            # worker-driven child tickets (3b)
-    "issueUpdate",            # state transitions, labels, assignment
+    "issueCreate",            # worker-driven child tickets (3b); labels set at creation
+    # NOTE: issueUpdate is intentionally ABSENT (ADR 0003 / slice 2c). Lifecycle-state
+    # writes are the ORCHESTRATOR's (claim/reconcile); a worker writing state would be a
+    # second writer racing it. The worker PROPOSES terminal state via report_outcome — it
+    # never transitions the board. Re-add narrowly only if a real non-state need appears.
     "commentCreate",          # progress / completion comments
     "commentUpdate",          # edit a prior comment (linear skill)
     "issueRelationCreate",    # blocked_by relations for the typed DAG (3b)

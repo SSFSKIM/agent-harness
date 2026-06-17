@@ -37,6 +37,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/DIRECTOR.md` | Director operating manual: identity, taste-vs-handle, the watched event-loop (`director` launcher skill enters it) |
 | `docs/PLANS.md` | ExecPlan methodology |
 | `docs/PRODUCT_SENSE.md` | What we optimize: minimum human-in-loop |
+| `docs/PRINCIPLES.md` | The human's externalized decision-taste; the Director consults it to simulate the human's call before escalating (lights-out, ADR 0003) |
 | `docs/QUALITY_SCORE.md` | Domain × layer grades, gap tracking over time |
 | `docs/RELIABILITY.md` | Hook/queue failure modes, idempotency rules |
 | `docs/SECURITY.md` | Threat model: transcripts, memory poisoning, hook perms |

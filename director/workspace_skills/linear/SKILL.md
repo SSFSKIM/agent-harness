@@ -237,25 +237,18 @@ mutation CreateComment($issueId: String!, $body: String!) {
 }
 ```
 
-### Move an issue to a different state
+### Do NOT transition issue state yourself
 
-Use `issueUpdate` with the destination `stateId`:
+You do **not** move the board between states. Lifecycle-state writes
+(Todo → In Progress → Done/blocked) are the **orchestrator's** job — it owns the
+claim and reconcile transitions, and a worker writing state would race it. The
+`issueUpdate` mutation is therefore **not** in your allowlist and will be refused.
 
-```graphql
-mutation MoveIssueToState($id: String!, $stateId: String!) {
-  issueUpdate(id: $id, input: { stateId: $stateId }) {
-    success
-    issue {
-      id
-      identifier
-      state {
-        id
-        name
-      }
-    }
-  }
-}
-```
+Instead, **propose** your terminal state with `report_outcome`
+(`status=done|blocked|needs_human`) — the orchestrator executes the board
+transition from your proposal. For everything short of terminal, keep your single
+progress comment current (`commentCreate`/`commentUpdate` above). Reads/queries of
+issue state remain unrestricted.
 
 ### Attach a GitHub PR to an issue
 
