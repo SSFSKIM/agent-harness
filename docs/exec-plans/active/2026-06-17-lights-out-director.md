@@ -1,0 +1,163 @@
+---
+status: active
+last_verified: 2026-06-17
+owner: harness
+base_commit: 1a2efd08b6a1169003d732dbe738b3197ce4cdd2
+review_level: targeted
+---
+# Lights-out Director — build (slice 2)
+
+## Goal
+
+Slice 2 of ADR 0002 is demonstrably built: the harness is *ready* for a
+human-absent (lights-out) Director even though the daemon runtime is a separate
+track. Observable definition of done:
+1. `docs/PRINCIPLES.md` exists with the 8-principle seed and is consulted-before-
+   escalate per `DIRECTOR.md`.
+2. `DIRECTOR.md` carries the lights-out decision procedure (hard-blocker→park /
+   mechanical→decide+log / taste→consult `PRINCIPLES.md`→infer-or-park), the
+   revised §2 outward-facing clause, and the three-mode model (R1/R3).
+3. A worker `issueUpdate` mutation is now **refused** by the authority guardrail,
+   and `workspace_skills/linear/SKILL.md` no longer tells the worker to transition
+   state; the orchestrator's own state writes are unaffected (R7/2c).
+4. The `WORKER_PROTOCOL` preamble instructs the worker to keep ONE canonical
+   board progress comment (R6/2b).
+5. `python3 plugin/scripts/check.py` is GREEN; `git diff
+   1a2efd0..HEAD` touches only the spec'd files; `report_outcome`, `decider.py`
+   behavior, board-state ownership, and `merger.py` are substantively unchanged.
+
+## Context
+
+- **Spec (owns the design — do NOT re-derive):**
+  `docs/product-specs/2026-06-17-lights-out-director.md` (R1–R7 + Design + the
+  `PRINCIPLES.md` seed). This plan builds it.
+- **Decision:** `docs/memory/adr/0003-lights-out-director.md` (the two-axis mode
+  model + the taste-vs-mechanical procedure + daemon-as-separate-track), child of
+  `docs/memory/adr/0002-graduated-autonomy.md`.
+- **Slice-1 seam (extended by 2b):** `director/taxonomy.py` —
+  `WORKER_PROTOCOL` + `frame_first_turn(prompt)` is the single first-turn seam on
+  every dispatch path; 2b appends a progress-comment discipline there. Test home:
+  `tests/test_director_taxonomy.py`.
+- **Authority guardrail (2c target):** `director/worker/authority.py:31`
+  `DEFAULT_MUTATION_ALLOWLIST`; `authorize()` refuses non-allowlisted mutations
+  before any POST. Tests: `tests/test_director_authority.py` (line ~113 currently
+  asserts `issueUpdate` ALLOWED — this plan flips it; line ~145 lists the default
+  set). The orchestrator's own state writes go through
+  `director/board/linear.py` `update_issue_state` (an `issueUpdate` mutation
+  *outside* the worker allowlist) — unaffected; guarded by
+  `tests/test_director_linear.py`.
+- **Park/audit surfaces (R4/R5 — verify, likely no code):**
+  `director/orchestrator.py:188` already renders the Director's `escalate` `reason`
+  into the board comment and keeps the ticket `started` (visible); `:164`/`:173`
+  render the terminal `reason`. So a distinct "awaiting human" reason + a principle
+  citation ride existing rendering — confirm, do not add transport.
+- **The worker doc to fix (2c):** `director/workspace_skills/linear/SKILL.md:242`
+  ("Use `issueUpdate` with the destination `stateId`").
+
+## Approach (self-generated alternatives)
+
+The only non-mechanical execution choice is **how the worker keeps ONE canonical
+progress comment** (2b) given it has no durable comment-id store across turns/
+attempts:
+- **A — Stable textual marker, find-or-create.** Instruct the worker to lead the
+  comment with a fixed sentinel (e.g. a `## 🤖 Worker Progress` header), and on
+  every write read the ticket's comments, find the marked one, `commentUpdate` it,
+  else `commentCreate`. Tradeoff: relies on a read each write, but reads are
+  unrestricted and it is self-healing across fresh-attempt threads.
+- **B — Thread-local id only.** Worker remembers the id it created this thread and
+  updates it. Simpler, but a retry starts a new thread → a second comment →
+  fragmentation, which is exactly what R6 forbids.
+- **Chosen: A** — it is the only option that satisfies "single canonical comment
+  across attempts" (R6), and it costs nothing the guardrail restricts. (Decision log.)
+
+Everything else is mechanical (remove an allowlist entry, edit two docs, append
+prompt text, create one doc) and follows the spec's Design verbatim.
+
+## Assumptions & open questions (self-interrogation)
+
+- **Assumption:** removing `issueUpdate` from the worker allowlist breaks no live
+  worker flow — verified by grep this session (only the now-fixed `linear/SKILL.md`
+  instructs it; decomposition uses `issueCreate`/`issueRelationCreate`; labels at
+  creation go through `issueCreate`). *If wrong:* a worker flow needing a non-state
+  `issueUpdate` would now be refused — re-add narrowly (forward-only split) per ADR
+  0002's alternative. Mitigated by the orchestrator-path test staying green.
+- **Assumption:** R4/R5 need no orchestrator code — the `escalate`/terminal `reason`
+  already renders into the board comment. *If wrong* (citation not surfaced): add a
+  one-line render of a disposition-supplied note in `reconcile`'s comment; still no
+  new transport.
+- **Open:** where `docs/PRINCIPLES.md` is indexed → resolved autonomously: it is a
+  top-level operating doc (sibling to `DIRECTOR.md`/`PRODUCT_SENSE.md`), so register
+  it in `AGENTS.md`'s Map table and any docs index the gate expects; the `docs-tree`
+  convention + the gate's docs lint are the arbiter (fix to GREEN).
+- **Open:** does `DIRECTOR.md` get a new §13 or fold into §6? → resolved: add a new
+  `§13 Running lights-out` (keeps §6's watched-vs-un-watched intact) and revise §2 +
+  §6 in place. Escalation: none — these are mechanical doc choices, not taste.
+
+## Milestones
+
+- **M1 — 2c: the `issueUpdate` ceiling.** Scope: close the worker's lifecycle-state
+  write hole. At the end: `director/worker/authority.py`'s
+  `DEFAULT_MUTATION_ALLOWLIST` no longer contains `issueUpdate` (comment updated to
+  note state writes are the orchestrator's); `director/workspace_skills/linear/
+  SKILL.md` no longer instructs `issueUpdate` state transitions (redirects to
+  `report_outcome` for terminal proposals + `commentCreate`/`Update` for progress,
+  keeps read/query guidance); `tests/test_director_authority.py` asserts a worker
+  `issueUpdate` mutation is now **refused** (the prior `allowed`/default-set
+  assertions updated to the new ceiling). Run `python3 -m unittest
+  tests.test_director_authority tests.test_director_linear tests.test_director_tools`;
+  expect GREEN — the worker `issueUpdate` is blocked, the board client's own
+  `update_issue_state` still passes (it is not the worker allowlist). Proof: the new
+  `assertFalse(...issueUpdate...)` fails at `base_commit` and passes at HEAD.
+
+- **M2 — 2b: single canonical progress comment.** Scope: extend the slice-1
+  preamble. At the end: `director/taxonomy.py`'s `WORKER_PROTOCOL` contains the
+  approach-A discipline (one comment, stable marker, find-or-create across attempts,
+  mirrors the repo-doc narrative — not a competing second narrative); a new
+  assertion in `tests/test_director_taxonomy.py` checks the instruction is present in
+  `frame_first_turn` output. Run `python3 -m unittest discover -s tests -p
+  'test_director_taxonomy*'`; expect the new assertion to fail at `base_commit` and
+  pass at HEAD. No guardrail change (reads + `commentCreate`/`Update` already
+  allowed).
+
+- **M3 — `docs/PRINCIPLES.md` from the seed.** Scope: create the Core Principle doc.
+  At the end: `docs/PRINCIPLES.md` exists with frontmatter (`status/last_verified/
+  owner`), the purpose preamble, and the 8 seed principles (P1–P8) in the spec's
+  `### P<n> … **Why:** … **Applied:**` shape; registered as a top-level operating doc
+  (AGENTS.md Map + the docs index the gate expects). Run `python3
+  plugin/scripts/check.py`; expect the docs lint GREEN (frontmatter + registration).
+  Proof: file present + gate green.
+
+- **M4 — `DIRECTOR.md` lights-out + §2 revision + mode model; R4/R5 verification.**
+  Scope: the manual changes that make the procedure operable, plus confirm park/audit
+  ride existing rendering. At the end: `DIRECTOR.md` has a new `§13 Running
+  lights-out` (the decision procedure + "consult `PRINCIPLES.md` before escalating a
+  taste fork; park only when silent/ambiguous or a hard blocker"), §2's
+  outward-facing clause revised to "human owns the *taste*, not the *act*; hard floor
+  = guardrails", and §6 reframed to the three modes (attended / lights-out — no new
+  flag / no-agent `--autonomous`), all referencing `docs/PRINCIPLES.md`; and a
+  Surprises note records whether `orchestrator.py` needed any change for R4/R5 (expected:
+  none — the `reason` already renders). Run `python3 plugin/scripts/check.py`; expect
+  GREEN. Proof: the three edits present + consistent with ADR 0003 + gate green.
+
+Completion = gate GREEN + `review_level: targeted` satisfied (dispatch
+**review-arch**: the authority single-writer invariant + the DIRECTOR.md mode-reframe
+consistency are the touched risk).
+
+## Progress log
+- [ ] M1 — 2c issueUpdate ceiling
+- [ ] M2 — 2b progress comment
+- [ ] M3 — PRINCIPLES.md
+- [ ] M4 — DIRECTOR.md + R4/R5 verify
+
+## Surprises & discoveries
+
+## Decision log
+- 2026-06-17: 2b uses a stable-marker find-or-create comment (Approach A) — only
+  option satisfying "single canonical comment across attempts" (R6) at zero
+  guardrail cost.
+- 2026-06-17: lights-out needs no new orchestrator flag — it is the watched queue
+  path with a daemon answerer (ADR 0003 / spec R1); slice work is doc + 2 small edits.
+
+## Feedback (from completion gate)
+
+## Outcomes & retrospective
