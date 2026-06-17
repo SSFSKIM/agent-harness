@@ -43,6 +43,8 @@ export interface HarnessConfig {
   taskTools?: boolean | { dir?: string; listId?: string; agentName?: string };
   // swarm / coordinator (Phase 2 A2): peer teammate orchestration over an in-process bus
   swarm?: boolean | { team?: string; coordinatorPersona?: boolean; tools?: string[]; permissions?: { allow?: string[]; escalateToCoordinator?: boolean; onPlanApproval?: "default" | "acceptEdits" | "auto" | "bypassPermissions" } };
+  // context introspection (domain 6, agent-facing): expose a GetContextUsage MCP tool to the model
+  contextTool?: boolean;
   mcpServers?: Record<string, McpServerConfig>;
   plugins?: SdkPluginConfig[];
   // escape hatches

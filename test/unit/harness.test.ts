@@ -57,4 +57,13 @@ describe("createHarness", () => {
     const h = createHarness({}, { query: fakeQuery });
     await expect(h.getContextUsage()).rejects.toThrow(/start a query first/);
   });
+  it("contextTool mounts the cc-context server and allowlists its tool", () => {
+    const h = createHarness({ contextTool: true }, { query: fakeQuery });
+    expect((h.options as any).mcpServers["cc-context"]).toBeTruthy();
+    expect((h.options as any).allowedTools).toContain("mcp__cc-context__GetContextUsage");
+  });
+  it("without contextTool there is no cc-context server", () => {
+    const h = createHarness({}, { query: fakeQuery });
+    expect((h.options as any).mcpServers?.["cc-context"]).toBeUndefined();
+  });
 });

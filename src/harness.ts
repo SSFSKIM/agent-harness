@@ -6,6 +6,7 @@ import { createTaskMcpServer } from "./tasks/server.js";
 import { SwarmRuntime } from "./swarm/runtime.js";
 import { createSwarmMcpServer } from "./swarm/server.js";
 import { applyCoordinatorPersona, NATIVE_TASK_TOOLS } from "./swarm/coordinator.js";
+import { withContextTool, type QueryHolder, type RawContextUsage } from "./context/server.js";
 
 export interface HarnessDeps { query?: typeof sdkQuery; }
 
@@ -31,6 +32,7 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
 
   let tasks: TaskStore | undefined;
   let swarm: SwarmRuntime | undefined;
+  let ctxHolder: QueryHolder | undefined;
 
   if (config.swarm) {
     const so = config.swarm === true ? {} : config.swarm;
@@ -51,6 +53,12 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     const existing = (options.mcpServers as Record<string, unknown>) ?? {};
     options.mcpServers = { ...existing, "cc-tasks": createTaskMcpServer(tasks) };
   }
+  if (config.contextTool) {
+    ctxHolder = {};
+    const merged = withContextTool(options, ctxHolder);
+    options.mcpServers = merged.mcpServers;
+    options.allowedTools = merged.allowedTools;
+  }
   // A Harness drives ONE query at a time; `active` tracks the most recent one.
   // Control methods (rewind/supported*) are SDK control requests that require an
   // OPEN transport (sdk.d.ts:2242, streaming mode) — call them while a query is
@@ -60,6 +68,7 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
 
   function start(prompt: string) {
     active = query({ prompt, options: options as any });
+    if (ctxHolder) ctxHolder.query = active as { getContextUsage(): Promise<RawContextUsage> };
     return active;
   }
 
