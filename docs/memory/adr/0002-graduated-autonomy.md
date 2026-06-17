@@ -35,13 +35,33 @@ parent decomposition per [[0001-recursive-decomposition]]):
    placed on the impl/rework path. **Do NOT port the file** — its lifecycle steps
    (worker moves the board, self-merges, never-asks-a-human) are welded to the two
    axes we reject; a line-by-line keep/adapt/reject triage is the spec's spine.
-2. **Selective-escalation decider** — graduate `director/decider.py` from the
-   current *binary* (watched = judge every turn-end; `--autonomous` = judge
-   nothing, no `turnReview` reaches the queue, `DIRECTOR.md §6`) into a **dial**:
-   auto-continue routine turn-ends, route only the `DIRECTOR.md §2` taste/risk
-   subset (`needs_human`, `attempt≥2` + destructive, `stuck` + force-past, merge
-   taste-forks) to the Director/human. Likely couples a worker-authority posture
-   raise toward `approval_policy: never`.
+2. **Selective-escalation decider + its two companions.** Three pieces that
+   cohere because each is about *what the human sees, and what the worker may do,
+   when no longer judged every turn* (scope confirmed 2026-06-17):
+   - **(2a) Selective-escalation decider** — graduate `director/decider.py` from
+     the current *binary* (watched = judge every turn-end; `--autonomous` = judge
+     nothing, no `turnReview` reaches the queue, `DIRECTOR.md §6`) into a **dial**:
+     auto-continue routine turn-ends, route only the `DIRECTOR.md §2` taste/risk
+     subset (`needs_human`, `attempt≥2` + destructive, `stuck` + force-past, merge
+     taste-forks) to the Director/human.
+   - **(2b) Board-side canonical progress comment** — Symphony's `## Codex Workpad`
+     discipline, *adapted*: as the Director steps back, the human curating the
+     daemon watches the **board**, not repo docs, so the worker maintains **one
+     canonical** progress comment on the ticket (via the already-allowlisted
+     `commentCreate`/`commentUpdate`) as a board-visible mirror of the repo-doc
+     narrative — single, not fragmented. This is the slice-1 source-of-truth
+     framing's natural completion: repo doc = the narrative's authoritative home,
+     board comment = its human-facing mirror (NOT a competing second narrative).
+   - **(2c) `issueUpdate` authority-ceiling decision** — the guardrail allowlists
+     `issueUpdate` ("state transitions, labels, assignment"), but the architecture
+     says the *orchestrator* owns lifecycle-state writes; today only a soft prompt
+     convention keeps the worker off it. Raising worker autonomy must mean *more
+     self-governance / less Director gating*, **not** the worker writing lifecycle
+     state (which would race the daemon claim/reconcile). Decide deliberately:
+     tighten `issueUpdate` out of `DEFAULT_MUTATION_ALLOWLIST`, or split
+     forward-only moves from terminal moves — so the convention becomes a ceiling.
+   Likely also couples a worker-authority posture raise toward `approval_policy:
+   never`.
 
 ## Why
 
