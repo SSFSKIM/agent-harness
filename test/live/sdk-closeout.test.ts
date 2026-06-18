@@ -14,10 +14,18 @@ live("SDK capability closeout (real SDK)", () => {
     finally { await s.dispose(); }
   }, 60_000);
 
-  it("maxBudgetUsd, when exceeded, throws (pass-through, no graceful result)", async () => {
+  it("maxBudgetUsd caps the turn — no normal completion (throws or empty result)", async () => {
     const s = openSession({ model: MODEL, permissionMode: "bypassPermissions", maxBudgetUsd: 0.0001 });
-    try { await expect(s.submit("Run three bash commands one at a time: echo a; echo b; echo c, then summarize.")).rejects.toThrow(); }
-    finally { await s.dispose(); }
+    try {
+      let rejected = false;
+      let result: unknown = "UNSET";
+      try { result = (await s.submit("Run three bash commands one at a time: echo a; echo b; echo c, then summarize.")).result; }
+      catch { rejected = true; }
+      // Budget-exceeded is a hard stop that surfaces EITHER as a thrown subprocess exit OR as a
+      // result frame with no real output (cut off before completion) — timing-dependent. The harness
+      // passes both through; assert the cap prevented a normal completion, not one manifestation.
+      expect(rejected || !result).toBe(true);
+    } finally { await s.dispose(); }
   }, 60_000);
 
   it("taskBudget is accepted on opus-4-8", async () => {
