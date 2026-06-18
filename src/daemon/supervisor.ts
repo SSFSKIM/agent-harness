@@ -141,6 +141,22 @@ export class DaemonSupervisor {
     return session.compact();
   }
 
+  async usage(id: string): Promise<unknown> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
+    return session.usage();
+  }
+  async initializationResult(id: string): Promise<unknown> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
+    return session.initializationResult();
+  }
+  async applyFlagSettings(id: string, settings: Record<string, unknown>): Promise<void> {
+    const session = this.pool.get(id);
+    if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
+    await session.applyFlagSettings(settings);
+  }
+
   async fork(id: string): Promise<{ id: string; sessionId: string }> {
     const session = this.pool.get(id);
     if (!session || session.isEnded()) {

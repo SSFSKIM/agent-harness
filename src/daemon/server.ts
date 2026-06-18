@@ -75,6 +75,9 @@ export class DaemonServer {
         case "control": send(await this.supervisor.control(op.id, op.frame)); sock.end(); break;
         case "compact": send({ ok: true, outcome: await this.supervisor.compact(op.id) }); sock.end(); break;
         case "fork": send({ ok: true, ...await this.supervisor.fork(op.id) }); sock.end(); break;
+        case "usage": send({ ok: true, usage: await this.supervisor.usage(op.id) }); sock.end(); break;
+        case "init": send({ ok: true, init: await this.supervisor.initializationResult(op.id) }); sock.end(); break;
+        case "apply_flag_settings": await this.supervisor.applyFlagSettings(op.id, op.settings); send({ ok: true }); sock.end(); break;
         case "start_proactive": send({ ok: true, status: this.supervisor.startProactive(op.id, op.config) }); sock.end(); break;
         case "stop_proactive": send(await this.supervisor.stopProactive(op.id)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;

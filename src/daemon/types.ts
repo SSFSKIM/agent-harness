@@ -48,6 +48,9 @@ const sessionsOp = z.object({ op: z.literal("sessions"), cwd: z.string().optiona
 const messagesOp = z.object({ op: z.literal("messages"), id: z.string(), cwd: z.string().optional(), limit: z.number().optional(), offset: z.number().optional() });
 const compactOp = z.object({ op: z.literal("compact"), id: z.string() });
 const forkOp = z.object({ op: z.literal("fork"), id: z.string() });
+const usageOp = z.object({ op: z.literal("usage"), id: z.string() });
+const initOp = z.object({ op: z.literal("init"), id: z.string() });
+const applyFlagSettingsOp = z.object({ op: z.literal("apply_flag_settings"), id: z.string(), settings: z.record(z.string(), z.unknown()) });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp, forkOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp, forkOp, usageOp, initOp, applyFlagSettingsOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;
