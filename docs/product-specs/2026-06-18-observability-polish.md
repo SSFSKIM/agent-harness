@@ -1,9 +1,18 @@
 ---
-status: draft
-last_verified: 2026-06-18
+status: stable
+last_verified: 2026-06-19
 owner: harness
 ---
 # Deferred observability polish — live token accrual · SSE · rate-limit view · cross-run history
+
+> **Built (2026-06-19).** All scoped slices shipped on branch `obs-polish`, each
+> gate-GREEN + reviewed: Layer-2 token accrual (R1–R3,
+> [layer2-token-accrual](../exec-plans/completed/2026-06-18-layer2-token-accrual.md)),
+> SSE + rate-limit (R4–R6,
+> [dashboard-sse-rate-limit](../exec-plans/completed/2026-06-19-dashboard-sse-rate-limit.md)),
+> and cross-run history (R7–R8,
+> [cross-run-history](../exec-plans/completed/2026-06-19-cross-run-history.md)).
+> Multi-run aggregate view remains the one deliberate deferral (no producer fan-out yet).
 
 The "deferred observability polish" track the read-dashboard
 ([director-observability-dashboard](2026-06-16-director-observability-dashboard.md))
