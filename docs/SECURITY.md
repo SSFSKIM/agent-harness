@@ -15,7 +15,8 @@ Grounding document for the review-security persona. Threats are numbered.
 > `.claude/lints` executable config), **T10** (worker tool authority — the
 > Director's live exec surface), **T11** (autonomous worker posture), **T12**
 > (operator-console write surface), **T13** (notifier outbound egress), **T14**
-> (Director workspace write/delete surface). The full
+> (Director workspace write/delete surface), **T15** (workspace lifecycle hooks —
+> host-trusted Director-side shell). The full
 > model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
@@ -259,3 +260,19 @@ Grounding document for the review-security persona. Threats are numbered.
   reachable only from the trusted single-ticket CLI (`load_ticket`), never the board/daemon
   path (`normalize_issue` emits no `workspace` key). Any future workspace-lifecycle code (the
   deferred §9.4 hooks slice) MUST route its paths through these same two helpers.
+- **T15 — Workspace lifecycle hooks run host-trusted, Director-side.** The §9.4 hooks
+  (`director.workspace.hooks` {`after_create`/`before_run`/`after_run`/`before_remove`},
+  `director/run.py` `run_hook`) execute `sh -lc <script>` with the **Director's**
+  environment and privileges (NOT the worker's deny-by-default sandbox) — by design, so a
+  private-repo clone can reach the Director's credentials (keychain / `GH_TOKEN`). This is
+  the same trust class as `codex_command` and the host lint commands (`.harness.json`
+  executable config, T9): **whoever can write `.harness.json` already has Director-level
+  code execution**, so the hook surface adds no new trust boundary — it is enumerated here
+  so a port reviews it as such. Rules: (1) hook scripts come only from the host's
+  `.harness.json`, never from board/worker/PR content (a ticket can't inject a hook);
+  (2) `run_hook` runs with `cwd` = the contained workspace, a bounded `hook_timeout_s`, and
+  logs start/failure/timeout to **stderr** without echoing the resolved env; (3) failure
+  semantics are fixed (after_create/before_run fatal, after_run/before_remove ignored) so a
+  hook can't silently half-prepare a workspace a worker then runs in. The worker that opens
+  PRs gets `GH_TOKEN` via the **`worker_env` allowlist** (T11), not the hook env. A future
+  hardening (deferred, container/vault track): sandbox the hooks themselves.
