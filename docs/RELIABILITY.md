@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-16
+last_verified: 2026-06-18
 owner: review-reliability
 ---
 # RELIABILITY.md
@@ -92,3 +92,35 @@ cite them in findings.
   gate on the very run it only meant to observe. This is R6's "hooks fail open"
   generalized to request threads — the boundary owns a catch-all, the listener
   stays up.
+- **R15 — Config/host-policy loaders split fail-open vs fail-loud, before any side
+  effect.** A loader for declarative config or host policy (`harness_lib.gate_config`,
+  `worker.policy.load_worker_policy`, `director.config`) treats an **absent** file/block as
+  **fail-open** (use defaults) and a **present-but-malformed** one as **fail-loud** (raise) —
+  and the fail-loud raise MUST land at load time, *before* the first irreversible side effect
+  (a board claim/transition, a worker spawn, a lock). A half-parsed policy must never widen
+  access or silently run on partial settings; a wrong team/state must never claim the wrong
+  tickets. (3-instance pattern; `director.config` raises before any worker spawns.)
+- **R16 — Cross-thread coordination uses thread-safe primitives; cancellation is bounded
+  and stale-safe.** Companion to R13 (single-writer). (1) Any object shared across threads
+  (main ↔ worker pool) MUST be a thread-safe primitive (`threading.Event`/`Queue`) — never a
+  plain dict/list reached into from a pool thread (the pool's `cancel_event` is the only
+  cross-thread object; `futures`/`attempts`/`cancelled_states` are main-thread-only).
+  (2) Cooperative cancellation of a long-running subprocess worker MUST bound observation
+  latency (a poll interval) AND guarantee no stale signal cancels a *fresh* attempt
+  (fresh Event per submit + drop-on-completion). (3) A worker outside the live tracking set
+  (e.g. parked in a retry holding-map, not yet in `futures`) is human-cancel-blind until it
+  re-enters — an accepted bounded staleness (board-as-truth converges), not a lost cancel.
+- **R17 — Daemon-lifetime state is evicted on set-exit, not only on success.** Any map
+  keyed by ticket id in a long-running loop (`run_forever`'s `attempts`, claim-backoff
+  `claim_fails`/`claim_retry_at`, the bounded `recent[]`) MUST be evicted when the ticket
+  **leaves the relevant set** — terminal, or moved/deleted off the board — not only on the
+  success path. Popping only on success leaks for the daemon's lifetime when a ticket exits
+  any other way; GC against `ready ∪ in_flight` each poll. (Bounds unbounded growth over a
+  multi-week run; the batch wave is exempt — it returns and is reaped.)
+- **R18 — Write-surface result fidelity.** An operator/human write surface (e.g.
+  `director/dashboard.py`'s `POST /api/v1/answer`) that fans a request out to a downstream
+  writer which can **refuse** (an idempotent no-op, a cap exceeded, an already-queued dedup —
+  e.g. `requeue_merge` at `max_attempts`) MUST propagate that refusal to the caller (a
+  non-2xx + reason), never return a generic success envelope for a no-op. Reporting a
+  declined write as written leaves the operator believing they acted when the request is
+  still open — the write analog of R12/R14's "never a wrong value / never a false gate".

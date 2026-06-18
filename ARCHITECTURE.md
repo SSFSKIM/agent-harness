@@ -120,7 +120,7 @@ orchestrator (a Director main session + Codex app-server workers) the harness is
 built to support. It is **instance-layer app code, not machine (`plugin/`)**: the
 machine governs it only through the gate + review personas, so its own
 architecture invariants live here (review-arch grounds in this doc). Runtime
-*correctness* invariants live in `docs/RELIABILITY.md` (R9, R12–R14).
+*correctness* invariants live in `docs/RELIABILITY.md` (R9, R12–R18).
 
 1. **Stdlib-only.** No third-party imports anywhere under `director/` (no
    `pyproject.toml` / `requirements.txt`) — the same "boring tech / internalize
@@ -153,4 +153,32 @@ architecture invariants live here (review-arch grounds in this doc). Runtime
    present-but-malformed block fails loud at load (before any worker spawns); an
    absent block uses the defaults. This is the `director/` analog of invariant 7
    ("a host's rules are the host's, declared in `.harness.json`"), and the Symphony
-   `WORKFLOW.md` analog (SPEC §5–6).
+   `WORKFLOW.md` analog (SPEC §5–6). Every default that also lives in `DEFAULTS` is
+   **aliased** from it (e.g. `merger.DEFAULT_MAX_MERGES = config.DEFAULTS["merger"]
+   ["max_merges"]`) — no parallel literal in ANY `director/` module (merger included),
+   so the single source can never silently drift.
+6. **One first-turn framing seam.** The worker's first-turn protocol — the
+   `WORKER_PROTOCOL` operating-disciplines preamble + the `TERMINAL_CONTRACT`, via
+   `taxonomy.frame_first_turn` — is injected at exactly ONE point, `run.drive`'s first
+   turn, and nowhere else (later turns carry the decider's directive verbatim). Every
+   dispatch path (orchestrator, `run.main`, direct drive) inherits the protocol because
+   all funnel through `drive`; a caller that framed again before `drive` would
+   double-inject. Add new shared first-turn text here, never at a call site.
+7. **One sharing boundary for batch + daemon; no new work spawns during a drain.** The
+   batch wave (`_dispatch_wave`) and the continuous daemon (`run_forever`) share ONE
+   implementation of claim → submit → reap → reconcile via `_RunState`; a new loop mode
+   routes through it (e.g. `reap(on_retry=…)`), never re-derives the machinery. A graceful
+   shutdown's "no new worker spawns while draining" is a STRUCTURAL guarantee
+   (scheduled-not-immediate retries + a `not draining`-guarded due-retry step +
+   exit-on-empty-`futures`), not a per-case patch. Two reconcile semantics ride here: a
+   terminal summary's `final_state` is the orchestrator's best **observation** of the board
+   state the ticket ends in (not an internal disposition label), and the active-run reconcile
+   cadence is **wall-clock-anchored** (a monotonic `last_reconcile`) so it fires under steady
+   completions, not only on a worker-completion wake.
+8. **Shared helpers live in a core module, not private-imported from a sibling.** A pure
+   helper or cross-module contract used by more than one `director/` module (a kind set, a
+   summarizer) belongs in a module both can depend on without reaching into a transport's
+   internals. A short-lived cross-module private import (`director.notify` reusing
+   `dashboard._summary_for` + `HUMAN_BOUND_KINDS`) is tolerated for a two-consumer product
+   slice that would otherwise duplicate-and-drift — but the moment a third consumer appears,
+   promote the helper to a core module (public name) rather than spread the private import.

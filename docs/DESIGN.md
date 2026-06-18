@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-18
 owner: review-arch
 ---
 # DESIGN.md — taste for building harness components
@@ -39,6 +39,13 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   default. A host that wants plugin inventory or component mention coverage to
   block commits opts in with `.harness.json` `component_inventory: strict` or
   `component_coverage: strict`.
+- Gate **behavior** that is machine-universal propagates to the `harness-init` seed
+  templates; host **policy** stays host-customizable. The always-on QA pair
+  (spec-compliance then code-quality, run at EVERY ExecPlan completion regardless of
+  `review_level`) is machine *method* — it belongs in the seed `PLANS.md`/`AGENTS.md` so
+  every ported host inherits it. `review_level` and which risk personas a host dispatches
+  are host *policy* (overridable). The line: a guarantee the machine makes everywhere → seed
+  it; a knob the host tunes → leave it host-owned.
 
 ## Skills
 - A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
@@ -48,9 +55,18 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   `git add docs/memory/` for dream, `git add docs/` for garden) — never
   `git add -A`. The state dir `.claude/harness/` is gitignored, so the guard
   works today, but explicit scoping makes the invariant written and lint-able.
+- Agent/worker operating-protocol prose (the `WORKER_PROTOCOL` preamble + the dev-stage
+  templates in `director/taxonomy.py`) is product text held to the same "map not
+  encyclopedia" bar as a SKILL.md: stage-agnostic disciplines in the shared preamble,
+  stage-specific guidance only in the template, terse throughout. Enrich it by adding a
+  load-bearing discipline, never prose volume — the worker re-reads it every first turn,
+  so every sentence costs tokens and attention.
 
 ## Agents (personas)
-- One persona ↔ one grounding doc, 1:1 (lint S5). Personas must not invent
+- One persona ↔ one **primary** grounding doc, 1:1 (lint S5) — additional constraint
+  docs (e.g. `core-beliefs.md` for review-code-quality) or per-plan inputs (the ExecPlan /
+  linked product-spec, as review-spec-compliance and review-code-quality consume) are
+  allowed alongside the primary, not a violation. Personas must not invent
   taste beyond their grounding doc; gaps go to "Proposed rule additions".
   Grounding docs are **taste/contract authority**, not blinders: review personas
   may still raise demonstrable correctness, reliability, or security bugs when

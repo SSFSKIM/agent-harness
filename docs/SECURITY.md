@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-13
+last_verified: 2026-06-18
 owner: review-security
 ---
 # SECURITY.md
@@ -13,10 +13,13 @@ Grounding document for the review-security persona. Threats are numbered.
 > threats are dormant alongside it. The live surface is small: **T3** (hook
 > execution), **T8** (lint-exemption scope), **T9** (`.harness.json` /
 > `.claude/lints` executable config), **T10** (worker tool authority — the
-> Director's live exec surface), **T11** (autonomous worker posture). The full model is no longer an active,
+> Director's live exec surface), **T11** (autonomous worker posture), **T12**
+> (operator-console write surface), **T13** (notifier outbound egress). The full
+> model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
-> exec surface (hooks · `.harness.json`/host-lint · `.harnessignore`); see the
+> exec surface (hooks · `.harness.json`/host-lint · `.harnessignore` · the Director
+> operator-console write surface / notifier egress); see the
 > `execplan` skill. Reactivate the dormant threats **with** the memory-loop
 > redesign (`docs/memory/openq/memory-loop-redesign.md`) — the threat model
 > co-evolves with the loop it guards. Kept verbatim as the record; reversible.
@@ -214,3 +217,27 @@ Grounding document for the review-security persona. Threats are numbered.
   `--autonomous` is opt-in (default = **watched**); posture and network are **identical**
   in both modes (full outbound; they differ only by the turn-end decider — autonomy.py),
   so the exfil residual above applies to both. Part of the live exec surface (status note).
+
+- **T12 — Director operator-console write surface.** `director/dashboard.py`'s
+  `POST /api/v1/answer` is the first first-party Director **write** surface (it writes
+  queue answers a worker consumes via `wait_for_answer`). The fence the surface must keep:
+  (1) **`127.0.0.1`-only** bind, no LAN — reads (GET) are unfenced, every write is fenced;
+  (2) a **per-server CSRF token** (`secrets.token_urlsafe(32)`) minted at start, embedded
+  same-origin in the served page, required as `X-Director-Token` and checked with
+  `secrets.compare_digest` — a cross-origin page can neither read it (same-origin policy)
+  nor attach the custom header without a preflight the server never approves; (3) a
+  loopback **`Origin`/`Host` check** as a fail-closed DNS-rebinding defense-in-depth;
+  (4) answers are **first-party operator input** (the human acting as Director), validated
+  against the downstream `director_min` contract before any write, with `request_id`
+  constrained to an already-queued id (no `answers/<id>.json` path traversal) and never
+  interpolated into a headless `-p` slot (cf. T6). Any new `director/` write route inherits
+  this fence; widening past loopback or dropping the token is a threat-model change.
+
+- **T13 — Director notifier outbound egress.** `director/notify.py` is the first
+  first-party **outbound** sender in the Director process (distinct from the worker-sandbox
+  egress of T11). Rules: the webhook URL is a **deployment secret kept in `.env` /
+  `$DIRECTOR_WEBHOOK_URL` only** (never `.harness.json`, memory, or committed — Slack/Discord
+  webhooks embed a token); the URL **scheme is allowlisted to http/https** (a misconfigured
+  `file://`/`ftp://` fails loud at startup, never honored); the POST payload carries **queue
+  metadata only** (`request_id`/`kind`/`ticket_id`/clipped `summary`/`created_at`) — never
+  credentials or `.env` contents — and the URL itself is never echoed to logs.

@@ -20,9 +20,9 @@ Deep truth lives in `docs/` — follow the pointers.
    in [the harness page](docs/design-docs/agent-harness.md).
 4. **Validate.** The harness lint gate must be GREEN before every commit —
    exact command in [the harness page](docs/design-docs/agent-harness.md).
-5. **Review.** ExecPlans own their review budget (`review_level`). Always
-   self-review; dispatch review personas only at the risk level the plan calls
-   for (execplan skill).
+5. **Review.** Two QA reviews (spec-compliance then code-quality) run at *every*
+   ExecPlan completion; `review_level` governs only the additional risk personas
+   dispatched at the level the plan calls for. Always self-review (execplan skill).
 6. **Write back.** Update `docs/memory/progress/current.md` before ending a
    long session. The automatic memory loop may be disabled; follow the harness
    page for the current mode.
