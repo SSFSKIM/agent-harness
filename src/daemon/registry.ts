@@ -53,5 +53,20 @@ export class SessionRegistry {
     return n;
   }
 
+  /** Boot adoption: claim orphaned-but-resumable records for `pid` (normalize status to idle, reset the
+   *  restart budget), reap the rest (errored / never-took-a-turn), and return the claimed records. Records
+   *  owned by a still-live daemon are left untouched (shared registry dir). Counterpart to reapStale(). */
+  rehydrate(pid: number): SessionRecord[] {
+    const claimed: SessionRecord[] = [];
+    for (const r of this.list()) {
+      if (this.isAlive(r.daemonPid)) continue;                                                  // a live daemon owns it
+      const resumable = !!r.sessionId && (r.status === "idle" || r.status === "busy" || r.status === "restarting");
+      if (!resumable) { this.remove(r.id); continue; }                                          // errored / no transcript → reap
+      const next: SessionRecord = { ...r, daemonPid: pid, status: "idle", restarts: 0 };
+      this.register(next); claimed.push(next);
+    }
+    return claimed;
+  }
+
   private path(id: string): string { return join(this.dir, `${id}.json`); }
 }
