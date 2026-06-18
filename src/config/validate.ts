@@ -16,7 +16,7 @@ export const harnessConfigSchema = z.looseObject({
   toolPreset: z.enum(["claude_code", "none"]).optional(),
   thinking: z.union([
     z.object({ type: z.enum(["adaptive", "disabled"]) }),
-    z.object({ type: z.literal("enabled"), budgetTokens: z.number().int().positive() }),
+    z.object({ type: z.literal("enabled"), budgetTokens: z.number().int().positive().optional() }),
   ]).optional(),
   taskBudget: z.object({ total: z.number().int().positive() }).optional(),
   settingSources: z.array(z.enum(["user", "project", "local"])).optional(),

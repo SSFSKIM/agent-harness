@@ -14,7 +14,8 @@ describe("validateHarnessConfig", () => {
     expect(() => validateHarnessConfig({ maxTurns: 0 })).toThrow(/maxTurns/);
     expect(() => validateHarnessConfig({ maxBudgetUsd: -1 })).toThrow(/maxBudgetUsd/);
     expect(() => validateHarnessConfig({ effort: "ultra" })).toThrow(/effort/);
-    expect(() => validateHarnessConfig({ thinking: { type: "enabled" } })).toThrow(/thinking/); // missing budgetTokens
+    expect(() => validateHarnessConfig({ thinking: { type: "enabled" } })).not.toThrow(); // budgetTokens is optional (SDK-valid)
+    expect(() => validateHarnessConfig({ thinking: { type: "enabled", budgetTokens: -1 } })).toThrow(/thinking|budgetTokens/); // negative budget invalid
     expect(() => validateHarnessConfig({ maxTurns: "five" as any })).toThrow(/maxTurns/);
   });
 });
