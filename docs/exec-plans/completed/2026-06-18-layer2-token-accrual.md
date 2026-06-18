@@ -1,6 +1,6 @@
 ---
-status: active
-last_verified: 2026-06-18
+status: completed
+last_verified: 2026-06-19
 owner: harness
 base_commit: 17b4b49
 review_level: standard
@@ -249,5 +249,41 @@ Five reviews; spec-compliance + arch + reliability **SATISFIED** first pass, cod
   usage from a *failed* attempt can transiently apply to the retried in-flight entry (drain runs
   after reap-which-retries) — a LIVE-display transient only; the final aggregate is correct and
   the spec explicitly scopes "retry-burn token accounting" as a non-goal.
+- **code-quality re-review (Claude persona — Codex worker unavailable, CLAUDE.md fallback):
+  SATISFIED.** Mutation-verified the P1 fix (deleting `on_event` from drive's `_prepare` → the
+  new drive test goes RED, the run_ticket test stays green), and confirmed the P2 deferral is
+  defensible (display-only, self-healing via replace-not-accumulate, final aggregate correct).
+  One new **minor P2 → tech-debt:** `accrue` (status.py:156-158) and `terminal` (status.py:180-183)
+  open-code the byte-identical all-or-nothing `{input,output,total}` int-group validation; a
+  `_token_group(d) -> dict|None` helper would centralize the "matching terminal's fold" contract
+  the `accrue` docstring promises in prose. Deferred (touches `terminal()`, which the gate
+  reviewed as unchanged; fix-forward, not a blocker).
 
 ## Outcomes & retrospective
+**Shipped:** Layer-2 in-flight token accrual — token usage now accrues LIVE mid-turn in the run
+snapshot, not only at `terminal()`. `StatusWriter` gained `accrue()` + a live `codex_totals`
+sum at `snapshot()` (ended `_codex_totals` + Σ in-flight tokens, mirroring `seconds_running`);
+the orchestrator marshals per-event usage from worker-pool threads to its main tick loop via a
+`queue.Queue` (`_enqueue_usage` puts — exception-total; `drain_accrual` drains+coalesces →
+`status.accrue`), drained after `reap` in both `_dispatch_wave` and `run_forever`; `run.py`
+threads `on_event` through `drive`/`run_ticket`/`_prepare`; the dashboard renders in-flight
+tokens. `app_server.py` UNCHANGED (D-2). **Goal met:** behaviorally proven — the producer
+sequence climbed `0 → 400 → 600 → 750 → 770` (live, multi-ticket, no double-count at terminal),
+and the browser DOM rendered `750 tok` headline + per-row in-flight tokens mid-turn.
+**Reviews:** spec-compliance + arch + reliability SATISFIED first pass; code-quality
+NOT-SATISFIED (P1: test covered run_ticket not the production drive path) → fixed → SATISFIED.
+One reliability P2 fixed inline (`_enqueue_usage` exception-total). Three P2s + 3 proposed rules
+recorded fix-forward.
+**Retrospective:**
+- The `seconds_running` precedent paid off: making `codex_totals` a live sum at `snapshot()`
+  reused a pattern reviewers already trust, so the no-double-count argument was a one-liner
+  (atomic live→ended move at `terminal()`'s existing pop) — and the dashboard needed only ONE
+  line of new render (the producer's enrichment flows through the existing pass-through view).
+- The R13/R16 marshal was the whole risk surface, and it held: the worker thread only ever
+  `put`s; the writer is touched only on the main thread. The reliability reviewer's catch — that
+  the callback runs in an *un-isolated* producer loop, so it must be exception-total at its own
+  boundary — was the one genuinely non-obvious hardening, now code + a tech-debt rule.
+- The code-quality P1 was a real silent-regression vector that the always-on QA review earned
+  its keep on: the obvious test (run_ticket) and the integration test (run_once final aggregate)
+  *both* miss a dropped `on_event` on the production `drive` path, because the final aggregate
+  comes from `terminal()`, not the marshal. The mutation-verified drive test now guards it.
