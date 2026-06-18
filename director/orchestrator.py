@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import signal
 import sys
 import threading
@@ -24,7 +25,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import director.queue as dq
-from director import config, decider, run, status as status_mod, taxonomy
+from director import config, decider, merger, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 from director.worker import autonomy
 
@@ -35,6 +36,10 @@ from director.worker import autonomy
 # over both). `failed`/`blocked` are OPTIONAL (None = no such state → leave the ticket
 # in `started` + comment).
 DEFAULT_STATE_NAMES = dict(config.DEFAULTS["states"])  # copy — never alias the shared DEFAULTS
+# Linear workflow-state TYPES that mean "terminal" (no more work) — the signal for
+# mid-flight / startup workspace cleanup (Symphony §8.5 Part B / §8.6). Type, not name,
+# so a human-chosen terminal state outside our configured names (e.g. "Canceled") counts.
+_TERMINAL_TYPES = frozenset({"completed", "canceled"})
 
 
 def resolve_states(board, team: str, names: dict | None = None) -> dict:
@@ -193,13 +198,24 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     elif kind == "cancelled":
         # Active-run reconciliation stopped this worker: its ticket left `started`
         # (a human moved it). The human OWNS the new state, so we do NOT re-transition
-        # the board and do NOT retry (D-62 / Symphony "terminate without cleanup").
-        # `final_state` is the OBSERVED external state the human moved it to (consistent
-        # with the other branches = the board state the ticket ends in); "released" is
-        # the fallback when that observation wasn't captured.
-        final = external_state or "released"
+        # the board and do NOT retry (D-62). `external_state` is the OBSERVED state dict
+        # ({state_name, state_type}); `final_state` reports its name (consistent with the
+        # other branches), "released" when the observation wasn't captured.
+        ext = external_state or {}
+        final = ext.get("state_name") or "released"
         comment(f"🛑 worker stopped after {turns} turn(s) — ticket moved to {final!r} "
                 f"externally (reconciliation); claim released")
+        # §8.5 Part B: human moved a RUNNING ticket to a TERMINAL state → the worker was
+        # killed mid-flight (it never reported done, so never enqueued a merge) and its
+        # workspace is abandoned → clean it. A non-terminal external state (parked
+        # elsewhere) leaves the workspace untouched (Symphony "terminate without cleanup").
+        if ext.get("state_type") in _TERMINAL_TYPES and workspace_root is not None:
+            ws = run.workspace_path(tid, workspace_root)
+            if run.is_contained(ws, workspace_root):
+                try:
+                    shutil.rmtree(ws, ignore_errors=True)
+                except Exception as exc:  # best-effort, recorded like a board-write miss
+                    errs.append(f"workspace cleanup: {exc}")
         summary = summarize("cancelled", final)
     elif kind == "stuck":
         final = "started"
@@ -262,8 +278,10 @@ def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
     in-flight tickets and signal cancel for any ticket a human moved OUT of `started`
     (the operator-control lever). A ticket whose id is absent from the refresh
     (deleted/unknown) is left running — never cancel on missing data. When a cancel is
-    signalled, the observed external state name is recorded in `cancelled_states[tid]`
-    so the summary can report what the human moved it to (not just "released").
+    signalled, the observed external state (the `{state_id, state_name, state_type}`
+    dict from the refresh) is recorded in `cancelled_states[tid]` so reconcile can report
+    what the human moved it to (state_name) AND decide workspace cleanup by state_type
+    (terminal → the mid-flight workspace is abandoned, clean it; §8.5 Part B).
 
     **Fail-soft (R5/§8.5):** the WHOLE pass is total — any error (a
     `fetch_issue_states_by_ids` raise, or anything else) keeps every worker running
@@ -285,7 +303,7 @@ def _reconcile_in_flight(board, in_flight_tickets, cancel_events: dict,
                 if ev is not None and not ev.is_set():
                     ev.set()
                     if cancelled_states is not None:
-                        cancelled_states[tid] = cur.get("state_name")
+                        cancelled_states[tid] = cur  # full dict (name + type for cleanup)
                     cancelled.append(tid)
         return cancelled
     except Exception:
@@ -326,7 +344,7 @@ class _RunState:
         self.attempts: dict = {}         # tid -> attempt count
         self.in_flight: set = set()      # tids claimed/dispatched, not yet terminal
         self.cancel_events: dict = {}    # tid -> threading.Event (set by reconciliation)
-        self.cancelled_states: dict = {} # tid -> observed external state name at cancel
+        self.cancelled_states: dict = {} # tid -> observed external state dict at cancel
         self.results: dict = {}          # tid -> terminal summary
         self.claim_failed: set = set()   # tids whose claim raised/returned False
 
@@ -592,6 +610,47 @@ def _install_daemon_signals(shutdown_event: threading.Event,
     return restore
 
 
+def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_base) -> None:
+    """Run ONCE at daemon entry, before the first tick (Symphony §8.6 + §14.3). Two
+    fail-soft passes — recovery is best-effort and idempotent across restarts; an error
+    in either logs a structured line and startup proceeds (§11.4), never crashing the
+    daemon before it can do useful work:
+
+    (a) Startup terminal-workspace cleanup — rmtree the workspaces of issues already in a
+        terminal state, EXCEPT any path a pending `mergeRequest` still references (the
+        serialized merger lands a `done` ticket's PR branch AFTER the ticket is terminal,
+        so that workspace is NOT disposable yet). Each rmtree is containment-guarded —
+        never delete outside the workspace root.
+    (b) Orphan re-attach — a ticket the prior process left in `started` has no live worker
+        on a fresh process (the running-map is empty before the loop), so it is a crash
+        orphan; move it back to `ready` so the first poll re-dispatches it into its
+        reused workspace (board-as-truth recovery; we go through the normal claim path,
+        no special dispatch). Per-orphan fail-soft."""
+    terminal_ids = [sid for sid in (states.get("done"), states.get("blocked"),
+                                    states.get("failed")) if sid]
+    try:  # (a) terminal-workspace cleanup
+        protected = {r.get("workspace_path") for r in merger.pending_merges(base=queue_base)
+                     if r.get("workspace_path")}
+        for ticket in board.fetch_issues_by_states(team, terminal_ids):
+            ws = run.workspace_path(ticket["id"], workspace_root)
+            if str(ws) in protected:
+                continue  # a queued PR-merge still needs this branch's workspace
+            if run.is_contained(ws, workspace_root):
+                shutil.rmtree(ws, ignore_errors=True)
+    except Exception as exc:
+        print(json.dumps({"daemon": "startup_cleanup_skipped", "error": str(exc)}))
+    try:  # (b) orphan re-attach
+        for ticket in board.fetch_issues_by_states(team, [states["started"]]):
+            try:
+                board.update_issue_state(ticket["id"], states["ready"])
+            except Exception as exc:
+                print(json.dumps({"daemon": "orphan_reattach_failed",
+                                  "ticket": ticket.get("identifier") or ticket.get("id"),
+                                  "error": str(exc)}))
+    except Exception as exc:
+        print(json.dumps({"daemon": "orphan_fetch_skipped", "error": str(exc)}))
+
+
 def run_forever(board, command: list[str], *, team: str, states: dict,
                 done_types=("completed",), concurrency: int = 3, queue_base=None,
                 workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
@@ -636,6 +695,10 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                       approval_policy=approval_policy, sandbox=sandbox, decide=decide,
                       max_turns=max_turns)
     restore = _install_daemon_signals(shutdown_event, force_event) if install_signals else None
+    # Crash/restart recovery (§8.6 + §14.3): clean terminal workspaces + re-attach
+    # orphaned `started` tickets BEFORE the first tick. Fail-soft — never blocks startup.
+    _startup_recovery(board, states, team=team, workspace_root=workspace_root,
+                      queue_base=queue_base)
     done_set = set(done_types)
     last_reconcile = time.monotonic()
     forced = False
@@ -833,6 +896,24 @@ class MockBoard:
                 continue
             out[iid] = {"state_id": iss["state_id"], "state_name": self.state_name(iid),
                         "state_type": self._state_type(iid)}
+        return out
+
+    def fetch_issues_by_states(self, team, state_ids) -> list:
+        """Issues currently in ANY of the given states, normalized like
+        list_ready_issues (re-dispatchable). Empty state_ids → [] (no-op) — the
+        startup-recovery / cleanup read (Symphony §11.1 op #2)."""
+        ids = set(state_ids)
+        if not ids:
+            return []
+        out = []
+        for i in self._issues.values():
+            if i["state_id"] not in ids:
+                continue
+            t = dict(i)
+            t["blockers"] = [{"id": bid, "state_type": self._state_type(bid)}
+                             for bid in i.get("blockers", [])]
+            t["labels"] = list(i.get("labels", []))
+            out.append(t)
         return out
 
 

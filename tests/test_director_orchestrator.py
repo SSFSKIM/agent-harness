@@ -806,6 +806,100 @@ class ActiveRunReconcileTest(unittest.TestCase):
         self.assertEqual(seen, [("cancelled", main_ident)])
 
 
+class StartupRecoveryTest(unittest.TestCase):
+    """_startup_recovery (Symphony §8.6 + §14.3): terminal-workspace cleanup +
+    orphaned-`started` re-attach, both fail-soft, run once before the daemon's first tick."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+        self.wsroot = self.tmp / "wsroot"
+
+    def test_cleanup_removes_terminal_workspaces_except_pending_merge(self):
+        board = orch.MockBoard([
+            {"id": "u1", "identifier": "D-1", "state_id": "st_done", "prompt": "p"},
+            {"id": "u2", "identifier": "D-2", "state_id": "st_done", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        ws1 = run.workspace_path("u1", self.wsroot); ws1.mkdir(parents=True)
+        ws2 = run.workspace_path("u2", self.wsroot); ws2.mkdir(parents=True)
+        # u2's workspace is still referenced by a queued PR-merge → must survive cleanup
+        dq.append_merge_request("u2", pr="http://pr", workspace_path=str(ws2), base=self.qbase)
+        orch._startup_recovery(board, states, team="T",
+                               workspace_root=self.wsroot, queue_base=self.qbase)
+        self.assertFalse(ws1.exists())   # terminal, no pending merge → removed
+        self.assertTrue(ws2.exists())    # protected by pending merge → kept
+
+    def test_reattaches_orphaned_started_tickets(self):
+        board = orch.MockBoard([
+            {"id": "o1", "identifier": "O-1", "state_id": "st_prog", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        orch._startup_recovery(board, states, team="T",
+                               workspace_root=self.wsroot, queue_base=self.qbase)
+        # the orphan was moved back to ready so the first poll re-dispatches it
+        self.assertEqual(board._issues["o1"]["state_id"], states["ready"])
+        self.assertIn(states["ready"], board.transitions["o1"])
+
+    def test_fetch_failure_is_fail_soft(self):
+        class _Boom(orch.MockBoard):
+            def fetch_issues_by_states(self, team, state_ids):
+                raise RuntimeError("tracker down")
+        board = _Boom([])
+        states = orch.resolve_states(board, "T")
+        # must NOT raise — startup proceeds despite the fetch error (§11.4)
+        orch._startup_recovery(board, states, team="T",
+                               workspace_root=self.wsroot, queue_base=self.qbase)
+
+    def test_run_forever_invokes_startup_recovery_before_loop(self):
+        board = orch.MockBoard([])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.orchestrator._startup_recovery") as sr:
+            # max_ticks=0 → the tick loop exits immediately, but recovery runs before it
+            orch.run_forever(board, command=["x"], team="T", states=states,
+                             install_signals=False, max_ticks=0)
+        sr.assert_called_once()
+
+
+class ReconcileCancelledCleanupTest(unittest.TestCase):
+    """reconcile's `cancelled` branch cleans the abandoned mid-flight workspace ONLY when
+    the human moved the ticket to a TERMINAL state (Symphony §8.5 Part B)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+        self.wsroot = self.tmp / "wsr"
+        self.board = orch.MockBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                                      "description": "d", "prompt": "p",
+                                      "state_id": "st_prog"}])
+        self.states = orch.resolve_states(self.board, "T")
+
+    def _cancel(self, ext):
+        return orch.reconcile(
+            self.board, {"id": "u1", "identifier": "D-1"},
+            {"kind": "cancelled", "reason": "reconciliation", "turns": 1},
+            1, self.states, 1, queue_base=self.qbase, workspace_root=self.wsroot,
+            external_state=ext)
+
+    def test_cancelled_to_terminal_cleans_workspace(self):
+        ws = run.workspace_path("u1", self.wsroot); ws.mkdir(parents=True)
+        out = self._cancel({"state_name": "Done", "state_type": "completed"})
+        self.assertEqual(out["summary"]["final_state"], "Done")
+        self.assertFalse(ws.exists())   # mid-flight kill to terminal → workspace cleaned
+
+    def test_cancelled_to_nonterminal_keeps_workspace(self):
+        ws = run.workspace_path("u1", self.wsroot); ws.mkdir(parents=True)
+        out = self._cancel({"state_name": "Backlog", "state_type": "backlog"})
+        self.assertEqual(out["summary"]["final_state"], "Backlog")
+        self.assertTrue(ws.exists())    # parked in a non-terminal state → workspace kept
+
+    def test_normal_done_keeps_workspace(self):
+        ws = run.workspace_path("u1", self.wsroot); ws.mkdir(parents=True)
+        orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
+                       {"kind": "terminal", "outcome": {"status": "done"},
+                        "turns": 1, "turn_id": "t"},
+                       1, self.states, 1, queue_base=self.qbase, workspace_root=self.wsroot)
+        self.assertTrue(ws.exists())    # §9.1: successful runs do not auto-delete (merger needs it)
+
+
 class BackoffHelperTest(unittest.TestCase):
     def test_exponential_with_cap(self):
         self.assertEqual(orch._backoff_s(1, base=2, cap=100), 2)    # n=1 → base

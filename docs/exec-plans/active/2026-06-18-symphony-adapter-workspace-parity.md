@@ -190,7 +190,18 @@ re-derive it):
   `run.workspace_path` (was re-derived). `tests/test_director_run.py` +6 (key sanitize
   incl. `..` survives, path = root+key, derived contained, derived-`..` raises, override
   exempt, dispatch↔merge agree). 13 pass; full gate GREEN.
-- [ ] M3 next.
+- [x] (2026-06-18) M3 done. `orchestrator.py`: `_TERMINAL_TYPES` const;
+  `_startup_recovery` (terminal-workspace cleanup excluding `merger.pending_merges`
+  paths, containment-guarded, fail-soft; orphaned-`started`→`ready` re-attach,
+  per-orphan fail-soft) wired into `run_forever` before the tick loop;
+  `_reconcile_in_flight` stores the observed-state DICT in `cancelled_states`;
+  reconcile `cancelled` branch reads `state_name` for the label + cleans the workspace
+  iff `state_type ∈ {completed,canceled}`; `MockBoard.fetch_issues_by_states` added.
+  `run.is_contained` helper added (shared by `_workspace_for` + cleanup).
+  `tests/test_director_orchestrator.py` +7 (cleanup-except-pending-merge, orphan
+  re-attach, fetch fail-soft, run_forever wiring, cancelled-terminal cleans,
+  cancelled-nonterminal keeps, normal-done keeps). 77 pass; full gate GREEN.
+- [ ] Completion gate next: behavioral check + reviews.
 
 ## Surprises & discoveries
 - 2026-06-18 (M2): the spec's first sanitization example (`feat/ABC..XY → feat_ABC__XY`)

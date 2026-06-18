@@ -85,6 +85,17 @@ def workspace_path(identifier, workspace_root) -> Path:
     return Path(workspace_root) / workspace_key(identifier)
 
 
+def is_contained(path, workspace_root) -> bool:
+    """True iff `path` resolves to a location at/under `workspace_root` (Symphony §9.5
+    invariant 2). Pure path comparison (no fs writes); the workspace-safety guard shared
+    by dispatch (reject an escaping derived path) and cleanup (never rmtree outside the
+    root). A path that cannot be resolved/compared is treated as NOT contained (safe)."""
+    try:
+        return Path(path).resolve().is_relative_to(Path(workspace_root).resolve())
+    except (OSError, ValueError):
+        return False
+
+
 def _workspace_for(ticket: dict, workspace_root) -> Path:
     explicit = ticket.get("workspace")
     if explicit:
@@ -98,10 +109,9 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
         ws = workspace_path(ticket["id"], workspace_root)
         # Containment (§9.5 invariant 2): the derived path MUST resolve under the root.
         # workspace_key already guarantees this; the check catches a sanitizer regression
-        # before any mkdir or worker launch. is_relative_to is a pure path comparison.
-        root = Path(workspace_root).resolve()
-        if not ws.resolve().is_relative_to(root):
-            raise RuntimeError(f"workspace path escapes root: {ws} not under {root}")
+        # before any mkdir or worker launch.
+        if not is_contained(ws, workspace_root):
+            raise RuntimeError(f"workspace path escapes root: {ws} not under {workspace_root}")
     ws.mkdir(parents=True, exist_ok=True)
     return ws
 
