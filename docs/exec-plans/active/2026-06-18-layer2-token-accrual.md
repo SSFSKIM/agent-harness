@@ -224,5 +224,30 @@ rate-limit, R4–R6) is a separate linked plan; Phase B (cross-run history) a th
   D-2) — smallest blast radius, single extraction site.
 
 ## Feedback (from completion gate)
+Five reviews; spec-compliance + arch + reliability **SATISFIED** first pass, code-quality
+**NOT-SATISFIED → fixed → re-review**. Zero unresolved P1s.
+- **spec-compliance (Codex, SATISFIED):** R1–R3 all traced to code; no scope creep (SSE /
+  rate-limit / history correctly absent); `app_server.py` confirmed unchanged (D-2).
+- **review-arch (SATISFIED):** clean layer law + seam placement (drain after reap in both
+  loops). Two **proposed rule additions** → tech-debt: (1) ARCHITECTURE invariant 7 should name
+  "a new per-tick main-thread side-channel drain rides the shared batch/daemon loop, placed at
+  the same seam in both, never re-derived" (so SSE change-detect / Phase-B history flush inherit
+  it); (2) the pure telemetry extractors `extract_usage`/`extract_rate_limits` arguably belong in
+  a `director` core module rather than `worker/app_server` (invariant 8 spirit) — D-2 chose
+  reuse-in-place for minimal blast radius, so this is a future refactor, not a block.
+- **review-reliability (SATISFIED):** R12/R13/R16 all satisfied. One **P2 FIXED INLINE**:
+  `_enqueue_usage` fires inside `run_turn`'s un-isolated read loop, so a future raise would
+  propagate up and fail a healthy turn — wrapped it exception-total (`try/except: pass`,
+  R13-clean) + a `test_enqueue_usage_is_exception_total_never_gates_the_turn` test. **Proposed
+  rule** → tech-debt: a callback bound into an un-isolated producer loop must be exception-total
+  at its own boundary (generalizes R12 from "the extractor is total" to "the whole observation
+  callback is total").
+- **code-quality (Codex):** **P1 FIXED** — the on_event-wiring test covered only `run_ticket`,
+  not the production `dispatch→drive` path, so dropping `on_event` from `drive`'s `_prepare` would
+  break live accrual yet stay green; added `test_drive_threads_on_event_to_client` exercising the
+  drive path over the `usage` scenario. **P2 → tech-debt (deferred per spec non-goal):** queued
+  usage from a *failed* attempt can transiently apply to the retried in-flight entry (drain runs
+  after reap-which-retries) — a LIVE-display transient only; the final aggregate is correct and
+  the spec explicitly scopes "retry-burn token accounting" as a non-goal.
 
 ## Outcomes & retrospective

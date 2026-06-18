@@ -99,6 +99,21 @@ class RunEndToEndTest(unittest.TestCase):
             any(extract_usage(e.get("method"), e.get("params", {})) is not None for e in events),
             "at least one streamed event should carry recognizable usage")
 
+    def test_drive_threads_on_event_to_client(self):
+        # Layer-2 M2 — the PRODUCTION path. The orchestrator dispatches via drive() (not
+        # run_ticket), so live accrual binds on_event onto DRIVE's client. This guards
+        # run.py's drive→_prepare on_event wiring: dropping it would break live accrual
+        # yet leave the run_ticket test above green (review-code-quality P1).
+        events = []
+        ticket = run.load_ticket(self._ticket_path())
+        disp = run.drive(ticket, command=[sys.executable, MOCK, "usage"],
+                         queue_base=self.qbase, workspace_root=self.tmp / "wsr_drv",
+                         on_event=lambda ev: events.append(ev))
+        self.assertEqual(disp["kind"], "terminal")
+        self.assertTrue(
+            any(extract_usage(e.get("method"), e.get("params", {})) is not None for e in events),
+            "drive must thread on_event to the client — the orchestrator's live-accrual seam")
+
     def test_install_skills_does_not_follow_symlink_target(self):
         # P1: a pre-existing symlinked skill target must not be written through.
         ws = self.tmp / "wssym"
