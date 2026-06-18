@@ -144,6 +144,15 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
   PAGE wires the panel). `GET /`+`/api/v1/state`+`/api/v1/stream` bodies unchanged. Full gate
   GREEN (504 tests).
 
+- [x] (2026-06-19) **M3 done** — behavioral E2E + docs. `docs/DIRECTOR.md` §10: history-panel
+  description + `--history-dir`/`$DIRECTOR_HISTORY_DIR`. **Behavioral check (web → playwright),
+  PASS:** seeded a current run (status: in-flight `NOW-1` accrued 500 tok) + two completed-run
+  records (history); served the dashboard with `--history-dir`; `GET /api/v1/history` returned
+  2 records (`[3000, 4000]` totals), and the browser **history panel** rendered both newest-first:
+  `2026-06-19 09:30:00 · 4000 tok · 1080s · ✗1 ✓5 · stuck` and `… 08:00:00 · 3000 tok · 540s · ✓4
+  · drained`, while the **live view coexisted** (run header `pass #3 · 500 tok`, in-flight
+  `NOW-1 · 500 tok`). Empty store → empty panel (asserted). Full gate GREEN (504 tests).
+
 ## Surprises & discoveries
 
 ## Decision log
