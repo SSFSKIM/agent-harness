@@ -31,6 +31,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | Path | What it is |
 |---|---|
 | `ARCHITECTURE.md` | Codemap, layer law, invariants, data flows |
+| `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v1.0): frontmatter schema, optional keys (`type`/`tags`/`resource`/`title`/`description`), conformance↔D-rule map |
 | `docs/design-docs/core-beliefs.md` | Golden rules + agent-first operating principles |
 | `docs/design-docs/index.md` | Design docs catalog |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |

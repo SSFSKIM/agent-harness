@@ -140,6 +140,11 @@ and have the harness read them — observably. Definition of done:
   in `tests/test_harness_lib.py` (flow/block/indented/empty/quoted/scalar-regression/
   colon-in-value/empty-stays-scalar/mixed). Proven fail-before via `git stash` of
   the parser, pass-after; full gate GREEN (all tests).
+- [x] (2026-06-18) **M2 done.** `docs/KNOWLEDGE_FORMAT.md` (KF v1.0) written:
+  required + the five optional keys (two tiers), `type` vocabulary, `tags` forms,
+  value-form rules, reserved filenames, link semantics (D5 divergence from OKF),
+  conformance↔D-rule map (D3/D4/D5/D6/D8), versioning, OKF relationship. Added to
+  the `AGENTS.md` Map. Gate GREEN; the doc self-parses via `read_frontmatter`.
 
 ## Surprises & discoveries
 
