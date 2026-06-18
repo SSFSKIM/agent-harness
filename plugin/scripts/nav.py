@@ -129,7 +129,8 @@ def _norm(path, root):
 
 
 def links(records, path, root):
-    """Forward `.md` link targets of `path` (the pages it points to)."""
+    """Forward `.md` link targets of `path` (sorted for stable CLI output; the
+    record's stored `links` list preserves document order)."""
     target = _norm(path, root)
     rec = next((r for r in records if r["path"] == target), None)
     return sorted(rec["links"]) if rec else []

@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-18
 owner: harness
 base_commit: 3edfe47
@@ -250,4 +250,52 @@ codex path unavailable, rate-limited until 21:49).
   fail soft per-page/per-edge." Logged as a RELIABILITY candidate (one occurrence
   so far; promote on recurrence per rule 10) — see tech-debt-tracker.
 
+Always-on QA reviews (via `general-purpose` carrying each rubric — dedicated
+agents unregistered this session): **spec-compliance → SATISFIED**,
+**code-quality → SATISFIED** (both P1-free). P2s processed:
+- spec-compliance P2 (FIXED): plan claimed the *template* agent-harness.md got a
+  nav run-line but only self-host did (template gets `docs-nav` via
+  `{{COMPONENTS}}` auto-render). Added a parity "Navigate docs" bullet to the
+  template (S7-safe — no `plugin/scripts/` literal).
+- code-quality P2 (FIXED): `links()` sorts but the docstring implied document
+  order — clarified ("sorted for stable CLI output; stored list is doc order").
+- spec-compliance P2 (accepted, no change): orphans/catalog exclude entry maps by
+  frontmatter-absence rather than by-name — identical today (maps have no
+  frontmatter); latent only if a map ever gains frontmatter.
+- code-quality P2 (accepted, no change): `backlinks docs/PLANS.md`/`DESIGN.md`
+  return 0 because the AGENTS.md map references them as bare table-cell paths, not
+  `[](…)` links — correct per the graph; documented in the skill's orphans note.
+
+All four reviewers SATISFIED (review-arch returned NOT-SATISFIED on the P1 crash,
+now fixed + tested → its blocker is cleared).
+
 ## Outcomes & retrospective
+
+**Delivered.** A read-only knowledge navigator: `plugin/scripts/nav.py`
+(library + CLI — `catalog`/`links`/`backlinks`/`stale`/`orphans`/`drift`, live
+from frontmatter + the link graph, nothing persisted) and the `docs-nav` skill,
+plus the consumer wiring across self-host + ported-host templates. The shared
+link/staleness/exempt primitives now have one definition in `harness_lib`
+(`LINK`/`links_in`, `is_stale`/`stale_window`/`STALE_DAYS`, `is_exempt`,
+`DOC_EXEMPT`), consumed by both the gate and nav.
+
+**Verified.** Gate GREEN (444 tests incl. 13 nav + 27 harness_lib);
+`backlinks okf-comparison.md` (6) == manual grep (6); body-less page still
+catalogued; drift git-fixture covers drifted/current/unknown; out-of-root link
+escape no longer crashes. Behavioral acceptance run and captured (catalog/json/
+backlinks/stale/orphans/drift + importable library path → 87 records).
+
+**What went well.** The gate caught two design/build conflicts the
+green-on-paper spec hid: (1) lint **S1** forbids nav importing `lint_docs`, which
+forced a *cleaner* harness_lib-derived scope (no script→script coupling); (2) the
+adversarial risk reviews found a real `relative_to` crash on out-of-root links.
+Both made the result better than the spec.
+
+**Decisions that held.** Live-query-first (no persisted artifact) means zero
+staleness machinery and the freshness concern that motivated the design simply
+doesn't exist. index.md stays curated; live `catalog` is the machine index.
+
+**Follow-ups (tech-debt).** Two proposed RELIABILITY rules logged (gate-parser
+totality from Phase 1; corpus-walking read-tool per-page/per-edge fail-soft from
+this phase) — promote on recurrence. No grade changes warranted in
+QUALITY_SCORE.md (additive read-only tooling; existing domains unaffected).

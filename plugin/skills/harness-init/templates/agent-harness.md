@@ -21,6 +21,10 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   scaffold.py after moving the repo or plugin and the hook is rewritten).
   Must be GREEN before every commit; the `harness-lint` skill interprets
   failures. `--no-verify` only for emergencies — fix forward right after.
+- Navigate docs: the `docs-nav` skill runs `nav.py` (alongside the gate's
+  `check.py` in the plugin) — read-only `catalog`/`backlinks`/`stale`/`drift`
+  over the corpus, queried from frontmatter instead of bulk-reading. Not in the
+  gate.
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
   `HARNESS_TEST_CMD="pytest -q"`) or `.harness.json` `test_cmd`; default is
   unittest discovery when a `tests/` directory exists, skipped otherwise.
