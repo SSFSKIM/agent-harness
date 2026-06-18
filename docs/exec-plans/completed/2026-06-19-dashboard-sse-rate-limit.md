@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: 09c0fc8
@@ -204,5 +204,50 @@ This is the v1 **dashboard** slice (spec R4–R6). The v1 **producer** slice
   (spec Non-goals: no producer push channel).
 
 ## Feedback (from completion gate)
+Four reviews (Claude personas — Codex worker unreliable, CLAUDE.md fallback). All
+**SATISFIED**, zero P1s. Three P2s fixed inline (two double-flagged); three minor P2s + two
+proposed rules recorded fix-forward.
+- **spec-compliance (SATISFIED):** R4–R6 traced to code; scope clean (R1–R3 pre-exist, R7–R8
+  absent). P2: reset-field drift (spec said `reset_at`, code does `reset_in_seconds`) → **FIXED**
+  (spec §C aligned to the duration-based set; `reset_at`/absolute degrades to no-suffix, tolerated).
+- **review-arch (SATISFIED):** loopback/fixed-route/pure-core invariants honored; testability
+  lever held (`_stream_loop` unit-tested without a socket). P2 (also flagged by reliability):
+  `should_run=lambda:True` had no shutdown exit → **FIXED** (a `_DashboardServer.serving` Event,
+  cleared by a `shutdown()` override, backs `should_run` so an in-process shutdown ends quiet
+  streams ≤ poll_s). Proposed rule → tech-debt: SSE framing convention (no Content-Length, `\n\n`,
+  Cache-Control) unwritten.
+- **review-reliability (SATISFIED):** R14 holds end-to-end (full errno family caught per write,
+  nothing reaches stderr; read-only; tolerant build_view). P2 #1: deliver-then-permanent-death
+  froze stale with no hint → **FIXED** (onerror-after-delivered shows "stream reconnecting…").
+  P2 #2: shutdown gap (same as arch) → FIXED. Proposed rule → tech-debt: a long-lived read stream
+  must force a bounded heartbeat so a silently-dead peer is detected (code honors it; unwritten).
+- **review-code-quality (SATISFIED):** clean decomposition (pure loop / thin shim / liveness flag
+  / client helpers), no duplication, comments load-bearing. Two trivial P2s **FIXED** inline
+  (compact-fallback prefix aligned `"rate: "`→`"rate "`; an explanatory comment on the onmessage
+  malformed-frame catch). One P2 → tech-debt: `fmtRateLimits` has no *executable* test (the
+  inline-page JS can't be Python-unit-tested without a JS runtime) — covered by PAGE-presence
+  asserts + the M3 playwright render; the inline-page testability ceiling is pre-existing.
 
 ## Outcomes & retrospective
+**Shipped:** the dashboard is **server-pushed** and rate limits are **legible**. New
+`GET /api/v1/stream` holds a `text/event-stream` open and pushes a `data:`-framed `build_view`
+the instant the snapshot changes (server-side change-detect over the same pure `build_view`),
+via a pure injectable `_stream_loop` (emit-on-change + heartbeat + R14 quiet-drop) and a thin
+`_stream()` shim bounded on a `serving` liveness flag; the page consumes it with `EventSource`
+and **falls back to the ~1s poll** if the stream can't hold (never blank). `fmtRateLimits`
+renders a glance-able gauge + "resets ~Xm", tolerant of an odd/`null` payload (no raw JSON dump).
+**Goal met:** behaviorally proven in-browser — the page rendered via SSE and **pushed** a
+snapshot mutation (700→1334 tok) without reload, with the rate gauge legible; `GET /` +
+`/api/v1/state` byte-compatible. Gate GREEN (491 tests).
+**Retrospective:**
+- The read-dashboard's testability lever paid off again: pulling the push logic into a pure
+  `_stream_loop` (injectable write/view/clock/should_run) meant the change-detect + heartbeat +
+  disconnect behavior was unit-tested without a socket — only a ~14-line `_stream` shim is
+  socket-bound. The same trick the producer slice used for `build_view`.
+- Two reviewers independently flagged the `should_run`-shutdown gap — a clean "feedback twice →
+  promote" signal — so the liveness flag was worth fixing inline (and it tidied test thread
+  hygiene: `shutdown()` now ends lingering stream threads promptly). Both proposed rules
+  (streaming heartbeat-liveness; SSE framing convention) are recorded for promotion.
+- The honest gap: the client JS (`fmtRateLimits`/`startStream`) stays untestable from Python —
+  the single-HTML-string page is the architectural ceiling. The playwright E2E is the only
+  executable coverage of the render; recorded as tech-debt, consistent with the existing pattern.

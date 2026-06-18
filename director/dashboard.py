@@ -281,7 +281,7 @@ function fmtRateLimits(rl) {
   }
   if (resets !== null) parts.push("resets ~" + Math.round(resets / 60) + "m");
   if (parts.length) return parts.join(" · ");
-  return "rate: " + Object.keys(rl).map(k => k + "=" + rl[k]).join(" ").slice(0, 60);
+  return "rate " + Object.keys(rl).map(k => k + "=" + rl[k]).join(" ").slice(0, 60);
 }
 function fill(id, lines) {
   const box = $(id); box.innerHTML = "";
@@ -375,7 +375,7 @@ function startStream() {
   if (!window.EventSource) { fallbackPoll(); return; }
   let delivered = false;
   const es = new EventSource("/api/v1/stream");
-  es.onmessage = (e) => { delivered = true; try { render(JSON.parse(e.data)); } catch (x) {} };
+  es.onmessage = (e) => { delivered = true; try { render(JSON.parse(e.data)); } catch (x) {} };  // malformed frame → keep last view
   es.onerror = () => {
     // never delivered → the stream can't hold: fall back to polling (no blank surface).
     // delivered before → a drop; EventSource auto-reconnects, so just flag staleness
