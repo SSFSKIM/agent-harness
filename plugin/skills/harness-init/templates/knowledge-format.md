@@ -117,11 +117,31 @@ Top-level machine docs are `UPPER_CASE.md` (this file, `PLANS.md`, `DESIGN.md`,
 ## 4. Links
 
 Pages cross-link with standard markdown links, forming a graph over the directory
-tree. **Unlike OKF, broken links fail the gate (D5):** a link whose `.md` target
-does not exist is an error, not "not-yet-written knowledge." This is deliberate —
-for a corpus an actor *acts on*, a dangling pointer is a defect. Relationship kind
-(depends-on, supersedes, …) lives in the surrounding prose; links are untyped
-edges (typed relationships are a possible future KF minor version).
+tree — the structure `nav.py` traverses and against which `orphans` / `backlinks`
+are computed. **Unlike OKF, broken links fail the gate (D5):** a link whose `.md`
+target does not exist is an error, not "not-yet-written knowledge." For a corpus
+an actor *acts on*, a dangling pointer is a defect.
+
+**How to write one.** Standard markdown, with the *concept name* as the link
+text — `[the completion gate](PLANS.md)`, never `[here](PLANS.md)`:
+
+- **Target** a repo `.md` path. Resolution mirrors the gate: relative to the
+  page's own directory first, then the repo root — an `adr/` page links a sibling
+  knowledge page as `../knowledge/foo.md`, a root doc as `memory/knowledge/foo.md`.
+- **Anchor** a section by appending its heading slug: `[…](DESIGN.md#some-heading)`.
+- **Verify** before committing — D5 rejects a broken target, and `nav.py links
+  <page>` prints the edges it actually resolved.
+- **External URLs** (`http(s)://`) are fine as citations but are **not corpus
+  edges**: D5 ignores them and the graph never sees them. Durable external facts
+  get their own page under `docs/references/`.
+- **Never hand-maintain backlinks.** The reverse graph is computed live
+  (`nav.py backlinks <page>`); author *forward* links only — no "Cited by" lists.
+
+Relationship kind (depends-on, supersedes, …) lives in the surrounding **prose**,
+not the link: links are untyped edges (typed relationships are a possible future
+KF minor version). For *when* a relationship earns a link at all — and the
+anti-orphan rule that every page needs an inbound one — see the `docs-tree`
+authoring procedure.
 
 ## 5. Conformance — the spec and the gate are two views of one contract
 
