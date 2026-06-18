@@ -235,10 +235,13 @@ no-op `on_event`, so every non-orchestrator caller is byte-unchanged.
 - A `fmtRateLimits(rl)` JS helper, **tolerant by contract** (client-side R12): if `rl`
   exposes a recognizable used-fraction (`used_percent`/`usedPercent`, or
   `remaining`+`limit`) it renders "rate: NN% used" + a small CSS bar; if it exposes a
-  reset hint (`resets_in_seconds`/`reset_at`/`window_minutes`) it appends "· resets ~Xm";
-  an unrecognized non-null shape degrades to a one-line compact summary (key:value
-  pairs, clipped), and `null`/`undefined` renders nothing. No render path throws on a
-  missing field.
+  **duration**-style reset hint (`resets_in_seconds`/`reset_in_seconds`/`window_minutes`)
+  it appends "· resets ~Xm"; an unrecognized non-null shape (incl. an absolute-timestamp
+  reset like `reset_at`, which needs no special-casing — it simply yields no reset suffix)
+  degrades to a one-line compact summary (key:value pairs, clipped), and `null`/`undefined`
+  renders nothing. No render path throws on a missing field. (The exact codex `rate_limits`
+  shape is pinned against a live run — see Open questions; the helper is tolerant by design
+  so an unanticipated field degrades, never crashes.)
 - **The exact real codex payload shape is pinned in the execplan against a live codex
   run** — today's tests use a placeholder (`{"remaining": 9}`), so the helper is written
   to the *observed* shape and the placeholder/`null` are kept as degradation cases.

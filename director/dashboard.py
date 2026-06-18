@@ -28,6 +28,7 @@ import argparse
 import datetime
 import json
 import secrets
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -375,7 +376,13 @@ function startStream() {
   let delivered = false;
   const es = new EventSource("/api/v1/stream");
   es.onmessage = (e) => { delivered = true; try { render(JSON.parse(e.data)); } catch (x) {} };
-  es.onerror = () => { if (!delivered) { es.close(); fallbackPoll(); } };
+  es.onerror = () => {
+    // never delivered → the stream can't hold: fall back to polling (no blank surface).
+    // delivered before → a drop; EventSource auto-reconnects, so just flag staleness
+    // (onmessage clears it on reconnect) rather than double-fetching with a poll.
+    if (!delivered) { es.close(); fallbackPoll(); }
+    else { $("updated").textContent = "· stream reconnecting…"; }
+  };
 }
 startStream();
 </script></body></html>"""
@@ -466,7 +473,8 @@ class _Handler(BaseHTTPRequestHandler):
 
         _stream_loop(write,
                      lambda: build_view(self.server.status_dir, self.server.queue_dir),
-                     sleep=time.sleep, now=time.monotonic, should_run=lambda: True,
+                     sleep=time.sleep, now=time.monotonic,
+                     should_run=self.server.serving.is_set,  # ends promptly on shutdown()
                      heartbeat_s=_STREAM_HEARTBEAT_S, poll_s=_STREAM_POLL_S)
 
     def _answer(self) -> None:
@@ -593,6 +601,15 @@ class _DashboardServer(ThreadingHTTPServer):
         # every write (POST). A foreign page in the browser cannot read it (same-origin)
         # so cannot forge a write to localhost. `token=` is injectable for tests.
         self.token = token or secrets.token_urlsafe(32)
+        # Server-liveness flag the SSE stream loop polls (`should_run`): an in-process
+        # `shutdown()` clears it so quiet/idle streams end at their next tick (≤ poll_s)
+        # instead of lingering until the next failed write — clean teardown (review P2).
+        self.serving = threading.Event()
+        self.serving.set()
+
+    def shutdown(self) -> None:
+        self.serving.clear()   # signal open SSE streams to stop, then stop the accept loop
+        super().shutdown()
 
 
 def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None) -> _DashboardServer:

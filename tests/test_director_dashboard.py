@@ -249,6 +249,15 @@ class DashboardHTTPTest(unittest.TestCase):
         view = json.loads(data)
         self.assertEqual(view["run"]["codex_totals"]["total"], 100)  # the seeded run, pushed
 
+    def test_shutdown_clears_serving_so_quiet_streams_end(self):
+        # review P2 (arch+reliability): an in-process shutdown() must signal open SSE
+        # streams to stop (their should_run = serving.is_set) — not leave them lingering
+        # until the next failed write. serving is set while up, cleared on shutdown.
+        self.assertTrue(self.httpd.serving.is_set())
+        self.httpd.shutdown()                          # in-process shutdown
+        self.assertFalse(self.httpd.serving.is_set())  # streams' should_run now False
+        # tearDown's shutdown()/server_close() are idempotent after this.
+
     def test_undefined_route_is_404_envelope(self):
         code, ctype, body = self._req("/nope")
         self.assertEqual(code, 404)
