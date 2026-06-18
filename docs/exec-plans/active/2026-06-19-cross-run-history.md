@@ -118,10 +118,21 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
   Expect: GREEN gate; the panel lists the runs; empty-store degrades cleanly.
 
 ## Progress log
-- [ ] (2026-06-19) plan created; base_commit 0fefede; review_level standard
+- [x] (2026-06-19) plan created; base_commit 0fefede; review_level standard
   (arch for the new module placement + orchestrator hook; reliability for the best-effort
   write + tolerant read + the new read route's R14 fail-soft). No write/exec surface → no
   security persona (history is a read store + a read route).
+- [x] (2026-06-19) **M1 done** — store + producer. New `director/history.py` (stdlib-only,
+  explicit `base=`): `summarize(snapshot)` (pure — exact run aggregate + outcomes counted from
+  `recent`, tolerant of None/garbage), `append_run(record, base)` (append-only JSONL,
+  best-effort — never raises, mirrors `_flush`), `read_history(base, limit)` (tolerant — skip
+  torn line, missing → `[]`), `RECENT_RUNS_MAX=50`, `python3 -m director.history` read surface.
+  `director/orchestrator.py`: `_record_run_history(status, history_base)` (guarded to a real
+  StatusWriter) called after `status.finished(...)` in BOTH `run_until_drained` and
+  `run_forever`; optional `history_base=None` threaded into both. 10 new tests (8 history:
+  summarize map/tolerant, append+read roundtrip, limit-tail, missing→[], torn-line skip,
+  bad-base no-raise; 2 orchestrator hook: run_until_drained over the mock appends 1 record
+  with exact codex_totals/outcomes, Noop run writes nothing). Full gate GREEN (501 tests).
 
 ## Surprises & discoveries
 

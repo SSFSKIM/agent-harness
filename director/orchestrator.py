@@ -26,7 +26,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import director.queue as dq
-from director import config, decider, merger, run, status as status_mod, taxonomy
+from director import config, decider, history, merger, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
 from director.worker import app_server, autonomy
 
@@ -553,9 +553,19 @@ def run_once(board, command: list[str], *, team: str, states: dict,
     return summaries
 
 
+def _record_run_history(status, history_base) -> None:
+    """Persist a completed run's summary to the cross-run history (Phase B, R7) —
+    best-effort. Only for a REAL StatusWriter: a Noop run has no snapshot to summarize,
+    and history is itself observability (off when visibility is off). `append_run`
+    swallows any failure, so this is a pure side-channel that never gates a run."""
+    if isinstance(status, status_mod.StatusWriter):
+        history.append_run(history.summarize(status.snapshot()), base=history_base)
+
+
 def run_until_drained(board, command: list[str], *, team: str, states: dict,
                       done_types=("completed",), max_passes: int = 50,
-                      max_dispatched: int = 200, status=None, **wave_kwargs) -> dict:
+                      max_dispatched: int = 200, status=None, history_base=None,
+                      **wave_kwargs) -> dict:
     """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
 
     Board-as-truth: a completed ticket leaves the `ready` state (reconciled to done),
@@ -610,6 +620,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
                                 if v.get("status") != "claim_failed")
         results.update(wave_summaries)
     status.finished(stopped_reason)
+    _record_run_history(status, history_base)  # Phase B: persist this run's summary (best-effort)
     out = {"summaries": list(results.values()), "passes": passes,
            "stopped_reason": stopped_reason, "stuck": stuck}
     if poll_error:
@@ -709,7 +720,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 backoff_base_s: float = config.DEFAULTS["backoff_base_s"],
                 backoff_cap_s: float = config.DEFAULTS["backoff_cap_s"],
                 shutdown_event=None, force_event=None, install_signals: bool = True,
-                max_ticks: int | None = None) -> dict:
+                max_ticks: int | None = None, history_base=None) -> dict:
     """The always-on daemon (gap #2): poll → claim ready work into free slots → keep
     ticking forever, never exiting on a drained board (the Symphony identity). Unlike
     the batch wave, this NEVER returns on its own — only a stop signal ends it.
@@ -863,6 +874,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 state.reconcile_in_flight()
                 last_reconcile = mono
         state.status.finished("shutdown")
+        _record_run_history(state.status, history_base)  # Phase B: persist the daemon-lifetime summary
         return {"stopped_reason": "shutdown", "polls": ticks}
     finally:
         if restore is not None:

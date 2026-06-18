@@ -8,6 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.director_min as dmin  # noqa: E402
+import director.history as dh  # noqa: E402
 import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.run as run  # noqa: E402
@@ -161,6 +162,37 @@ class TelemetryPersistenceTest(unittest.TestCase):
         # run aggregate = sum across the 2 tickets; runtime is a live non-negative aggregate
         self.assertEqual(snap["run"]["codex_totals"]["total"], 200)
         self.assertGreaterEqual(snap["run"]["codex_totals"]["seconds_running"], 0.0)
+
+
+class CrossRunHistoryHookTest(unittest.TestCase):
+    """Phase B (R7): a completed run appends ONE summary record to the cross-run history,
+    derived from the final snapshot — and a Noop (visibility-off) run writes nothing."""
+
+    def _run(self, status, hbase, tmp):
+        board = orch.MockBoard.demo()  # u1, u2 ready
+        states = orch.resolve_states(board, "T")
+        orch.run_until_drained(board, command=[sys.executable, MOCK, "usage"],
+                               team="T", states=states, concurrency=2,
+                               workspace_root=Path(tmp) / "ws", status=status,
+                               history_base=hbase)
+
+    def test_run_until_drained_appends_one_history_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hbase = Path(tmp) / "h"
+            self._run(ds.StatusWriter(base=Path(tmp) / "s"), hbase, tmp)
+            recs = dh.read_history(base=hbase)
+        self.assertEqual(len(recs), 1)
+        rec = recs[0]
+        self.assertEqual(rec["stopped_reason"], "drained")
+        self.assertEqual(rec["codex_totals"]["total"], 200)   # 2 tickets × absolute 100
+        self.assertEqual(rec["outcomes"].get("completed"), 2)
+        self.assertEqual(rec["ticket_count"], 2)
+
+    def test_noop_status_writes_no_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hbase = Path(tmp) / "h"
+            self._run(None, hbase, tmp)  # status=None → NoopStatusWriter
+            self.assertEqual(dh.read_history(base=hbase), [])  # history is off when visibility is off
 
 
 class _RecordingStatus:
