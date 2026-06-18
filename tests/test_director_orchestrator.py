@@ -832,6 +832,40 @@ class StartupRecoveryTest(unittest.TestCase):
         self.qbase = self.tmp / "q"
         self.wsroot = self.tmp / "wsroot"
 
+    def test_before_remove_fires_before_rmtree(self):
+        board = orch.MockBoard([
+            {"id": "old", "identifier": "OLD", "state_id": "st_done", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        ws = run.workspace_path("old", self.wsroot); ws.mkdir(parents=True)
+        marker = self.tmp / "br_ran"  # outside ws → survives the rmtree, proving the hook ran
+        orch._startup_recovery(board, states, team="T", workspace_root=self.wsroot,
+                               queue_base=self.qbase,
+                               hooks={"before_remove": f"touch {marker}"}, hook_timeout_s=5)
+        self.assertFalse(ws.exists())      # workspace removed
+        self.assertTrue(marker.exists())   # before_remove ran (before the delete)
+
+    def test_failing_before_remove_does_not_block_rmtree(self):
+        board = orch.MockBoard([
+            {"id": "old", "identifier": "OLD", "state_id": "st_done", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        ws = run.workspace_path("old", self.wsroot); ws.mkdir(parents=True)
+        orch._startup_recovery(board, states, team="T", workspace_root=self.wsroot,
+                               queue_base=self.qbase,
+                               hooks={"before_remove": "exit 1"}, hook_timeout_s=5)
+        self.assertFalse(ws.exists())  # delete still happened despite before_remove failure
+
+    def test_run_once_threads_hooks_to_dispatched_worker(self):
+        # hooks flow main→run_once→_dispatch_wave→_RunState→dispatch→run.drive→_prepare:
+        # after_create populates the dispatched worker's workspace (the daemon-path bridge)
+        board = orch.MockBoard([
+            {"id": "u1", "identifier": "U-1", "state_id": "st_todo", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        wsroot = self.tmp / "wsr_once"
+        orch.run_once(board, command=[sys.executable, run._MOCK, "report"], team="T",
+                      states=states, queue_base=self.tmp / "q_once", workspace_root=wsroot,
+                      hooks={"after_create": "touch hooked"}, hook_timeout_s=10)
+        self.assertTrue((wsroot / "u1" / "hooked").exists())  # after_create ran for the worker
+
     def test_cleanup_removes_terminal_workspaces_except_pending_merge(self):
         board = orch.MockBoard([
             {"id": "u1", "identifier": "D-1", "state_id": "st_done", "prompt": "p"},

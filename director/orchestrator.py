@@ -123,7 +123,8 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
 
 def reconcile(board, ticket: dict, disp: dict, attempts: int,
               states: dict, retry_budget: int, *, queue_base=None,
-              workspace_root=None, external_state=None) -> dict:
+              workspace_root=None, external_state=None,
+              hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
     """EXECUTE a drive disposition onto the board. Returns {"retry": True} to ask
     run_once to re-dispatch (a `failed` disposition within budget), or
     {"summary": {...}} for a terminal outcome. This is the R4 redesign: the board
@@ -218,6 +219,9 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
         if ext.get("state_type") in _TERMINAL_TYPES and workspace_root is not None:
             ws = run.workspace_path(tid, workspace_root)
             if run.is_contained(ws, workspace_root):
+                # before_remove hook (Symphony §9.4) — logged+ignored, never blocks delete.
+                run.run_hook("before_remove", (hooks or {}).get("before_remove"),
+                             cwd=ws, timeout_s=hook_timeout_s, fatal=False)
                 try:  # NOT ignore_errors: a real delete failure is recorded in the
                     shutil.rmtree(ws)  # summary (reconcile_error), like a board-write miss
                 except Exception as exc:
@@ -413,7 +417,9 @@ class _RunState:
             outcome = reconcile(self.board, ticket, fut.result(), self.attempts[tid],
                                 self.states, self.retry_budget, queue_base=self.queue_base,
                                 workspace_root=self.workspace_root,
-                                external_state=self.cancelled_states.pop(tid, None))
+                                external_state=self.cancelled_states.pop(tid, None),
+                                hooks=self._dispatch_kwargs.get("hooks"),
+                                hook_timeout_s=self._dispatch_kwargs.get("hook_timeout_s", 60.0))
             if outcome.get("retry"):
                 self.attempts[tid] += 1
                 self.status.retrying(ticket, attempt=self.attempts[tid])
@@ -446,7 +452,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    sandbox: str = "workspace-write",
                    decide=decider.autonomous_decide,
                    max_turns: int = run.DEFAULT_MAX_TURNS,
-                   reconcile_interval_s: float = 15.0) -> dict:
+                   reconcile_interval_s: float = 15.0,
+                   hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
     """Claim, dispatch (bounded concurrency), and fully drain a given (already
     eligible) ticket list; returns {ticket_id: summary}. The wave BARRIER: returns
     only once every ticket has reached a terminal summary (incl. retries), so the
@@ -467,7 +474,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                       tool_executor=tool_executor, install_skills=install_skills,
                       read_timeout_s=read_timeout_s, timeout_s=timeout_s,
                       approval_policy=approval_policy, sandbox=sandbox, decide=decide,
-                      max_turns=max_turns)
+                      max_turns=max_turns, hooks=hooks, hook_timeout_s=hook_timeout_s)
     try:
         for ticket in tickets:
             tid = ticket["id"]
@@ -616,7 +623,8 @@ def _install_daemon_signals(shutdown_event: threading.Event,
     return restore
 
 
-def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_base) -> None:
+def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_base,
+                      hooks: dict | None = None, hook_timeout_s: float = 60.0) -> None:
     """Run ONCE at daemon entry, before the first tick (Symphony §8.6 + §14.3). Two
     fail-soft passes — recovery is best-effort and idempotent across restarts; an error
     in either logs a structured line and startup proceeds (§11.4), never crashing the
@@ -642,6 +650,9 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
             if str(ws) in protected:
                 continue  # a queued PR-merge still needs this branch's workspace
             if run.is_contained(ws, workspace_root):
+                # before_remove hook (Symphony §9.4) — logged+ignored, never blocks delete.
+                run.run_hook("before_remove", (hooks or {}).get("before_remove"),
+                             cwd=ws, timeout_s=hook_timeout_s, fatal=False)
                 # ignore_errors here is deliberate: a single stale workspace that won't
                 # delete is silently best-effort so the loop still cleans the rest (a
                 # FETCH error is what the outer except surfaces, not a per-dir failure).
@@ -676,7 +687,8 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 backoff_base_s: float = config.DEFAULTS["backoff_base_s"],
                 backoff_cap_s: float = config.DEFAULTS["backoff_cap_s"],
                 shutdown_event=None, force_event=None, install_signals: bool = True,
-                max_ticks: int | None = None) -> dict:
+                max_ticks: int | None = None,
+                hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
     """The always-on daemon (gap #2): poll → claim ready work into free slots → keep
     ticking forever, never exiting on a drained board (the Symphony identity). Unlike
     the batch wave, this NEVER returns on its own — only a stop signal ends it.
@@ -706,12 +718,12 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                       tools=tools, tool_executor=tool_executor, install_skills=install_skills,
                       read_timeout_s=read_timeout_s, timeout_s=timeout_s,
                       approval_policy=approval_policy, sandbox=sandbox, decide=decide,
-                      max_turns=max_turns)
+                      max_turns=max_turns, hooks=hooks, hook_timeout_s=hook_timeout_s)
     restore = _install_daemon_signals(shutdown_event, force_event) if install_signals else None
     # Crash/restart recovery (§8.6 + §14.3): clean terminal workspaces + re-attach
     # orphaned `started` tickets BEFORE the first tick. Fail-soft — never blocks startup.
     _startup_recovery(board, states, team=team, workspace_root=workspace_root,
-                      queue_base=queue_base)
+                      queue_base=queue_base, hooks=hooks, hook_timeout_s=hook_timeout_s)
     done_set = set(done_types)
     last_reconcile = time.monotonic()
     forced = False
@@ -973,6 +985,9 @@ def resolve_settings(args, cfg) -> dict:
         "tools": _pick(getattr(args, "tools", None), cfg.worker_tools),
         "install_skills": _pick(getattr(args, "install_skills", None),
                                 cfg.worker_install_skills),
+        # Workspace lifecycle hooks (R4) — config-only (no CLI flag); the repo-population
+        # bridge a host declares in .harness.json director.workspace.
+        "workspace": cfg.workspace,
     }
 
 
@@ -1085,6 +1100,8 @@ def main(argv=None, *, board=None) -> int:
     # host's linear default there would only mis-wire an offline run.
     worker_tools = "none" if args.mock else s["tools"]
     install_skills = False if args.mock else s["install_skills"]
+    # Workspace hooks off under --mock (offline fake worker has no real repo to populate).
+    hooks = None if args.mock else s["workspace"].hooks
     tools = tool_executor = None
     if worker_tools == "linear":
         from director.worker.tools import linear_graphql_spec, make_linear_tool_executor
@@ -1101,7 +1118,8 @@ def main(argv=None, *, board=None) -> int:
               "sandbox": s["posture"].sandbox,
               "decide": decide, "max_turns": s["max_turns"],
               "read_timeout_s": s["read_timeout_s"],
-              "reconcile_interval_s": s["reconcile_interval_s"]}
+              "reconcile_interval_s": s["reconcile_interval_s"],
+              "hooks": hooks, "hook_timeout_s": s["workspace"].hook_timeout_s}
     if s["workspace_root"]:
         kwargs["workspace_root"] = Path(s["workspace_root"])
 

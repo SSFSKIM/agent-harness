@@ -306,10 +306,14 @@ def main(argv=None) -> int:
                     else cfg.merger.read_timeout_s)
     decide = select_decider(autonomous=args.autonomous, mock=args.mock,
                             queue_base=queue_dir, turn_review_timeout=turn_review_timeout)
+    # Workspace lifecycle hooks (R4) reach the land lane too — off under --mock. A land
+    # worker on a fresh box re-clones/syncs the PR branch via after_create/before_run.
+    hooks = None if args.mock else cfg.workspace.hooks
     return run_loop(base=queue_dir, command=_command(args, codex_command, posture),
                     poll=poll, once=args.once, decide=decide, queue_base=queue_dir,
                     approval_policy=posture.approval_policy, sandbox=posture.sandbox,
-                    read_timeout_s=read_timeout, max_merges=cfg.merger.max_merges)
+                    read_timeout_s=read_timeout, max_merges=cfg.merger.max_merges,
+                    hooks=hooks, hook_timeout_s=cfg.workspace.hook_timeout_s)
 
 
 if __name__ == "__main__":

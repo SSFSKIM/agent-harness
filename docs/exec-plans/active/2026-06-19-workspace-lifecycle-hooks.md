@@ -106,7 +106,15 @@ Full gate GREEN; parity slices 1–3 and the decider/queue unchanged.
   (fatal, create-only) + before_run (fatal); `drive`/`run_ticket` run after_run (ignored) in
   a finally; `run.main` threads `cfg.workspace` (off under --mock). Tests +16 (config ×5,
   run_hook + lifecycle ×11). Discovered: config-layer `$VAR` is whole-string only; embedded
-  `$VAR` is shell-time — both work, spec clarified. 66 pass; full gate GREEN. Next: M2.
+  `$VAR` is shell-time — both work, spec clarified. 66 pass; full gate GREEN.
+- [x] (2026-06-19) M2 done. `orchestrator.py`: hooks thread through `_dispatch_wave`/
+  `run_forever` → `_RunState` dispatch-kwargs → `dispatch` → `run.drive` (daemon/batch
+  workers now get populated workspaces); `reap` extracts hooks for `reconcile`'s
+  `before_remove`; `before_remove` runs before both `rmtree` sites (reconcile cancelled +
+  `_startup_recovery`), logged+ignored; `resolve_settings`/`main` thread `cfg.workspace`
+  (off under --mock). `merger.main` threads hooks into the land-lane drive-kwargs. Tests +3
+  (before_remove fires/doesn't-block; run_once threads after_create to the worker). 81 pass;
+  full gate GREEN. Next: M3 live demo.
 ## Surprises & discoveries
 ## Decision log
 - 2026-06-19: hooks run Director-side with full env (Approach B) — only the un-sandboxed
