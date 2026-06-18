@@ -83,4 +83,16 @@ describe("createHarness", () => {
     const { HarnessConfigError } = await import("../../src/config/validate.js");
     expect(() => createHarness({ permissionMode: "bogus" as any })).toThrow(HarnessConfigError);
   });
+  it("teardown: a control method before any run() throws cleanly (no hang)", async () => {
+    const { createHarness } = await import("../../src/harness.js");
+    const h = createHarness({}, { query: (() => (async function* () {})()) as any });
+    await expect(h.getContextUsage()).rejects.toThrow(/start a query first/);
+  });
+  it("teardown: a stream can be abandoned early without hanging", async () => {
+    const { createHarness } = await import("../../src/harness.js");
+    const q = ({ prompt }: any) => (async function* () { for await (const t of prompt) { yield { type: "chunk", n: 1 }; yield { type: "result", result: "ok" }; } })();
+    const h = createHarness({}, { query: q as any });
+    for await (const _m of h.stream("hi")) break;          // abandon after the first frame
+    expect(true).toBe(true);                                // reached here ⇒ no hang
+  });
 });
