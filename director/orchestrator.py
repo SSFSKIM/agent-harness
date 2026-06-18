@@ -104,7 +104,10 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
         return False
     ws = ticket.get("workspace")
     if ws is None and workspace_root is not None:
-        ws = str(Path(workspace_root) / str(tid))
+        # The same single derivation dispatch used (run.workspace_path), so the
+        # merger's land-lane path and the worker's actual workspace agree, sanitized
+        # (R2c / ARCHITECTURE invariant 8) — was a re-derived `root/str(tid)`.
+        ws = str(run.workspace_path(tid, workspace_root))
     try:
         return dq.append_merge_request(tid, pr=pr_url, branch=pr_branch,
                                        workspace_path=ws, base=queue_base)

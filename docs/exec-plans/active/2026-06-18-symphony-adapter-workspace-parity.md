@@ -143,10 +143,11 @@ re-derive it):
   already present). In `_prepare`, assert the resolved `cwd` equals the resolved
   workspace path before constructing `AppServerClient`. At the end: one helper governs
   every workspace path; ids are sanitized + contained. Run:
-  `python3 -m pytest tests/test_director_run.py -q` (add cases). Acceptance: id `a/b..c`
-  → dir `a_b__c` under root; an override resolving outside root raises before mkdir;
-  `_maybe_enqueue_merge` and `_workspace_for` agree on the path for the same id+root
-  (spec acceptance 3–4).
+  `python3 -m pytest tests/test_director_run.py -q` (add cases). Acceptance:
+  `workspace_key("feat/ABC XY")=="feat_ABC_XY"`; a *derived* id resolving outside root
+  (e.g. `".."`) raises before mkdir; `_maybe_enqueue_merge` and `_workspace_for` agree on
+  the path for the same id+root (spec acceptance 3–4). (`.` is allowed, so `..` survives
+  sanitization — containment R2b blocks the escape, not the sanitizer.)
 
 - **M3 — Daemon startup recovery + reconcile cleanup (R3).**
   Scope: `director/orchestrator.py`. Add `_startup_recovery(board, states, *,
@@ -182,9 +183,24 @@ re-derive it):
   `fetch_issues_by_states(team, state_ids)` + LinearBoard method (empty-guard).
   `tests/test_director_linear.py` +6 (2-page order, missing-cursor raise, no-pageInfo,
   empty-guard, by-states paginate+normalize, board method). 22 pass; full gate GREEN.
-- [ ] M2 next.
+- [x] (2026-06-18) M2 done. `run.py`: `workspace_key` (re.sub charset) + shared
+  `workspace_path` helper; `_workspace_for` derived-path containment guard (resolve +
+  `is_relative_to`, raise) with explicit-override exemption; `_prepare` pre-launch
+  cwd/is-dir check (§9.5 inv 1). `orchestrator._maybe_enqueue_merge` now calls
+  `run.workspace_path` (was re-derived). `tests/test_director_run.py` +6 (key sanitize
+  incl. `..` survives, path = root+key, derived contained, derived-`..` raises, override
+  exempt, dispatch↔merge agree). 13 pass; full gate GREEN.
+- [ ] M3 next.
 
 ## Surprises & discoveries
+- 2026-06-18 (M2): the spec's first sanitization example (`feat/ABC..XY → feat_ABC__XY`)
+  was wrong — Symphony's charset `[A-Za-z0-9._-]` ALLOWS `.`, so `..` survives the
+  sanitizer. Containment (R2b) is what blocks a `..`-component escape (`root/..`
+  resolves outside root → raise). The two invariants are complementary, not redundant.
+  Corrected spec R2a + acceptance 3 and the M2 milestone/acceptance to a real example
+  (`feat/ABC XY → feat_ABC_XY`) + a derived-`..` containment case. In practice the
+  derived key is the issue UUID (always safe); sanitization+containment are
+  defense-in-depth for a malformed id.
 
 ## Decision log
 - 2026-06-18: shared `_paginate` helper (Approach B) — one cursor loop, one test surface.

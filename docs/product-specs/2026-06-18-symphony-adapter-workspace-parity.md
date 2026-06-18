@@ -63,8 +63,11 @@ reconcile/daemon — already matches):
 - **R2 — Workspace safety invariants (Symphony §9.5).**
   - **R2a** The per-issue workspace **key** is sanitized: every character outside
     `[A-Za-z0-9._-]` is replaced with `_` before the path is built. A human can
-    dispatch a ticket whose id is `feat/ABC..XY` and observe the workspace dir named
-    `feat_ABC__XY` directly under the root (not a nested/escaped path).
+    dispatch a ticket whose id is `feat/ABC XY` and observe the workspace dir named
+    `feat_ABC_XY` directly under the root (slash + space collapsed, not a nested path).
+    Note `.` is in the allowed set (Symphony's charset), so a literal `..` survives
+    sanitization — the **R2b containment check** is what blocks a `..` escape, not the
+    sanitizer; the two invariants are complementary.
   - **R2b** The derived workspace path is **contained**: it resolves to a directory
     whose parent is the resolved workspace root; a path that would resolve outside
     the root **raises** before any `mkdir` or worker launch.
@@ -213,9 +216,9 @@ the decider, the queue, or the merger's own logic.
    `endCursor` asserts it raises.
 2. **R1b:** `fetch_issues_by_states([])` makes zero `http_post` calls and returns
    `[]`; a populated multi-page case returns normalized, re-dispatchable tickets.
-3. **R2a/R2b:** a test dispatches a ticket with id `a/b..c` and asserts the workspace
-   dir is `a_b__c` under the root; a crafted override resolving outside the root
-   raises before mkdir.
+3. **R2a/R2b:** a test asserts `workspace_key("feat/ABC XY") == "feat_ABC_XY"` (and
+   that `.` survives, so `".."` is preserved); a *derived* id that resolves outside the
+   root (e.g. `".."`) raises before mkdir.
 4. **R2c:** dispatch, merge-enqueue, and cleanup are shown to call the one
    `workspace_path` helper (same path for the same id+root) — e.g. a test asserts
    `_maybe_enqueue_merge` and `_workspace_for` agree.

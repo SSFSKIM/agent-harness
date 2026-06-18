@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -68,9 +69,39 @@ def load_ticket(path: str | Path) -> dict:
             "model": data.get("model"), "workspace": data.get("workspace")}
 
 
+def workspace_key(identifier) -> str:
+    """Sanitize a board identifier into a safe workspace directory NAME (Symphony §9.5
+    invariant 3): every character outside `[A-Za-z0-9._-]` becomes `_`. A board id with
+    `/` or `..` can no longer reshape the path or escape the workspace root."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(identifier))
+
+
+def workspace_path(identifier, workspace_root) -> Path:
+    """The per-ticket workspace path — `<root>/<sanitized key>`. The SINGLE derivation
+    used by dispatch (`_workspace_for`), merge-enqueue (`orchestrator._maybe_enqueue_merge`),
+    and startup cleanup (`orchestrator._startup_recovery`) so all three agree on the
+    directory for a given (id, root) (ARCHITECTURE invariant 8 — shared helper, not
+    re-derived per call site)."""
+    return Path(workspace_root) / workspace_key(identifier)
+
+
 def _workspace_for(ticket: dict, workspace_root) -> Path:
-    ws = Path(ticket["workspace"]) if ticket.get("workspace") \
-        else Path(workspace_root) / str(ticket["id"])
+    explicit = ticket.get("workspace")
+    if explicit:
+        # Explicit override: the single-ticket-CLI / test affordance (a trusted caller
+        # may target an arbitrary path, e.g. /tmp). It is NEVER produced by the Linear
+        # daemon path (board ids are always derived), so it is exempt from the
+        # containment check below (the board-controlled id is the real escape vector,
+        # and workspace_key sanitizes that).
+        ws = Path(explicit)
+    else:
+        ws = workspace_path(ticket["id"], workspace_root)
+        # Containment (§9.5 invariant 2): the derived path MUST resolve under the root.
+        # workspace_key already guarantees this; the check catches a sanitizer regression
+        # before any mkdir or worker launch. is_relative_to is a pure path comparison.
+        root = Path(workspace_root).resolve()
+        if not ws.resolve().is_relative_to(root):
+            raise RuntimeError(f"workspace path escapes root: {ws} not under {root}")
     ws.mkdir(parents=True, exist_ok=True)
     return ws
 
@@ -87,6 +118,12 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
     (director/worker/policy.py) — a worker never inherits the Director's host secrets
     (SECURITY.md T11, env-inheritance channel)."""
     ws = _workspace_for(ticket, workspace_root)
+    # §9.5 invariant 1: validate before launch that the worker's cwd is the prepared
+    # workspace directory (we pass cwd=ws below). Held by construction; the explicit
+    # check guards a future refactor that lets the launch cwd drift off the contained
+    # workspace, and a torn/non-dir path.
+    if not ws.is_dir():
+        raise RuntimeError(f"workspace path is not a directory before launch: {ws}")
     if install_skills:
         install_workspace_skills(ws)
     if worker_env is None:

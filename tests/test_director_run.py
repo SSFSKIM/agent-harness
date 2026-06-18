@@ -105,5 +105,52 @@ class RunEndToEndTest(unittest.TestCase):
             run.install_workspace_skills(ws)
 
 
+class WorkspaceSafetyTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def test_workspace_key_sanitizes_unsafe_chars(self):
+        # slash + space → _; alnum/./-/_ preserved (Symphony §9.5 invariant 3)
+        self.assertEqual(run.workspace_key("feat/ABC XY"), "feat_ABC_XY")
+        self.assertEqual(run.workspace_key("LIN-22"), "LIN-22")
+        self.assertEqual(run.workspace_key("a.b_c-1"), "a.b_c-1")
+        # '.' is in the allowed set, so '..' SURVIVES sanitization (containment, not the
+        # sanitizer, blocks the escape — see the derived-'..' test below)
+        self.assertEqual(run.workspace_key(".."), "..")
+
+    def test_workspace_path_is_root_plus_sanitized_key(self):
+        p = run.workspace_path("a/b", self.tmp)
+        self.assertEqual(p, self.tmp / "a_b")
+
+    def test_derived_workspace_contained_under_root(self):
+        ws = run._workspace_for({"id": "ABC-1"}, self.tmp)
+        self.assertEqual(ws, self.tmp / "ABC-1")
+        self.assertTrue(ws.is_dir())
+
+    def test_derived_path_escaping_root_raises(self):
+        # a derived id that resolves outside the root (e.g. '..') is rejected before mkdir
+        with self.assertRaises(RuntimeError):
+            run._workspace_for({"id": ".."}, self.tmp / "root")
+
+    def test_explicit_workspace_override_is_exempt_from_containment(self):
+        # the trusted single-ticket-CLI/test affordance may target an arbitrary path
+        outside = self.tmp / "outside"
+        ws = run._workspace_for({"id": "X", "workspace": str(outside)}, self.tmp / "root")
+        self.assertEqual(ws, outside)
+        self.assertTrue(ws.is_dir())
+
+    def test_dispatch_and_merge_enqueue_agree_on_path(self):
+        # _maybe_enqueue_merge derives the same path as _workspace_for (one helper, R2c)
+        import director.orchestrator as orch
+        root = self.tmp / "wsroot"
+        derived = run._workspace_for({"id": "feat/Z 1"}, root)
+        errs = []
+        orch._maybe_enqueue_merge("feat/Z 1", {"id": "feat/Z 1"},
+                                  {"status": "done", "pr_url": "http://pr"},
+                                  self.tmp / "q", root, errs)
+        # the helper-derived path equals what dispatch created
+        self.assertEqual(run.workspace_path("feat/Z 1", root), derived)
+
+
 if __name__ == "__main__":
     unittest.main()
