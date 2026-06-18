@@ -5,6 +5,7 @@ import { resolveSandbox } from "./sandbox.js";
 import { resolveProviderEnv } from "./provider.js";
 import { resolveTools } from "./tools.js";
 import { resolveAgents } from "./agents.js";
+import { createPermissionGate } from "../permissions/gate.js";
 
 // Produces a plain object that is structurally the SDK `Options`.
 export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
@@ -45,6 +46,7 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   // SDK contract (sdk.d.ts:1719): bypassPermissions REQUIRES allowDangerouslySkipPermissions.
   // Centralize it here so no path (CLI/lib/tests) can set the mode without satisfying it.
   if (config.permissionMode === "bypassPermissions") options.allowDangerouslySkipPermissions = true;
+  if (config.permissionBroker) options.canUseTool = createPermissionGate(config.permissionBroker);
   if (config.mcpServers) options.mcpServers = config.mcpServers;
   if (config.plugins) options.plugins = config.plugins;
   if (config.cwd) options.cwd = config.cwd;

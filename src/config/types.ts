@@ -1,5 +1,6 @@
 import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig, SessionStore, EffortLevel, ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { HooksMap } from "../hooks/types.js";
+import type { PermissionBroker } from "../permissions/types.js";
 
 export type SettingSource = "user" | "project" | "local";
 
@@ -28,6 +29,9 @@ export interface HarnessConfig {
   // permissionMode: 6 SDK modes. acceptEdits auto-accepts edits but still routes non-edit tools to
   // canUseTool; dontAsk replaces canUseTool entirely (joins auto/bypass as broker-replacing) — verified.
   permissionMode?: PermissionMode;
+  // interactive permission broker (incr3): when set, resolveOptions wires it as the SDK canUseTool.
+  // Only consulted in broker-live modes (default/acceptEdits/plan); bypassPermissions/dontAsk bypass it.
+  permissionBroker?: PermissionBroker;
   allowedTools?: string[];
   disallowedTools?: string[];
   toolPreset?: "claude_code" | "none";     // default claude_code
