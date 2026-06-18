@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-18
 owner: harness
 base_commit: 0ff9be38d56d367b44d852e957956677c1ff91c0
@@ -210,3 +210,41 @@ Round 1 reviews: codex (spec-compliance + code-quality) and `review-reliability`
   must keep all gate consumers total" — captured for RELIABILITY.md. **→ tech-debt-tracker.**
 
 ## Outcomes & retrospective
+
+**Shipped (Phase 1 — the format, not the tool).** The harness knowledge format is
+now explicit and versioned (`docs/KNOWLEDGE_FORMAT.md`, KF v1.0), with five
+optional, ungated frontmatter keys — `type`/`tags`/`resource` (routing/binding) +
+`title`/`description` (display) — covering OKF's entire recommended surface minus
+`timestamp` (subsumed by `last_verified`). `read_frontmatter` is now list-aware
+(flow + block) with scalars byte-unchanged, proven by a fail-before/pass-after
+test. All 7 memory concept pages carry the keys, giving Phase 2 real data. The
+gate stayed permissive on the new keys throughout (D3 unchanged).
+
+**Verification.** `check.py` GREEN at every milestone; parser list-reading shown
+on real pages; permissive proof (strip keys → still GREEN). Completion reviews:
+codex (spec-compliance + code-quality) and `review-reliability` — final verdicts
+all SATISFIED after round-1 remediation.
+
+**What the review caught (the value of the gate-blind check).**
+- A spec↔implementation contradiction invisible to the green gate: the spec's
+  prose had regressed to "three keys" (a worktree commit-on-stale-tree gremlin)
+  while the build used five. Fixed by restoring from `933fffe`.
+- A real graceful-FAIL→crash regression in D4 on a list-valued required key,
+  found independently by both reviewers. Fixed (widened except) + regression test.
+
+**Deviations / decisions.** `last_verified` bumped on the 7 pages (reversed an
+initial no-bump call after review flagged it contradicted KF's own
+edit=re-verification rule). `resource` only on the one page documenting a code
+asset. Grades in `QUALITY_SCORE.md` left unchanged: the capability is real but
+unproven in daily use until the Phase-2 navigation tool exercises it.
+
+**Carried forward.** Two P2s → `tech-debt-tracker.md` (list-`description` slice in
+gen_inventory/scaffold; a gate-parser-totality RELIABILITY rule). The full
+deferred roadmap (drift detection, generated indexes, full-corpus backfill, typed
+links, lint validation, protected-doc/porting wiring) lives in the spec's Next-phase
+section. **Phase 2 = the knowledge navigation/query tool + agentic skill**, which
+consumes this format.
+
+**`progress/current.md` note.** Not updated from this feature branch — it tracks the
+main-line (Director/orchestration) state; this knowledge-format branch's record is
+this completed ExecPlan. Fold a progress note in when the branch merges to the main line.
