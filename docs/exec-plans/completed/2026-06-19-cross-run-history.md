@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: 0fefede
@@ -141,8 +141,8 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
   `fmtRun`/`renderHistory` (newest-first: when · tokens · runtime · ✓/✗ outcomes · stopped-reason)
   + `loadHistory()` on a slow 10s interval (history changes only at run end — independent of
   the SSE/poll). 4 tests (history route empty→[], route returns seeded records oldest-first,
-  PAGE wires the panel). `GET /`+`/api/v1/state`+`/api/v1/stream` bodies unchanged. Full gate
-  GREEN (504 tests).
+  PAGE wires the panel). `GET /` read rendering preserved (+ the history panel/JS — R8 requires
+  it); `/api/v1/state` + `/api/v1/stream` bodies byte-unchanged. Full gate GREEN (504 tests).
 
 - [x] (2026-06-19) **M3 done** — behavioral E2E + docs. `docs/DIRECTOR.md` §10: history-panel
   description + `--history-dir`/`$DIRECTOR_HISTORY_DIR`. **Behavioral check (web → playwright),
@@ -166,5 +166,51 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
   counts for >20-ticket runs) — YAGNI; the headline trend metric (cost/duration) is exact.
 
 ## Feedback (from completion gate)
+Four reviews (Claude personas). All **SATISFIED**, zero P1s. One doc-wording P2 fixed; one
+genuine P2 + several proposed rules recorded fix-forward.
+- **spec-compliance (SATISFIED):** R7/R8 traced to code; scope clean (multi-run aggregate absent;
+  R1–R6 untouched but-additive; `status.py` not in the diff). P2: plan M2 "GET / byte-unchanged"
+  wording imprecise (the panel changes the page) → **FIXED**. Proposed (→tech-debt): pin
+  `ended_at` source (`= snapshot.updated_at`) + the route's N in a future spec rev.
+- **review-arch (SATISFIED):** clean separate module (one-job), correct minimal hook, append-only
+  JSONL the right shape. **P2 → tech-debt:** producer/consumer history-dir asymmetry — the
+  dashboard grew `--history-dir` but `orchestrator.main()` doesn't thread `history_base` and there's
+  no `paths.history_dir` config, so the two converge only via the shared default or
+  `$DIRECTOR_HISTORY_DIR` (the common same-repo case works). Deferred: the full symmetric fix
+  touches `config.DEFAULTS["paths"]` + orchestrator main (a different subsystem). Proposed rule
+  (→tech-debt): a new operator-redirectable state dir must be reachable by the same precedence on
+  EVERY process that reads/writes it.
+- **review-reliability (SATISFIED):** R12/R14/D-6 hold end-to-end (append_run swallows; the hook
+  can't raise — snapshot/summarize are total; read_history tolerant; the route fail-soft). Note:
+  concurrent appends are interleave-safe only because records are tiny (~580 B < the O_APPEND
+  atomic bound) — recorded so a future record-shape growth is a conscious call. Unbounded growth =
+  accepted non-goal (bounded read; one line/run).
+- **review-code-quality (SATISFIED):** clean decomposition + naming + load-bearing comments; the
+  hook test is a genuine end-to-end control (real run → read-back). P2s non-actionable: the
+  `_root`/tolerant-read mirror of `status.py` is deliberate (different on-disk shapes; folding
+  into status.py was rejected) — extract a shared `_dir_root` only if a THIRD store appears; the
+  `run_forever` hook is graceful-shutdown-only by design.
 
 ## Outcomes & retrospective
+**Shipped:** cross-run history — completed runs survive their own lifetime. New append-only
+`director/history.py` (`summarize` pure · `append_run` best-effort · `read_history` tolerant ·
+a read CLI) persists a compact run-summary at each run's completion (the orchestrator hooks it
+after `status.finished` in both `run_until_drained` and `run_forever`, guarded to a real
+StatusWriter); the dashboard reads it via `GET /api/v1/history` and renders a **history panel**
+(per-run when · tokens · runtime · ✓/✗ · stopped-reason) on a slow independent poll.
+**Goal met:** behaviorally proven in-browser — `GET /api/v1/history` served 2 records and the
+panel rendered both runs newest-first while the live view coexisted; empty store → empty panel.
+Gate GREEN (504 tests). `app_server`/`queue`/`decider` untouched; `status.py` untouched (the hook
+reads its snapshot).
+**Retrospective:**
+- A clean separate module was the right call (the rejected alternative — folding into `status.py`
+  — would have coupled the single-atomic-snapshot producer to a cross-run append store with a
+  different on-disk shape). The `_root`/tolerant-read idiom mirrors `status.py` so it reads like
+  the surrounding code; reviewers flagged the duplication as deliberate, not a DRY violation.
+- The exact-vs-approximate split is the honest design: the headline trend metrics (`codex_totals`,
+  runtime) are exact from the run aggregate; outcome COUNTS derive from the bounded `recent` tail
+  (under-counting only past 20 tickets), disclosed in code + docs + the plan.
+- The one real seam to revisit is the producer/consumer history-dir symmetry (recorded) — today
+  the default + `$DIRECTOR_HISTORY_DIR` keep the orchestrator's write and the dashboard's read
+  aligned, but the dashboard's `--history-dir` flag has no orchestrator twin; the full fix belongs
+  with the `.harness.json` `paths` config, a separate slice.
