@@ -170,7 +170,26 @@ This is the v1 **dashboard** slice (spec R4–R6). The v1 **producer** slice
   (PAGE wires EventSource + keeps poll fallback + uses fmtRateLimits, raw dump gone). Full gate
   GREEN (490 tests).
 
+- [x] (2026-06-19) **M3 done** — behavioral E2E + docs. `docs/DIRECTOR.md` §10 rewritten:
+  server-pushed (SSE) with poll fallback + rate-limit gauge (replacing "re-polled ~1s … no SSE").
+  **Behavioral check (web → playwright), PASS:** served the dashboard against a seeded status dir
+  (one ended ticket carrying `rate_limits={used_percent:42, resets_in_seconds:180}` + a live
+  in-flight ticket); the browser rendered **via SSE** (initial frame through `EventSource.onmessage`)
+  showing `700 tok (in 420 / out 280)` and `rate ▮▮▮▮▯▯▯▯▯▯ 42% · resets ~3m`; mutating the
+  snapshot (in-flight 600→1234) **pushed** the update to `1334 tok` + in-flight row `1234 tok`
+  within ~1.5s with NO reload — confirmed across 3 successive mutations. (The window-marker
+  no-reload check read "cleared" only because `playwright-cli eval` is isolated per invocation —
+  verified separately; the page's sole update path is `onmessage → render()`, DOM-only, no reload
+  in `PAGE`.) Rate-limit shape: a real codex run wasn't available in this environment, so the
+  renderer is pinned tolerant (used_percent/remaining+limit/resets + compact fallback + null→"");
+  the seeded representative payload renders the gauge, and `{"remaining":9}`/`null` degrade
+  without error (unit-asserted). Full gate GREEN.
+
 ## Surprises & discoveries
+- 2026-06-19: `playwright-cli eval` evaluates each invocation in an isolated context — a
+  `window.__probe` set in one `eval` is gone in the next, so a cross-eval "did the page reload?"
+  marker reads as cleared even when the page never reloaded. The no-reload property is instead
+  established by construction (SSE `onmessage → render()` is DOM-only) + the functional push test.
 
 ## Decision log
 - 2026-06-19: review_level = **standard** (arch + reliability). SSE adds a long-lived

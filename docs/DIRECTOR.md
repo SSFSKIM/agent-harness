@@ -250,9 +250,12 @@ python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir>
 ```
 
 **Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
-+ `director.queue` pending), re-polled ~1s in the browser (no SSE, no reload): the run header
++ `director.queue` pending), **server-pushed** over SSE (`GET /api/v1/stream` emits a frame the
+instant the snapshot changes; the page consumes it via `EventSource` and **falls back to a ~1s
+poll** if the stream can't hold — so it never regresses to blank): the run header
 with **cost/usage** (cumulative tokens — a **LIVE sum** that climbs mid-turn as in-flight
-workers burn tokens, not only at terminal; runtime seconds; latest rate-limit), in-flight tickets
+workers burn tokens, not only at terminal; runtime seconds; **rate-limit headroom** rendered as a
+glance-able gauge + "resets ~Xm", tolerant of an odd payload), in-flight tickets
 (phase·attempt/wave + their **live mid-turn tokens** as they accrue), what is stuck and why, the
 recent-outcomes tail (✓/✗ + per-ticket tokens/session), and the pending Director queue. No run /
 torn snapshot → "no active run" (visibility is never a gate).
