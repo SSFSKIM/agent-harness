@@ -91,4 +91,23 @@ describe("DaemonServer over a real UDS", () => {
     await expect(b.listen()).rejects.toThrow(/already running/);
     await a.close();
   });
+
+  it("rename/tag/delete ops delegate to the persisted-store wrappers", async () => {
+    const d = tmp(); const sock = join(d, "sock");
+    const calls: any[] = [];
+    const sup = new DaemonSupervisor({
+      query: fakeQuery,
+      renameSession: async (id: string, title: string) => { calls.push(["rename", id, title]); },
+      tagSession: async (id: string, tag: string | null) => { calls.push(["tag", id, tag]); },
+      deleteSession: async (id: string) => { calls.push(["delete", id]); },
+    } as any, { dir: join(d, "sessions") });
+    const server = new DaemonServer(sup, sock);
+    await server.listen();
+    expect((await daemonRequest(sock, { op: "rename", id: "sdk-1", title: "T" }))[0]).toEqual({ ok: true });
+    expect((await daemonRequest(sock, { op: "tag", id: "sdk-1", tag: "blue" }))[0]).toEqual({ ok: true });
+    expect((await daemonRequest(sock, { op: "delete", id: "sdk-1" }))[0]).toEqual({ ok: true });
+    expect(calls).toEqual([["rename", "sdk-1", "T"], ["tag", "sdk-1", "blue"], ["delete", "sdk-1"]]);
+    await daemonRequest(sock, { op: "shutdown" });
+    await server.closed;
+  });
 });

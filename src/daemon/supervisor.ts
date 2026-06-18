@@ -14,6 +14,7 @@ import type { ProactiveConfigInput, ProactiveStatus } from "../proactive/types.j
 import { defaultIdleDetector } from "../proactive/prompts.js";
 import { listSessions, getSessionMessages } from "../sessions/reader.js";
 import { forkSession } from "../sessions/fork.js";
+import { renameSession, tagSession, deleteSession } from "../sessions/mutate.js";
 import type { CompactOutcome } from "../compaction/server.js";
 
 export interface DaemonDeps {
@@ -21,6 +22,9 @@ export interface DaemonDeps {
   listSessions?: (opts?: Parameters<typeof listSessions>[0]) => Promise<unknown[]>;
   getSessionMessages?: (id: string, opts?: Parameters<typeof getSessionMessages>[1]) => Promise<unknown[]>;
   forkSession?: (id: string, opts?: Parameters<typeof forkSession>[1]) => Promise<{ sessionId: string }>;
+  renameSession?: (id: string, title: string, opts?: { cwd?: string }) => Promise<void>;
+  tagSession?: (id: string, tag: string | null, opts?: { cwd?: string }) => Promise<void>;
+  deleteSession?: (id: string, opts?: { cwd?: string }) => Promise<void>;
 }
 
 interface SpawnConfig { model?: string; restart: RestartPolicy; }
@@ -121,6 +125,15 @@ export class DaemonSupervisor {
   }
   getPersistedMessages(id: string, opts: { cwd?: string; limit?: number; offset?: number } = {}): Promise<unknown[]> {
     return (this.deps.getSessionMessages ?? getSessionMessages)(id, opts);
+  }
+  renamePersisted(id: string, title: string, opts: { cwd?: string } = {}): Promise<void> {
+    return (this.deps.renameSession ?? renameSession)(id, title, opts);
+  }
+  tagPersisted(id: string, tag: string | null, opts: { cwd?: string } = {}): Promise<void> {
+    return (this.deps.tagSession ?? tagSession)(id, tag, opts);
+  }
+  deletePersisted(id: string, opts: { cwd?: string } = {}): Promise<void> {
+    return (this.deps.deleteSession ?? deleteSession)(id, opts);
   }
 
   async control(id: string, frame: ControlFrame): Promise<ControlResponse> {

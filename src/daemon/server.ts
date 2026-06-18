@@ -78,6 +78,9 @@ export class DaemonServer {
         case "usage": send({ ok: true, usage: await this.supervisor.usage(op.id) }); sock.end(); break;
         case "init": send({ ok: true, init: await this.supervisor.initializationResult(op.id) }); sock.end(); break;
         case "apply_flag_settings": await this.supervisor.applyFlagSettings(op.id, op.settings); send({ ok: true }); sock.end(); break;
+        case "rename": await this.supervisor.renamePersisted(op.id, op.title, { cwd: op.cwd }); send({ ok: true }); sock.end(); break;
+        case "tag": await this.supervisor.tagPersisted(op.id, op.tag, { cwd: op.cwd }); send({ ok: true }); sock.end(); break;
+        case "delete": await this.supervisor.deletePersisted(op.id, { cwd: op.cwd }); send({ ok: true }); sock.end(); break;
         case "start_proactive": send({ ok: true, status: this.supervisor.startProactive(op.id, op.config) }); sock.end(); break;
         case "stop_proactive": send(await this.supervisor.stopProactive(op.id)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
