@@ -1,0 +1,292 @@
+---
+status: active
+last_verified: 2026-06-18
+owner: harness
+---
+# Knowledge Format evolution — OKF-grounded keys + a versioned format spec (Phase 1)
+
+## Problem
+
+Our knowledge corpus (`docs/`, `docs/memory/`) is a markdown + YAML-frontmatter
+tree governed by `lint_docs.py`. The OKF parity analysis
+([`docs/design-docs/okf-comparison.md`](../design-docs/okf-comparison.md))
+established that Google's Open Knowledge Format independently arrived at the same
+substrate, and named three concrete things OKF has at the **format layer** that
+we lack:
+
+1. **No machine-readable concept-kind.** Our "type" is implicit in the
+   *directory* (`knowledge/` vs `adr/` vs `limitations/` vs `openq/`). A consumer
+   — or the Phase-2 navigation tool — cannot filter the corpus by kind without
+   hard-coding our directory taxonomy. OKF's required `type` field makes kind
+   explicit and orthogonal to location.
+2. **No structured asset binding.** Pages name their source in prose
+   (`## Source: plugin/scripts/harness_lib.py`) but not as a machine-resolvable
+   field. OKF's `resource` lets tooling link a page to the code/asset it
+   describes — the precondition for automated drift detection.
+3. **No cross-cutting facets.** We have only the directory tree and manual
+   cross-links; no `tags` axis.
+
+A fourth, structural gap: **our format is implicit in `lint_docs.py`.** There is
+no single document a human or agent can read to learn "what a conformant harness
+knowledge page is." OKF's contribution is precisely that it is *specified* and
+*versioned*. To make our recording system more sophisticated — and to give the
+Phase-2 navigation tool a stable contract to build against — the format must
+become an explicit, versioned artifact.
+
+Two facts constrain the solution:
+
+- **The frontmatter parser is flat.** `harness_lib.read_frontmatter` parses only
+  `key: value` scalar lines; it skips indented/`-` lines. It cannot read a YAML
+  list. So `tags` (a list) is not merely "a new key" — its value representation
+  must be chosen so our own stack can read it.
+- **The gate must stay permissive on new keys.** Per the product decision, the
+  three new keys are *optional*; `check.py` must not start failing pages that
+  omit them, and authors must not be forced to backfill the entire corpus.
+
+This is **Phase 1** of a two-phase arc. Phase 1 evolves the *format and recording
+structure*. Phase 2 (a separate future spec) builds the *query / navigation tool*
+that consumes this format. Phase 1 is shippable and verifiable on its own.
+
+## Requirements
+
+Each is independently checkable by a human.
+
+- **R1 — Three optional frontmatter keys are defined and documented.** `type`,
+  `tags`, `resource` have written semantics, a recommended `type` vocabulary, and
+  a canonical authored form for `tags`. A reader can determine, for any page,
+  whether its frontmatter uses them correctly.
+- **R2 — The keys are genuinely optional.** `check.py` is GREEN on the repo both
+  before and after the change with pages that omit all three keys. No new
+  blocking lint rule keys on `type`/`tags`/`resource`. `D3` still requires
+  exactly `status / last_verified / owner`.
+- **R3 — `read_frontmatter` reads list-valued keys.** Given a page whose
+  frontmatter contains `tags` in the canonical form, `read_frontmatter` returns a
+  Python `list` of strings for `tags`. Given any pre-existing scalar key, it
+  returns the identical string it returned before (byte-for-byte behavior
+  preserved). Covered by unit tests that fail before the change and pass after.
+- **R4 — A versioned Knowledge Format spec exists as a standing document.**
+  `docs/KNOWLEDGE_FORMAT.md` specifies the frontmatter schema (required +
+  optional keys), reserved filenames, link semantics, the conformance rules the
+  lints actually enforce (mapped to D-rule IDs), and a declared format version.
+  It is registered in the `AGENTS.md` map and carries standard governance
+  frontmatter. A new contributor can author a conformant page from this doc
+  alone, without reading `lint_docs.py`.
+- **R5 — The authoring guidance reflects the new keys.** The `docs-tree` skill's
+  frontmatter procedure and `docs/memory/MEMORY.md`'s write rules mention the
+  three optional keys and point to `docs/KNOWLEDGE_FORMAT.md` as the authority.
+- **R6 — A representative slice of the corpus uses the new keys.** Every concept
+  page under `docs/memory/{knowledge,adr,limitations,openq}/` (excluding
+  `index.md`) carries `type`, carries `tags`, and carries `resource` when the
+  page documents a concrete code asset. This proves the format end-to-end and
+  gives Phase 2 real data to consume. Index pages MAY carry `type`.
+- **R7 — Everything stays GREEN.** `python3 plugin/scripts/check.py` passes
+  (lints + full unittest suite), including the new parser tests.
+
+## Design
+
+### D-1. The three keys (R1)
+
+All three are **optional** and added to the *recommended* tier of the frontmatter
+schema. Required tier (`status / last_verified / owner`) is unchanged.
+
+**`type` — concept-kind, made explicit and queryable.** A scalar string naming
+the *epistemic kind* of the page, lifting our directory-implicit taxonomy into a
+machine-readable field that survives independent of path. Recommended vocabulary
+(free/extensible — consumers tolerate unknown values, OKF-style):
+
+| `type` value | For pages like |
+|---|---|
+| `knowledge` | `docs/memory/knowledge/*` — reusable how-it-works |
+| `adr` | `docs/memory/adr/*` — decision + why |
+| `limitation` | `docs/memory/limitations/*` — known landmines |
+| `openq` | `docs/memory/openq/*` — unresolved questions |
+| `progress` | `docs/memory/progress/*` — where we are |
+| `session-digest` | `docs/memory/archive/sessions/*` |
+| `design-doc` | `docs/design-docs/*` |
+| `product-spec` | `docs/product-specs/*` |
+| `exec-plan` | `docs/exec-plans/**` |
+| `reference` | `docs/references/*` — external-API digests |
+| `methodology` | top-level machine docs (PLANS, DESIGN, …) |
+
+`type` is *intrinsic kind*, the directory is *location*; they usually agree, but
+`type` is authoritative for machine routing (a `knowledge`-typed page can live
+outside `knowledge/`). It is scalar, so the flat parser already reads it — **no
+parser change needed for `type`.**
+
+**`resource` — asset binding.** An optional scalar: a repo-relative path
+(preferred) or a URL identifying the single primary asset the page documents
+(e.g. `plugin/scripts/harness_lib.py`). Absent for pages describing abstract
+ideas or many assets. Scalar → flat parser reads it unchanged. This field is the
+**precondition for Phase-2 drift detection** (compare the resource's git state
+against `last_verified`); Phase 1 only introduces and populates the field — no
+drift logic, and the lint does **not** verify the target exists (permissive).
+
+**`tags` — cross-cutting facets.** An optional list of short lowercase strings.
+**Canonical authored form is YAML flow inline:** `tags: [a, b, c]` on one line.
+This is compact, diff-friendly, and the cheapest possible parser extension. The
+parser additionally *tolerates* the OKF block form (`tags:` then `- a` lines) on
+read, so we can consume foreign OKF bundles, but our own pages author the flow
+form.
+
+### D-2. Parser upgrade — `harness_lib.read_frontmatter` (R3)
+
+`read_frontmatter` gains list handling, strictly additively:
+
+- **Contract change:** the returned dict's *values* are now `str | list[str]`
+  instead of `str`. A value is a `list[str]` **only** when the source uses a list
+  form; every scalar `key: value` line continues to yield the identical string.
+- **Flow form:** a value matching `[ ... ]` is parsed into a list by splitting on
+  commas and stripping whitespace/quotes from each element; `[]` → `[]`.
+- **Block form (tolerated):** a `key:` line with an empty value followed by lines
+  whose stripped form starts with `- ` accumulates those items into a list until
+  a non-item line. This is the one place the loop must look past the current line;
+  it must not disturb scalar parsing.
+- **Backward-compatibility proof:** no existing page uses a list-valued key (every
+  current key is `status`/`last_verified`/`owner`/etc., all scalar), so the
+  upgrade changes *zero* existing parse results. The new parser tests assert both
+  the new list behavior and a representative scalar-unchanged case.
+
+**Blast-radius check.** `read_frontmatter` is called by `lint_docs.py`, the
+feeder, and the imprint scripts. All existing callers read only scalar keys
+(`status`, `last_verified`, `owner`) and never touch `tags`/list values, so a
+`list` appearing under a new key cannot reach a code path that assumes `str`.
+The ExecPlan verifies this by grep + a GREEN full-suite run.
+
+Files: `plugin/scripts/harness_lib.py` (the function), `tests/` (new parser
+test module).
+
+### D-3. Lint — permissive by construction (R2)
+
+No new D-rule. `lint_docs.py` is touched only as needed to:
+
+- leave `FM_REQUIRED` and `D3` exactly as they are (the three new keys are never
+  required); and
+- confirm (via the existing tests + a new assertion) that a page carrying the new
+  keys — including a `list`-valued `tags` — passes all current rules unchanged.
+
+The lint deliberately does **not** validate `type` against the recommended
+vocabulary, nor check that `resource` resolves, nor constrain `tags` values:
+permissive consumption is the OKF lesson we keep (`okf-comparison.md` §5, "do NOT
+adopt … rejection" — applied here as "do not reject on the *new* keys"). Any
+soft, non-blocking reporting on these keys is Phase-2 navigation-tool territory.
+
+### D-4. The versioned format spec — `docs/KNOWLEDGE_FORMAT.md` (R4)
+
+A new top-level governed doc, peer to `PLANS.md`/`DESIGN.md`, that makes the
+format explicit. Sections:
+
+- **Version.** Declares **Knowledge Format v1.0** (the required-key core is
+  production-proven; `type`/`tags`/`resource` are the keys this version
+  introduces). Versioning convention mirrors OKF's `<major>.<minor>` (minor =
+  backward-compatible additions, major = breaking).
+- **Frontmatter schema.** Required (`status`, `last_verified`, `owner`) with
+  their meaning + the staleness contract; recommended (`type`, `resource`,
+  `tags`) with D-1's semantics and the recommended `type` vocabulary.
+- **Reserved filenames.** `index.md` (category listing, registered per D8),
+  `MEMORY.md` (bootloader). 
+- **Link semantics.** Markdown links form the cross-cutting graph; `D5` rejects
+  broken links (stricter than OKF, which tolerates them — noted as a deliberate
+  divergence with a one-line why).
+- **Conformance.** The rules a conformant page satisfies, each mapped to its
+  D-rule ID (D3 frontmatter, D4 staleness, D5 links, D6 kebab naming, D8 index
+  registration). This is the "implicit-in-lint → explicit" payoff: the spec and
+  the gate are two views of one contract.
+- **Relationship to OKF.** A short pointer to `okf-comparison.md`: shared
+  substrate, the permissive-vs-enforced divergence, and that `type`/`tags`/
+  `resource` are the adopted keys.
+
+It carries standard frontmatter (`status: stable`) and is added to the `AGENTS.md`
+Map table so it is discoverable.
+
+**Governance scope (decision, see below):** Phase 1 makes `KNOWLEDGE_FORMAT.md` a
+*governed top-level doc* (standard D3/D4 apply) but does **not** wire it into the
+protected machine-doc set (`harness_lib.MANAGED_DOCS`/lint `MACHINE_DOCS`) or the
+`scaffold.py` porting seed. That "protect from loosening + seed into every ported
+host" step pulls the porting subsystem into a format change; it is deferred to
+keep this phase focused (Non-goal NG-4).
+
+### D-5. Authoring guidance (R5)
+
+- `plugin/skills/docs-tree/SKILL.md`: the "frontmatter (`status / last_verified /
+  owner`)" step gains a clause naming the optional `type`/`tags`/`resource` keys
+  and pointing to `docs/KNOWLEDGE_FORMAT.md` for their semantics.
+- `docs/memory/MEMORY.md`: the write-rules bullet that states "Every page carries
+  frontmatter `status / last_verified / owner` (lint D3)" gains a sentence on the
+  three optional keys + the spec pointer.
+
+### D-6. Representative backfill (R6)
+
+Add the new keys to existing concept pages under
+`docs/memory/{knowledge,adr,limitations,openq}/` (not the `index.md` files):
+
+- `type` on every such page, matching the D-1 vocabulary for its directory.
+- `tags` on every such page (2–5 facets each, flow form).
+- `resource` on pages that document one concrete code asset (e.g.
+  `knowledge/recursion-guard.md` → `plugin/scripts/harness_lib.py`); omitted for
+  purely abstract pages.
+
+This is a bounded set (currently a handful of pages), proves the format
+end-to-end, and seeds Phase-2 with real `type`/`tag`/`resource` data. The
+`last_verified` of each touched page is bumped to the edit date (the edit *is* a
+re-verification of the page against reality, per D4 semantics).
+
+### Decisions resolved autonomously (recorded per methodology)
+
+- **`type` = epistemic kind, free vocabulary.** Chosen over an OKF-style
+  subject-kind and over a lint-enforced closed vocabulary: it lifts the taxonomy
+  we already have into a queryable field while honoring the permissive mandate.
+- **`tags` canonical = YAML flow inline `[a, b]`, block form tolerated on read.**
+  Chosen over (a) inline-string-without-parsing and (b) comma-separated scalar:
+  it is real (minimal) YAML, gives Phase-2 genuine lists, and makes us able to
+  read OKF bundles, at the cost of a ~small additive parser change. The
+  alternatives avoid the parser change but push list-parsing into every consumer
+  and break OKF interop.
+- **Format spec as a governed top-level doc, protection/porting deferred.** See
+  D-4 / NG-4 — keeps a format phase out of the porting subsystem.
+- **Backfill scoped to `memory/{knowledge,adr,limitations,openq}` concept
+  pages.** Proves the format without churning all ~80 docs (YAGNI); exec-plans,
+  product-specs, references, and top-level docs are not backfilled this phase.
+
+## Non-goals
+
+- **NG-1 — The query / navigation tool.** No backlinks index, graph view, type/
+  tag filter, or `viz.html`. That is Phase 2, built *on* this format.
+- **NG-2 — `title` / `description` frontmatter keys.** OKF also recommends these;
+  our H1 + index one-liners cover them today. Deferred (revisit if Phase-2 index
+  auto-generation wants `description`).
+- **NG-3 — Drift detection.** `resource` is introduced and populated but no code
+  compares it against `last_verified` this phase.
+- **NG-4 — Protected-doc / porting wiring for `KNOWLEDGE_FORMAT.md`.** Not added
+  to `MANAGED_DOCS`/`MACHINE_DOCS`/`scaffold.py` this phase (D-4).
+- **NG-5 — Full-corpus backfill.** Only the memory concept-page slice (D-6).
+- **NG-6 — Typed link relationships.** Links stay untyped edges (as in OKF);
+  relationship kind remains in prose.
+- **NG-7 — Lint validation of the new keys.** No vocabulary check, no
+  resource-resolves check (D-3).
+
+## Acceptance criteria
+
+1. `docs/KNOWLEDGE_FORMAT.md` exists, declares Knowledge Format v1.0, documents
+   the required + three optional keys with the `type` vocabulary and the `tags`
+   canonical form, maps conformance to D-rule IDs, and is linked from the
+   `AGENTS.md` Map. (R1, R4)
+2. A unittest for `read_frontmatter` asserts: a flow-form `tags: [a, b]` parses to
+   `["a", "b"]`; a block-form list parses to the same; an existing scalar key
+   parses to its unchanged string. The test fails on the pre-change parser and
+   passes after. (R3)
+3. `python3 plugin/scripts/check.py` is GREEN, with the corpus containing pages
+   that both use and omit the new keys. Removing all three keys from any page
+   keeps it GREEN; no D-rule names them. (R2, R7)
+4. Every page under `docs/memory/{knowledge,adr,limitations,openq}/` except
+   `index.md` carries `type` and `tags`; pages documenting one code asset carry
+   `resource`. (R6)
+5. `plugin/skills/docs-tree/SKILL.md` and `docs/memory/MEMORY.md` mention the
+   three optional keys and point to `docs/KNOWLEDGE_FORMAT.md`. (R5)
+
+## Next phase
+
+Phase 2 — **Knowledge navigation/query tool** (separate spec): consumes `type`/
+`tags`/`resource` + the D5 link graph to provide backlinks ("what links here"),
+kind/tag/status filters, stale/orphan detection, and optionally an OKF-style
+graph view. The `resource` field unlocks the drift-detection check deferred here
+(NG-3).

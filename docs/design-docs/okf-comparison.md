@@ -235,7 +235,10 @@ exchangeable* as OKF's while keeping it as *fresh and governed* as it already is
 
 ## 6. Derived work
 
-If adoptions 1–3 are pursued, they need a product-spec (new optional frontmatter
-keys, `lint_docs.py` left permissive on them, `docs-tree` + `MEMORY.md` updated).
-Adoption 4 (graph view) is a standalone script + ExecPlan. None is committed work
-until specced; this doc is the observational comparison the OKF track cites.
+Adoptions 1–3 + 5 are specced as Phase 1:
+[`../product-specs/2026-06-18-knowledge-format-evolution.md`](../product-specs/2026-06-18-knowledge-format-evolution.md)
+— optional `type`/`tags`/`resource` keys (lint stays permissive), a flat-parser
+list upgrade, and a versioned `docs/KNOWLEDGE_FORMAT.md` formalizing the
+implicit-in-lint format. Adoption 4 (the graph/navigation view) is Phase 2: a
+separate spec + ExecPlan that consumes the Phase-1 format. This doc remains the
+observational comparison both phases cite.

@@ -135,3 +135,12 @@ owner: harness
   sweep** pre-handoff+on-arrival). 척추 = `WORKFLOW.md` 줄별 keep/adapt/reject triage(보드-쓰기 소유·
   직렬 merger·`report_outcome`·5 typed stage 에 대고). 워커-프롬프트 only — `decider.py`(slice 2)·
   보드 소유·merger 불변. graduated-autonomy 의 *worker-autonomy enabler*.
+- [Knowledge Format evolution — OKF 기반 키 + versioned 포맷 spec (Phase 1)](2026-06-18-knowledge-format-evolution.md)
+  — [`okf-comparison.md`](../design-docs/okf-comparison.md) 가 고른 채택안을 집행: optional
+  frontmatter 키 `type`(머신리더블 concept-kind, 디렉토리와 직교) + `tags`(flow 인라인 리스트,
+  cross-cutting facet) + `resource`(페이지↔코드 자산 바인딩, Phase-2 drift 감지 선행) 추가 —
+  모두 optional, 린트 permissive 유지(D3 불변). 평면 `read_frontmatter` 를 리스트 인식하도록
+  additive 업그레이드(스칼라 byte-불변, OKF 블록폼 read-tolerant). 포맷을 implicit-in-lint →
+  explicit `docs/KNOWLEDGE_FORMAT.md`(KF v1.0, conformance↔D-rule 매핑)으로 굳힘. memory
+  concept-page 대표 backfill. 쿼리/navigation tool 은 Phase 2(별도 spec). 보호/포팅 wiring 은
+  NG-4 로 연기.
