@@ -12,7 +12,9 @@ Library: `build_index(root)` -> list[record]; query helpers project over it.
 CLI: `python3 plugin/scripts/nav.py <catalog|links|backlinks|stale|orphans|drift>`.
 """
 import argparse
+import datetime
 import json
+import subprocess
 from pathlib import Path
 
 import harness_lib as hl
@@ -110,6 +112,106 @@ def catalog(records, kind=None, tag=None, status=None):
     return out
 
 
+def _norm(path, root):
+    """Normalize a user-supplied path to repo-relative posix (accepts absolute
+    or repo-relative; a leading ./ is stripped)."""
+    root = Path(root).resolve()
+    p = Path(path)
+    cand = p if p.is_absolute() else root / p
+    try:
+        return cand.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.lstrip("./")
+
+
+def links(records, path, root):
+    """Forward `.md` link targets of `path` (the pages it points to)."""
+    target = _norm(path, root)
+    rec = next((r for r in records if r["path"] == target), None)
+    return sorted(rec["links"]) if rec else []
+
+
+def backlinks(records, path, root):
+    """Pages that markdown-link to `path` (the reverse of the link graph)."""
+    target = _norm(path, root)
+    return sorted(r["path"] for r in records if target in r["links"])
+
+
+def orphans(records):
+    """Catalog pages with no inbound markdown link (unreachable in the graph).
+
+    Reserved spines (index.md/MEMORY.md) and the entry maps are not catalog
+    pages, so they are never reported. A page linked only by a bare-text mention
+    (not a `[](…)` link) still counts as an orphan — this mirrors the D5 graph."""
+    linked = set()
+    for r in records:
+        linked.update(r["links"])
+    return sorted(r["path"] for r in records
+                  if r["catalog"] and r["path"] not in linked)
+
+
+def stale(records, root):
+    """Catalog pages past the effective staleness window (advisory view of D4).
+
+    Uses the shared `hl.is_stale` + `hl.stale_window`, so it agrees with what
+    the gate's D4 would flag. A bad/missing date is a lint concern, not a
+    staleness one, and is skipped here."""
+    sd = hl.stale_window(hl.gate_config(root))
+    out = []
+    for r in records:
+        if not r["catalog"] or not r["last_verified"]:
+            continue
+        try:
+            if hl.is_stale(r["last_verified"], sd, r["status"]):
+                out.append(r)
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _resource_state(root, resource, last_verified):
+    """drift state for one resource: 'drifted' (code committed after the page's
+    last_verified), 'current', or 'unknown' (no git / missing / bad date / URL).
+    Fail-soft — never raises, never a non-zero exit."""
+    if (not isinstance(resource, str) or not resource
+            or resource.startswith(("http://", "https://"))):
+        return "unknown"
+    if not (root / resource).exists():
+        return "unknown"
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(root), "log", "-1", "--format=%cI", "--", resource],
+            capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    iso = r.stdout.strip()
+    if r.returncode != 0 or not iso:
+        return "unknown"
+    try:
+        committed = datetime.date.fromisoformat(iso[:10])
+        verified = datetime.date.fromisoformat(last_verified)
+    except (ValueError, TypeError):
+        return "unknown"
+    return "drifted" if committed > verified else "current"
+
+
+def drift(records, root):
+    """Per resource-bound page, whether its code moved since last_verified.
+
+    Returns rows {path, resource, last_verified, state} for every record that
+    declares a `resource`. Advisory only — `resource` exists to enable exactly
+    this check (spec / Phase-1 NG-3)."""
+    root = Path(root).resolve()
+    out = []
+    for r in records:
+        if not r["resource"]:
+            continue
+        out.append({"path": r["path"], "resource": r["resource"],
+                    "last_verified": r["last_verified"],
+                    "state": _resource_state(root, r["resource"], r["last_verified"])})
+    return out
+
+
 def _public(rec):
     """A record without the internal `catalog` flag, for JSON output."""
     return {k: v for k, v in rec.items() if k != "catalog"}
@@ -130,6 +232,27 @@ def _emit(rows, as_json):
         print(f"# {len(rows)} page(s)")
 
 
+def _emit_paths(paths, as_json):
+    if as_json:
+        print(json.dumps(paths, ensure_ascii=False))
+    else:
+        for p in paths:
+            print(p)
+        print(f"# {len(paths)} page(s)")
+
+
+def _emit_drift(rows, as_json):
+    if as_json:
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+    else:
+        drifted = [r for r in rows if r["state"] == "drifted"]
+        for r in drifted:
+            print(f"{r['path']}  ->  {r['resource']}  (verified {r['last_verified']})")
+        unknown = sum(1 for r in rows if r["state"] == "unknown")
+        print(f"# {len(drifted)} drifted, {len(rows)} resource-bound "
+              f"({unknown} unknown) — advisory")
+
+
 def main(argv=None):
     root = hl.repo_root()
     ap = argparse.ArgumentParser(description="Knowledge navigator (read-only).")
@@ -139,11 +262,31 @@ def main(argv=None):
     c.add_argument("--tag", help="filter by a tag")
     c.add_argument("--status", help="filter by status")
     c.add_argument("--json", action="store_true", help="emit JSON records")
+    for name, helptext in (("links", "pages this page links to"),
+                           ("backlinks", "pages that link to this page")):
+        g = sub.add_parser(name, help=helptext)
+        g.add_argument("path", help="repo-relative page path (e.g. docs/PLANS.md)")
+        g.add_argument("--json", action="store_true", help="emit JSON")
+    for name, helptext in (("stale", "pages past the staleness window (advisory)"),
+                           ("orphans", "catalog pages with no inbound link"),
+                           ("drift", "resource-bound pages whose code moved")):
+        h = sub.add_parser(name, help=helptext)
+        h.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
     records = build_index(root)
     if args.cmd == "catalog":
         _emit(catalog(records, args.kind, args.tag, args.status), args.json)
+    elif args.cmd == "links":
+        _emit_paths(links(records, args.path, root), args.json)
+    elif args.cmd == "backlinks":
+        _emit_paths(backlinks(records, args.path, root), args.json)
+    elif args.cmd == "orphans":
+        _emit_paths(orphans(records), args.json)
+    elif args.cmd == "stale":
+        _emit(stale(records, root), args.json)
+    elif args.cmd == "drift":
+        _emit_drift(drift(records, root), args.json)
 
 
 if __name__ == "__main__":

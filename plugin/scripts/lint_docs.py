@@ -13,7 +13,7 @@ import sys
 
 import harness_lib as hl
 
-STALE_DAYS = 30
+STALE_DAYS = hl.STALE_DAYS  # the one default lives in harness_lib (shared with nav)
 FM_REQUIRED = ("status", "last_verified", "owner")
 INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/adr", "memory/knowledge", "memory/openq",

@@ -1,4 +1,4 @@
-import sys, tempfile, unittest
+import datetime, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugin" / "scripts"))
@@ -92,6 +92,83 @@ class TestNavCatalog(unittest.TestCase):
     def test_links_resolved_repo_relative(self):
         rec = next(r for r in self.records if r["path"] == "docs/memory/adr/a1.md")
         self.assertEqual(rec["links"], ["docs/memory/knowledge/k1.md"])
+
+    def test_links_and_backlinks(self):
+        self.assertEqual(nav.links(self.records, "docs/memory/adr/a1.md", self.root),
+                         ["docs/memory/knowledge/k1.md"])
+        # AGENTS.md links to a1 (a1 has an inbound edge from the map)
+        self.assertEqual(nav.backlinks(self.records, "docs/memory/adr/a1.md", self.root),
+                         ["AGENTS.md"])
+        # k1 is linked only by a1
+        self.assertEqual(nav.backlinks(self.records, "docs/memory/knowledge/k1.md",
+                                       self.root), ["docs/memory/adr/a1.md"])
+
+    def test_orphans_are_catalog_pages_with_no_inbound(self):
+        # a1 (linked by AGENTS) and k1 (linked by a1) are reachable; empty + q1
+        # have no inbound markdown link. Spines/maps are never orphans.
+        self.assertEqual(nav.orphans(self.records),
+                         ["docs/memory/knowledge/empty.md", "docs/memory/openq/q1.md"])
+
+
+class TestNavStale(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _page(self.root / "docs/memory/knowledge/fresh.md",
+              ["status: stable", f"last_verified: {datetime.date.today().isoformat()}",
+               "owner: h", "type: knowledge", "description: Fresh."])
+        _page(self.root / "docs/memory/knowledge/old.md",
+              ["status: stable", "last_verified: 2000-01-01", "owner: h",
+               "type: knowledge", "description: Old and active."])
+        _page(self.root / "docs/memory/archive/done.md",
+              ["status: archived", "last_verified: 2000-01-01", "owner: h",
+               "type: session-digest", "description: Old but archived."])
+        self.records = nav.build_index(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_stale_lists_only_old_active_pages(self):
+        # old+active is stale; fresh is within window; archived is exempt
+        paths = sorted(r["path"] for r in nav.stale(self.records, self.root))
+        self.assertEqual(paths, ["docs/memory/knowledge/old.md"])
+
+
+class TestNavDrift(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        for args in (["init", "-q"], ["config", "user.email", "t@t"],
+                     ["config", "user.name", "t"]):
+            subprocess.run(["git", "-C", str(self.root), *args], check=True,
+                           capture_output=True, text=True)
+        res = self.root / "plugin" / "scripts" / "x.py"
+        res.parent.mkdir(parents=True)
+        res.write_text("# code\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", "."], check=True,
+                       capture_output=True, text=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-q", "-m", "x"],
+                       check=True, capture_output=True, text=True)  # commit date = today
+        _page(self.root / "docs/memory/knowledge/drifted.md",
+              ["status: stable", "last_verified: 2000-01-01", "owner: h",
+               "type: knowledge", "resource: plugin/scripts/x.py", "description: d"])
+        _page(self.root / "docs/memory/knowledge/current.md",
+              ["status: stable", f"last_verified: {datetime.date.today().isoformat()}",
+               "owner: h", "type: knowledge", "resource: plugin/scripts/x.py",
+               "description: c"])
+        _page(self.root / "docs/memory/knowledge/missing.md",
+              ["status: stable", "last_verified: 2000-01-01", "owner: h",
+               "type: knowledge", "resource: plugin/scripts/gone.py", "description: m"])
+        self.records = nav.build_index(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_drift_states(self):
+        states = {r["path"]: r["state"] for r in nav.drift(self.records, self.root)}
+        self.assertEqual(states["docs/memory/knowledge/drifted.md"], "drifted")
+        self.assertEqual(states["docs/memory/knowledge/current.md"], "current")
+        self.assertEqual(states["docs/memory/knowledge/missing.md"], "unknown")
 
 
 if __name__ == "__main__":

@@ -257,6 +257,17 @@ def today():
     return datetime.date.today()
 
 
+STALE_DAYS = 30  # default staleness window in days; a host may override it
+
+
+def stale_window(cfg):
+    """Effective staleness window from a gate config: the `stale_days` override
+    when it is a real int (bool excluded), else the STALE_DAYS default. The one
+    window resolver shared by the gate and nav so `nav stale` agrees with D4."""
+    v = cfg.get("stale_days")
+    return v if isinstance(v, int) and not isinstance(v, bool) else STALE_DAYS
+
+
 def is_stale(last_verified, stale_days, status):
     """The ONE definition of staleness (lint D4 + nav `stale`).
 

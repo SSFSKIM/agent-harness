@@ -178,7 +178,14 @@ the predicate, don't copy it.
   frontmatter ∧ not reserved (index.md/MEMORY.md) ∧ not exempt; extracted the
   segment-boundary matcher to `hl.is_exempt` (lint_docs now delegates). Self-host
   scope == lint's governed content set. Gate GREEN; lint_docs 38 tests unchanged.
-- [ ] M3 — nav.py links/backlinks/stale/orphans/drift + tests
+- [x] (2026-06-18) M3 — graph + health. Added `links`/`backlinks` (over the
+  shared edge set), `orphans` (catalog pages with no inbound markdown link),
+  `stale` (via `hl.is_stale` + new `hl.stale_window`, agrees with D4), `drift`
+  (git last-commit vs `last_verified`, fail-soft: drifted/current/unknown). CLI
+  subcommands + emitters. Cross-checked `backlinks okf-comparison.md` (6) ==
+  manual grep (6). +4 tests (links/backlinks, orphans, stale, git-fixture drift)
+  → 12 nav tests; gate GREEN. `hl.STALE_DAYS`/`hl.stale_window` added; lint
+  re-exports STALE_DAYS (one default).
 - [ ] M4 — docs-nav skill + AGENTS/template/MEMORY wiring + gate GREEN
 
 ## Surprises & discoveries
