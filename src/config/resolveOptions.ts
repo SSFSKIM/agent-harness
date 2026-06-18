@@ -35,6 +35,12 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   if (config.model) options.model = config.model;
   if (config.fallbackModel) options.fallbackModel = config.fallbackModel;
   if (config.maxTurns !== undefined) options.maxTurns = config.maxTurns;
+  if (config.effort) options.effort = config.effort;
+  if (config.thinking) options.thinking = config.thinking;
+  if (config.maxBudgetUsd !== undefined) options.maxBudgetUsd = config.maxBudgetUsd;
+  if (config.taskBudget) options.taskBudget = config.taskBudget;
+  if (config.includePartialMessages) options.includePartialMessages = config.includePartialMessages;
+  if (config.forwardSubagentText) options.forwardSubagentText = config.forwardSubagentText;
   if (config.permissionMode) options.permissionMode = config.permissionMode;
   // SDK contract (sdk.d.ts:1719): bypassPermissions REQUIRES allowDangerouslySkipPermissions.
   // Centralize it here so no path (CLI/lib/tests) can set the mode without satisfying it.

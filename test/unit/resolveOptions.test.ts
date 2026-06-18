@@ -72,4 +72,26 @@ describe("resolveOptions", () => {
     expect(o.hooks).toBe(hooks);
     expect(resolveOptions({})).not.toHaveProperty("hooks");
   });
+  it("threads the turn-control fields through, omits them when absent", () => {
+    const o: any = resolveOptions({
+      effort: "high",
+      thinking: { type: "enabled", budgetTokens: 1024 },
+      maxBudgetUsd: 0.5,
+      taskBudget: { total: 60000 },
+      includePartialMessages: true,
+      forwardSubagentText: true,
+    });
+    expect(o.effort).toBe("high");
+    expect(o.thinking).toEqual({ type: "enabled", budgetTokens: 1024 });
+    expect(o.maxBudgetUsd).toBe(0.5);
+    expect(o.taskBudget).toEqual({ total: 60000 });
+    expect(o.includePartialMessages).toBe(true);
+    expect(o.forwardSubagentText).toBe(true);
+    const bare: any = resolveOptions({});
+    for (const k of ["effort", "thinking", "maxBudgetUsd", "taskBudget", "includePartialMessages", "forwardSubagentText"])
+      expect(bare).not.toHaveProperty(k);
+  });
+  it("emits maxBudgetUsd:0 (guards on !== undefined, not truthiness)", () => {
+    expect((resolveOptions({ maxBudgetUsd: 0 }) as any).maxBudgetUsd).toBe(0);
+  });
 });

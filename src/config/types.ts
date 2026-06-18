@@ -1,4 +1,4 @@
-import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig, SessionStore } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentDefinition, McpServerConfig, PermissionMode, SdkPluginConfig, SessionStore, EffortLevel, ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { HooksMap } from "../hooks/types.js";
 
 export type SettingSource = "user" | "project" | "local";
@@ -8,6 +8,13 @@ export interface HarnessConfig {
   model?: string;
   fallbackModel?: string;
   maxTurns?: number;
+  // turn controls (verified live 2026-06-18; specs/2026-06-18-sdk-capability-closeout-design.md)
+  effort?: EffortLevel;                    // 'low'|'medium'|'high'|'xhigh'|'max' — reasoning effort
+  thinking?: ThinkingConfig;               // {type:'adaptive'|'disabled'} | {type:'enabled',budgetTokens}
+  maxBudgetUsd?: number;                   // hard USD ceiling; EXCEEDED → the query THROWS (no graceful result)
+  taskBudget?: { total: number };          // token-pacing hint; opus-4-8-only (sonnet/haiku return 400)
+  includePartialMessages?: boolean;        // emit SDKPartialAssistantMessage stream_event frames
+  forwardSubagentText?: boolean;           // forward nested subagent text/thinking (parent_tool_use_id set)
   // settings / context
   settingSources?: SettingSource[];        // default all three
   settings?: Record<string, unknown>;      // inline settings object passed to SDK
@@ -18,6 +25,8 @@ export interface HarnessConfig {
   outputStyle?: string;                    // mapped to systemPrompt preset append
   appendSystemPrompt?: string;             // extra append text
   // permissions / tools
+  // permissionMode: 6 SDK modes. acceptEdits auto-accepts edits but still routes non-edit tools to
+  // canUseTool; dontAsk replaces canUseTool entirely (joins auto/bypass as broker-replacing) — verified.
   permissionMode?: PermissionMode;
   allowedTools?: string[];
   disallowedTools?: string[];
