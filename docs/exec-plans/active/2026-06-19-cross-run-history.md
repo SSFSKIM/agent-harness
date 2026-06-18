@@ -134,6 +134,16 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
   bad-base no-raise; 2 orchestrator hook: run_until_drained over the mock appends 1 record
   with exact codex_totals/outcomes, Noop run writes nothing). Full gate GREEN (501 tests).
 
+- [x] (2026-06-19) **M2 done** — dashboard route + panel. `director/dashboard.py`:
+  `from director import history`; `_HISTORY_PATH` added to `_ROUTES`/`_route` →
+  `_send(read_history(history_dir))`; `_DashboardServer` carries `history_dir`; `serve()` +
+  `main()` (`--history-dir`) thread it. `PAGE`: a `<h2>history (recent runs)</h2>` section +
+  `fmtRun`/`renderHistory` (newest-first: when · tokens · runtime · ✓/✗ outcomes · stopped-reason)
+  + `loadHistory()` on a slow 10s interval (history changes only at run end — independent of
+  the SSE/poll). 4 tests (history route empty→[], route returns seeded records oldest-first,
+  PAGE wires the panel). `GET /`+`/api/v1/state`+`/api/v1/stream` bodies unchanged. Full gate
+  GREEN (504 tests).
+
 ## Surprises & discoveries
 
 ## Decision log

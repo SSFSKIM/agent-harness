@@ -35,12 +35,15 @@ from urllib.parse import urlparse
 
 import director.queue as dq
 from director import director_min as dm
+from director import history
 from director import status
 
 # The single versioned, read-only data route (Symphony §13.7 alignment).
 _STATE_PATH = "/api/v1/state"
 # The server-push variant of _STATE_PATH: an SSE stream of build_view, pushed on change.
 _STREAM_PATH = "/api/v1/stream"
+# Cross-run history: the last N completed-run summaries (Phase B), read-only.
+_HISTORY_PATH = "/api/v1/history"
 # The single write route — answer a pending Director-queue request (operator console).
 _ANSWER_PATH = "/api/v1/answer"
 _DEFAULT_PORT = 8787
@@ -248,6 +251,7 @@ PAGE = """<!doctype html>
 <h2>stuck</h2><div id="stuck"></div>
 <h2>recent</h2><div id="recent"></div>
 <h2>pending (director queue)</h2><div id="pending"></div>
+<h2>history (recent runs)</h2><div id="history"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 function el(tag, text, cls) {
@@ -367,6 +371,19 @@ async function poll() {
   try { const r = await fetch("/api/v1/state"); render(await r.json()); }
   catch (e) { $("updated").textContent = "· fetch error: " + e; }
 }
+function fmtRun(r) {  // one history row: when · cost · runtime · outcomes · why-it-ended
+  const ct = r.codex_totals || {};
+  const started = (r.started_at || "").slice(0, 19).replace("T", " ");
+  const outs = Object.keys(r.outcomes || {}).map(k => (k === "completed" ? "✓" : "✗") + r.outcomes[k]).join(" ");
+  return started + " · " + (ct.total != null ? ct.total + " tok" : "—")
+    + " · " + Math.round(ct.seconds_running || 0) + "s"
+    + (outs ? " · " + outs : "") + (r.stopped_reason ? " · " + r.stopped_reason : "");
+}
+function renderHistory(runs) { fill("history", (runs || []).slice().reverse().map(r => [fmtRun(r)])); }  // newest first
+async function loadHistory() {  // history changes only at run end → a slow, independent poll
+  try { const r = await fetch("/api/v1/history"); renderHistory(await r.json()); }
+  catch (e) {}
+}
 function fallbackPoll() { setInterval(poll, 1000); poll(); }  // the ~1s degradation path
 function startStream() {
   // Prefer server-push (SSE): render each pushed view. Fall back to polling ONLY if the
@@ -385,6 +402,7 @@ function startStream() {
   };
 }
 startStream();
+loadHistory(); setInterval(loadHistory, 10000);  // cross-run history (slow, independent of the live view)
 </script></body></html>"""
 
 
@@ -436,7 +454,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
     _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _STREAM_PATH: {"GET"},
-               _ANSWER_PATH: {"POST"}}
+               _HISTORY_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
 
     def _route(self):
         path = self.path.split("?", 1)[0]
@@ -453,6 +471,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
         if path == _STREAM_PATH:
             return self._stream()
+        if path == _HISTORY_PATH:
+            runs = history.read_history(base=self.server.history_dir)
+            return self._send(200, json.dumps(runs).encode("utf-8"), "application/json")
         return self._answer()  # _ANSWER_PATH + POST
 
     def _stream(self) -> None:
@@ -593,10 +614,12 @@ class _DashboardServer(ThreadingHTTPServer):
     """Carries the status/queue dirs the handler reads from (set once at construction,
     never per-request) — an explicit field instead of a monkey-attribute."""
 
-    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None, token=None):
+    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None,
+                 history_dir=None, token=None):
         super().__init__(addr, handler)
         self.status_dir = status_dir
         self.queue_dir = queue_dir
+        self.history_dir = history_dir   # the cross-run history store the /api/v1/history route reads
         # Per-server CSRF token: minted once, embedded in the served page, required on
         # every write (POST). A foreign page in the browser cannot read it (same-origin)
         # so cannot forge a write to localhost. `token=` is injectable for tests.
@@ -612,12 +635,13 @@ class _DashboardServer(ThreadingHTTPServer):
         super().shutdown()
 
 
-def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None) -> _DashboardServer:
+def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None,
+          history_dir=None) -> _DashboardServer:
     """Bind a read-only dashboard server on 127.0.0.1 (LAN never exposed, D-5). A bind
     failure (e.g. port in use) propagates immediately — no retry loop. Caller runs
     serve_forever(); tests bind port 0 and drive it over urllib."""
-    return _DashboardServer(("127.0.0.1", port), _Handler,
-                            status_dir=status_dir, queue_dir=queue_dir)
+    return _DashboardServer(("127.0.0.1", port), _Handler, status_dir=status_dir,
+                            queue_dir=queue_dir, history_dir=history_dir)
 
 
 def main(argv=None) -> int:
@@ -627,8 +651,9 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=_DEFAULT_PORT, help="bind port (default 8787)")
     ap.add_argument("--status-dir", default=None, help="status dir override")
     ap.add_argument("--queue-dir", default=None, help="queue dir override")
+    ap.add_argument("--history-dir", default=None, help="cross-run history dir override")
     args = ap.parse_args(argv)
-    httpd = serve(args.port, args.status_dir, args.queue_dir)
+    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir)
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"director.dashboard: http://{host}:{port}/  (read-only; Ctrl-C to stop)")
     try:

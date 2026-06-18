@@ -109,6 +109,12 @@ class BuildViewTest(unittest.TestCase):
         self.assertIn("fmtRateLimits(run.rate_limits)", dash.PAGE)
         self.assertNotIn("JSON.stringify(run.rate_limits)", dash.PAGE)  # raw dump removed
 
+    def test_page_wires_history_panel(self):
+        # Phase B (R8): the page has a history section it loads from /api/v1/history.
+        self.assertIn('id="history"', dash.PAGE)
+        self.assertIn('fetch("/api/v1/history")', dash.PAGE)
+        self.assertIn("renderHistory", dash.PAGE)
+
     def test_no_run_is_tolerant(self):
         # No status.json (no run) and an empty queue → run:None, zero counts, valid dict.
         v = self._view()
@@ -199,8 +205,9 @@ class DashboardHTTPTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.status_dir = Path(self.tmp) / "director-status"
         self.queue_dir = Path(self.tmp) / "director-queue"
+        self.history_dir = Path(self.tmp) / "director-history"
         _seed_run(self.status_dir)  # so /api/v1/state has real telemetry to serve
-        self.httpd = dash.serve(0, self.status_dir, self.queue_dir)  # port 0 = ephemeral
+        self.httpd = dash.serve(0, self.status_dir, self.queue_dir, self.history_dir)  # port 0 = ephemeral
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
@@ -257,6 +264,26 @@ class DashboardHTTPTest(unittest.TestCase):
         self.httpd.shutdown()                          # in-process shutdown
         self.assertFalse(self.httpd.serving.is_set())  # streams' should_run now False
         # tearDown's shutdown()/server_close() are idempotent after this.
+
+    def test_history_route_empty_when_no_store(self):
+        # Phase B (R8): no history store yet → [] (tolerant), 200 json.
+        code, ctype, body = self._req("/api/v1/history")
+        self.assertEqual(code, 200)
+        self.assertIn("application/json", ctype)
+        self.assertEqual(json.loads(body), [])
+
+    def test_history_route_returns_seeded_records(self):
+        import director.history as dh
+        dh.append_run({"started_at": "2026-06-19T00:00:00", "stopped_reason": "drained",
+                       "codex_totals": {"total": 100, "seconds_running": 3},
+                       "outcomes": {"completed": 1}}, base=self.history_dir)
+        dh.append_run({"started_at": "2026-06-19T01:00:00", "stopped_reason": "stuck",
+                       "codex_totals": {"total": 250, "seconds_running": 7},
+                       "outcomes": {"completed": 2, "blocked": 1}}, base=self.history_dir)
+        code, _, body = self._req("/api/v1/history")
+        self.assertEqual(code, 200)
+        runs = json.loads(body)
+        self.assertEqual([r["codex_totals"]["total"] for r in runs], [100, 250])  # oldest-first
 
     def test_undefined_route_is_404_envelope(self):
         code, ctype, body = self._req("/nope")
