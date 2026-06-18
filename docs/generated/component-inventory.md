@@ -5,6 +5,7 @@
 | Type | Name | Description / wiring | Source |
 |---|---|---|---|
 | skill | architecture-setup | This skill should be used to "write ARCHITECTURE.md", "create an architecture map", "set up architec | plugin/skills/architecture-setup/SKILL.md |
+| skill | docs-nav | Use when finding or orienting in existing docs — query the knowledge corpus by type/tag/status, foll | plugin/skills/docs-nav/SKILL.md |
 | skill | docs-tree | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, applies fro | plugin/skills/docs-tree/SKILL.md |
 | skill | dream | Use periodically (or after several work sessions) to consolidate memory — dispatches the dreamer age | plugin/skills/dream/SKILL.md |
 | skill | execplan | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory changes) or wh | plugin/skills/execplan/SKILL.md |

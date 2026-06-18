@@ -186,7 +186,14 @@ the predicate, don't copy it.
   manual grep (6). +4 tests (links/backlinks, orphans, stale, git-fixture drift)
   → 12 nav tests; gate GREEN. `hl.STALE_DAYS`/`hl.stale_window` added; lint
   re-exports STALE_DAYS (one default).
-- [ ] M4 — docs-nav skill + AGENTS/template/MEMORY wiring + gate GREEN
+- [x] (2026-06-18) M4 — docs-nav skill + propagation. New
+  `plugin/skills/docs-nav/SKILL.md` (when-to-query, intent→command table, output
+  contract, cross-links). Wired self-host + templates: AGENTS.md step 3 +
+  agents-md.md template; MEMORY.md + memory-bootloader.md template "query"
+  pointer; docs-tree SKILL cross-link; agent-harness.md Components row + a
+  nav.py run line. Regenerated component-inventory (docs-nav present). S7 clean
+  (skill uses `<plugin>/scripts/`, not the literal); D9 sees docs-nav; gate
+  GREEN incl. fresh-host-lint-green + propagation-guard tests.
 
 ## Surprises & discoveries
 - Spec D-4 had an internal contradiction ("`is_stale` raises nothing on a bad

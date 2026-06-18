@@ -17,7 +17,9 @@ Deep truth lives in `docs/` — follow the pointers.
    must be settled before the *how*; otherwise a living ExecPlan in
    `docs/exec-plans/active/` (execplan skill). No ceremony when risk is low.
 3. **Implement.** Match existing style. New knowledge pages: placement table
-   in [the harness page](docs/design-docs/agent-harness.md).
+   in [the harness page](docs/design-docs/agent-harness.md). Find existing docs
+   by querying — the `docs-nav` skill (`nav.py`: catalog/backlinks/stale/drift)
+   — not by bulk-reading.
 4. **Validate.** The harness lint gate must be GREEN before every commit —
    exact command in [the harness page](docs/design-docs/agent-harness.md).
 5. **Review.** ExecPlans own their review budget (`review_level`). Always

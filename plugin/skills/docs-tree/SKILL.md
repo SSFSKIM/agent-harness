@@ -4,6 +4,10 @@ description: Use when adding or relocating knowledge — decides where a page be
 ---
 # Docs tree placement
 
+This skill decides *where a new page goes*. To *find* what already exists —
+query by type/tag, check backlinks before editing, sweep for stale/orphan/drift
+— use the `docs-nav` skill (`nav.py`) instead of bulk-reading.
+
 | Knowledge kind | Home |
 |---|---|
 | Design rationale / principle | `docs/design-docs/` |

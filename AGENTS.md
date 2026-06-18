@@ -15,7 +15,9 @@ Deep truth lives in `docs/` — follow the pointers.
    must be settled before the *how*; otherwise a living ExecPlan in
    `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
-   style. New knowledge pages: the `docs-tree` skill decides where they live.
+   style. New knowledge pages: the `docs-tree` skill decides where they live; the
+   `docs-nav` skill (`nav.py`) queries existing docs by type/tag, backlinks, and
+   stale/orphan/drift — query, don't bulk-read.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
 5. **Review.** Always self-review. A conditional **behavioral check** (run the plan's
