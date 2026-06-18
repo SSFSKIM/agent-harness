@@ -163,8 +163,17 @@ rate-limit, R4–R6) is a separate linked plan; Phase B (cross-run history) a th
   run total; the dashboard headline reflects in-flight cost.
 
 ## Progress log
-- [ ] (2026-06-18) plan created; base_commit 17b4b49; review_level standard
+- [x] (2026-06-18) plan created; base_commit 17b4b49; review_level standard
   (arch + reliability — the marshal touches R13/R16 threading + the status model).
+- [x] (2026-06-18) **M1 done** — `director/status.py`: `claimed()` seeds
+  `in_flight[].tokens = None`; new `accrue(ticket_key, usage)` transition (tolerant —
+  no-op on unknown/terminated tid, all-or-nothing `{input,output,total}` fold, main-thread
+  only per R13); `snapshot()` `codex_totals` is now a LIVE sum (ended `_codex_totals` +
+  `Σ(in-flight tokens)`), mirroring `seconds_running`; `terminal()` UNCHANGED (atomic
+  live→ended move). 7 new TDD tests (default-none, live populate+advance, ended+in-flight
+  sum, accrue→terminal no-double-count, unknown/terminated no-op, malformed ignored,
+  no-accrue back-compat) — RED first (6 errors + KeyError), then GREEN. Full gate GREEN
+  (477 tests). `app_server.py` untouched (D-2). `NoopStatusWriter` unchanged.
 
 ## Surprises & discoveries
 

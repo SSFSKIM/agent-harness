@@ -18,8 +18,9 @@ Snapshot schema (.claude/harness/director-status/status.json):
   {
     "run":       {"started_at", "pass", "stopped_reason",
                   "codex_totals": {"input", "output", "total", "seconds_running"},
-                  "rate_limits"},                          # Symphony-grade telemetry
-    "in_flight": [{"ticket_id", "identifier", "phase", "attempt", "wave", "started_at"}],
+                  "rate_limits"},                          # codex_totals = LIVE sum: ended + in-flight (Layer-2)
+    "in_flight": [{"ticket_id", "identifier", "phase", "attempt", "wave", "started_at",
+                   "tokens": {"input","output","total"}|None}],  # tokens = LIVE mid-turn accrual (Layer-2)
     "recent":    [{"ticket_id", "ticket", "status", "final_state", "attempts", "turns",
                    "tokens": {"input","output","total"}|None, "session_id", "last_message"}],  # bounded
     "stuck":     [{"ticket", "blocked_by": [{"id", "state_type"}]}],
@@ -120,7 +121,7 @@ class StatusWriter:
         key = _ticket_key(ticket)
         self._in_flight[key] = {"ticket_id": key, "identifier": _ticket_label(ticket),
                                 "phase": "claimed", "attempt": attempt, "wave": wave,
-                                "started_at": self._now()}
+                                "started_at": self._now(), "tokens": None}
         self._flush()
 
     def dispatched(self, ticket: dict) -> None:
@@ -135,6 +136,27 @@ class StatusWriter:
             entry["attempt"] = attempt
             entry["phase"] = "retrying"
         self._flush()
+
+    def accrue(self, ticket_key, usage) -> None:
+        """Live mid-turn token accrual (Layer-2, spec R1-R3): record the in-flight
+        ticket's LATEST absolute usage so the snapshot's run `codex_totals` (a live
+        sum — see `snapshot`) climbs DURING a turn, not only at `terminal()`.
+
+        Main-thread only (R13): the orchestrator observes per-event usage on a worker-
+        pool thread but MARSHALS it (via a `queue.Queue` drained on its tick loop)
+        before calling this — the writer model is never touched from a pool thread.
+        Tolerant (R12): a `ticket_key` not in flight (already terminal/popped) is a
+        no-op — so the drain is order-independent vs. a ticket that terminated between
+        enqueue and drain (no resurrection, no double-count); a partial/garbage `usage`
+        is ignored (the all-or-nothing `{input,output,total}` group, matching
+        `terminal`'s fold), leaving the in-flight tokens unchanged."""
+        entry = self._in_flight.get(str(ticket_key))
+        if entry is None or not isinstance(usage, dict):
+            return
+        vals = {k: usage.get(k) for k in ("input", "output", "total")}
+        if all(isinstance(v, int) and not isinstance(v, bool) for v in vals.values()):
+            entry["tokens"] = vals
+            self._flush()
 
     def terminal(self, ticket: dict, summary: dict) -> None:
         key = _ticket_key(ticket)
@@ -222,7 +244,14 @@ class StatusWriter:
         active = sum(_elapsed(e.get("started_at"), now)
                      for e in self._in_flight.values())
         run = dict(self._run)
-        run["codex_totals"] = {**self._codex_totals,
+        # codex_totals is a LIVE aggregate (Layer-2), mirroring seconds_running: the
+        # cumulative tokens of ENDED tickets (folded once at terminal) PLUS the latest
+        # in-flight usage of RUNNING tickets. A terminating ticket moves live→ended
+        # atomically (terminal folds + pops in one call), so the total never double-counts.
+        live = {k: self._codex_totals[k] + sum((e.get("tokens") or {}).get(k, 0)
+                                                for e in self._in_flight.values())
+                for k in ("input", "output", "total")}
+        run["codex_totals"] = {**live,
                                "seconds_running": round(self._seconds_ended + active, 3)}
         run["rate_limits"] = self._rate_limits
         return {"run": run,
