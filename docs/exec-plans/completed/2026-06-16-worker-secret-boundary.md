@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [worker, security, secrets]
+description: Stops a spawned worker from inheriting secret environment variables by constructing its subprocess env deny-by-default from a host-declared allowlist in .harness.json, closing the env-inheritance exfiltration channel.
 base_commit: 53a3e49325103aa694a9bc3715513711e804d635
 review_level: targeted
 ---

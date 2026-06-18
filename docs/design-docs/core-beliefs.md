@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+type: design-doc
+tags: [core-beliefs, golden-rules, agent-first]
+description: The agent-first golden rules that serve as defaults for the self-hosting reference repo and seed material that hosts adopt, amend, or reject at harness-init.
 ---
 # Core beliefs (golden rules)
 

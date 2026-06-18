@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-12
 owner: harness
+type: methodology
+tags: [product-sense, human-attention, harness]
+description: What the harness optimizes for, treating human time and attention as the scarce resource that big-software work should consume minimally.
 ---
 # PRODUCT_SENSE.md — what this harness optimizes
 

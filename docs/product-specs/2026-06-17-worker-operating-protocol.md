@@ -2,6 +2,9 @@
 status: draft
 last_verified: 2026-06-17
 owner: harness
+type: product-spec
+tags: [worker, protocol, methodology, autonomy]
+description: Harvests Symphony's stage-agnostic operating discipline into a shared WORKER_PROTOCOL preamble injected at the first-turn seam across all dispatch paths, plus impl-template enrichment for reproduction-first work and PR-feedback sweeps.
 ---
 # Worker operating-protocol depth (graduated-autonomy slice 1)
 

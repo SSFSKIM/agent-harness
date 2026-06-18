@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-18
 owner: harness
+type: exec-plan
+tags: [knowledge-format, memory, porting]
+description: Authors KNOWLEDGE_FORMAT.md declaring Knowledge Format v1.0 and backfills the new optional frontmatter keys into memory concept pages, with the harness parser reading tags as a list while keys stay permissive.
 base_commit: 0ff9be38d56d367b44d852e957956677c1ff91c0
 review_level: targeted
 ---

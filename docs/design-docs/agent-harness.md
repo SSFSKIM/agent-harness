@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-18
 owner: harness
+type: design-doc
+tags: [harness, plugin, docs-as-memory, self-host]
+description: An overview of the installed agent-harness plugin that operates this repo, covering its docs-as-memory system, taste lints, review personas, and memory loop.
 ---
 # agent-harness — the installed harness
 

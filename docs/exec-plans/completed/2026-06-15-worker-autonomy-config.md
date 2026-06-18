@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-15
 owner: harness
+type: exec-plan
+tags: [worker, autonomy, security, director]
+description: A preset that lets a worker run a ticket end-to-end with no human approver by configuring Codex's own sandbox and approval-reviewer for un-watched autonomy.
 base_commit: 11360eb
 review_level: targeted
 ---

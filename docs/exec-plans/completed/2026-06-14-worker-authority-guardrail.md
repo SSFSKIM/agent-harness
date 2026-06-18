@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [worker, security, linear, guardrail]
+description: Stopped the worker's linear_graphql tool from running arbitrary destructive Linear mutations by gating the default executor so issueDelete is rejected without any HTTP call while issueUpdate and queries still POST to Linear, recorded as threat T10 in SECURITY.md.
 base_commit: 9464e4d3d47e2d0ed1ea3064cfbbc55f6844c209
 review_level: targeted
 ---

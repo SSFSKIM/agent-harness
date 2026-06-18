@@ -2,6 +2,9 @@
 status: active
 last_verified: 2026-06-17
 owner: harness
+type: product-spec
+tags: [director, autonomy, principles, worker, board]
+description: Splits the mode bit into Director-presence and human-presence axes so autonomous rebinds to human-absence, adds a PRINCIPLES.md decision-taste layer and a lights-out park contract, has workers keep one canonical progress comment, and removes issueUpdate from the worker allowlist.
 ---
 # Lights-out Director — Core Principle layer, park contract, board comment, issueUpdate ceiling
 

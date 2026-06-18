@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [director, dashboard, observability, telemetry]
+description: Adds a live read-only web dashboard that polls a JSON state API and renders the Director run header, telemetry, in-flight and stuck tickets, the recent-outcomes tail, and the pending Director queue without entering the Director session.
 base_commit: b3a69d3
 review_level: standard
 ---

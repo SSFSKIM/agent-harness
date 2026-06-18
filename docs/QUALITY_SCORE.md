@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-13
 owner: doc-gardener
+type: methodology
+tags: [quality, grading, doc-gardener]
+description: The domain-by-layer quality grades from A to F that the doc-gardener updates on each gardening pass.
 ---
 # QUALITY_SCORE.md — domain × layer grades
 

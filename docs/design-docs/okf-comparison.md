@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-17
 owner: harness
+type: design-doc
+tags: [okf, knowledge-format, comparison, parity]
+description: A holistic comparison of Google's Open Knowledge Format against this harness's docs and memory knowledge system.
 ---
 # OKF parity — Google's Open Knowledge Format vs our docs/memory system
 

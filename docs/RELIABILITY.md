@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-16
 owner: review-reliability
+type: methodology
+tags: [reliability, idempotency, review-reliability]
+description: The numbered reliability rules that ground the review-reliability persona, covering concerns such as idempotent memory imprinting.
 ---
 # RELIABILITY.md
 

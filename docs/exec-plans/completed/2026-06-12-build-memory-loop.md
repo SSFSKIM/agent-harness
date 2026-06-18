@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-12
 owner: harness
+type: exec-plan
+tags: [memory, store, feeder, dreaming, consolidation]
+description: Built Layer 2 of the v1 spec — the memory loop with a STORE tree, a two-stage feeder for injection, an imprint queue, and dreaming-based consolidation passing the spec's success criteria.
 base_commit: 5f17c42
 ---
 # Build the memory loop (Phases 3-5) + retrospective (Phase 6)

@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: claude
+type: exec-plan
+tags: [product-design, methodology, execplan, skill, planning]
+description: Encoded a methodology where the agent self-selects its entry mode (throwaway / Product Design / ExecPlan) and, when the what is rich, writes a standalone spec under docs/product-specs/ before handing off to a referencing ExecPlan, registered via a new product-design skill and the three-way entry decision in AGENTS.md/PLANS.md.
 base_commit: 8432a8b
 review_level: targeted
 ---

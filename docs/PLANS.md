@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+type: methodology
+tags: [execplan, planning, methodology]
+description: The ExecPlan methodology for choosing between a self-contained living plan for complex work and a throwaway plan for small changes.
 ---
 # PLANS.md — ExecPlan methodology
 

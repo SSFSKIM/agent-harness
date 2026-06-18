@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [merger, director, board, reliability]
+description: Lets the Director requeue an escalated PR with guidance by adding a fresh attempt discriminant to merge ids so a consumed merge can be re-enqueued for a retry, bounded by a max-attempts cap.
 base_commit: 17dea43bb7e09cb5a3ff39c592927a85258d5dfe
 review_level: targeted
 ---

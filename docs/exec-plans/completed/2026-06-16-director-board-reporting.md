@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [director, board, telemetry]
+description: Makes the watched Director proactively pull the human at run-level inflection by emitting a synthetic runReport event when a run reaches a terminal stopped_reason so the Director composes and pushes a run digest.
 base_commit: 723e0dd537590d89640e2131d5d92f22ed444bd7
 review_level: targeted
 ---

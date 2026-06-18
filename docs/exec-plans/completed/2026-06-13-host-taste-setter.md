@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: harness
+type: exec-plan
+tags: [architecture, taste, lint, host-governance, enforcement]
+description: Let a host repo mechanize its own architecture invariants into the deterministic commit gate with the harness hardcoding zero rules — providing only the per-commit substrate and the authoring role for host-owned checks.
 base_commit: 4a2f29f29618144ef1f740f0b3a53e116be63abf
 ---
 # Host-owned architecture & taste enforcement (the setter axis)

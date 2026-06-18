@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-16
 owner: harness
+type: product-spec
+tags: [director, board, reporting, telemetry]
+description: A run-level pull that, when a watched run reaches a terminal phase, tails the status snapshot to emit a runReport event so the Director writes a digest and pulls a human in via push notification.
 ---
 # Director board reporting (run-level pull)
 

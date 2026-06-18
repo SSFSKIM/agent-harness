@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [director, config, autonomy]
+description: Moves Director orchestration policy from scattered code constants and argparse defaults into a single repo-owned director block in .harness.json, with CLI-over-config-over-default precedence and env-var resolution.
 base_commit: 21d63c6670683fd9c6bf8d421ce15668d3e98809
 review_level: standard
 ---

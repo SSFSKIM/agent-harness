@@ -2,6 +2,9 @@
 status: active
 last_verified: 2026-06-18
 owner: harness
+type: product-spec
+tags: [knowledge-format, frontmatter, memory, porting]
+description: Adds optional frontmatter keys (type, tags, resource) to the knowledge corpus, upgrades read_frontmatter to recognize lists, and hardens the format from implicit-in-lint into an explicit versioned KNOWLEDGE_FORMAT.md spec.
 ---
 # Knowledge Format evolution — OKF-grounded keys + a versioned format spec (Phase 1)
 

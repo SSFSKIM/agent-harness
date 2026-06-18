@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: claude
+type: exec-plan
+tags: [execplan, methodology, self-gates, planning, autonomy]
+description: Front-loaded three design disciplines into the ExecPlan Create step as agent self-gates — self-generated alternatives, a self-interrogated assumptions ledger, and a creation-time self-review — plus a scope-check that splits multi-subsystem work into linked plans.
 base_commit: 808e41891df3f3d9c917beae915b0e140b532333
 review_level: targeted
 ---

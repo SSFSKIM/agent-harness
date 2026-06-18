@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [worker, tooling, linear, codex, graphql]
+description: Gave Codex workers working dynamicTools so a turn can call a client-advertised linear_graphql tool to read and write Linear, routing item/tool/call to a tool_executor that returns success/output/contentItems and resumes the turn, verified in mock and against a live codex app-server.
 base_commit: 74bca60c889cc8b69d29512706bbbc68f0e55f59
 review_level: standard
 ---

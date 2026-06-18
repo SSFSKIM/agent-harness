@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-17
 owner: harness
+type: exec-plan
+tags: [daemon, director, reliability, autonomy]
+description: Turns the orchestrator into an always-on daemon that keeps polling an empty board forever, tops up the next ready ticket as a slot frees, reconciles in-flight work, writes a heartbeat, and drains gracefully on signal.
 base_commit: 7091b0c
 review_level: standard
 ---

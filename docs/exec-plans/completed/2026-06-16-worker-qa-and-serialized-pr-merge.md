@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [worker, merger, board, reliability]
+description: Has a worker finish an impl ticket with self-QA and PR creation as a procedure, then lands those PRs one at a time onto main through a serialized merge queue and single PR-merger that escalates conflicts to the Director.
 base_commit: a6d8537b392ab298e94663af2b437700f74a7d7e
 review_level: standard
 ---

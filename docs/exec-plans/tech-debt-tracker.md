@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-14
 owner: doc-gardener
+type: tracker
+tags: [tech-debt, fix-forward, doc-gardener]
+description: The running tracker where fix-forward findings from gate P2s and gardening passes land for continuous GC by the doc-gardener.
 ---
 # Tech debt tracker
 

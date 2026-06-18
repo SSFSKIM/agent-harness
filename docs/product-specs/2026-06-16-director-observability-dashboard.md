@@ -2,6 +2,9 @@
 status: draft
 last_verified: 2026-06-16
 owner: harness
+type: product-spec
+tags: [director, observability, dashboard, telemetry]
+description: A stdlib-only local read-only web view over the existing status snapshot and pending queue that serves run state as JSON and re-renders via a polling vanilla-JS page for live current-run observability.
 ---
 # Director observability dashboard (라이브 read-only 웹 뷰)
 

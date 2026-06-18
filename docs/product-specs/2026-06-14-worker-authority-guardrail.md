@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+type: product-spec
+tags: [worker, guardrail, security, autonomy]
+description: Bounds the worker's linear_graphql to a default-deny mutation allowlist so reads are unrestricted, only allowlisted forward-only mutations pass, and destructive or unknown mutations are rejected locally before reaching Linear.
 ---
 # Worker authority guardrail — bounding `linear_graphql`
 

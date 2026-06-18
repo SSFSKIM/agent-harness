@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [orchestrator, dev-stage, taxonomy, worker, dispatch]
+description: Made the orchestrator read each ticket's type label and launch the worker with that type's harness dev-stage workflow prompt, so a planning→design→spec→impl chain dispatches in dependency order with each worker receiving the synthesized prompt for its stage.
 base_commit: 4f44b41aaca943e770f8726ee167cf46904e52d7
 review_level: targeted
 ---

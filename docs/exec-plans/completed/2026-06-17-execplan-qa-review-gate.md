@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-17
 owner: harness
+type: exec-plan
+tags: [execplan, review, autonomy]
+description: Adds two always-on review agents to the ExecPlan completion gate — spec-compliance and code-quality — that emit the P1/P2/Verdict finding contract on every plan completion alongside the risk-budgeted personas.
 base_commit: 35d4d1fdf5dee4d469e0c6209a1a78ec0ce03343
 review_level: targeted
 ---

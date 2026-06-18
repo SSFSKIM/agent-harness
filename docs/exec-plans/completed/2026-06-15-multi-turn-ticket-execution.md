@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-15
 owner: harness
+type: exec-plan
+tags: [worker, director, multi-turn, codex, autonomy]
+description: Let a single ticket drive across multiple turns on one Codex thread until the worker (not code) judges it terminal, with the board holding off Done between turns and the worker proposing the terminal status.
 base_commit: 0c9ec4c2a866f3a795dd068f869e27791732845b
 review_level: standard
 ---

@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-17
 owner: harness
+type: exec-plan
+tags: [worker, autonomy, taxonomy]
+description: Gives every worker's first-turn prompt on all dispatch paths a stage-agnostic WORKER PROTOCOL preamble, plus impl-template disciplines for reproduction-first work, acceptance-criteria mirroring, temp-edit revert, and a PR feedback sweep.
 base_commit: a42b90d
 review_level: standard
 ---

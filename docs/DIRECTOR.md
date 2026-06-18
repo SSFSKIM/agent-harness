@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-17
 owner: harness
+type: methodology
+tags: [director, orchestration, operating-manual]
+description: The operating manual for running the harness as the Director, the watched session that oversees a run and communicates with the human.
 ---
 # DIRECTOR.md — the Director operating manual
 

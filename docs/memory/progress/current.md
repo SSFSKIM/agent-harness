@@ -2,6 +2,9 @@
 status: active
 last_verified: 2026-06-14
 owner: dreamer
+type: progress
+tags: [harness, memory, completion-gate, success-criteria]
+description: Current state of the agent-harness build, recording that Phases 0-6 are complete and the Task 17 completion gate and §7 success criteria have passed validation.
 ---
 # Current state
 

@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-13
 owner: review-security
+type: methodology
+tags: [security, threat-model, review-security]
+description: The numbered threat model that grounds the review-security persona, much of it scoped to the currently disabled automatic memory loop.
 ---
 # SECURITY.md
 
