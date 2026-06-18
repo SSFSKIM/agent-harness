@@ -28,6 +28,7 @@ import argparse
 import datetime
 import json
 import secrets
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -37,9 +38,16 @@ from director import status
 
 # The single versioned, read-only data route (Symphony §13.7 alignment).
 _STATE_PATH = "/api/v1/state"
+# The server-push variant of _STATE_PATH: an SSE stream of build_view, pushed on change.
+_STREAM_PATH = "/api/v1/stream"
 # The single write route — answer a pending Director-queue request (operator console).
 _ANSWER_PATH = "/api/v1/answer"
 _DEFAULT_PORT = 8787
+
+# SSE cadence: re-read the (file-backed) snapshot this often server-side and push only a
+# CHANGED view; a heartbeat keeps the connection alive / detects a dead peer between changes.
+_STREAM_POLL_S = 0.5
+_STREAM_HEARTBEAT_S = 15.0
 
 # Queue kinds a human/console answers. Excludes `mergeRequest` (the serialized
 # merger's worklist — answering it would silently consume a merge) and `runReport`
@@ -179,6 +187,35 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     }
 
 
+def _stream_loop(write, view_fn, *, sleep, now, should_run, heartbeat_s, poll_s) -> None:
+    """Push the view as Server-Sent Events until the peer disconnects.
+
+    Emits a `data: <json>\\n\\n` frame ONLY when the serialized view changes (so a
+    pushed event always carries new state — less client churn than the fixed poll),
+    else a `: ping\\n\\n` comment heartbeat after `heartbeat_s` of no change (keeps the
+    connection alive and surfaces a dead peer). A `write` raising the client-disconnect
+    errno family ends the loop quietly (R14 — never a crash, never stderr).
+
+    Pure and fully injectable (`write`/`view_fn`/`sleep`/`now`/`should_run`) so the push
+    logic is unit-tested without a socket — the same testability lever as `build_view`
+    (the HTTP `_stream` shim below is a ~5-line adapter over this)."""
+    last = None
+    last_beat = now()
+    while should_run():
+        payload = json.dumps(view_fn())
+        try:
+            if payload != last:
+                write(("data: " + payload + "\n\n").encode("utf-8"))
+                last = payload
+                last_beat = now()
+            elif now() - last_beat >= heartbeat_s:
+                write(b": ping\n\n")
+                last_beat = now()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            return  # peer gone mid-write — quiet drop (R14), the daemon thread ends
+        sleep(poll_s)
+
+
 # The whole client: one self-contained HTML string (CSS + vanilla JS poller), no
 # framework, no bundler, no external asset — offline-OK (stdlib-only grain). It polls
 # GET /api/v1/state ~1s and re-renders the DOM. Every data value is written via
@@ -222,6 +259,29 @@ function fmtTokens(t) {
   if (!t || t.total == null) return "—";
   return t.total + " tok (in " + t.input + " / out " + t.output + ")";
 }
+function fmtRateLimits(rl) {
+  // Tolerant (client-side R12): render a glance-able summary from recognizable fields,
+  // degrade to a compact key=value summary for an odd shape, "" for null — never a raw
+  // JSON dump, never throw on a missing field. Real codex shape pinned in the E2E.
+  if (!rl || typeof rl !== "object") return "";
+  let pct = null;
+  if (typeof rl.used_percent === "number") pct = rl.used_percent;
+  else if (typeof rl.usedPercent === "number") pct = rl.usedPercent;
+  else if (typeof rl.remaining === "number" && typeof rl.limit === "number" && rl.limit > 0)
+    pct = 100 * (1 - rl.remaining / rl.limit);
+  let resets = null;
+  if (typeof rl.resets_in_seconds === "number") resets = rl.resets_in_seconds;
+  else if (typeof rl.reset_in_seconds === "number") resets = rl.reset_in_seconds;
+  else if (typeof rl.window_minutes === "number") resets = rl.window_minutes * 60;
+  const parts = [];
+  if (pct !== null) {
+    const f = Math.max(0, Math.min(10, Math.round(pct / 10)));
+    parts.push("rate " + "▮".repeat(f) + "▯".repeat(10 - f) + " " + Math.round(pct) + "%");
+  }
+  if (resets !== null) parts.push("resets ~" + Math.round(resets / 60) + "m");
+  if (parts.length) return parts.join(" · ");
+  return "rate: " + Object.keys(rl).map(k => k + "=" + rl[k]).join(" ").slice(0, 60);
+}
 function fill(id, lines) {
   const box = $(id); box.innerHTML = "";
   if (!lines.length) { box.appendChild(el("div", "—", "muted")); return; }
@@ -237,7 +297,7 @@ function render(v) {
     const ct = run.codex_totals || {};
     h.appendChild(el("span", fmtTokens(ct), "tag"));
     h.appendChild(el("span", "runtime " + Math.round(ct.seconds_running || 0) + "s", "tag"));
-    if (run.rate_limits) h.appendChild(el("span", "rate " + JSON.stringify(run.rate_limits), "tag"));
+    const rl = fmtRateLimits(run.rate_limits); if (rl) h.appendChild(el("span", rl, "tag"));
   }
   const c = v.counts || {};
   $("counts").textContent = "in-flight " + (c.in_flight||0) + " · stuck " + (c.stuck||0)
@@ -306,7 +366,18 @@ async function poll() {
   try { const r = await fetch("/api/v1/state"); render(await r.json()); }
   catch (e) { $("updated").textContent = "· fetch error: " + e; }
 }
-setInterval(poll, 1000); poll();
+function fallbackPoll() { setInterval(poll, 1000); poll(); }  // the ~1s degradation path
+function startStream() {
+  // Prefer server-push (SSE): render each pushed view. Fall back to polling ONLY if the
+  // stream can't deliver (no EventSource, or it errors before the first event) — so the
+  // surface never regresses to blank. A stream that delivers then drops auto-reconnects.
+  if (!window.EventSource) { fallbackPoll(); return; }
+  let delivered = false;
+  const es = new EventSource("/api/v1/stream");
+  es.onmessage = (e) => { delivered = true; try { render(JSON.parse(e.data)); } catch (x) {} };
+  es.onerror = () => { if (!delivered) { es.close(); fallbackPoll(); } };
+}
+startStream();
 </script></body></html>"""
 
 
@@ -357,7 +428,8 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
 
     # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
-    _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
+    _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _STREAM_PATH: {"GET"},
+               _ANSWER_PATH: {"POST"}}
 
     def _route(self):
         path = self.path.split("?", 1)[0]
@@ -372,7 +444,30 @@ class _Handler(BaseHTTPRequestHandler):
         if path == _STATE_PATH:
             view = build_view(self.server.status_dir, self.server.queue_dir)
             return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+        if path == _STREAM_PATH:
+            return self._stream()
         return self._answer()  # _ANSWER_PATH + POST
+
+    def _stream(self) -> None:
+        """Server-push the view as SSE (R4): hold the connection open and emit a frame
+        on each snapshot change (server-side change-detect over the same `build_view`),
+        plus a heartbeat. NOT via `_send` — an event-stream sends no `Content-Length`;
+        the connection stays open and the body is flushed frame-by-frame. Fail-soft per
+        R14: `_stream_loop` swallows the client-disconnect errno family, so a closed tab
+        just ends this (daemon) thread — never a crash, never stderr."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        def write(chunk: bytes) -> None:
+            self.wfile.write(chunk)
+            self.wfile.flush()
+
+        _stream_loop(write,
+                     lambda: build_view(self.server.status_dir, self.server.queue_dir),
+                     sleep=time.sleep, now=time.monotonic, should_run=lambda: True,
+                     heartbeat_s=_STREAM_HEARTBEAT_S, poll_s=_STREAM_POLL_S)
 
     def _answer(self) -> None:
         """Resolve one pending Director-queue request from the browser (R1/R2). Fenced

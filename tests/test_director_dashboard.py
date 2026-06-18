@@ -99,6 +99,16 @@ class BuildViewTest(unittest.TestCase):
         # of the producer's new in_flight[].tokens field.
         self.assertIn("fmtTokens(e.tokens)", dash.PAGE)
 
+    def test_page_uses_sse_with_poll_fallback_and_legible_rate(self):
+        # M2 (R4/R6): the page prefers EventSource(/api/v1/stream), keeps the ~1s poll as
+        # the fallback path, and renders rate limits via the tolerant helper — never the
+        # raw JSON dump.
+        self.assertIn('new EventSource("/api/v1/stream")', dash.PAGE)
+        self.assertIn("fallbackPoll", dash.PAGE)
+        self.assertIn("setInterval(poll, 1000)", dash.PAGE)        # fallback preserved
+        self.assertIn("fmtRateLimits(run.rate_limits)", dash.PAGE)
+        self.assertNotIn("JSON.stringify(run.rate_limits)", dash.PAGE)  # raw dump removed
+
     def test_no_run_is_tolerant(self):
         # No status.json (no run) and an empty queue → run:None, zero counts, valid dict.
         v = self._view()
@@ -221,6 +231,24 @@ class DashboardHTTPTest(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
 
+    def test_stream_route_pushes_initial_event(self):
+        # M1 integration (R4): GET /api/v1/stream holds a text/event-stream open and
+        # emits an initial data: frame = the current build_view. Read one frame, then
+        # close (the server's next write fails → its stream loop ends cleanly, R14).
+        url = f"http://127.0.0.1:{self.port}/api/v1/stream"
+        resp = urllib.request.urlopen(url, timeout=2)
+        self.assertIn("text/event-stream", resp.headers.get("Content-Type"))
+        data = None
+        for _ in range(10):
+            line = resp.readline().decode("utf-8")
+            if line.startswith("data:"):
+                data = line[len("data:"):].strip()
+                break
+        resp.close()
+        self.assertIsNotNone(data, "stream should emit an initial data: frame")
+        view = json.loads(data)
+        self.assertEqual(view["run"]["codex_totals"]["total"], 100)  # the seeded run, pushed
+
     def test_undefined_route_is_404_envelope(self):
         code, ctype, body = self._req("/nope")
         self.assertEqual(code, 404)
@@ -287,6 +315,58 @@ class DashboardHTTPTest(unittest.TestCase):
                        'btn("requeue"', 'btn("abandon"',
                        'kind === "turnReview"', 'kind === "mergeReview"'):
             self.assertIn(marker, html)
+
+
+class SSEStreamLoopTest(unittest.TestCase):
+    """M1: the SSE push logic is a pure, injectable loop — unit-tested without a socket
+    (the read-dashboard testability lever). Emits a `data:` frame only when the view
+    CHANGES, a `: ping` heartbeat after no-change, and stops on a write disconnect (R14)."""
+
+    def test_emits_initial_frame_then_only_on_change(self):
+        frames = []
+        views = iter([{"a": 1}, {"a": 1}, {"a": 2}])  # initial · unchanged · changed
+        n = {"i": 0}
+        def should_run():
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        dash._stream_loop(frames.append, lambda: next(views), sleep=lambda _: None,
+                          now=lambda: 0.0, should_run=should_run, heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        self.assertEqual(len(datas), 2)              # initial + the change; the unchanged tick emitted nothing
+        self.assertIn(b'"a": 1', datas[0])
+        self.assertIn(b'"a": 2', datas[1])
+
+    def test_heartbeat_after_no_change(self):
+        frames = []
+        clock = {"t": 0.0}
+        n = {"i": 0}
+        def should_run():
+            clock["t"] += 20.0       # advance past heartbeat each tick
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        dash._stream_loop(frames.append, lambda: {"same": 1}, sleep=lambda _: None,
+                          now=lambda: clock["t"], should_run=should_run,
+                          heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        pings = [f for f in frames if f == b": ping\n\n"]
+        self.assertEqual(len(datas), 1)              # only the initial state
+        self.assertEqual(len(pings), 2)              # then heartbeats while unchanged
+
+    def test_stops_on_write_disconnect_without_raising(self):
+        calls = {"n": 0}
+        def write(_b):
+            calls["n"] += 1
+            raise BrokenPipeError()                  # peer gone mid-write
+        n = {"i": 0}
+        def should_run():
+            keep = n["i"] < 5
+            n["i"] += 1
+            return keep
+        dash._stream_loop(write, lambda: {"a": 1}, sleep=lambda _: None, now=lambda: 0.0,
+                          should_run=should_run, heartbeat_s=15.0, poll_s=0.0)  # must NOT raise
+        self.assertEqual(calls["n"], 1)              # returned on the first failed write (R14)
 
 
 class ValidatorUnitTest(unittest.TestCase):

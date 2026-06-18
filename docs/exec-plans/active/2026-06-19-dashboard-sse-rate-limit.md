@@ -148,10 +148,27 @@ This is the v1 **dashboard** slice (spec R4–R6). The v1 **producer** slice
   Expect: GREEN gate; the browser updates via SSE on a status change; rate limits legible.
 
 ## Progress log
-- [ ] (2026-06-19) plan created; base_commit 09c0fc8; review_level standard
+- [x] (2026-06-19) plan created; base_commit 09c0fc8; review_level standard
   (arch for the transport/handler shape; reliability for the R14 long-lived-stream
   fail-soft). No new write/exec surface → review-security not triggered (SSE is
   read-only push, unlike the operator-console write fence).
+- [x] (2026-06-19) **M1 done** — SSE server core. `director/dashboard.py`: `import time`;
+  `_STREAM_PATH`/`_STREAM_POLL_S`(0.5)/`_STREAM_HEARTBEAT_S`(15); pure injectable
+  `_stream_loop(write, view_fn, *, sleep, now, should_run, heartbeat_s, poll_s)` (emit
+  `data:` only on view CHANGE, `: ping` heartbeat on no-change, return on the disconnect
+  errno family — R14); `_ROUTES` + `_route` gain `_STREAM_PATH:{GET}`; `_stream()` sends
+  event-stream headers (NO Content-Length) then runs the loop with `wfile.write+flush`.
+  4 TDD tests (initial+on-change, heartbeat, stops-on-disconnect; integration: urllib opens
+  `/api/v1/stream`, reads the initial `data:` frame = current build_view). `GET /` +
+  `/api/v1/state` byte-unchanged. 37 dashboard tests green.
+- [x] (2026-06-19) **M2 done** — client + rate-limit render. `PAGE`: `startStream()` prefers
+  `EventSource('/api/v1/stream')`, renders each pushed view, and falls back to the preserved
+  `setInterval(poll,1000)` ONLY if the stream can't deliver (no EventSource / error before
+  first event); a deliver-then-drop auto-reconnects (no double-poll). Tolerant `fmtRateLimits`
+  (used_percent / remaining+limit → a text gauge + %, reset hint → "resets ~Xm", odd shape →
+  compact key=value, null → ""); run header now uses it instead of `JSON.stringify`. 1 test
+  (PAGE wires EventSource + keeps poll fallback + uses fmtRateLimits, raw dump gone). Full gate
+  GREEN (490 tests).
 
 ## Surprises & discoveries
 
