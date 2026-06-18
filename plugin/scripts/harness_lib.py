@@ -139,7 +139,8 @@ def iter_md(base):
 # (the persona grounding + execplan docs that the review gate itself rides on).
 MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
                  "product-specs")
-MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
+MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "KNOWLEDGE_FORMAT.md",
+                "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")
 
 

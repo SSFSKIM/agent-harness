@@ -28,6 +28,7 @@ HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
 FM_EXEMPT = ("generated/", "superpowers/")
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
+    "docs/KNOWLEDGE_FORMAT.md",
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
     "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
 )
