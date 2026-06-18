@@ -871,6 +871,11 @@ def resolve_settings(args, cfg) -> dict:
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
         "status_dir": _pick(args.status_dir, cfg.paths.status_dir),
         "posture": cfg.posture,
+        # Worker capability defaults (CLI > config > default). `getattr` keeps the
+        # synthetic-namespace tests working when they omit these attrs.
+        "tools": _pick(getattr(args, "tools", None), cfg.worker_tools),
+        "install_skills": _pick(getattr(args, "install_skills", None),
+                                cfg.worker_install_skills),
     }
 
 
@@ -910,8 +915,12 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--codex", default=None, help="real worker command")
     ap.add_argument("--queue-dir", default=None)
     ap.add_argument("--workspace-root", default=None)
-    ap.add_argument("--tools", choices=["none", "linear"], default="none")
-    ap.add_argument("--install-skills", action="store_true")
+    ap.add_argument("--tools", choices=["none", "linear"], default=None,
+                    help="worker integration tool (default: director.worker.tools, else "
+                         "none); 'linear' hands the worker the linear_graphql tool")
+    ap.add_argument("--install-skills", action="store_true", default=None,
+                    help="install vendored .codex/skills into each worker workspace "
+                         "(default: director.worker.install_skills, else off)")
     ap.add_argument("--once", action="store_true",
                     help="single pass (no re-poll); default is the DAG-aware continuous loop")
     ap.add_argument("--max-passes", type=int, default=None,
@@ -973,15 +982,21 @@ def main(argv=None, *, board=None) -> int:
               else decider.make_queue_decider(base=s["queue_dir"],
                                               timeout_s=s["turn_review_timeout_s"]))
 
+    # Worker tooling resolved CLI > config > default. The offline `--mock` niche NEVER
+    # advertises the linear tool or installs skills regardless of host config: it has no
+    # live tool executor and no real worker (the truly-detached niche), so honoring a
+    # host's linear default there would only mis-wire an offline run.
+    worker_tools = "none" if args.mock else s["tools"]
+    install_skills = False if args.mock else s["install_skills"]
     tools = tool_executor = None
-    if args.tools == "linear":
+    if worker_tools == "linear":
         from director.worker.tools import linear_graphql_spec, make_linear_tool_executor
         tools = [linear_graphql_spec()]
         tool_executor = make_linear_tool_executor()
 
     kwargs = {"team": s["team"], "states": states, "concurrency": s["concurrency"],
               "queue_base": s["queue_dir"], "tools": tools, "tool_executor": tool_executor,
-              "install_skills": args.install_skills, "done_types": s["done_types"],
+              "install_skills": install_skills, "done_types": s["done_types"],
               "status": None if args.no_status else status_mod.StatusWriter(base=s["status_dir"]),
               # Posture from the resolved config (a host may tighten it in
               # .harness.json director.worker); --autonomous differs only by the decider.

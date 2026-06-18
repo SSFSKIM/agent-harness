@@ -127,7 +127,11 @@ thin transport)를 따른다 — 로직은 socket/subprocess 없이 단위테스
   "codex_command": "codex app-server",
   "worker": {                        // posture (기본 = 현 autonomy.py 값, T11 문서화 값)
     "approval_policy": "on-request", "sandbox": "workspace-write",
-    "auto_review": true, "network": true
+    "auto_review": true, "network": true,
+    // capability 기본값(posture 와 별개): 워커에 줄 통합 tool + .codex/skills 설치.
+    // 기본 off(전역/오프라인 동작 불변) — Linear 백엔드 호스트가 opt-in. offline
+    // `--mock` 은 host config 와 무관하게 항상 무시(orchestrator.main).
+    "tools": "none", "install_skills": false
   },
   "paths": {                         // 미지정 시 현 기본 경로
     "workspace_root": null, "queue_dir": null, "status_dir": null

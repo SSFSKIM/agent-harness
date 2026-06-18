@@ -12,6 +12,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from director import config
 
@@ -84,6 +85,31 @@ class LoadConfigTest(unittest.TestCase):
         self.assertTrue(cfg.posture.auto_review)           # default kept
         self.assertEqual(cfg.merger.max_merges, 5)
         self.assertEqual(cfg.merger.poll_s, 1.0)           # default kept
+
+    # -- worker capability knobs (tools / install_skills) -------------------
+    def test_worker_tools_default_off(self):
+        # global default leaves the offline behavior unchanged (no tool, no skills)
+        d = config.defaults()
+        self.assertEqual(d.worker_tools, "none")
+        self.assertFalse(d.worker_install_skills)
+
+    def test_worker_tools_opt_in(self):
+        _write(self.root, {"director": {"worker": {"tools": "linear",
+                                                   "install_skills": True}}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.worker_tools, "linear")
+        self.assertTrue(cfg.worker_install_skills)
+        self.assertEqual(cfg.posture.approval_policy, "on-request")  # posture untouched
+
+    def test_bad_worker_tools_raises(self):
+        _write(self.root, {"director": {"worker": {"tools": "github"}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_bad_install_skills_raises(self):
+        _write(self.root, {"director": {"worker": {"install_skills": "yes"}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
 
     # -- fail-loud: present-but-malformed raises ----------------------------
     def test_director_not_object_raises(self):
@@ -218,6 +244,47 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s["concurrency"], 2)          # CLI wins
         self.assertEqual(s["team"], "T-cli")
         self.assertEqual(s["done_types"], ("completed", "canceled"))
+
+    def test_worker_tools_resolve(self):
+        from director import orchestrator
+        cfg = config._build({"worker": {"tools": "linear", "install_skills": True}})
+        s = orchestrator.resolve_settings(self._args(), cfg)            # config fills
+        self.assertEqual((s["tools"], s["install_skills"]), ("linear", True))
+        s2 = orchestrator.resolve_settings(                            # CLI overrides
+            self._args(tools="linear", install_skills=True), config._build({}))
+        self.assertEqual((s2["tools"], s2["install_skills"]), ("linear", True))
+
+    def test_mock_run_ignores_linear_tool_config(self):
+        # the offline --mock niche never wires the linear tool / skills, even when the
+        # host config defaults them on (it has no live executor / real worker).
+        from director import orchestrator
+        _write(self.root, {"director": {"worker": {"tools": "linear",
+                                                   "install_skills": True}}})
+        board = orchestrator.MockBoard.demo()
+        with _chdir(self.root), mock.patch(
+                "director.orchestrator.run_until_drained",
+                return_value={"summaries": [], "passes": 1,
+                              "stopped_reason": "drained", "stuck": []}) as drained:
+            orchestrator.main(["--team", "T", "--mock", "--mock-scenario", "report"],
+                              board=board)
+        kw = drained.call_args.kwargs
+        self.assertIsNone(kw["tools"])
+        self.assertFalse(kw["install_skills"])
+
+    def test_real_run_honors_linear_tool_config(self):
+        # a real (non-mock) run picks up the host's linear tool + skill default with no flag
+        from director import orchestrator
+        _write(self.root, {"director": {"team": "T", "worker": {
+            "tools": "linear", "install_skills": True}}})
+        board = orchestrator.MockBoard.demo()
+        with _chdir(self.root), mock.patch(
+                "director.orchestrator.run_until_drained",
+                return_value={"summaries": [], "passes": 1,
+                              "stopped_reason": "drained", "stuck": []}) as drained:
+            orchestrator.main([], board=board)  # team + tooling from config, no flags
+        kw = drained.call_args.kwargs
+        self.assertIsNotNone(kw["tools"])
+        self.assertTrue(kw["install_skills"])
 
     def test_reconcile_interval_resolves(self):
         from director import orchestrator

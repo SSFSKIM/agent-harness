@@ -68,8 +68,15 @@ DEFAULTS: dict = {
     "backoff_base_s": 10.0,
     "backoff_cap_s": 300.0,
     "codex_command": "codex app-server",
+    # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
+    # above): which integration tool a worker is handed (`linear` → the linear_graphql
+    # tool) and whether the vendored `.codex/skills` are installed into its workspace.
+    # Default OFF so the global/offline behavior is unchanged — a Linear-backed host
+    # opts in via `.harness.json` (`director.worker.tools="linear"`, `install_skills=
+    # true`). The offline `--mock` niche ignores these regardless (orchestrator.main).
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
-               "auto_review": True, "network": True},
+               "auto_review": True, "network": True,
+               "tools": "none", "install_skills": False},
     # paths are OPTIONAL overrides: None = "use the module's built-in default"
     # (run.DEFAULT_WORKSPACE_ROOT for workspaces; queue/status `_root(base=None)`).
     "paths": {"workspace_root": None, "queue_dir": None, "status_dir": None},
@@ -79,6 +86,7 @@ DEFAULTS: dict = {
 _STATE_KEYS = ("ready", "started", "done", "failed", "blocked")
 _APPROVAL_VALUES = frozenset({"untrusted", "on-request", "on-failure", "never"})
 _SANDBOX_VALUES = frozenset({"read-only", "workspace-write", "danger-full-access"})
+_TOOLS_VALUES = frozenset({"none", "linear"})
 _VAR_RE = re.compile(r"^\$(?:\{(\w+)\}|(\w+))$")
 
 
@@ -121,6 +129,8 @@ class DirectorConfig:
     backoff_cap_s: float
     codex_command: str
     posture: Posture
+    worker_tools: str
+    worker_install_skills: bool
     paths: Paths
     merger: Merger
 
@@ -201,6 +211,10 @@ def _build(raw: dict) -> DirectorConfig:
     posture = Posture(w["approval_policy"], w["sandbox"],
                       _bool(w["auto_review"], "worker.auto_review"),
                       _bool(w["network"], "worker.network"))
+    if w["tools"] not in _TOOLS_VALUES:
+        raise ValueError(f"director.worker.tools must be one of "
+                         f"{sorted(_TOOLS_VALUES)}, got {w['tools']!r}")
+    worker_install_skills = _bool(w["install_skills"], "worker.install_skills")
 
     p_raw = raw.get("paths") or {}
     if not isinstance(p_raw, dict):
@@ -245,7 +259,9 @@ def _build(raw: dict) -> DirectorConfig:
                                         DEFAULTS["backoff_base_s"]), "backoff_base_s"),
         backoff_cap_s=_pos_num(raw.get("backoff_cap_s",
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
-        codex_command=codex_command, posture=posture, paths=paths, merger=merger)
+        codex_command=codex_command, posture=posture,
+        worker_tools=w["tools"], worker_install_skills=worker_install_skills,
+        paths=paths, merger=merger)
 
 
 def defaults() -> DirectorConfig:

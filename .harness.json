@@ -3,5 +3,11 @@
     "worker_env": [],
     "network_allowlist": ["chatgpt.com", "api.openai.com", "github.com", "registry.npmjs.org"],
     "capabilities": []
+  },
+  "director": {
+    "worker": {
+      "tools": "linear",
+      "install_skills": true
+    }
   }
 }
