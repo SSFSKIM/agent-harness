@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: d457aab787fd44b89e7be115c14a32ae721ceedc
@@ -158,4 +158,54 @@ NOT SATISFIED (1 P1). All findings resolved inline:
   the "no secrets in hook output" host discipline (same as T3/T9).
 - Proposed rules noted (after_run/before_run pairing semantics; hook-output discipline) —
   folded into T15; the pairing semantics are tested, left as a tracker doc-debt candidate.
+
+Always-on QA (Codex was unavailable — rate-limited / no result; ran as Claude rubric agents
+per CLAUDE.md fallback, [[mid-session-agents-not-dispatchable]]):
+- **spec-compliance — SATISFIED**, no findings: every R1–R5 verified against the code +
+  the live MERGED PR #2; non-goals respected; T15 written; tests cover acceptance 1–3.
+- **review-code-quality — SATISFIED**, 2 P2s: (1) `run_hook`'s `env` param was speculative
+  (only the test used it) → **dropped** (run_hook always uses the Director env); (2) the
+  `60.0` hook-timeout default duplicated as a literal across config/signatures/reap →
+  recorded in the tech-debt-tracker as accepted (mirrors the per-function-default convention).
+
+All five reviews SATISFIED (arch, security, reliability, spec-compliance, code-quality).
 ## Outcomes & retrospective
+**Shipped:** Symphony §9.4 workspace lifecycle hooks — the repo-population bridge (R4 of the
+parity track). A host declares `director.workspace.hooks` ({after_create/before_run/after_run/
+before_remove} + `hook_timeout_s`) in `.harness.json`; `run.run_hook` runs each `sh -lc`
+Director-side with cwd=the workspace, Symphony's fatal/ignored semantics, total against
+timeout + non-zero + launch failure. Wired through every dispatch path (run.main, the daemon/
+batch orchestrator via `_RunState` dispatch-kwargs, the merger land lane minus `before_run`)
++ both cleanup `rmtree` sites (before_remove). Repo population is the host's `after_create`
+clone — the harness stays VCS-agnostic.
+
+**Live-validated** on `SSFSKIM/agent-harness-r4-demo` (real GitHub): a ticket drove a worker
+in a workspace the `after_create` hook had just cloned; the worker opened **real PR #2**;
+the serialized merger escalated (no integration gate in the throwaway repo) and, after the
+Director resolved it via `requeue_merge` with guidance, **squash-merged PR #2** into `main`
+(commit `ecd5ea1`, GitHub `state: MERGED`). This exercised R4 AND the full lights-out merger
+escalate→Director-resolve→land loop.
+
+**De-risk-first paid off:** a manual spike (before any code) proved the one unknown inspection
+couldn't — a `workspace-write`-sandbox codex worker, with `GH_TOKEN` in `worker_env` + git's gh
+credential helper, can clone→edit→push→open a PR. That settled the architecture (worker auths by
+token; hook clones Director-side via keychain) and let the spec/build reflect reality, not guesses.
+
+**What review caught:** (reliability P1) `run_hook` was only total against timeout+exit-code, not
+the `OSError` launch-failure family — and this repo's concurrent-session reality (workspaces
+deleted out from under a daemon) makes a vanished `cwd` real, so a non-fatal hook would have
+crashed the daemon → fixed (catch `OSError`, swallow iff non-fatal). (arch P2) the merger would
+have threaded a host's `before_run` sync into the land lane and reset the PR branch away → fixed
+(drop `before_run` from landing). (security P2) captured hook stderr is logged → T15 host
+discipline. (code-quality P2) dropped a speculative `env` param.
+
+**Rules written:** SECURITY **T15** (workspace hooks run host-trusted, Director-side; hook output
+is a host-trusted log channel). **Tracker:** the `60.0` default-literal duplication (accepted) +
+the after_run/before_run pairing-semantics doc-rule (candidate).
+
+**Deferred (future hardening):** sandbox the hooks themselves (container/vault track); the
+merger-land-under-sandbox question (the land worker needs a host gate — the demo repo had none,
+which is why it escalated; a real host supplies its gate).
+
+**Parity track status:** R1–R3 (pagination/workspace-safety/daemon-recovery) + R4 (hooks) all
+shipped. The Symphony adapter & workspace parity track is now CLOSED.

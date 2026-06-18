@@ -84,7 +84,7 @@ decider, or the queue.
   the existing `_resolve_env_deep`.
 
 ### Component 2 — `director/run.py` (R2, R3 create/run)
-- `run_hook(name, script, *, cwd, timeout_s, env=None, fatal) -> None` — if `script` is
+- `run_hook(name, script, *, cwd, timeout_s, fatal) -> None` — if `script` is
   falsy, no-op. Else `subprocess.run(["sh", "-lc", script], cwd=cwd, env=env or os.environ,
   timeout=timeout_s, capture_output=True)`. On non-zero exit or `TimeoutExpired`: log a
   structured stderr line (`{"hook": name, "event": "failed"/"timeout", "cwd", ...}` with

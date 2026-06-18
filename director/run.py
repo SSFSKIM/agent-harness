@@ -116,20 +116,19 @@ def _expected_ws(ticket: dict, workspace_root) -> Path:
         else workspace_path(ticket["id"], workspace_root)
 
 
-def run_hook(name: str, script, *, cwd, timeout_s: float, env: dict | None = None,
-             fatal: bool) -> None:
+def run_hook(name: str, script, *, cwd, timeout_s: float, fatal: bool) -> None:
     """Run one workspace lifecycle hook (Symphony §9.4) as `sh -lc <script>` with cwd=the
-    workspace, under a wall-clock timeout. Director-side (trusted host config — default env
-    is the Director's, so a private-repo clone has credential reach). A falsy `script` is a
-    no-op. Start/failure/timeout log a structured line to STDERR (the daemon-diagnostic
-    stream). On non-zero exit or timeout: if `fatal` (after_create/before_run) raise; else
-    (after_run/before_remove) swallow. Never returns a value — hooks are side-effecting."""
+    workspace, under a wall-clock timeout. Director-side (trusted host config — runs with the
+    Director's own environment, so a private-repo clone has credential reach). A falsy
+    `script` is a no-op. Start/failure/timeout log a structured line to STDERR (the
+    daemon-diagnostic stream). On non-zero exit or timeout: if `fatal` (after_create/
+    before_run) raise; else (after_run/before_remove) swallow. Never returns a value —
+    hooks are side-effecting."""
     if not script:
         return
     print(json.dumps({"hook": name, "event": "start", "cwd": str(cwd)}), file=sys.stderr)
     try:
-        proc = subprocess.run(["sh", "-lc", script], cwd=str(cwd),
-                              env=os.environ.copy() if env is None else env,
+        proc = subprocess.run(["sh", "-lc", script], cwd=str(cwd), env=os.environ.copy(),
                               capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired as exc:
         print(json.dumps({"hook": name, "event": "timeout", "timeout_s": timeout_s}),

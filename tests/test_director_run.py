@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 import tempfile
 import threading
@@ -202,11 +201,6 @@ class WorkspaceHookTest(unittest.TestCase):
         run.run_hook("before_remove", "echo hi", cwd=missing, timeout_s=5, fatal=False)
         with self.assertRaises(RuntimeError):
             run.run_hook("after_create", "echo hi", cwd=missing, timeout_s=5, fatal=True)
-
-    def test_hook_env_override(self):
-        run.run_hook("x", "printf %s \"$FOO\" > env.txt", cwd=self.ws, timeout_s=5,
-                     env={"FOO": "bar", "PATH": os.environ["PATH"]}, fatal=True)
-        self.assertEqual((self.ws / "env.txt").read_text(), "bar")
 
     # -- _prepare lifecycle (create / run), no real worker --
     def _prepare(self, ticket, hooks):
