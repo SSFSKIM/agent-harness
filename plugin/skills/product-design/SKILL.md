@@ -34,18 +34,29 @@ it outlive one plan and be referenced by several.
      check X"), not implementation steps.
    - **Design** (for system/code features; scale down or skip for a pure
      policy/methodology doc) — the components and their responsibilities, the
-     contracts/interfaces between them, key behaviors, and how errors, edge
-     cases, and integration points are handled. Name the files to create/modify
-     when in a codebase. Design-level, not code or task steps — those are the
-     ExecPlan's.
+     contracts/interfaces between them, key behaviors, how errors, edge cases,
+     and integration points are handled, and how the design will be **verified**
+     (testability — name the seams that make behavior checkable). Keep units
+     **isolated and legible**: each has one clear purpose behind a contract a
+     consumer can use without reading its internals and whose internals can
+     change without breaking consumers — a unit that resists this, or a file
+     grown large enough to do too much, is a design smell to fix here. Name the
+     files to create/modify when in a codebase. Design-level, not code or task
+     steps — those are the ExecPlan's.
    - **Non-goals** — what this explicitly does not do (scope fence). **YAGNI —
      cut every requirement not needed now**; a smaller spec is a better spec.
    - **Acceptance criteria** — the demonstrable conditions for "spec satisfied".
-4. **Human touch lands here, and only here.** Resolve ambiguities autonomously
-   and record the choice. Escalate ONLY a genuine product-direction / taste
-   fork (the kind PRODUCT_SENSE.md reserves for the human) — never "what next?".
-   When you do escalate, ask one focused, preferably multiple-choice question.
-   Record the resolution back into the spec.
+4. **Human touch lands here, and only here.** First **enumerate** the open
+   factors the spec leaves unsettled, then **triage** each: a
+   mechanical/technical one — a best answer exists on the merits — you decide
+   yourself and record; a genuine product-direction / taste fork (the kind
+   PRODUCT_SENSE.md reserves for the human) you escalate — never "what next?".
+   This includes a **design-approach** fork: surface ≥2 approaches only when
+   they are genuinely valid and attractive and the choice turns on taste/product
+   judgment, not when one is technically best — don't manufacture alternatives
+   to look thorough; pick the clear winner and move on. When you do escalate,
+   ask one focused, preferably multiple-choice question, and record the
+   resolution back into the spec.
 5. **Self-review before handoff** (fix inline): completeness (no TBD / vague
    requirement), coverage (error handling, edge cases, integration points
    addressed), internal consistency (no requirement or design element
