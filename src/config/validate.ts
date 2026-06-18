@@ -3,9 +3,9 @@ import { z } from "zod/v4";
 /** Thrown at the public front doors on a malformed config — mirrors DaemonError / SwarmError / TaskError. */
 export class HarnessConfigError extends Error {}
 
-// Validates ONLY the fields with invalidate-able constraints; .passthrough() leaves every other field
+// Validates ONLY the fields with invalidate-able constraints; z.looseObject() leaves every other field
 // (incl. escape hatches extraOptions/settings/managedSettings/customHeaders) untouched.
-export const harnessConfigSchema = z.object({
+export const harnessConfigSchema = z.looseObject({
   model: z.string().min(1).optional(),
   fallbackModel: z.string().min(1).optional(),
   maxTurns: z.number().int().positive().optional(),
@@ -22,15 +22,15 @@ export const harnessConfigSchema = z.object({
   settingSources: z.array(z.enum(["user", "project", "local"])).optional(),
   autoCompactWindow: z.number().int().positive().optional(),
   sandbox: z.union([z.boolean(), z.record(z.string(), z.unknown())]).optional(),
-}).passthrough();
+});
 
-export const daemonOptionsSchema = z.object({
+export const daemonOptionsSchema = z.looseObject({
   model: z.string().min(1).optional(),
   restart: z.enum(["no", "on-failure"]).optional(),
   maxSessions: z.number().int().positive().optional(),
   idleTimeoutMs: z.number().int().nonnegative().optional(),
   maxRestarts: z.number().int().nonnegative().optional(),
-}).passthrough();
+});
 
 function check(schema: z.ZodType, value: unknown): void {
   const r = schema.safeParse(value);

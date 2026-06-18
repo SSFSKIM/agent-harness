@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateHarnessConfig, validateDaemonOptions, HarnessConfigError } from "../../src/config/validate.js";
+import { validateHarnessConfig, validateDaemonOptions, HarnessConfigError, harnessConfigSchema } from "../../src/config/validate.js";
 
 describe("validateHarnessConfig", () => {
   it("accepts a valid config and passes escape-hatch fields untouched", () => {
@@ -7,6 +7,7 @@ describe("validateHarnessConfig", () => {
       thinking: { type: "enabled", budgetTokens: 1024 }, permissionMode: "acceptEdits",
       extraOptions: { anything: 123 }, settings: { whatever: true } })).not.toThrow();
     expect(() => validateHarnessConfig({})).not.toThrow();
+    expect(harnessConfigSchema.parse({ extraOptions: { x: 1 }, settings: { y: true } })).toMatchObject({ extraOptions: { x: 1 }, settings: { y: true } });
   });
   it("rejects bad enums / numerics / shapes with HarnessConfigError naming the path", () => {
     expect(() => validateHarnessConfig({ permissionMode: "bogus" })).toThrow(HarnessConfigError);
