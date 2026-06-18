@@ -144,3 +144,12 @@ owner: harness
   explicit `docs/KNOWLEDGE_FORMAT.md`(KF v1.0, conformance↔D-rule 매핑)으로 굳힘. memory
   concept-page 대표 backfill. 쿼리/navigation tool 은 Phase 2(별도 spec). 보호/포팅 wiring 은
   NG-4 로 연기.
+- [Knowledge navigation tool — live query over the Phase-1 format (Phase 2)](2026-06-18-knowledge-navigation-tool.md)
+  — Phase 1 포맷의 *consumer*. `plugin/scripts/nav.py`(library+CLI) + `docs-nav` 스킬이
+  `type`/`tags`/`description`/`resource` + D5 링크 그래프를 **live**(매 호출 frontmatter 에서
+  재계산, 영속 artifact 0)로 쿼리: `catalog`(type/tag/status 필터, `--json`, 바디 안 읽음),
+  `links`/`backlinks`, `stale`(D4 재사용), `orphans`, `drift`(resource 의 git last-commit vs
+  `last_verified`, advisory). `LINK`/staleness 를 `harness_lib` 로 추출해 lint·nav 단일 정의
+  (core-belief 5). 커밋 catalog/생성 index.md/graph view(viz.html) 모두 NON-GOAL — index.md 는
+  curation 유지(NG-2 reframe), agent-소비 우선. 게이트 비차단(read-only, on-demand).
+  포팅: 도구·스킬이 `plugin/` 에 있어 자동 동행 + AGENTS.md/템플릿 포인터(belief 13).

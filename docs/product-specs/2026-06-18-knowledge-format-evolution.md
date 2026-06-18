@@ -339,6 +339,11 @@ roadmap survives this spec. Nothing below is built in Phase 1.
 
 ### Phase 2 — Knowledge navigation/query tool + agentic skill (separate spec)
 
+**Specced & in progress:**
+[2026-06-18-knowledge-navigation-tool.md](2026-06-18-knowledge-navigation-tool.md)
+(live-query `nav.py` + `docs-nav` skill; committed catalog, generated `index.md`,
+and the graph view are all NON-goals there — see its decisions).
+
 The *consumer* of the Phase-1 format. Consumes `type`/`tags`/`description` +
 `resource` + the D5 link graph to provide a queryable catalog
 (`(path, type, tags, description)` an agent filters without loading bodies),

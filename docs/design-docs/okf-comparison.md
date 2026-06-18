@@ -242,6 +242,10 @@ Adoptions 1–3 + 5 are specced as Phase 1:
 [`../product-specs/2026-06-18-knowledge-format-evolution.md`](../product-specs/2026-06-18-knowledge-format-evolution.md)
 — optional `type`/`tags`/`resource` keys (lint stays permissive), a flat-parser
 list upgrade, and a versioned `docs/KNOWLEDGE_FORMAT.md` formalizing the
-implicit-in-lint format. Adoption 4 (the graph/navigation view) is Phase 2: a
-separate spec + ExecPlan that consumes the Phase-1 format. This doc remains the
-observational comparison both phases cite.
+implicit-in-lint format. The navigation/consumer half (adoptions 1–4's read side)
+is Phase 2:
+[`../product-specs/2026-06-18-knowledge-navigation-tool.md`](../product-specs/2026-06-18-knowledge-navigation-tool.md)
+— a live-query `nav.py` tool + `docs-nav` skill (catalog/backlinks/stale/drift).
+It consciously **declines adoption 4's `viz.html`**: the consumer here is the
+agent (queries JSON), not a human browsing, so the graph view is deferred. This
+doc remains the observational comparison both phases cite.
