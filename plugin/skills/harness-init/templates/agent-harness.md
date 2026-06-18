@@ -64,8 +64,10 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
 Procedure for a new harness-managed page: kebab-case filename → frontmatter
-(`status / last_verified / owner`) → write → register in that directory's
-`index.md` → cross-link → run the gate (the `docs-tree` skill owns this).
+(required `status / last_verified / owner`; optional `type / tags / resource /
+title / description` per `docs/KNOWLEDGE_FORMAT.md`) → write → register in that
+directory's `index.md` → cross-link → run the gate (the `docs-tree` skill owns
+this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md`.
 Host-owned project roots may use the structure that best fits the repo unless
 they are opted into managed governance.
 

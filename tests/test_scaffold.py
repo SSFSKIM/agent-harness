@@ -30,6 +30,7 @@ class TestScaffold(unittest.TestCase):
                     "docs/exec-plans/tech-debt-tracker.md",
                     "docs/generated/component-inventory.md",
                     "docs/PLANS.md", "docs/DESIGN.md", "docs/QUALITY_SCORE.md",
+                    "docs/KNOWLEDGE_FORMAT.md",
                     "docs/PRODUCT_SENSE.md", "docs/product-specs/index.md",
                     "docs/references/index.md"):
             self.assertTrue((self.root / rel).exists(), rel)

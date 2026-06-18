@@ -34,6 +34,7 @@ SEEDS = (  # (template, destination relative to host root)
     # docs the machine reads (lint D10) — gate/personas break without them:
     ("plans-md.md", "docs/PLANS.md"),
     ("design-md.md", "docs/DESIGN.md"),
+    ("knowledge-format.md", "docs/KNOWLEDGE_FORMAT.md"),  # the format contract a host authors docs against
     ("architecture-md.md", "ARCHITECTURE.md"),
     ("quality-score.md", "docs/QUALITY_SCORE.md"),
     ("product-sense.md", "docs/PRODUCT_SENSE.md"),
