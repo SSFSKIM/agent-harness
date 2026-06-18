@@ -441,9 +441,11 @@ class _Handler(BaseHTTPRequestHandler):
         return False, f"unsupported kind: {kind!r}"  # defensive; HUMAN_BOUND_KINDS gates above
 
     def _authorized(self) -> bool:
-        """Write fence (R5): the per-server CSRF token AND a loopback Host (and Origin,
-        when the browser sends one). GET routes never call this — reads are unfenced."""
-        if self.headers.get("X-Director-Token") != self.server.token:
+        """Write fence (R5): the per-server CSRF token (constant-time compare) AND a
+        loopback Host (and Origin, when the browser sends one). GET routes never call
+        this — reads are unfenced."""
+        tok = self.headers.get("X-Director-Token")
+        if not tok or not secrets.compare_digest(tok, self.server.token):
             return False
         if not _host_is_local(self.headers.get("Host")):
             return False
