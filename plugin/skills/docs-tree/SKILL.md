@@ -24,6 +24,12 @@ frontmatter (`status / last_verified / owner`) → write the page → register i
 in that directory's `index.md` → cross-link related pages → run the gate
 (command in `docs/design-docs/agent-harness.md`).
 
+Optionally add the recommended keys from `docs/KNOWLEDGE_FORMAT.md` (the format
+contract): `type` (concept-kind), `tags` (`[a, b]` facets), `resource` (the
+code/asset the page documents), `description` (one-sentence summary), `title`
+(only to override a poor H1). All optional and ungated — they make the page
+queryable and self-describing for navigation.
+
 Procedure for host-owned project roots: choose the structure that makes the
 agent most capable in this repo. Use frontmatter/indexes when they help, but do
 not force the harness convention unless the root is listed in `.harness.json`

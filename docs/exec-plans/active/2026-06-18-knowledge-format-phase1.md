@@ -145,6 +145,9 @@ and have the harness read them — observably. Definition of done:
   value-form rules, reserved filenames, link semantics (D5 divergence from OKF),
   conformance↔D-rule map (D3/D4/D5/D6/D8), versioning, OKF relationship. Added to
   the `AGENTS.md` Map. Gate GREEN; the doc self-parses via `read_frontmatter`.
+- [x] (2026-06-18) **M3 done.** `docs-tree/SKILL.md` (frontmatter procedure) and
+  `docs/memory/MEMORY.md` (write rules) now name the optional keys and link
+  `KNOWLEDGE_FORMAT.md` as the authority. Gate GREEN.
 
 ## Surprises & discoveries
 
