@@ -137,6 +137,16 @@ def run_hook(name: str, script, *, cwd, timeout_s: float, env: dict | None = Non
         if fatal:
             raise RuntimeError(f"workspace hook {name!r} timed out after {timeout_s}s") from exc
         return
+    except OSError as exc:
+        # Launch failure (missing `sh`, a `cwd` deleted out from under us by a concurrent
+        # session, perms). run_hook must be TOTAL against this family (RELIABILITY R8):
+        # a non-fatal hook (after_run/before_remove) MUST swallow it, never crash the reap
+        # loop / daemon nor mask a disposition; a fatal hook still raises.
+        print(json.dumps({"hook": name, "event": "error", "error": str(exc)}),
+              file=sys.stderr)
+        if fatal:
+            raise RuntimeError(f"workspace hook {name!r} failed to launch: {exc}") from exc
+        return
     if proc.returncode != 0:
         print(json.dumps({"hook": name, "event": "failed", "code": proc.returncode,
                           "stderr": (proc.stderr or "")[-2000:]}), file=sys.stderr)

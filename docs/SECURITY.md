@@ -274,5 +274,9 @@ Grounding document for the review-security persona. Threats are numbered.
   logs start/failure/timeout to **stderr** without echoing the resolved env; (3) failure
   semantics are fixed (after_create/before_run fatal, after_run/before_remove ignored) so a
   hook can't silently half-prepare a workspace a worker then runs in. The worker that opens
-  PRs gets `GH_TOKEN` via the **`worker_env` allowlist** (T11), not the hook env. A future
-  hardening (deferred, container/vault track): sandbox the hooks themselves.
+  PRs gets `GH_TOKEN` via the **`worker_env` allowlist** (T11), not the hook env. On
+  failure `run_hook` logs the hook's **captured stderr tail** to the daemon stream — since
+  the hook runs with the Director's full env, a host-authored hook MUST NOT echo credentials
+  to its own stderr (the same "no secrets in output" discipline as T3/T9; the host owns the
+  hook content). A future hardening (deferred, container/vault track): sandbox the hooks
+  themselves and/or redact captured hook output.

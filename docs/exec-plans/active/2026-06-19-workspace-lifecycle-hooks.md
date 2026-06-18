@@ -140,4 +140,22 @@ Full gate GREEN; parity slices 1–3 and the decider/queue unchanged.
 - 2026-06-19: demo via scripted single-ticket + `merger.drain` (Approach B) — deterministic;
   the daemon loop is already validated.
 ## Feedback (from completion gate)
+Round-1 reviews (full): review-arch SATISFIED, review-security SATISFIED, review-reliability
+NOT SATISFIED (1 P1). All findings resolved inline:
+- **review-reliability P1 — `run_hook` not total against subprocess-LAUNCH failure.** It
+  caught only `TimeoutExpired`+returncode, not `OSError` (missing `sh`, a `cwd` deleted by a
+  concurrent session). A non-fatal `before_remove`/`after_run` would then raise instead of
+  swallow → crash the reap loop/daemon + skip the `rmtree`, or mask a disposition (R8).
+  Fixed: `run_hook` now catches `OSError` → logs `event:error` → raises only when fatal.
+  Resolves the P1 + its two derived P2s (startup-cleanup loop abort; after_run finally
+  masking). Test added (`test_launch_failure_is_total`).
+- **review-arch P2 — merger threaded `before_run` (FATAL) into the land lane.** A host
+  `before_run` sync (`git reset --hard origin/<default>`) would reset the PR branch's commits
+  away before the merge (land worker reuses the PR checkout). Fixed: `merger.main` drops
+  `before_run` from the land-lane hooks (keeps `after_create` for the fresh-box re-clone).
+- **review-security P2 — captured hook stderr is logged verbatim.** A host hook echoing a
+  secret to its stderr would surface it in the daemon log. Fixed: SECURITY T15 extended with
+  the "no secrets in hook output" host discipline (same as T3/T9).
+- Proposed rules noted (after_run/before_run pairing semantics; hook-output discipline) —
+  folded into T15; the pairing semantics are tested, left as a tracker doc-debt candidate.
 ## Outcomes & retrospective

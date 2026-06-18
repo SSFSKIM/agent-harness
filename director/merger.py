@@ -307,8 +307,12 @@ def main(argv=None) -> int:
     decide = select_decider(autonomous=args.autonomous, mock=args.mock,
                             queue_base=queue_dir, turn_review_timeout=turn_review_timeout)
     # Workspace lifecycle hooks (R4) reach the land lane too — off under --mock. A land
-    # worker on a fresh box re-clones/syncs the PR branch via after_create/before_run.
-    hooks = None if args.mock else cfg.workspace.hooks
+    # worker on a FRESH box still needs `after_create` to re-clone the workspace, BUT
+    # `before_run` is DROPPED here (review-arch P2): the land worker reuses the PR branch's
+    # checkout, and a typical `before_run` sync (`git reset --hard origin/<default>`) would
+    # reset the PR commits away before the merge. The land skill does its own fetch/rebase.
+    hooks = None if args.mock else {k: v for k, v in cfg.workspace.hooks.items()
+                                    if k != "before_run"}
     return run_loop(base=queue_dir, command=_command(args, codex_command, posture),
                     poll=poll, once=args.once, decide=decide, queue_base=queue_dir,
                     approval_policy=posture.approval_policy, sandbox=posture.sandbox,

@@ -195,6 +195,14 @@ class WorkspaceHookTest(unittest.TestCase):
             run.run_hook("x", "sleep 5", cwd=self.ws, timeout_s=0.3, fatal=True)
         run.run_hook("x", "sleep 5", cwd=self.ws, timeout_s=0.3, fatal=False)  # swallowed
 
+    def test_launch_failure_is_total(self):
+        # a vanished cwd (concurrent-session delete) → OSError on launch: a non-fatal hook
+        # MUST swallow it (R8 — never crash the reap loop / daemon), a fatal hook raises.
+        missing = self.tmp / "vanished"  # does not exist
+        run.run_hook("before_remove", "echo hi", cwd=missing, timeout_s=5, fatal=False)
+        with self.assertRaises(RuntimeError):
+            run.run_hook("after_create", "echo hi", cwd=missing, timeout_s=5, fatal=True)
+
     def test_hook_env_override(self):
         run.run_hook("x", "printf %s \"$FOO\" > env.txt", cwd=self.ws, timeout_s=5,
                      env={"FOO": "bar", "PATH": os.environ["PATH"]}, fatal=True)
