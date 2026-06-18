@@ -134,6 +134,14 @@ model recovers in spirit); workspace handling lacks Symphony's sanitization +
 root-containment invariants and the `after_create`/`before_run`/`after_run`/
 `before_remove` hooks (§9).
 
+> **Update (2026-06-18).** `fetch_issue_states_by_ids` **landed** with the
+> active-run-reconciliation slice (so it is no longer a gap). The rest of this
+> paragraph is now the **Symphony adapter & workspace parity** track:
+> [`docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md`](../product-specs/2026-06-18-symphony-adapter-workspace-parity.md)
+> takes pagination + the `fetch_issues_by_states` op (R1), workspace sanitization +
+> root-containment (R2), and startup cleanup + crash/orphan recovery (R3); the §9
+> lifecycle hooks (the repo-population bridge) are deferred there as R4.
+
 ## Derived work
 
 The chosen next move (human pick, 2026-06-16, from the three axes — daemon /

@@ -152,3 +152,19 @@ owner: harness
   `dashboard.py` + `notify.py` + tests + DIRECTOR.md; orchestrator/queue/status
   unchanged. Non-goals: orchestrator poll-trigger, non-webhook channels, SSE,
   pause/cancel (active-run reconciliation already owns operator-stop).
+- [Symphony adapter & workspace parity](2026-06-18-symphony-adapter-workspace-parity.md)
+  — the leftover "lesser/adapter-level gaps" from
+  [symphony-parity-gap](../design-docs/symphony-parity-gap.md) (lines 130–135), after the
+  daemon/config/protocol tracks closed. **R1** Linear candidate-fetch pagination
+  (`_READY_ISSUES`/`list_ready_issues` `first`/`after`+`pageInfo`, page 50, order-preserving,
+  `linear_missing_end_cursor` raise) + new paginated `fetch_issues_by_states` op (§11.1 #2,
+  empty-guard). **R2** workspace safety in `run.py` (§9.5): sanitize key to `[A-Za-z0-9._-]`,
+  root-containment (resolve+`is_relative_to`, raise), one shared `workspace_path` helper
+  (dispatch/merge-enqueue/cleanup agree — ARCH invariant 8), pre-launch cwd assert. **R3**
+  daemon startup recovery in `run_forever` (§8.6/§14.3/§8.5B): startup terminal-workspace
+  cleanup *excluding pending-merge paths* (the serialized merger still needs a `done` PR
+  branch) + orphaned-`started` re-attach (→`ready` so the first poll re-dispatches) +
+  mid-flight-cancelled-to-terminal reconcile cleanup (normal `done`/`blocked` never clean,
+  §9.1). Build = slices 1–3. **R4 workspace lifecycle hooks DEFERRED** (the repo-population
+  bridge — only load-bearing once workers run on a real repo). Additive; daemon/reconcile
+  core + decider/queue/merger unchanged.
