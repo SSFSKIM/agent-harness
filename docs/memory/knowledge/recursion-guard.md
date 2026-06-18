@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-12
 owner: imprint-job
+type: knowledge
+tags: [hooks, recursion-guard, headless, subprocess]
+resource: plugin/scripts/harness_lib.py
+description: The HARNESS_HEADLESS env guard prevents infinite SessionStart recursion when hooks spawn headless claude children.
 ---
 # Recursion guard — HARNESS_HEADLESS
 

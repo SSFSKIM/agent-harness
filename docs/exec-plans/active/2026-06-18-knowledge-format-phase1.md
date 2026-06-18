@@ -148,8 +148,23 @@ and have the harness read them — observably. Definition of done:
 - [x] (2026-06-18) **M3 done.** `docs-tree/SKILL.md` (frontmatter procedure) and
   `docs/memory/MEMORY.md` (write rules) now name the optional keys and link
   `KNOWLEDGE_FORMAT.md` as the authority. Gate GREEN.
+- [x] (2026-06-18) **M4 done.** All 7 memory concept pages carry `type` + flow
+  `tags` + one-sentence `description`; `recursion-guard.md` adds
+  `resource: plugin/scripts/harness_lib.py` (the only page documenting one code
+  asset). Gate GREEN; the parser reads real-page `tags` as Python lists. Permissive
+  proof: stripped `type`+`tags` from a page → gate still GREEN → restored.
 
 ## Surprises & discoveries
+- M4: **Deviated from spec D-6's "bump `last_verified`" instruction** — left all 7
+  pages' `last_verified` unchanged. Adding navigation metadata is not a genuine
+  re-verification of a page's *claims* against reality, so bumping would falsely
+  reset the staleness clock the `doc-gardener` loop depends on. All 7 pages are
+  well within `STALE_DAYS` (30), so there is no gate pressure to bump. Honesty of
+  the staleness signal > literal spec adherence here (see Decision log).
+- M4: `resource` landed on only 1 of 7 pages (`recursion-guard.md`). The ADRs and
+  open-questions document *decisions/questions*, not single code assets, so adding
+  `resource` to them would overclaim the field's meaning. Matches spec R6 ("when
+  the page documents a concrete code asset").
 
 ## Decision log
 - 2026-06-18: Chose parser-first execution (Approach A) — the shared-parser change
@@ -157,6 +172,9 @@ and have the harness read them — observably. Definition of done:
 - 2026-06-18: `tags` flow item normalization = strip whitespace + surrounding
   quotes; block form tolerated on read, flow form authored.
 - 2026-06-18: index.md pages excluded from the backfill (spec R6 = concept pages).
+- 2026-06-18: **`last_verified` NOT bumped on backfill** (deviation from D-6) —
+  preserves the integrity of the staleness signal; metadata-add ≠ claim
+  re-verification; no page is stale anyway. Recorded as the honest call.
 
 ## Feedback (from completion gate)
 

@@ -2,6 +2,9 @@
 status: open
 last_verified: 2026-06-12
 owner: imprint-job
+type: openq
+tags: [tech-debt, tracker, traceability, provenance]
+description: Should tech-debt tracker `fixed` rows cite the implementing commit SHA? — open, the schema has no field for it.
 ---
 # Open question: should tracker `fixed` rows cite the implementing commit SHA?
 

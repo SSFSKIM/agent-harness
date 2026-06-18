@@ -2,6 +2,9 @@
 status: accepted
 last_verified: 2026-06-17
 owner: harness
+type: adr
+tags: [autonomy, director, worker, escalation]
+description: Move the Director from per-turn judge to exception-handler — workers self-govern the routine, the human is woken only on genuine taste/risk.
 ---
 # Graduated autonomy — human at the edges, autonomous in the middle
 
