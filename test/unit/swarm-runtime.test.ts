@@ -179,6 +179,14 @@ describe("SwarmRuntime", () => {
     const r = await decision;
     expect(r.behavior).toBe("deny");
   });
+  it("teardown: a second disposeAll() is a safe no-op (idempotent)", async () => {
+    const rt = newRuntime();
+    const team = rt.createTeam("alpha");
+    rt.spawnTeammate({ teamId: team.id, name: "w1", prompt: "seed" });
+    await rt.disposeAll();
+    await expect(rt.disposeAll()).resolves.toBeUndefined();  // second teardown must not throw
+  });
+
   it("requestShutdown emits a shutdown ack and unregisters the teammate", async () => {
     const fq = ({ prompt }: any) => (async function* () { for await (const t of prompt) { void t; yield { type: "result", result: "r" }; } })();
     const rt = new SwarmRuntime({ query: fq }, { taskOptions: { dir: dir() } });

@@ -82,6 +82,16 @@ describe("DaemonServer over a real UDS", () => {
     await server.closed;
   });
 
+  it("teardown: a second close() is a safe no-op (idempotent)", async () => {
+    const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: tmp() });
+    const sock = join(tmp(), "s");
+    const server = new DaemonServer(sup, sock);
+    await server.listen();
+    await server.close();
+    await expect(server.close()).resolves.toBeUndefined();   // the `closing` guard makes this a no-op
+    await sup.shutdown();
+  });
+
   it("refuses to start a second daemon on a live socket", async () => {
     const d = tmp();
     const sock = join(d, "sock");

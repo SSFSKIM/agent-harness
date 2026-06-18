@@ -616,6 +616,14 @@ describe("DaemonSupervisor", () => {
     expect(sup.list()).toEqual([]);                              // record removed
     await sup.shutdown();
   });
+  it("teardown: a second shutdown() is a safe no-op (idempotent)", async () => {
+    const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: dir() });
+    sup.spawn();
+    await sup.shutdown();
+    await expect(sup.shutdown()).resolves.toBeUndefined();   // double shutdown must not throw
+    expect(sup.list()).toEqual([]);
+  });
+
   it("rejects a malformed DaemonOptions at construction", async () => {
     const { HarnessConfigError } = await import("../../src/config/validate.js");
     expect(() => new DaemonSupervisor({ query: fakeQuery }, { dir: dir(), restart: "sometimes" as any })).toThrow(HarnessConfigError);
