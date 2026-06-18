@@ -392,6 +392,18 @@ class AnswerRouteTest(unittest.TestCase):
                                  "action": "requeue", "note": "rebase then merge"})
         self.assertEqual(code, 200, body)
 
+    def test_merge_review_requeue_refused_is_not_reported_as_success(self):
+        # at max_attempts, requeue_merge REFUSES and leaves the review open — the console
+        # must NOT return a written-success envelope for that no-op (review fix).
+        self._pend({"request_id": "mcap", "kind": "mergeReview",
+                    "payload": {"pr": "#9", "branch": "b", "attempt": 3}})  # 3 = default cap
+        code, body = self._post({"request_id": "mcap", "kind": "mergeReview",
+                                 "action": "requeue", "note": "again"})
+        self.assertEqual(code, 400)
+        self.assertIn("refused", body["error"]["message"])
+        # the review is left OPEN (still pending), not silently consumed
+        self.assertIn("mcap", [r["request_id"] for r in dq.read_pending(base=self.queue_dir)])
+
     def test_merge_request_not_answerable(self):
         self._pend({"request_id": "mr", "kind": "mergeRequest",
                     "payload": {"pr": "#9", "branch": "b"}})

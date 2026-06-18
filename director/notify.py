@@ -22,6 +22,8 @@ import os
 import sys
 import time
 import urllib.request
+from pathlib import Path
+from urllib.parse import urlparse
 
 import director.queue as dq
 from director import watch
@@ -31,6 +33,24 @@ from director import watch
 from director.dashboard import HUMAN_BOUND_KINDS, _summary_for
 
 _RETRY_CAP = 5  # per-request POST attempts before abandoning a permanently-dead URL
+
+
+def _resolve_webhook_url(cli=None, env_path: str | Path = ".env"):
+    """The webhook URL: `--webhook`, else `$DIRECTOR_WEBHOOK_URL`, else a repo-root
+    `.env` line — mirroring `board.linear.load_api_key` so the secret-bearing URL lives
+    in `.env` (never committed) exactly like `LINEAR_API_KEY`."""
+    if cli:
+        return cli
+    env = os.environ.get("DIRECTOR_WEBHOOK_URL")
+    if env:
+        return env
+    p = Path(env_path)
+    if p.exists():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("DIRECTOR_WEBHOOK_URL="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return None
 
 
 def webhook_payload(req: dict) -> dict:
@@ -87,12 +107,14 @@ def run(notify, *, queue_dir=None, poll_s: float = 1.0, once: bool = False,
             # new_pending added rid to `seen`; on a failed POST we discard it (retry).
             rid = req.get("request_id")
             if notify(webhook_payload(req)):
+                attempts.pop(rid, None)  # delivered → drop any retry counter
                 continue
             n = attempts.get(rid, 0) + 1
             attempts[rid] = n
             if n >= retry_cap:
                 print(json.dumps({"notify": "abandoned", "request_id": rid,
                                   "attempts": n}), file=sys.stderr)
+                attempts.pop(rid, None)  # abandoned (stays in `seen`) → counter not needed
             else:
                 seen.discard(rid)  # leave unseen → retried next tick
         if max_ticks is None or ticks < max_ticks:
@@ -109,9 +131,12 @@ def main(argv=None) -> int:
     ap.add_argument("--poll", type=float, default=1.0, help="poll interval seconds")
     ap.add_argument("--once", action="store_true", help="single pass then exit")
     args = ap.parse_args(argv)
-    url = args.webhook or os.environ.get("DIRECTOR_WEBHOOK_URL")
+    url = _resolve_webhook_url(args.webhook)
     if not url:
-        ap.error("no webhook URL (pass --webhook or set DIRECTOR_WEBHOOK_URL)")
+        ap.error("no webhook URL (pass --webhook, set $DIRECTOR_WEBHOOK_URL, or add "
+                 "DIRECTOR_WEBHOOK_URL=... to repo-root .env)")
+    if urlparse(url).scheme not in ("http", "https"):
+        ap.error(f"webhook URL must be http(s), got scheme {urlparse(url).scheme!r}")
     run(make_webhook_notifier(url), queue_dir=args.queue_dir,
         poll_s=args.poll, once=args.once)
     return 0

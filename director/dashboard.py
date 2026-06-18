@@ -120,7 +120,9 @@ def _host_is_local(value) -> bool:
     hostname is loopback. Empty/foreign → False (the write fence, R5)."""
     if not value:
         return False
-    host = urlparse(value).hostname if "//" in value else value.rsplit(":", 1)[0].strip("[]")
+    # urlparse needs a scheme/netloc marker; a bare Host ("127.0.0.1:8787" / "[::1]:8787")
+    # is parsed by prefixing "//" so IPv6 + ports resolve (vs a naive ":" split).
+    host = urlparse(value if "//" in value else "//" + value).hostname
     return host in _LOCAL_HOSTS
 
 
@@ -432,7 +434,12 @@ class _Handler(BaseHTTPRequestHandler):
             action, note = body.get("action"), body.get("note") or ""
             if action == "requeue":
                 res = dm.requeue_merge(req, note=note, base=qbase, answered_by="console")
-                return True, f"requeue {res}"
+                # requeue_merge REFUSES at max_attempts / already_queued and leaves the
+                # review OPEN — never report that no-op as a written success (review fix).
+                if not res.get("requeued"):
+                    return False, (f"requeue refused: {res.get('reason')} "
+                                   f"(attempt {res.get('attempt')}) — review left open")
+                return True, f"requeued at attempt {res.get('attempt')}"
             if action in ("abandon", "human"):
                 dm.answer_merge_review(request_id, {"action": action, "note": note},
                                        base=qbase, answered_by="console")

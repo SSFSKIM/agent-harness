@@ -84,6 +84,24 @@ class RunLoopTest(unittest.TestCase):
                    max_ticks=2, sleep=_NOSLEEP)  # must simply return
 
 
+class ResolveUrlTest(unittest.TestCase):
+    def test_precedence_cli_env_dotenv(self):
+        import os
+        self.assertEqual(notify._resolve_webhook_url("http://cli"), "http://cli")  # cli wins
+        prev = os.environ.pop("DIRECTOR_WEBHOOK_URL", None)
+        os.environ["DIRECTOR_WEBHOOK_URL"] = "http://env"
+        try:
+            self.assertEqual(notify._resolve_webhook_url(None), "http://env")     # env next
+        finally:
+            os.environ.pop("DIRECTOR_WEBHOOK_URL", None)
+            if prev is not None:
+                os.environ["DIRECTOR_WEBHOOK_URL"] = prev
+        d = tempfile.mkdtemp()
+        p = Path(d) / ".env"
+        p.write_text('DIRECTOR_WEBHOOK_URL="http://dotenv"\n', encoding="utf-8")
+        self.assertEqual(notify._resolve_webhook_url(None, env_path=p), "http://dotenv")
+
+
 class MainTest(unittest.TestCase):
     def test_missing_url_errors(self):
         # no --webhook and no env → SystemExit (argparse error), never a silent no-op
@@ -91,10 +109,15 @@ class MainTest(unittest.TestCase):
         prev = os.environ.pop("DIRECTOR_WEBHOOK_URL", None)
         try:
             with self.assertRaises(SystemExit):
-                notify.main(["--once"])
+                notify.main(["--once", "--queue-dir", "/tmp/nope-notify"])
         finally:
             if prev is not None:
                 os.environ["DIRECTOR_WEBHOOK_URL"] = prev
+
+    def test_non_http_scheme_rejected(self):
+        # a misconfigured file:// (etc.) URL fails loud at startup, never honored
+        with self.assertRaises(SystemExit):
+            notify.main(["--once", "--webhook", "file:///etc/passwd"])
 
 
 if __name__ == "__main__":
