@@ -391,6 +391,17 @@ class AnswerRouteTest(unittest.TestCase):
         code, body = self._post({"request_id": "m2", "kind": "mergeReview",
                                  "action": "requeue", "note": "rebase then merge"})
         self.assertEqual(code, 200, body)
+        self.assertIsNotNone(dq.read_answer("m2", base=self.queue_dir))  # review consumed
+        # a fresh mergeRequest was enqueued for the retry (attempt 2)
+        mrs = [r for r in dq.read_requests(base=self.queue_dir) if r.get("kind") == "mergeRequest"]
+        self.assertTrue(any((r.get("payload") or {}).get("attempt") == 2 for r in mrs))
+
+    def test_merge_review_human_action(self):
+        # the API-level `human` resolution (no UI button — API superset; record it works)
+        self._pend({"request_id": "mh", "kind": "mergeReview", "payload": {"pr": "#1", "attempt": 1}})
+        code, _ = self._post({"request_id": "mh", "kind": "mergeReview", "action": "human"})
+        self.assertEqual(code, 200)
+        self.assertEqual(dq.read_answer("mh", base=self.queue_dir)["merge_review_disposition"]["action"], "human")
 
     def test_merge_review_requeue_refused_is_not_reported_as_success(self):
         # at max_attempts, requeue_merge REFUSES and leaves the review open — the console

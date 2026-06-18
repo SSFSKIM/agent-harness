@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-18
 owner: harness
 base_commit: 82449c23fee34e9795834881f7e482492f4bb16e
@@ -195,7 +195,14 @@ without attaching to the session. Concretely, observable:
   - *Notifier (live socket):* `director.notify --once` against a real capture HTTP
     server fired **exactly one** POST for the human-bound `turnReview`
     (`{request_id,kind,ticket_id,summary,created_at}`) and skipped the `mergeRequest`.
-- [ ] M4 completion gate — full gate GREEN + self-review + QA/risk reviews (next).
+- [x] (2026-06-18) **M4 completion gate done** — gate GREEN (450 tests; 31 dashboard +
+  10 notify new); self-review fix (constant-time token compare). Risk personas
+  review-arch / review-reliability / review-security all **SATISFIED**; QA reviews
+  spec-compliance + code-quality (Codex was rate-limited → Claude rubric agents) both
+  **SATISFIED**. P2s addressed inline (requeue-refused→non-200, IPv6 Host parse, webhook
+  scheme allowlist, `.env` URL fallback, attempts-map prune, spec wording, +tests);
+  doc-rule promotions (SECURITY T12/T13, RELIABILITY result-fidelity, the cross-module
+  private-import rule) recorded in `tech-debt-tracker.md`. Zero P1s.
 
 ## Surprises & discoveries
 - 2026-06-18: `build_view` needed **no enrichment** for M2 after all — the existing
@@ -219,5 +226,41 @@ without attaching to the session. Concretely, observable:
   independent (any order, placed third), E2E + docs last.
 
 ## Feedback (from completion gate)
+Five reviewers, all **SATISFIED**, zero P1s.
+- **review-arch (SATISFIED):** P2 requeue-refused-reported-as-success → FIXED; P2 notify
+  `.env` fallback (doc claimed it, code didn't) → FIXED; proposed cross-module private-import
+  rule → tech-debt; spec "GET / byte-unchanged" wording drift → FIXED (R7/Acceptance reworded).
+- **review-reliability (SATISFIED):** P2 requeue-refused (same) → FIXED; P2 `attempts` map
+  never pruned → FIXED; proposed "write-surface result fidelity" rule → tech-debt.
+- **review-security (SATISFIED):** P2 `_host_is_local` bare-IPv6 parse (was fail-closed) →
+  FIXED (urlparse('//'+value)); P2 webhook scheme allowlist (file:// honored) → FIXED
+  (http/https, fail-loud); proposed SECURITY T12 (console write surface) + T13 (notifier
+  egress) → tech-debt (code already honors the invariants).
+- **spec-compliance (SATISFIED):** every R1–R8 traced to code; only the GET / wording P2 (FIXED).
+- **code-quality (SATISFIED):** P2 requeue success-path test shallow + `human` action untested
+  → FIXED (assertions + a `human` test added); cross-module `_summary_for` import judged
+  acceptable coupling (recorded as tech-debt for a future-third-consumer promotion).
 
 ## Outcomes & retrospective
+**Shipped:** the operator console — the read-only dashboard is now actionable
+(`POST /api/v1/answer` kind-dispatched to the `director_min` writers, fenced by 127.0.0.1
++ a per-server CSRF token + Origin/Host + constant-time compare, refuse-double-answer 409,
+fail-soft) with per-kind browser controls, plus `director/notify.py` webhooking the human
+once per new human-bound park. **Demonstrated live:** a browser click answered a real
+`turnReview` (`answered_by:"console"`, pending cleared) and `director.notify --once` fired
+one real webhook for the human-bound park (mergeRequest skipped).
+**Goal met:** all four Goal clauses observable; gate GREEN; orchestrator/queue/status/run/
+decider byte-unchanged (R8 held — `build_view` didn't even need enrichment).
+**Retrospective:**
+- The spec's "boring by design" bet paid off: every write reuses an existing `director_min`
+  writer, so the console cannot drift from the queue contract — the whole feature is "expose
+  the LIN-22 manual loop (Monitor→answer_turn) as a web surface + a ping."
+- The one genuinely new risk (the write fence) drew the most review attention and held; the
+  recurring P2 (requeue-refused-as-success) was caught by *two* independent reviewers — a good
+  signal it was real, and worth fixing inline rather than deferring.
+- This closes the deferred slice the read-dashboard's D-2/Open-Q named, and is the
+  human-reachability half of lights-out (ADR 0003): a parked run can now reach an absent human
+  AND be answered from anywhere, no session attach. The daemon track, when it lands, parks
+  into this same queue surface.
+- Process note: Codex was rate-limited at the gate, so the two always-on QA reviews ran as
+  Claude rubric agents (CLAUDE.md fallback) — verdicts unaffected.

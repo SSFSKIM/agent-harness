@@ -78,8 +78,9 @@ console closes both gaps: answer-from-browser + notify-on-park.
   an answer is refused (`409`) rather than clobbering a possibly-consumed answer
   ([[queue-act-before-consume-ordering]]). *Verifiable:* a second `POST` for an
   already-answered `request_id` returns `409` and leaves the first answer intact.
-- **R7 — Read-only safety preserved; everything fail-soft.** The `GET /` and
-  `GET /api/v1/state` behaviors are byte-unchanged; a malformed `POST` → `400`,
+- **R7 — Read-only safety preserved; everything fail-soft.** `GET /api/v1/state` is
+  byte-unchanged and `GET /`'s read rendering is preserved (the page gains the R3
+  controls + the R5 token `<meta>`, but watching is unaffected); a malformed `POST` → `400`,
   an unknown/answered request → `404`/`409`, and any handler or webhook error is
   fail-soft (structured response, the server/notifier survives) — never a gate on
   a run, never a crash, mirroring the read dashboard's "never a gate" posture
@@ -221,7 +222,8 @@ console closes both gaps: answer-from-browser + notify-on-park.
 - `python3 -m director.notify --webhook <capture>` POSTs exactly once per new
   human-bound `request_id` with `{request_id, kind, ticket_id, summary,
   created_at}`; a dead URL is fail-soft (bounded retry, poller survives).
-- `GET /` and `GET /api/v1/state` byte-unchanged; `python3 plugin/scripts/check.py`
+- `GET /api/v1/state` byte-unchanged, `GET /` read rendering preserved (+ controls/token);
+  `python3 plugin/scripts/check.py`
   GREEN.
 
 ## Decision log
