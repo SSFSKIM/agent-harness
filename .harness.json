@@ -1,6 +1,6 @@
 {
   "worker_policy": {
-    "worker_env": [],
+    "worker_env": ["GH_TOKEN"],
     "network_allowlist": ["chatgpt.com", "api.openai.com", "github.com", "registry.npmjs.org"],
     "capabilities": []
   },

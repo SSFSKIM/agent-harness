@@ -213,7 +213,9 @@ the decider, the queue, or the merger's own logic.
   hooks aren't yet load-bearing; they become essential only when we point workers at
   a real repo / real PRs, which is its own product decision (where the code comes
   from, the host-shell-execution trust boundary, the config schema). Specced as a
-  future slice of this same parity track, not built now.
+  future slice of this same parity track. **Update (2026-06-19): R4 is now built** — see
+  [workspace-lifecycle-hooks](2026-06-19-workspace-lifecycle-hooks.md) (de-risked by a
+  worker-PR spike, then implemented + live-validated on the throwaway repo).
 - No change to the daemon tick loop, backoff, stall handling, decider, queue, or
   merger internals (all closed tracks).
 - No multi-instance claim coordination (orphan recovery is single-instance).

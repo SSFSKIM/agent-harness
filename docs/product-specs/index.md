@@ -168,3 +168,14 @@ owner: harness
   §9.1). Build = slices 1–3. **R4 workspace lifecycle hooks DEFERRED** (the repo-population
   bridge — only load-bearing once workers run on a real repo). Additive; daemon/reconcile
   core + decider/queue/merger unchanged.
+- [Workspace lifecycle hooks (R4 — repo-population bridge)](2026-06-19-workspace-lifecycle-hooks.md)
+  — the deferred R4 of the parity track, promoted to built after a spike proved a
+  `workspace-write`-sandbox codex worker (with `GH_TOKEN` in `worker_env` + git's gh
+  credential helper) can clone→edit→push→open a real PR in one turn. Adds Symphony §9.4
+  workspace lifecycle hooks: `.harness.json` `director.workspace.hooks`
+  {`after_create`/`before_run`/`after_run`/`before_remove`} + `hook_timeout_s`, each run
+  `sh -lc` with cwd=workspace, **Director-side** (trusted host config — keychain reach for
+  private clone), with Symphony's fatal/ignored failure semantics. Repo population is the
+  host's `after_create` clone, not harness logic (§9.3 VCS-agnostic). Live-validated on a
+  throwaway GitHub repo: ticket → worker PR → merger land. New SECURITY T15 (hook privilege).
+  Additive — config.py + run.py + orchestrator.py cleanup sites; parity slices 1–3 unchanged.
