@@ -156,8 +156,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { SwarmRuntime } from "cc-harness";
 
 const swarm = new SwarmRuntime({ query }, { cwd: process.cwd() });
-swarm.createTeam("core");
-swarm.spawnTeammate({ name: "reviewer", teamId: "core", prompt: "Review the diff for bugs." });
+const team = swarm.createTeam("core");
+swarm.spawnTeammate({ name: "reviewer", teamId: team.id, prompt: "Review the diff for bugs." });
 // … coordinate via swarm.bus / swarm.tasks …
 await swarm.disposeAll();
 ```
@@ -221,6 +221,11 @@ try {
 
 Validation guards constrained fields only (it never transforms); escape hatches
 (`extraOptions`/`settings`/`managedSettings`/`customHeaders`) pass through untouched.
+
+### Also exported
+
+- **Assistant persona (experimental):** `KairosAssistant`, with `applyAssistantPersona` / `resolveAssistantPosture` / `createBriefMcpServer` / `stdoutBriefSink`, reconstructs a proactive Claude.ai-style assistant persona over the daemon. See [`API-STABILITY.md`](./API-STABILITY.md) (experimental tier).
+- **Constants:** `DEFAULTS` (the CC-faithful config defaults), `BUILTIN_AGENTS`, and `BUILTIN_OUTPUT_STYLES`.
 
 ## `HarnessConfig` reference
 
