@@ -39,4 +39,53 @@ describe("public API", () => {
     expect(typeof api.validateHarnessConfig).toBe("function");
     expect(typeof api.HarnessConfigError).toBe("function");
   });
+  it("freezes the full public value-export surface (deliberate-update gate)", () => {
+    const EXPECTED: string[] = [
+      "BUILTIN_AGENTS",
+      "BUILTIN_OUTPUT_STYLES",
+      "COMPACT_TOOL",
+      "CONTEXT_TOOL",
+      "DEFAULTS",
+      "DaemonError",
+      "DaemonServer",
+      "DaemonSupervisor",
+      "HarnessConfigError",
+      "KairosAssistant",
+      "Session",
+      "SwarmError",
+      "SwarmRuntime",
+      "TaskError",
+      "TaskStore",
+      "applyAssistantPersona",
+      "blockTool",
+      "createBriefMcpServer",
+      "createCompactMcpServer",
+      "createContextMcpServer",
+      "createHarness",
+      "createSwarmMcpServer",
+      "createTaskMcpServer",
+      "daemonRequest",
+      "daemonSocketPath",
+      "deleteSession",
+      "forkSession",
+      "getSessionInfo",
+      "getSessionMessages",
+      "guardTool",
+      "injectContext",
+      "listSessions",
+      "mergeHooks",
+      "observe",
+      "openSession",
+      "renameSession",
+      "resolveAssistantPosture",
+      "resolveOptions",
+      "resumeHarness",
+      "resumeSession",
+      "stdoutBriefSink",
+      "summarizeUsage",
+      "tagSession",
+      "validateHarnessConfig",
+    ];
+    expect(Object.keys(api).sort()).toEqual(EXPECTED);
+  });
 });
