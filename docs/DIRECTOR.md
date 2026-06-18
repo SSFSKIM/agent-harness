@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-17
+last_verified: 2026-06-18
 owner: harness
 ---
 # DIRECTOR.md — the Director operating manual
@@ -239,29 +239,49 @@ On a `runReport`:
 Run-level reporting is **watched-mode only** — un-watched (`--autonomous`) has no live you to
 pull, so no `runReport` is acted on (the run's outcome is read from `director.status` after).
 
-## 10. Watching a run live (the observability dashboard)
+## 10. Watching — and answering — a run live (the operator console)
 
 §1/§8 are how *you* read the picture (`director.status`, on demand). This is how a **human**
-watches it directly — an ambient, read-only browser view they glance at without entering your
-session:
+watches AND answers a run directly from a browser, without entering your session:
 
 ```
-python3 -m director.dashboard            # http://127.0.0.1:8787/  (read-only)
+python3 -m director.dashboard            # http://127.0.0.1:8787/
 python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir>
 ```
 
-It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status` +
-`director.queue` pending), re-polled ~1s in the browser (no SSE, no reload). The page renders
-the run header with **cost/usage** — cumulative tokens, runtime seconds, and the latest
-rate-limit (the Symphony-grade telemetry the producer now ships) — plus in-flight tickets
+**Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
++ `director.queue` pending), re-polled ~1s in the browser (no SSE, no reload): the run header
+with **cost/usage** (cumulative tokens, runtime seconds, latest rate-limit), in-flight tickets
 (phase·attempt/wave), what is stuck and why, the recent-outcomes tail (✓/✗ + per-ticket
-tokens/session), and the pending Director queue (kind·ticket·summary). With no run it shows
-"no active run"; a torn/absent snapshot degrades to that too — visibility is never a gate.
+tokens/session), and the pending Director queue. No run / torn snapshot → "no active run"
+(visibility is never a gate).
 
-It is **read-only by design** (D-2/D-5): a pending `turnReview`/`mergeReview` is shown so the
-human *sees* it, but answering it still goes through **you** (§4/§7). The dashboard never
-writes — no act path in the browser. It binds `127.0.0.1` only (no LAN, no auth) and is a
-convenience instrument: a run is correct whether or not anyone is watching it.
+**Answer.** Each pending item shows a kind-appropriate control: a `turnReview` gets
+reply / done / blocked / escalate (with a text box); an approval gets accept / decline; a
+`mergeReview` gets requeue (with a note) / abandon. Submitting `POST`s `/api/v1/answer`, which
+writes the answer through the **same `director_min` writers you call in §4/§7** — so the
+blocked worker unblocks identically. Answering from the console *is* answering as the Director;
+it just doesn't require attaching to the session. (`mergeRequest` is shown read-only — it is
+the merger's worklist, not a human decision.)
+
+**Fenced** (the deferred "write surface" concern, now closed): it binds `127.0.0.1` only and
+every write requires a per-server **CSRF token** (minted at start, embedded in the page) plus a
+localhost `Origin`/`Host` — so no other page in your browser can forge a write. Reads are
+unfenced; no auth, no LAN bind. Bad/absent token → `403`, already-answered → `409`, malformed
+body → `400`; fail-soft, never a gate on a run.
+
+**Get pinged when a run parks.** A console only helps if you know to open it — so run the park
+notifier alongside the orchestrator:
+
+```
+export DIRECTOR_WEBHOOK_URL=https://hooks.slack.com/...   # kept in .env, never committed
+python3 -m director.notify                                # or: --webhook <url> --queue-dir <dir>
+```
+
+It tails the queue and fires your webhook **once** per new human-bound pending request
+(`turnReview` / approval / `mergeReview`) — the lights-out "you're needed" ping (§13). It is
+fail-soft (a dead URL retries a few times, then abandons — never crashes) and reuses the same
+dedup as `director.watch`; the network egress is isolated here, not in the watch emitter.
 
 ## 11. Configuring a run (the `.harness.json` `director` block)
 

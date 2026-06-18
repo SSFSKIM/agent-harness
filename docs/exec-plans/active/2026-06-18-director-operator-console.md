@@ -182,7 +182,20 @@ without attaching to the session. Concretely, observable:
   abandon+log), `--webhook`/`$DIRECTOR_WEBHOOK_URL`. New `test_director_notify.py` (8
   tests: payload, 2xx/non2xx/raise, fire-once + skip-non-human, retry-then-abandon,
   transient-recover, torn-queue fail-soft, missing-url errors). Full gate GREEN.
-- [ ] M4 — DIRECTOR.md section + playwright E2E + completion gate.
+- [x] (2026-06-18) **M4 docs + behavioral E2E done** — `DIRECTOR.md` §10 rewritten
+  ("Watching — and answering — a run live (the operator console)"): answer-from-browser,
+  the fence, and the `director.notify` webhook; `last_verified` bumped.
+  **Behavioral check (web surface → required), both PASS:**
+  - *Browser (playwright):* seeded a pending `turnReview` + run snapshot, served
+    `director.dashboard` on :8799, drove `GET /` in chrome — the page rendered the run
+    header + in-flight + the pending item with reply/done/blocked/escalate controls;
+    clicking **done** wrote `answers/e2e-tr-1.json` = `{disposition:{kind:terminal,
+    outcome:{status:done}}, answered_by:"console"}` and the pending item cleared on the
+    next poll (`read_pending` → `[]`). Browser→POST→director_min→unblock proven live.
+  - *Notifier (live socket):* `director.notify --once` against a real capture HTTP
+    server fired **exactly one** POST for the human-bound `turnReview`
+    (`{request_id,kind,ticket_id,summary,created_at}`) and skipped the `mergeRequest`.
+- [ ] M4 completion gate — full gate GREEN + self-review + QA/risk reviews (next).
 
 ## Surprises & discoveries
 - 2026-06-18: `build_view` needed **no enrichment** for M2 after all — the existing
