@@ -24,7 +24,7 @@ HOST_INDEXED_DIRS = ("design-docs", "product-specs", "memory/adr",
 # generated pages are frontmatter-exempt and guarded from .harnessignore
 # un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it.
 HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
-FM_EXEMPT = ("generated/", "superpowers/")
+FM_EXEMPT = hl.DOC_EXEMPT  # the shared exempt set (one definition in harness_lib)
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
     "docs/KNOWLEDGE_FORMAT.md",

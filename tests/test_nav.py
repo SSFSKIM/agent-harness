@@ -130,8 +130,25 @@ class TestNavStale(unittest.TestCase):
 
     def test_stale_lists_only_old_active_pages(self):
         # old+active is stale; fresh is within window; archived is exempt
-        paths = sorted(r["path"] for r in nav.stale(self.records, self.root))
+        paths = sorted(r["path"] for r in nav.stale(self.records, 30))
         self.assertEqual(paths, ["docs/memory/knowledge/old.md"])
+
+
+class TestNavLinkEscape(unittest.TestCase):
+    def test_out_of_root_link_skipped_not_crash(self):
+        # a link target that EXISTS but resolves outside the repo root must be
+        # skipped, never crash build_index (review: nav.py _resolve_links).
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            (tmp / "outside.md").write_text("# out\n", encoding="utf-8")
+            root = tmp / "repo"
+            _page(root / "docs/memory/knowledge/p.md",
+                  ["status: stable", "last_verified: 2026-06-18", "owner: h",
+                   "type: knowledge", "description: links outside root."],
+                  body="see [o](../../../../outside.md)\n")
+            records = nav.build_index(root)  # must not raise
+            rec = next(r for r in records if r["path"].endswith("p.md"))
+            self.assertEqual(rec["links"], [])  # escaping edge dropped
 
 
 class TestNavDrift(unittest.TestCase):

@@ -152,6 +152,10 @@ def links_in(text):
 # (the persona grounding + execplan docs that the review gate itself rides on).
 MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
                  "product-specs")
+# docs/ subtrees that carry no governed frontmatter — skipped by content lints
+# AND by nav's catalog scope. One definition both consume (core-belief 5);
+# consumers may append their own extras (e.g. host .harnessignore roots).
+DOC_EXEMPT = ("generated/", "superpowers/")
 MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "KNOWLEDGE_FORMAT.md",
                 "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")

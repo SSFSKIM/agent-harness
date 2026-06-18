@@ -19,14 +19,15 @@ from pathlib import Path
 
 import harness_lib as hl
 
-# docs subtrees nav never indexes (mirrors lint's FM_EXEMPT). Pure stdlib +
+# docs subtrees nav never indexes — the shared exempt set (hl.DOC_EXEMPT, also
+# lint's FM_EXEMPT), plus host .harnessignore roots at build time. Pure stdlib +
 # harness_lib only — nav must not import lint_docs (lint S1, core-belief 7), so
 # scope is derived here from frontmatter + harness_lib helpers rather than by
 # reusing the gate's predicate. In self-host this set equals lint's governed
 # content pages (every governed page carries frontmatter per D3); in relaxed
 # hosts nav may show a few more frontmatter-bearing pages, which is fine for a
 # read-only navigator.
-EXEMPT = ("generated/", "superpowers/")
+EXEMPT = hl.DOC_EXEMPT
 # Reserved spine files: indexed as link roots, never catalog rows or orphans.
 RESERVED = ("index.md", "MEMORY.md")
 
@@ -57,7 +58,10 @@ def _resolve_links(p, root, raw):
         for base in (p.parent, root):
             cand = base / t
             if cand.exists():
-                out.append(cand.resolve().relative_to(root.resolve()).as_posix())
+                try:
+                    out.append(cand.resolve().relative_to(root.resolve()).as_posix())
+                except ValueError:
+                    pass  # exists but escapes the repo root — not an intra-corpus edge
                 break
     return out
 
@@ -150,19 +154,18 @@ def orphans(records):
                   if r["catalog"] and r["path"] not in linked)
 
 
-def stale(records, root):
-    """Catalog pages past the effective staleness window (advisory view of D4).
+def stale(records, stale_days):
+    """Catalog pages past `stale_days` (advisory view of D4) — a pure projection.
 
-    Uses the shared `hl.is_stale` + `hl.stale_window`, so it agrees with what
-    the gate's D4 would flag. A bad/missing date is a lint concern, not a
-    staleness one, and is skipped here."""
-    sd = hl.stale_window(hl.gate_config(root))
+    Uses the shared `hl.is_stale`, so it agrees with what the gate's D4 would
+    flag at the same window (main() resolves the window via `hl.stale_window`). A
+    bad/missing date is a lint concern, not a staleness one, and is skipped."""
     out = []
     for r in records:
         if not r["catalog"] or not r["last_verified"]:
             continue
         try:
-            if hl.is_stale(r["last_verified"], sd, r["status"]):
+            if hl.is_stale(r["last_verified"], stale_days, r["status"]):
                 out.append(r)
         except (ValueError, TypeError):
             continue
@@ -284,7 +287,7 @@ def main(argv=None):
     elif args.cmd == "orphans":
         _emit_paths(orphans(records), args.json)
     elif args.cmd == "stale":
-        _emit(stale(records, root), args.json)
+        _emit(stale(records, hl.stale_window(hl.gate_config(root))), args.json)
     elif args.cmd == "drift":
         _emit_drift(drift(records, root), args.json)
 

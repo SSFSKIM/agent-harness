@@ -226,4 +226,28 @@ the predicate, don't copy it.
 
 ## Feedback (from completion gate)
 
+Risk personas (review_level standard): **review-arch** + **review-reliability**
+(dispatched as the registered agents). Always-on **spec-compliance** +
+**code-quality** dispatched via `general-purpose` carrying each rubric (the
+dedicated review-spec-compliance / review-code-quality agents are not yet in the
+session's dispatchable registry — see memory `mid-session-agents-not-dispatchable`;
+codex path unavailable, rate-limited until 21:49).
+
+- **P1 (review-arch; review-reliability flagged same as P2) — FIXED.**
+  `nav.py _resolve_links` did `cand.resolve().relative_to(root.resolve())`, which
+  raised `ValueError` on a link target that exists but resolves outside the repo
+  root (`../`-escape or symlink), crashing every nav subcommand — a fail-soft
+  violation and a divergence from D5 (which only `.exists()`-checks). Guarded with
+  `try/except ValueError: pass` (skip the escaping edge, matching the docstring);
+  regression test `TestNavLinkEscape`. Reran gate GREEN.
+- **P2 (review-arch) — FIXED.** Exempt literals were duplicated (lint `FM_EXEMPT`
+  vs nav `EXEMPT`). Lifted to `hl.DOC_EXEMPT`; both now reference it (finishes the
+  single-definition move). 
+- **P2 (review-arch) — FIXED.** `stale()` resolved `gate_config` internally,
+  coupling a projection to the filesystem. Now `stale(records, stale_days)` is a
+  pure projection; `main()` wires `hl.stale_window(hl.gate_config(root))`.
+- **Proposed rule (review-reliability) → tech-debt.** "Corpus-walking read tools
+  fail soft per-page/per-edge." Logged as a RELIABILITY candidate (one occurrence
+  so far; promote on recurrence per rule 10) — see tech-debt-tracker.
+
 ## Outcomes & retrospective
