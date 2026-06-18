@@ -14,7 +14,6 @@ describe("public API", () => {
     expect(typeof api.createContextMcpServer).toBe("function");
     expect(typeof api.summarizeUsage).toBe("function");
     expect(typeof api.createCompactMcpServer).toBe("function");
-    expect(typeof api.parseCompactOutcome).toBe("function");
     expect(typeof api.openSession).toBe("function");
     expect(typeof api.resumeSession).toBe("function");
     expect(typeof api.Session).toBe("function");
@@ -31,5 +30,9 @@ describe("public API", () => {
     expect(typeof api.blockTool).toBe("function");
     expect(typeof api.observe).toBe("function");
     expect(typeof api.mergeHooks).toBe("function");
+  });
+  it("does NOT export internal plumbing from the package root (boundary curation)", () => {
+    for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
+      expect(api).not.toHaveProperty(name);
   });
 });
