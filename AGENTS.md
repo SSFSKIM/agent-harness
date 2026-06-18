@@ -66,6 +66,13 @@ Deep truth lives in `docs/` — follow the pointers.
 - **Preferred paths, not negative space.** Named commands and skills are the
   routine path. Extra CLI exploration is allowed when it serves the task; if it
   repeats, promote it into docs, a skill, or the gate.
+- **General by identity; propagate to the portable layer.** This repo is both the
+  portable *machine* and its first *host*. A change to how the harness works must
+  land in the portable layer (`plugin/` + `harness-init` templates + `scaffold.py`
+  seeds + generic skills, host-agnostic — lint S7), not only self-host `docs/` —
+  what lands only self-host doesn't exist for ported hosts. Mechanize the
+  propagation where you can (e.g. the machine-doc→seed guard). Full text: core
+  belief 13.
 
 ## Porting
 
