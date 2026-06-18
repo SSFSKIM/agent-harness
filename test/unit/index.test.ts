@@ -20,4 +20,11 @@ describe("public API", () => {
     expect(typeof api.Session).toBe("function");
     expect(typeof api.forkSession).toBe("function");
   });
+  it("exports the hook builders and mergeHooks", () => {
+    expect(typeof api.injectContext).toBe("function");
+    expect(typeof api.guardTool).toBe("function");
+    expect(typeof api.blockTool).toBe("function");
+    expect(typeof api.observe).toBe("function");
+    expect(typeof api.mergeHooks).toBe("function");
+  });
 });

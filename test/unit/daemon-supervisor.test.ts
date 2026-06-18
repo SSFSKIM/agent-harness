@@ -528,4 +528,12 @@ describe("DaemonSupervisor", () => {
     expect(sink.slice(1).every((o) => o.resume === undefined)).toBe(true); // no captured id → fresh restart
     await sup.shutdown();
   });
+  it("threads a hooks-bearing sessionOptions factory through to the underlying query options", async () => {
+    const seen: any[] = [];
+    const hooks = { PostToolUse: [{ hooks: [async () => ({})] }] };
+    const sup = new DaemonSupervisor({ query: captureQuery(seen) }, { dir: dir(), sessionOptions: () => ({ hooks }) });
+    sup.spawn();
+    expect(seen[0].hooks).toBe(hooks);   // factory's hooks reached the query options
+    await sup.shutdown();
+  });
 });

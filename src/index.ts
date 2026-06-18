@@ -21,3 +21,8 @@ export { createCompactMcpServer, parseCompactOutcome, COMPACT_TOOL } from "./com
 export type { CompactHolder, CompactOutcome } from "./compaction/index.js";
 export { openSession, resumeSession, Session } from "./session/index.js";
 export type { OpenSessionConfig, SessionDepsInput, SessionDeps, SessionOpts } from "./session/index.js";
+export { injectContext, guardTool, blockTool, observe, mergeHooks } from "./hooks/index.js";
+export type {
+  HooksMap, HookDecision, HookEvent, HookInput, HookCallback, HookJSONOutput, HookCallbackMatcher,
+  PreToolUseHookInput, PostToolUseHookInput, UserPromptSubmitHookInput, StopHookInput, SubagentStopHookInput,
+} from "./hooks/index.js";
