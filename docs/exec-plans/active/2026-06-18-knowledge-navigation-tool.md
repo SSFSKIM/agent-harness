@@ -172,7 +172,12 @@ the predicate, don't copy it.
   datetime`. Regression: 38 lint_docs + 27 harness_lib tests green, NO existing
   assertion edited; full gate GREEN. Added 5 primitive tests (links_in, is_stale
   true/within-window/archived-exempt/raises-on-bad-date).
-- [ ] M2 — nav.py build_index + catalog/filter + tests
+- [x] (2026-06-18) M2 — nav.py `build_index` + `catalog` (--type/--tag/--status,
+  --json) + 8 tests. Hit lint **S1** (scripts may not import lint_docs) — reworked
+  nav to derive its scope from harness_lib only: catalog-eligible = has
+  frontmatter ∧ not reserved (index.md/MEMORY.md) ∧ not exempt; extracted the
+  segment-boundary matcher to `hl.is_exempt` (lint_docs now delegates). Self-host
+  scope == lint's governed content set. Gate GREEN; lint_docs 38 tests unchanged.
 - [ ] M3 — nav.py links/backlinks/stale/orphans/drift + tests
 - [ ] M4 — docs-nav skill + AGENTS/template/MEMORY wiring + gate GREEN
 
@@ -183,6 +188,12 @@ the predicate, don't copy it.
   (caller owns reporting); updated the spec D-4 wording to match so the
   spec-compliance review sees agreement. The ExecPlan already specified this
   contract — the spec line was the imprecise one.
+- **S1 blocked the spec's "reuse lint's predicate" design.** lint_structure S1
+  forbids a script importing `lint_docs` (pure-stdlib+harness_lib only). Reworked
+  nav's scope to be harness_lib-derived (frontmatter + `hl.is_exempt` + reserved
+  exclusion); updated spec D-1 to match. This is *better* than the original design:
+  no script→script coupling, and `is_exempt` is now a shared primitive. The gate
+  caught a spec/architecture conflict the green-on-paper design hid.
 - Tests run via `python3 -m unittest discover -s tests` (check.py step), not
   `-m unittest tests.test_x` (tests/ is not a package; modules self-insert
   plugin/scripts on sys.path). Pyright "harness_lib could not be resolved" is a

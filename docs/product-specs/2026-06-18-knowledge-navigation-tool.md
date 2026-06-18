@@ -139,9 +139,15 @@ links          list[str]         # repo-relative targets this page links to
 `build_index` walks `hl.iter_md(root/"docs")` plus the two entry maps
 (`AGENTS.md`, `ARCHITECTURE.md`) for link purposes, reads each page's frontmatter
 via `hl.read_frontmatter` (Phase-1 list-aware — `tags` already returns a list),
-and extracts links via the shared primitive (D-4). It governs the same set
-`lint_docs` does (it imports `lint_docs`'s governance predicate rather than
-re-deriving it) so the catalog and the gate agree on "which pages count".
+and extracts links via the shared primitive (D-4). A record is **catalog-eligible**
+when it carries frontmatter and is not a reserved spine file (`index.md` /
+`MEMORY.md`); exempt subtrees (`generated/`, `superpowers/`, host
+`.harnessignore` roots) are skipped via the shared `hl.is_exempt`. nav must **not**
+import `lint_docs` (lint S1 / core-belief 7 forbid script→script deps), so it
+derives this scope from `harness_lib` + frontmatter rather than reusing the gate's
+predicate. In **self-host** that scope equals lint's governed content pages
+(every governed page carries D3 frontmatter); in relaxed hosts nav may surface a
+few more frontmatter-bearing pages — acceptable for a read-only navigator.
 
 Bodies are never parsed beyond the link scan (a single regex pass) — the catalog
 columns come from frontmatter only, which is the whole point (R2).

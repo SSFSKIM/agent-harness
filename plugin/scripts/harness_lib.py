@@ -192,6 +192,17 @@ def exempt_roots(root):
     return tuple(out)
 
 
+def is_exempt(rel, prefixes):
+    """True if docs-relative posix `rel` is under (or equals) any of `prefixes`.
+
+    Matched on path-segment boundaries (a trailing `/` on a prefix is optional):
+    `business` matches the `business/` tree and the file `business`, but never a
+    sibling `business-plan.md`. The one definition shared by lint_docs (content
+    lints) and nav.py (catalog scope) — see core-belief 5.
+    """
+    return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in prefixes)
+
+
 def gate_config(root):
     """Optional per-repo gate config: `<root>/.harness.json`.
 

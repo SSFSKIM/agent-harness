@@ -53,12 +53,9 @@ def _rel(p, root):
 
 
 def _exempt(p, docs, parts):
-    # Match on path-segment boundaries, never bare substring: an entry `business`
-    # exempts the `business/` tree and the file `business`, but NOT a sibling
-    # `business-plan.md`. This is what stops a partial prefix (`mem`) from
-    # reaching `memory/…` and what makes the trailing `/` optional/forgiving.
-    rel = p.relative_to(docs).as_posix()
-    return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in parts)
+    # Segment-boundary match (never bare substring) lives in harness_lib so the
+    # gate and nav.py share one definition (core-belief 5 / S1).
+    return hl.is_exempt(p.relative_to(docs).as_posix(), parts)
 
 
 def _strict_doc_governance(root, cfg=None, plugin=None):
