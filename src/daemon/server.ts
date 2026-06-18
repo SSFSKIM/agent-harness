@@ -69,7 +69,7 @@ export class DaemonServer {
     try {
       switch (op.op) {
         case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart, resume: op.resume }) }); sock.end(); break;
-        case "list": send({ ok: true, sessions: this.supervisor.list() }); sock.end(); break;
+        case "list": send({ ok: true, sessions: this.supervisor.list().map((r) => ({ ...r, proactive: this.supervisor.proactiveStatus(r.id) })) }); sock.end(); break;
         case "sessions": send({ ok: true, sessions: await this.supervisor.listPersistedSessions({ cwd: op.cwd, limit: op.limit, offset: op.offset }) }); sock.end(); break;
         case "messages": send({ ok: true, messages: await this.supervisor.getPersistedMessages(op.id, { cwd: op.cwd, limit: op.limit, offset: op.offset }) }); sock.end(); break;
         case "control": send(await this.supervisor.control(op.id, op.frame)); sock.end(); break;

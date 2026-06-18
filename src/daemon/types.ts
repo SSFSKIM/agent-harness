@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { controlFrame } from "../bridge/types.js";
 import { proactiveConfig } from "../proactive/types.js";
+import type { ProactiveStatus } from "../proactive/types.js";
 
 export class DaemonError extends Error {}
 
@@ -18,6 +19,9 @@ export interface SessionRecord {
   lastActiveAt: number;
   restarts?: number;       // count of automatic restarts (D2)
 }
+
+/** A live-pool entry on the wire: a SessionRecord enriched with the session's proactive status (if any). */
+export type ListEntry = SessionRecord & { proactive?: ProactiveStatus };
 
 export interface DaemonOptions {
   dir?: string;            // registry dir (default ~/.claude/cc-daemon/sessions)
