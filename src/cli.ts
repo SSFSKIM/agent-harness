@@ -7,6 +7,8 @@ import { DaemonServer } from "./daemon/server.js";
 import { daemonRequest } from "./daemon/client.js";
 import { daemonSocketPath } from "./daemon/paths.js";
 import { KairosAssistant } from "./kairos/index.js";
+import { runMonitor } from "./monitor/app.js";
+import { daemonMonitorClient } from "./monitor/client.js";
 
 async function readStdin(): Promise<string | undefined> {
   if (process.stdin.isTTY) return undefined;
@@ -49,6 +51,17 @@ async function daemonCli(args: string[]): Promise<boolean> {
       if (o.type === "chunk") { for (const b of o.message?.message?.content ?? []) if (b.type === "text") process.stdout.write(b.text); }
       else if (o.type === "done") process.stdout.write("\n");
     });
+    return true;
+  }
+  if (args[0] === "top") {
+    let socket = daemonSocketPath(); let intervalMs = 1000; let once = false;
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i];
+      if (a === "--socket") socket = args[++i];
+      else if (a === "--interval") intervalMs = Number(args[++i]) || intervalMs;
+      else if (a === "--once") once = true;
+    }
+    await runMonitor({ client: daemonMonitorClient(socket), socketPath: socket, intervalMs, once });
     return true;
   }
   return false;
