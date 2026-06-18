@@ -135,3 +135,20 @@ owner: harness
   sweep** pre-handoff+on-arrival). 척추 = `WORKFLOW.md` 줄별 keep/adapt/reject triage(보드-쓰기 소유·
   직렬 merger·`report_outcome`·5 typed stage 에 대고). 워커-프롬프트 only — `decider.py`(slice 2)·
   보드 소유·merger 불변. graduated-autonomy 의 *worker-autonomy enabler*.
+- [Director operator console — actionable dashboard + park notifications](2026-06-18-director-operator-console.md)
+  — the human-reachability complement to lights-out ([ADR 0003](../memory/adr/0003-lights-out-director.md)).
+  Turns the read-only dashboard ([observability-dashboard](2026-06-16-director-observability-dashboard.md)
+  D-2 deferred slice) into an **actionable** surface + adds the missing "reach an
+  absent human" channel. `POST /api/v1/answer` resolves a pending queue request via
+  the canonical `director_min` writers (`answer`/`answer_turn`/`answer_merge_review`/
+  `requeue_merge`) per kind (turnReview/commandApproval/fileChange/userInput/
+  elicitation/mergeReview; `mergeRequest` read-only) → the blocked worker's
+  `wait_for_answer` unblocks. Write-surface fencing = `127.0.0.1` + per-server CSRF
+  token + Origin/Host check (the deferred "write fencing" concern); act-durably +
+  refuse-double-answer (R6, [[queue-act-before-consume-ordering]]). New
+  `director/notify.py` tails the queue (reusing `watch.new_pending` dedup) and POSTs
+  a **webhook** ($DIRECTOR_WEBHOOK_URL/`--webhook`, secret kept in `.env`) once per
+  new human-bound pending request — the lights-out "you're needed" ping. Additive:
+  `dashboard.py` + `notify.py` + tests + DIRECTOR.md; orchestrator/queue/status
+  unchanged. Non-goals: orchestrator poll-trigger, non-webhook channels, SSE,
+  pause/cancel (active-run reconciliation already owns operator-stop).
