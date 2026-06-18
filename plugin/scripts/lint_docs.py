@@ -8,7 +8,6 @@ product-specs strict while additional project-specific docs stay host-owned
 unless opted into governance.
 Exit 0 = green; exit 1 = at least one FAIL.
 """
-import datetime
 import re
 import sys
 
@@ -41,7 +40,8 @@ PROTECTED_PATHS = frozenset(
     ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
-LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
+# LINK / staleness now live in harness_lib (the one definition shared with
+# nav.py) — see hl.links_in / hl.is_stale.
 
 
 def _fail(errors, rule, path, problem, fix):
@@ -132,13 +132,11 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
                       f"Add `{k}:` to the frontmatter block.")
         lv = fm.get("last_verified", "")
         if "last_verified" in fm:
+            sd = stale_days
+            if p.relative_to(root).as_posix() in PROTECTED_PATHS:
+                sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
             try:
-                d = datetime.date.fromisoformat(lv)
-                sd = stale_days
-                if p.relative_to(root).as_posix() in PROTECTED_PATHS:
-                    sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
-                stale = (hl.today() - d).days > sd
-                if stale and fm.get("status") not in ("archived", "completed"):
+                if hl.is_stale(lv, sd, fm.get("status")):
                     _fail(errors, "D4", _rel(p, root),
                           f"stale: last_verified {lv} is over {sd} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
@@ -160,8 +158,7 @@ def check_links(root, errors, host=(), cfg=None):
             targets.append(root / name)
     for p in targets:
         text = p.read_text(encoding="utf-8")
-        for m in LINK.finditer(text):
-            t = m.group(1)
+        for t in hl.links_in(text):
             if t.startswith(("http://", "https://")):
                 continue
             if not ((p.parent / t).exists() or (root / t).exists()):

@@ -7,6 +7,7 @@ Pure stdlib. Portable: never hardcodes an absolute path.
 import datetime
 import json
 import os
+import re
 import shlex
 from pathlib import Path
 
@@ -133,6 +134,18 @@ def iter_md(base):
     return sorted(p for p in base.rglob("*.md"))
 
 
+# The ONE definition of a knowledge link: a markdown link whose target is a
+# `.md` page (optionally with a `#fragment`). Consumed by lint_docs D5 AND by
+# nav.py's graph — keeping them on one regex stops the gate and the navigator
+# from disagreeing about what an edge is (core-belief 5).
+LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
+
+
+def links_in(text):
+    """Repo-relative `.md` link targets appearing in `text`, in document order."""
+    return [m.group(1) for m in LINK.finditer(text)]
+
+
 # Doc trees the harness always governs — never exemptable via .harnessignore,
 # so a host can't un-govern (and silently poison) the memory/design/product tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
@@ -231,3 +244,19 @@ def gate_command(cfg, key, env_name):
 
 def today():
     return datetime.date.today()
+
+
+def is_stale(last_verified, stale_days, status):
+    """The ONE definition of staleness (lint D4 + nav `stale`).
+
+    Parses `last_verified` first, so a bad or non-scalar date (e.g. a YAML
+    list, which `read_frontmatter` returns as `list`) raises ValueError /
+    TypeError — the caller owns the reporting UX (lint → D4 FAIL with its
+    message + list-date guard; nav → skip the page). A well-formed date with
+    `status` in {archived, completed} is never stale. Otherwise stale iff
+    `today - last_verified > stale_days`.
+    """
+    d = datetime.date.fromisoformat(last_verified)  # raises on bad/non-scalar
+    if status in ("archived", "completed"):
+        return False
+    return (today() - d).days > stale_days

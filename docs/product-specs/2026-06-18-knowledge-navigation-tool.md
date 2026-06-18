@@ -196,8 +196,12 @@ ARCHITECTURE's layer law and core-belief 5):
 - `hl.LINK` (or `hl.links_in(text) -> list[str]`) — the one definition of a
   knowledge link. `lint_docs.check_links` and `nav.build_index` both call it.
 - `hl.is_stale(last_verified, stale_days, status) -> bool` — the one definition of
-  staleness, returning `False` for archived/completed and raising nothing on a
-  bad date (callers decide how to report: lint → D4 FAIL, nav → skip/flag).
+  staleness: `False` for archived/completed, else whether `today -
+  last_verified > stale_days`. It parses the date **first**, so a bad or
+  non-scalar date (e.g. a YAML list) **raises** `ValueError`/`TypeError` — the
+  caller owns the reporting UX (lint → catch → its existing D4 FAIL message +
+  list-date guard; nav → catch → skip the page). This keeps lint's bad-date
+  detection working while centralizing the date math.
 
 `lint_docs` is refactored to import these; its observable behavior is unchanged,
 proven by its **existing** test suite staying green (the refactor adds no new D4

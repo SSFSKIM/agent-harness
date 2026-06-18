@@ -165,12 +165,28 @@ the predicate, don't copy it.
   `catalog`/`backlinks`/`stale`/`drift` and capture output in Outcomes.
 
 ## Progress log
-- [ ] M1 — shared primitives (harness_lib LINK/links_in/is_stale; lint_docs refactor)
+- [x] (2026-06-18) M1 — shared primitives. Added `hl.LINK`/`hl.links_in` +
+  `hl.is_stale` to harness_lib; refactored `lint_docs.check_links` →
+  `hl.links_in` and the D4 block → `hl.is_stale` (protected-path tightening +
+  list-date guard preserved); removed lint_docs' now-dead `LINK` + `import
+  datetime`. Regression: 38 lint_docs + 27 harness_lib tests green, NO existing
+  assertion edited; full gate GREEN. Added 5 primitive tests (links_in, is_stale
+  true/within-window/archived-exempt/raises-on-bad-date).
 - [ ] M2 — nav.py build_index + catalog/filter + tests
 - [ ] M3 — nav.py links/backlinks/stale/orphans/drift + tests
 - [ ] M4 — docs-nav skill + AGENTS/template/MEMORY wiring + gate GREEN
 
 ## Surprises & discoveries
+- Spec D-4 had an internal contradiction ("`is_stale` raises nothing on a bad
+  date" AND "lint → D4 FAIL" — lint can't FAIL on a date the predicate hides).
+  Resolved during M1 by making `is_stale` parse-first / raise on a bad date
+  (caller owns reporting); updated the spec D-4 wording to match so the
+  spec-compliance review sees agreement. The ExecPlan already specified this
+  contract — the spec line was the imprecise one.
+- Tests run via `python3 -m unittest discover -s tests` (check.py step), not
+  `-m unittest tests.test_x` (tests/ is not a package; modules self-insert
+  plugin/scripts on sys.path). Pyright "harness_lib could not be resolved" is a
+  static false positive for that runtime path insert (every test file).
 
 ## Decision log
 - 2026-06-18: Approach B (extract shared primitives) over A (nav re-implements) —
