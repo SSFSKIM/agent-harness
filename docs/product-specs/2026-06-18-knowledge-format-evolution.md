@@ -352,9 +352,12 @@ deferrals:
   The `resource` field exists precisely to enable this.
 - **Generated indexes** (from NG-2) — auto-build `index.md` listings from page
   `description`s, retiring the hand-maintained index/description duplication.
-- **Full-corpus backfill** (from NG-5) — extend the keys past the memory
-  concept-page slice to the rest of the corpus, tool-assisted (the Phase-2 tool
-  identifies pages missing keys). Mechanical sweep, cheap once the tool exists.
+- **Full-corpus backfill** (from NG-5) — ✅ **DONE 2026-06-18** (pulled forward at
+  user request): `type`/`tags`/`description` applied to the remaining 68 content
+  pages (machine docs, design-docs, product-specs, completed exec-plans, session
+  digests, progress) via parallel subagents; `last_verified` deliberately not
+  bumped (mechanical metadata-add, per the refined KNOWLEDGE_FORMAT.md rule).
+  `index.md` files, `MEMORY.md`, and `ARCHITECTURE.md` (no frontmatter) excluded.
 
 ### Later — format & governance evolutions (post-Phase-2, own specs)
 
