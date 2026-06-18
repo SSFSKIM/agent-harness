@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -106,7 +108,43 @@ def is_contained(path, workspace_root) -> bool:
         return False
 
 
-def _workspace_for(ticket: dict, workspace_root) -> Path:
+def _expected_ws(ticket: dict, workspace_root) -> Path:
+    """The workspace path a ticket resolves to — explicit override or derived (sanitized).
+    Pure (no mkdir); shared by `_prepare`'s cwd assert and the lifecycle-hook call sites so
+    they target the same dir `_workspace_for` creates."""
+    return Path(ticket["workspace"]) if ticket.get("workspace") \
+        else workspace_path(ticket["id"], workspace_root)
+
+
+def run_hook(name: str, script, *, cwd, timeout_s: float, env: dict | None = None,
+             fatal: bool) -> None:
+    """Run one workspace lifecycle hook (Symphony §9.4) as `sh -lc <script>` with cwd=the
+    workspace, under a wall-clock timeout. Director-side (trusted host config — default env
+    is the Director's, so a private-repo clone has credential reach). A falsy `script` is a
+    no-op. Start/failure/timeout log a structured line to STDERR (the daemon-diagnostic
+    stream). On non-zero exit or timeout: if `fatal` (after_create/before_run) raise; else
+    (after_run/before_remove) swallow. Never returns a value — hooks are side-effecting."""
+    if not script:
+        return
+    print(json.dumps({"hook": name, "event": "start", "cwd": str(cwd)}), file=sys.stderr)
+    try:
+        proc = subprocess.run(["sh", "-lc", script], cwd=str(cwd),
+                              env=os.environ.copy() if env is None else env,
+                              capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired as exc:
+        print(json.dumps({"hook": name, "event": "timeout", "timeout_s": timeout_s}),
+              file=sys.stderr)
+        if fatal:
+            raise RuntimeError(f"workspace hook {name!r} timed out after {timeout_s}s") from exc
+        return
+    if proc.returncode != 0:
+        print(json.dumps({"hook": name, "event": "failed", "code": proc.returncode,
+                          "stderr": (proc.stderr or "")[-2000:]}), file=sys.stderr)
+        if fatal:
+            raise RuntimeError(f"workspace hook {name!r} failed (exit {proc.returncode})")
+
+
+def _workspace_for(ticket: dict, workspace_root) -> tuple[Path, bool]:
     explicit = ticket.get("workspace")
     if explicit:
         # Explicit override: the single-ticket-CLI / test affordance (a trusted caller
@@ -122,32 +160,44 @@ def _workspace_for(ticket: dict, workspace_root) -> Path:
         # before any mkdir or worker launch.
         if not is_contained(ws, workspace_root):
             raise RuntimeError(f"workspace path escapes root: {ws} not under {workspace_root}")
+    created_now = not ws.exists()  # captured BEFORE mkdir — drives the after_create hook
     ws.mkdir(parents=True, exist_ok=True)
-    return ws
+    return ws, created_now
 
 
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              read_timeout_s, tool_executor, install_skills,
-             worker_env: dict | None = None, cancel_event=None) -> AppServerClient:
+             worker_env: dict | None = None, cancel_event=None,
+             hooks: dict | None = None, hook_timeout_s: float = 60.0) -> AppServerClient:
     """Build (but do not start) the worker client for one ticket: resolve+create the
-    workspace, optionally install the vendored skills, and wire the approval seam.
-    Shared by the single-turn `run_ticket` and the multi-turn `drive`.
+    workspace, run the create/run lifecycle hooks, optionally install the vendored skills,
+    and wire the approval seam. Shared by the single-turn `run_ticket` and the multi-turn
+    `drive`.
 
     Secure by construction: unless the caller passes an explicit `worker_env`, the
     worker subprocess env is the **deny-by-default** construction from the host policy
     (director/worker/policy.py) — a worker never inherits the Director's host secrets
     (SECURITY.md T11, env-inheritance channel)."""
-    ws = _workspace_for(ticket, workspace_root)
+    hooks = hooks or {}
+    ws, created_now = _workspace_for(ticket, workspace_root)
+    # after_create (Symphony §9.4): populate a BRAND-NEW workspace (the repo-population
+    # clone). FATAL — a worker must never start on a workspace whose population failed.
+    if created_now:
+        run_hook("after_create", hooks.get("after_create"), cwd=ws,
+                 timeout_s=hook_timeout_s, fatal=True)
     # §9.5 invariant 1 (R2d): before launch, the worker's cwd (we pass cwd=ws below) must
     # be a real directory AND resolve to exactly the canonical workspace path. `expected`
     # is re-derived independently of `_workspace_for`, so this catches a future refactor
     # that lets the launch cwd drift off the contained workspace, not just a torn path.
-    expected = Path(ticket["workspace"]) if ticket.get("workspace") \
-        else workspace_path(ticket["id"], workspace_root)
+    expected = _expected_ws(ticket, workspace_root)
     if not ws.is_dir():
         raise RuntimeError(f"workspace path is not a directory before launch: {ws}")
     if ws.resolve() != expected.resolve():
         raise RuntimeError(f"launch cwd {ws} != expected workspace {expected}")
+    # before_run (Symphony §9.4): runs before EVERY attempt (e.g. sync to origin/main).
+    # FATAL — abort the attempt if the pre-run sync fails.
+    run_hook("before_run", hooks.get("before_run"), cwd=ws,
+             timeout_s=hook_timeout_s, fatal=True)
     if install_skills:
         install_workspace_skills(ws)
     if worker_env is None:
@@ -163,7 +213,8 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                timeout_s: float = 300.0, read_timeout_s: float = 30.0,
                tools=None, tool_executor=None, install_skills: bool = False,
                approval_policy: str = "untrusted",
-               sandbox: str = "workspace-write") -> dict:
+               sandbox: str = "workspace-write",
+               hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
     """Drive one worker through ONE turn; returns {status, turn_id, final_message}.
 
     The single-turn primitive (kept for callers that want one turn). The multi-turn
@@ -173,14 +224,22 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
     client = _prepare(ticket, command=command, queue_base=queue_base,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=tool_executor,
-                      install_skills=install_skills)
-    with client as c:
-        c.initialize()
-        thread_id = c.thread_start(model=ticket.get("model"), tools=tools,
-                                   approval_policy=approval_policy, sandbox=sandbox)
-        # `sandbox` is a THREAD-level attribute (set on thread/start only); the turn
-        # inherits it, so run_turn takes approval_policy but not sandbox.
-        return c.run_turn(thread_id, ticket["prompt"], approval_policy=approval_policy)
+                      install_skills=install_skills, hooks=hooks,
+                      hook_timeout_s=hook_timeout_s)
+    try:
+        with client as c:
+            c.initialize()
+            thread_id = c.thread_start(model=ticket.get("model"), tools=tools,
+                                       approval_policy=approval_policy, sandbox=sandbox)
+            # `sandbox` is a THREAD-level attribute (set on thread/start only); the turn
+            # inherits it, so run_turn takes approval_policy but not sandbox.
+            return c.run_turn(thread_id, ticket["prompt"], approval_policy=approval_policy)
+    finally:
+        # after_run (Symphony §9.4): fires once the attempt ends, on any outcome; logged
+        # and ignored (never alters the result).
+        run_hook("after_run", (hooks or {}).get("after_run"),
+                 cwd=_expected_ws(ticket, workspace_root), timeout_s=hook_timeout_s,
+                 fatal=False)
 
 
 def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
@@ -188,7 +247,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
           timeout_s: float = 300.0, read_timeout_s: float = 30.0,
           tools=None, tool_executor=None, install_skills: bool = False,
           approval_policy: str = "untrusted", sandbox: str = "workspace-write",
-          max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1, cancel_event=None) -> dict:
+          max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1, cancel_event=None,
+          hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
     """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
     until the worker is terminal (or `max_turns` is hit). This is the multi-turn
     slice's core: a ticket is a thread, a turn end is an *event* not a completion,
@@ -223,7 +283,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
     client = _prepare(ticket, command=command, queue_base=queue_base,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=combined,
-                      install_skills=install_skills, cancel_event=cancel_event)
+                      install_skills=install_skills, cancel_event=cancel_event,
+                      hooks=hooks, hook_timeout_s=hook_timeout_s)
     turns = 0
     turn_id = None
     thread_id = None
@@ -248,53 +309,61 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                 "turn_id": turn_id, "final_message": final_message,
                 "thread_id": thread_id, "telemetry": _telemetry()}
 
-    with client as c:
-        # Wrap the WHOLE session: a reconciliation cancel can land during the handshake
-        # (initialize/thread_start) or mid-turn (run_turn) — both surface as TurnCancelled
-        # and must release, not fail-and-retry (D-59).
-        try:
-            c.initialize()
-            thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
-                                       approval_policy=approval_policy, sandbox=sandbox)
-            # First turn: frame the ticket with the stage-agnostic WORKER PROTOCOL
-            # (operating disciplines) + the multi-turn TURN PROTOCOL (terminal contract)
-            # so the worker self-governs and knows to call report_outcome at terminal
-            # (else un-watched it would loop to stuck). This single seam covers every
-            # dispatch path (orchestrator, run.main, direct-drive). Later turns carry the
-            # decider's directive verbatim.
-            input_text = taxonomy.frame_first_turn(ticket["prompt"])
-            for i in range(max_turns):
-                # Between-turns cancel check (covers the gap while a watched decider was
-                # parked); mid-turn cancellation arrives as TurnCancelled from run_turn.
-                if cancel_event is not None and cancel_event.is_set():
-                    return _cancelled()
-                turns = i + 1
-                sink.pop("outcome", None)  # fresh terminal-signal slot for this turn
-                result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
-                turn_id = result.get("turn_id")
-                final_message = result.get("final_message")
-                if result.get("usage") is not None:        # keep latest absolute totals
-                    usage = result["usage"]
-                if result.get("rate_limits") is not None:
-                    rate_limits = result["rate_limits"]
-                status = result.get("status")
-                base = {"turns": turns, "turn_id": turn_id,
-                        "final_message": final_message, "thread_id": thread_id,
-                        "telemetry": _telemetry()}
-                if status != "completed":  # turn/failed | turn/cancelled — not a disposition
-                    return {"kind": "failed", "status": status, **base}
-                disp = decide({"ticket": ticket, "turn_index": i, "status": status,
-                               "final_message": final_message, "outcome": sink.get("outcome"),
-                               "attempt": attempt})
-                if disp.get("kind") in ("terminal", "escalate"):
-                    return {**disp, **base}
-                # kind == "reply": continue the SAME thread with the directive (board untouched)
-                input_text = disp.get("reply") or ""
-        except TurnCancelled:  # mid-turn reconciliation cancel (D-59) — release, no retry
-            return _cancelled()
-    return {"kind": "stuck", "reason": "max_turns", "turns": turns,
-            "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id,
-            "telemetry": _telemetry()}
+    # after_run (Symphony §9.4) fires once this attempt ends, on ANY return path
+    # (terminal/escalate/stuck/failed/cancelled); logged and ignored, never alters the
+    # disposition. The finally wraps the whole worker session below.
+    try:
+        with client as c:
+            # Wrap the WHOLE session: a reconciliation cancel can land during the handshake
+            # (initialize/thread_start) or mid-turn (run_turn) — both surface as TurnCancelled
+            # and must release, not fail-and-retry (D-59).
+            try:
+                c.initialize()
+                thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
+                                           approval_policy=approval_policy, sandbox=sandbox)
+                # First turn: frame the ticket with the stage-agnostic WORKER PROTOCOL
+                # (operating disciplines) + the multi-turn TURN PROTOCOL (terminal contract)
+                # so the worker self-governs and knows to call report_outcome at terminal
+                # (else un-watched it would loop to stuck). This single seam covers every
+                # dispatch path (orchestrator, run.main, direct-drive). Later turns carry the
+                # decider's directive verbatim.
+                input_text = taxonomy.frame_first_turn(ticket["prompt"])
+                for i in range(max_turns):
+                    # Between-turns cancel check (covers the gap while a watched decider was
+                    # parked); mid-turn cancellation arrives as TurnCancelled from run_turn.
+                    if cancel_event is not None and cancel_event.is_set():
+                        return _cancelled()
+                    turns = i + 1
+                    sink.pop("outcome", None)  # fresh terminal-signal slot for this turn
+                    result = c.run_turn(thread_id, input_text, approval_policy=approval_policy)
+                    turn_id = result.get("turn_id")
+                    final_message = result.get("final_message")
+                    if result.get("usage") is not None:        # keep latest absolute totals
+                        usage = result["usage"]
+                    if result.get("rate_limits") is not None:
+                        rate_limits = result["rate_limits"]
+                    status = result.get("status")
+                    base = {"turns": turns, "turn_id": turn_id,
+                            "final_message": final_message, "thread_id": thread_id,
+                            "telemetry": _telemetry()}
+                    if status != "completed":  # turn/failed | turn/cancelled — not a disposition
+                        return {"kind": "failed", "status": status, **base}
+                    disp = decide({"ticket": ticket, "turn_index": i, "status": status,
+                                   "final_message": final_message, "outcome": sink.get("outcome"),
+                                   "attempt": attempt})
+                    if disp.get("kind") in ("terminal", "escalate"):
+                        return {**disp, **base}
+                    # kind == "reply": continue the SAME thread with the directive (board untouched)
+                    input_text = disp.get("reply") or ""
+            except TurnCancelled:  # mid-turn reconciliation cancel (D-59) — release, no retry
+                return _cancelled()
+        return {"kind": "stuck", "reason": "max_turns", "turns": turns,
+                "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id,
+                "telemetry": _telemetry()}
+    finally:
+        run_hook("after_run", (hooks or {}).get("after_run"),
+                 cwd=_expected_ws(ticket, workspace_root), timeout_s=hook_timeout_s,
+                 fatal=False)
 
 
 def _command(args, codex_command, posture) -> list[str]:
@@ -358,13 +427,17 @@ def main(argv=None) -> int:
     # Per-action posture is the resolved config's (a host may tighten it in
     # .harness.json director.worker; the command's auto_review/network follow it).
     posture = cfg.posture
+    # Workspace lifecycle hooks (R4) from the resolved config — disabled under --mock
+    # (the offline fake app-server has no real repo to populate).
+    hooks = None if args.mock else cfg.workspace.hooks
     # The single-ticket CLI is un-watched (no orchestrator queue / live Director to
     # answer turn reviews), so it drives with the autonomous code decider.
     disp = drive(ticket, command=_command(args, codex_command, posture),
                  decide=autonomous_decide, queue_base=queue_dir, tools=tools,
                  tool_executor=tool_executor, install_skills=args.install_skills,
                  approval_policy=posture.approval_policy, sandbox=posture.sandbox,
-                 max_turns=max_turns)
+                 max_turns=max_turns, hooks=hooks,
+                 hook_timeout_s=cfg.workspace.hook_timeout_s)
     print(json.dumps({"ticket": ticket["id"], **disp}))
     return 0 if disp.get("kind") == "terminal" else 1
 

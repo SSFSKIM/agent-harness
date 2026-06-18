@@ -37,8 +37,10 @@ PR** in one turn (PR #1 on the throwaway `SSFSKIM/agent-harness-r4-demo`), repor
   `before_remove` — plus `director.workspace.hook_timeout_s` (default 60). Absent block
   or absent hook → that hook is a no-op (current behavior preserved, fail-open). A
   present-but-malformed `workspace` block **fails loud** at load (RELIABILITY R15:
-  before any worker spawn), like every other config block. Hook strings support `$VAR`
-  indirection like the rest of the config.
+  before any worker spawn), like every other config block. A **whole-string** `$VAR`
+  hook value is substituted at the config layer (like the rest of the config); an
+  **embedded** `$VAR` (e.g. `git clone $REPO .`) is left for `sh -lc` to expand at
+  runtime from the hook's env — both forms work, at different layers.
 - **R2 — Hook execution.** A configured hook runs as `sh -lc <script>` with **cwd = the
   per-ticket workspace path**, under a wall-clock timeout (`hook_timeout_s`). It runs
   **Director-side** with the Director process environment (NOT the worker's deny-by-

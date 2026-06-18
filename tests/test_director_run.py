@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -123,9 +124,10 @@ class WorkspaceSafetyTest(unittest.TestCase):
         self.assertEqual(p, self.tmp / "a_b")
 
     def test_derived_workspace_contained_under_root(self):
-        ws = run._workspace_for({"id": "ABC-1"}, self.tmp)
+        ws, created = run._workspace_for({"id": "ABC-1"}, self.tmp)
         self.assertEqual(ws, self.tmp / "ABC-1")
         self.assertTrue(ws.is_dir())
+        self.assertTrue(created)  # brand-new dir → created_now True (drives after_create)
 
     def test_derived_path_escaping_root_raises(self):
         # a derived id that resolves outside the root (e.g. '..') is rejected before mkdir
@@ -149,7 +151,7 @@ class WorkspaceSafetyTest(unittest.TestCase):
     def test_explicit_workspace_override_is_exempt_from_containment(self):
         # the trusted single-ticket-CLI/test affordance may target an arbitrary path
         outside = self.tmp / "outside"
-        ws = run._workspace_for({"id": "X", "workspace": str(outside)}, self.tmp / "root")
+        ws, _ = run._workspace_for({"id": "X", "workspace": str(outside)}, self.tmp / "root")
         self.assertEqual(ws, outside)
         self.assertTrue(ws.is_dir())
 
@@ -157,13 +159,81 @@ class WorkspaceSafetyTest(unittest.TestCase):
         # _maybe_enqueue_merge derives the same path as _workspace_for (one helper, R2c)
         import director.orchestrator as orch
         root = self.tmp / "wsroot"
-        derived = run._workspace_for({"id": "feat/Z 1"}, root)
+        derived, _ = run._workspace_for({"id": "feat/Z 1"}, root)
         errs = []
         orch._maybe_enqueue_merge("feat/Z 1", {"id": "feat/Z 1"},
                                   {"status": "done", "pr_url": "http://pr"},
                                   self.tmp / "q", root, errs)
         # the helper-derived path equals what dispatch created
         self.assertEqual(run.workspace_path("feat/Z 1", root), derived)
+
+
+class WorkspaceHookTest(unittest.TestCase):
+    """R4 workspace lifecycle hooks: run_hook + the create/run/after_run wiring."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.ws = self.tmp / "ws"
+        self.ws.mkdir()
+
+    # -- run_hook unit behavior --
+    def test_falsy_script_is_noop(self):
+        run.run_hook("x", None, cwd=self.ws, timeout_s=5, fatal=True)  # must not raise
+        run.run_hook("x", "", cwd=self.ws, timeout_s=5, fatal=True)
+
+    def test_runs_in_workspace_cwd(self):
+        run.run_hook("x", "touch marker", cwd=self.ws, timeout_s=5, fatal=True)
+        self.assertTrue((self.ws / "marker").exists())
+
+    def test_nonzero_exit_fatal_raises_nonfatal_swallows(self):
+        with self.assertRaises(RuntimeError):
+            run.run_hook("x", "exit 3", cwd=self.ws, timeout_s=5, fatal=True)
+        run.run_hook("x", "exit 3", cwd=self.ws, timeout_s=5, fatal=False)  # swallowed
+
+    def test_timeout_fatal_raises_nonfatal_swallows(self):
+        with self.assertRaises(RuntimeError):
+            run.run_hook("x", "sleep 5", cwd=self.ws, timeout_s=0.3, fatal=True)
+        run.run_hook("x", "sleep 5", cwd=self.ws, timeout_s=0.3, fatal=False)  # swallowed
+
+    def test_hook_env_override(self):
+        run.run_hook("x", "printf %s \"$FOO\" > env.txt", cwd=self.ws, timeout_s=5,
+                     env={"FOO": "bar", "PATH": os.environ["PATH"]}, fatal=True)
+        self.assertEqual((self.ws / "env.txt").read_text(), "bar")
+
+    # -- _prepare lifecycle (create / run), no real worker --
+    def _prepare(self, ticket, hooks):
+        return run._prepare(ticket, command=["true"], queue_base=self.tmp / "q",
+                            workspace_root=self.tmp / "root", timeout_s=5, read_timeout_s=5,
+                            tool_executor=None, install_skills=False, worker_env={},
+                            hooks=hooks, hook_timeout_s=5)
+
+    def test_after_create_fatal_on_new_workspace(self):
+        with self.assertRaises(RuntimeError):
+            self._prepare({"id": "NEW-1"}, {"after_create": "exit 1"})
+
+    def test_after_create_skipped_on_reuse(self):
+        (self.tmp / "root" / "REUSE-1").mkdir(parents=True)  # pre-exists → created_now False
+        # a failing after_create must NOT fire on reuse → _prepare succeeds (builds client)
+        self._prepare({"id": "REUSE-1"}, {"after_create": "exit 1"})
+
+    def test_after_create_populates_then_before_run(self):
+        self._prepare({"id": "POP-1"}, {"after_create": "touch populated"})
+        self.assertTrue((self.tmp / "root" / "POP-1" / "populated").exists())
+
+    def test_before_run_fatal_every_prepare(self):
+        with self.assertRaises(RuntimeError):
+            self._prepare({"id": "BR-1"}, {"before_run": "exit 1"})
+
+    # -- after_run fires through the real drive path (mock worker) --
+    def test_after_run_fires_via_run_ticket(self):
+        root = self.tmp / "root2"
+        run.run_ticket({"id": "AR-1", "prompt": "do it"},
+                       command=[sys.executable, MOCK, "plain"], queue_base=self.tmp / "q2",
+                       workspace_root=root,
+                       hooks={"after_create": "touch ac", "after_run": "touch ar"},
+                       hook_timeout_s=5)
+        self.assertTrue((root / "AR-1" / "ac").exists())   # after_create populated
+        self.assertTrue((root / "AR-1" / "ar").exists())   # after_run fired post-attempt
 
 
 if __name__ == "__main__":

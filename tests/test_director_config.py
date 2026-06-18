@@ -177,6 +177,44 @@ class LoadConfigTest(unittest.TestCase):
         cfg = config.load_director_config(root=self.root, environ={})
         self.assertEqual(cfg.states["ready"], "Todo")  # no `$` → passthrough
 
+    # -- workspace lifecycle hooks (R4) -------------------------------------
+    def test_workspace_hooks_absent_yields_none(self):
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.workspace.hooks,
+                         {"after_create": None, "before_run": None,
+                          "after_run": None, "before_remove": None})
+        self.assertEqual(cfg.workspace.hook_timeout_s, 60.0)
+
+    def test_workspace_hooks_partial_override(self):
+        # whole-string $VAR is substituted at the config layer; an EMBEDDED $VAR (e.g.
+        # `git clone $REPO .`) is left for `sh -lc` to expand at runtime from the env.
+        _write(self.root, {"director": {"workspace": {
+            "hooks": {"after_create": "$CLONE_CMD", "before_run": "git clone $REPO ."},
+            "hook_timeout_s": 120}}})
+        cfg = config.load_director_config(root=self.root,
+                                          environ={"CLONE_CMD": "git clone https://x/y.git ."})
+        self.assertEqual(cfg.workspace.hooks["after_create"], "git clone https://x/y.git .")
+        self.assertEqual(cfg.workspace.hooks["before_run"], "git clone $REPO .")  # shell-time
+        self.assertIsNone(cfg.workspace.hooks["after_run"])  # unset stays None
+        self.assertEqual(cfg.workspace.hook_timeout_s, 120.0)
+
+    def test_workspace_unknown_hook_key_raises(self):
+        # a typo'd hook name must fail loud (a silently-never-run clone is a bad failure)
+        _write(self.root, {"director": {"workspace": {"hooks": {"befor_run": "x"}}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_workspace_bad_hook_type_raises(self):
+        _write(self.root, {"director": {"workspace": {"hooks": {"after_create": 7}}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_workspace_bad_timeout_raises(self):
+        for bad in (0, -1, "60", True):
+            _write(self.root, {"director": {"workspace": {"hook_timeout_s": bad}}})
+            with self.assertRaises(ValueError, msg=f"timeout={bad!r}"):
+                config.load_director_config(root=self.root)
+
     # -- immutability + operator surface ------------------------------------
     def test_config_is_frozen(self):
         cfg = config.defaults()

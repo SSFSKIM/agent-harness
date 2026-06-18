@@ -98,7 +98,15 @@ Full gate GREEN; parity slices 1–3 and the decider/queue unchanged.
   Acceptance: spec acceptance 4 — PR URL + merged state observed via `gh`.
 
 ## Progress log
-- [ ] (2026-06-19) Spike done (PR #1 real); spec + plan written. Next: M1.
+- [x] (2026-06-19) Spike done (PR #1 real); spec + plan written.
+- [x] (2026-06-19) M1 done. `config.py`: `DEFAULTS["workspace"]` + `Workspace` dataclass +
+  `DirectorConfig.workspace` + fail-loud validation (unknown hook key rejected, bad
+  type/timeout raise). `run.py`: `run_hook` (sh -lc, timeout, stderr-logged, fatal-raises);
+  `_expected_ws` helper; `_workspace_for`→`(ws, created_now)`; `_prepare` runs after_create
+  (fatal, create-only) + before_run (fatal); `drive`/`run_ticket` run after_run (ignored) in
+  a finally; `run.main` threads `cfg.workspace` (off under --mock). Tests +16 (config ×5,
+  run_hook + lifecycle ×11). Discovered: config-layer `$VAR` is whole-string only; embedded
+  `$VAR` is shell-time — both work, spec clarified. 66 pass; full gate GREEN. Next: M2.
 ## Surprises & discoveries
 ## Decision log
 - 2026-06-19: hooks run Director-side with full env (Approach B) — only the un-sandboxed

@@ -81,9 +81,18 @@ DEFAULTS: dict = {
     # (run.DEFAULT_WORKSPACE_ROOT for workspaces; queue/status `_root(base=None)`).
     "paths": {"workspace_root": None, "queue_dir": None, "status_dir": None},
     "merger": {"poll_s": 1.0, "read_timeout_s": 180.0, "max_merges": 200},
+    # workspace lifecycle hooks (Symphony §9.4) — host-declared shell commands run at
+    # workspace create/run/teardown. The repo-population bridge: `after_create` typically
+    # clones the repo into the fresh workspace. Absent = no hooks (bare workspace, today's
+    # behavior). Run Director-side, `sh -lc`, cwd=workspace; after_create/before_run are
+    # FATAL on failure, after_run/before_remove are logged+ignored.
+    "workspace": {"hooks": {"after_create": None, "before_run": None,
+                            "after_run": None, "before_remove": None},
+                  "hook_timeout_s": 60.0},
 }
 
 _STATE_KEYS = ("ready", "started", "done", "failed", "blocked")
+_HOOK_KEYS = ("after_create", "before_run", "after_run", "before_remove")
 _APPROVAL_VALUES = frozenset({"untrusted", "on-request", "on-failure", "never"})
 _SANDBOX_VALUES = frozenset({"read-only", "workspace-write", "danger-full-access"})
 _TOOLS_VALUES = frozenset({"none", "linear"})
@@ -113,6 +122,12 @@ class Merger:
 
 
 @dataclass(frozen=True)
+class Workspace:
+    hooks: dict          # {after_create/before_run/after_run/before_remove: str|None}
+    hook_timeout_s: float
+
+
+@dataclass(frozen=True)
 class DirectorConfig:
     team: str | None
     states: dict
@@ -133,6 +148,7 @@ class DirectorConfig:
     worker_install_skills: bool
     paths: Paths
     merger: Merger
+    workspace: Workspace
 
 
 # -- $VAR indirection (spec R5 / Symphony §6.1) ------------------------------
@@ -232,6 +248,29 @@ def _build(raw: dict) -> DirectorConfig:
                     _pos_num(m["read_timeout_s"], "merger.read_timeout_s"),
                     _pos_int(m["max_merges"], "merger.max_merges"))
 
+    ws_raw = raw.get("workspace") or {}
+    if not isinstance(ws_raw, dict):
+        raise ValueError("director.workspace must be an object")
+    h_raw = ws_raw.get("hooks") or {}
+    if not isinstance(h_raw, dict):
+        raise ValueError("director.workspace.hooks must be an object")
+    # Unknown hook keys are REJECTED (unlike states, which ignore them): a typo'd hook
+    # name silently never running is a worse failure than an unused state alias — a missing
+    # after_create means a worker on a bare/empty workspace.
+    unknown = set(h_raw) - set(_HOOK_KEYS)
+    if unknown:
+        raise ValueError(f"director.workspace.hooks has unknown keys {sorted(unknown)}; "
+                         f"valid: {list(_HOOK_KEYS)}")
+    hooks: dict = {k: None for k in _HOOK_KEYS}
+    for k in _HOOK_KEYS:
+        if k in h_raw:
+            hooks[k] = _str_or_none(h_raw[k], f"workspace.hooks.{k}")
+    workspace = Workspace(
+        hooks=hooks,
+        hook_timeout_s=_pos_num(ws_raw.get("hook_timeout_s",
+                                           DEFAULTS["workspace"]["hook_timeout_s"]),
+                                "workspace.hook_timeout_s"))
+
     dt = raw.get("done_types", DEFAULTS["done_types"])
     if not isinstance(dt, list) or not dt or not all(isinstance(x, str) for x in dt):
         raise ValueError(f"director.done_types must be a non-empty list of strings, got {dt!r}")
@@ -261,7 +300,7 @@ def _build(raw: dict) -> DirectorConfig:
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
         codex_command=codex_command, posture=posture,
         worker_tools=w["tools"], worker_install_skills=worker_install_skills,
-        paths=paths, merger=merger)
+        paths=paths, merger=merger, workspace=workspace)
 
 
 def defaults() -> DirectorConfig:
