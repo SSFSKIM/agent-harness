@@ -114,7 +114,23 @@ Full gate GREEN; parity slices 1–3 and the decider/queue unchanged.
   `_startup_recovery`), logged+ignored; `resolve_settings`/`main` thread `cfg.workspace`
   (off under --mock). `merger.main` threads hooks into the land-lane drive-kwargs. Tests +3
   (before_remove fires/doesn't-block; run_once threads after_create to the worker). 81 pass;
-  full gate GREEN. Next: M3 live demo.
+  full gate GREEN.
+- [x] (2026-06-19) M3 LIVE DEMO done on `SSFSKIM/agent-harness-r4-demo` (full pipeline):
+  - **Phase 1** — `run_once`(MockBoard[ticket], real codex, `hooks={after_create: git clone …}`):
+    the after_create hook cloned the repo into the fresh workspace (`.git/README.md/app.py/.codex`),
+    the worker added `shout`, pushed `feat/r4-shout`, opened **PR #2**; reconcile enqueued the
+    merge (`merge_enqueued: true`).
+  - **Phase 2** — `merger.drain`: land worker rebased + confirmed mergeable + ran the smoke test,
+    then **correctly refused to squash-merge and escalated** (`needs_human`) because the land
+    skill's gate `plugin/scripts/check.py` is absent in the throwaway repo → `mergeReview` queued.
+    (The serialized merger's safety contract working — it won't blind-merge without a green gate.)
+  - **Phase 3** — Director resolves: `director_min.requeue_merge` with guidance ("no harness gate
+    in this repo; smoke passes; squash-merge"), then `merger.drain` again → land worker
+    **squash-merged PR #2** (`result: merged`, commit `ecd5ea1`; GitHub confirms `state: MERGED`,
+    `main` now has `shout`).
+  - Proves R4 (hook repo-population) AND the full escalate→Director-resolve→land merger loop.
+  - Throwaway demo runners (`/tmp/r4_demo.py`, `/tmp/r4_merge.py`) not committed; commands +
+    output recorded here + in Outcomes.
 ## Surprises & discoveries
 ## Decision log
 - 2026-06-19: hooks run Director-side with full env (Approach B) — only the un-sandboxed
