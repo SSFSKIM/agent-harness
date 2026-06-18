@@ -35,6 +35,7 @@ export class DaemonSupervisor {
   private pool = new Map<string, DaemonSession>();
   private proactive = new Map<string, ProactiveLoop>(); // active heartbeats by session id (Phase 2 C)
   private configs = new Map<string, SpawnConfig>();   // per-session config, for re-creation on restart
+  private rehydratable = new Set<string>();           // ids claimed at boot, awaiting first-access revival (boot-rehydration)
   private registry: SessionRegistry;
   private seq = 0;
   private maxSessions: number;
@@ -55,7 +56,7 @@ export class DaemonSupervisor {
   private compactTool: boolean;
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
-    this.registry = new SessionRegistry({ dir: opts.dir });
+    this.registry = new SessionRegistry({ dir: opts.dir, isAlive: opts.isAlive });
     this.maxSessions = opts.maxSessions ?? 32;
     this.idleTimeoutMs = opts.idleTimeoutMs ?? 30 * 60_000;
     this.now = opts.now ?? Date.now;
@@ -66,7 +67,16 @@ export class DaemonSupervisor {
     this.scheduleRestart = opts.scheduleRestart ?? ((fn, ms) => { const t = setTimeout(fn, ms); (t as any).unref?.(); return () => clearTimeout(t); });
     this.contextTool = opts.contextTool ?? false;
     this.compactTool = opts.compactTool ?? false;
-    this.registry.reapStale(); // clear records orphaned by a prior crash
+    if (opts.rehydrate) {                              // adopt the prior process's sessions (lazy: no subprocess here)
+      for (const rec of this.registry.rehydrate(process.pid)) {
+        this.configs.set(rec.id, { model: rec.model, restart: rec.restart ?? this.restartPolicy });
+        this.rehydratable.add(rec.id);
+        const n = Number(rec.id.replace(/^sess-/, ""));
+        if (Number.isFinite(n) && n > this.seq) this.seq = n;    // mint new ids past rehydrated ones → no collision
+      }
+    } else {
+      this.registry.reapStale();                      // default: clear records orphaned by a prior crash
+    }
     if (this.idleTimeoutMs > 0) {
       this.reaper = setInterval(() => { void this.reapIdle(); }, opts.reapEvery ?? 30_000);
       this.reaper.unref?.();
@@ -97,7 +107,7 @@ export class DaemonSupervisor {
   }
 
   async submit(id: string, prompt: string, onMessage: (m: unknown) => void): Promise<{ result: unknown }> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
@@ -137,7 +147,7 @@ export class DaemonSupervisor {
   }
 
   async control(id: string, frame: ControlFrame): Promise<ControlResponse> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
@@ -146,7 +156,7 @@ export class DaemonSupervisor {
   }
 
   async compact(id: string): Promise<CompactOutcome> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
@@ -155,23 +165,23 @@ export class DaemonSupervisor {
   }
 
   async usage(id: string): Promise<unknown> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
     return session.usage();
   }
   async initializationResult(id: string): Promise<unknown> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
     return session.initializationResult();
   }
   async applyFlagSettings(id: string, settings: Record<string, unknown>): Promise<void> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) { const rec = this.registry.get(id); throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`); }
     await session.applyFlagSettings(settings);
   }
 
   async fork(id: string): Promise<{ id: string; sessionId: string }> {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
@@ -184,7 +194,7 @@ export class DaemonSupervisor {
   }
 
   startProactive(id: string, config?: ProactiveConfigInput): ProactiveStatus {
-    const session = this.pool.get(id);
+    const session = this.ensureLive(id);
     if (!session || session.isEnded()) {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
@@ -221,8 +231,9 @@ export class DaemonSupervisor {
   }
 
   async stop(id: string): Promise<void> {
-    const session = this.pool.get(id);
+    const session = this.pool.get(id);                       // NOT ensureLive — never spawn just to dispose
     if (!session && !this.registry.get(id)) throw new DaemonError(`unknown session ${id}`);
+    this.rehydratable.delete(id);                            // drop any pending boot-revival flag
     const loop = this.proactive.get(id);
     if (loop) { await loop.stop("session stopped"); this.proactive.delete(id); }
     this.stopping.add(id);                       // flag BEFORE dispose so the end hook won't restart
@@ -258,6 +269,22 @@ export class DaemonSupervisor {
   }
 
   // ---- restart machinery ----
+
+  /** Return the live session for `id`, reviving it from a boot-claimed record on first access (lazy
+   *  rehydration). Returns the pool entry (even if ended — callers still check isEnded()), a freshly
+   *  resumed session for a rehydratable id, or undefined when neither exists. */
+  private ensureLive(id: string): DaemonSession | undefined {
+    const live = this.pool.get(id);
+    if (live) return live;
+    if (!this.rehydratable.has(id)) return undefined;
+    this.rehydratable.delete(id);                                  // revive once
+    const rec = this.registry.get(id);
+    if (!rec?.sessionId) return undefined;                         // defensive — rehydrate() guaranteed a sessionId
+    const cfg = this.configs.get(id) ?? { model: rec.model, restart: this.restartPolicy };
+    const s = this.makeSession(id, cfg, rec.sessionId);            // resume the captured sdk session
+    this.pool.set(id, s);
+    return s;
+  }
 
   private makeSession(id: string, cfg: SpawnConfig, resume?: string): DaemonSession {
     const base: Record<string, unknown> = cfg.model ? { model: cfg.model } : {};

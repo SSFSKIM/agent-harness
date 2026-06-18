@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
 import { DaemonError, daemonOp } from "../../src/daemon/types.js";
+import { SessionRegistry } from "../../src/daemon/registry.js";
+import type { SessionRecord } from "../../src/daemon/types.js";
 import { NATIVE_TASK_TOOLS } from "../../src/swarm/coordinator.js";
 const CC_TASKS = ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"].map((t) => `mcp__cc-tasks__${t}`);
 
@@ -43,6 +45,12 @@ function captureInitQuery(sink: any[], sid: string) {
   return ({ prompt, options }: any) => { sink.push(options); return (async function* () {
     for await (const t of prompt) { yield { type: "system", subtype: "init", session_id: sid }; yield { type: "result", result: "did:" + t.message.content }; }
   })(); };
+}
+// seed a registry dir with a record as if a prior (dead) daemon had owned it
+function seed(d: string, rec: Partial<SessionRecord> & { id: string }) {
+  new SessionRegistry({ dir: d }).register(
+    { daemonPid: 999999, status: "idle", createdAt: 1, lastActiveAt: 1, ...rec } as SessionRecord,
+  );
 }
 
 describe("DaemonSupervisor", () => {
@@ -543,6 +551,77 @@ describe("DaemonSupervisor", () => {
     const sup = new DaemonSupervisor({ query: captureQuery(seen) }, { dir: dir(), sessionOptions: () => ({ hooks }) });
     sup.spawn();
     expect(seen[0].hooks).toBe(hooks);   // factory's hooks reached the query options
+    await sup.shutdown();
+  });
+
+  // ---- boot-rehydration (lazy, opt-in) ----
+  it("rehydrate:true boot claims orphaned records (configs + seq advance) WITHOUT spawning", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1", restart: "on-failure" });
+    seed(d, { id: "sess-3", sessionId: "sdk-3", model: "m3" });
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureInitQuery(sink, "sdk-x") }, { dir: d, rehydrate: true, isAlive: () => false });
+    expect(sink).toHaveLength(0);                                  // LAZY: no subprocess at boot
+    expect(sup.list().map((r) => r.id).sort()).toEqual(["sess-1", "sess-3"]);
+    expect(sup.spawn()).toBe("sess-4");                           // seq advanced past sess-3 → no id collision
+    await sup.shutdown();
+  });
+  it("submit on a rehydrated id lazily resumes the captured session_id; revive-once reuses it", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1" });
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureInitQuery(sink, "sdk-1") }, { dir: d, rehydrate: true, isAlive: () => false });
+    expect((await sup.submit("sess-1", "hi", () => {})).result).toBe("did:hi");
+    expect(sink).toHaveLength(1);                                 // revived once
+    expect(sink[0].resume).toBe("sdk-1");                         // resumed the captured id
+    expect(sink[0].model).toBe("m1");                            // reconstructed model
+    await sup.submit("sess-1", "again", () => {});                // reuses the live session
+    expect(sink).toHaveLength(1);                                 // NOT revived again
+    await sup.shutdown();
+  });
+  it("a rehydrated session keeps its PERSISTED restart policy (crash → resume, not fresh)", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1", restart: "on-failure" });   // record says on-failure
+    const cap: any[] = [];
+    let calls = 0;
+    const fq = ({ prompt, options }: any) => {
+      cap.push(options); calls++;
+      if (calls === 1) return (async function* () {                // revived life: init + one turn, then crash
+        yield { type: "system", subtype: "init", session_id: "sdk-1" };
+        for await (const t of prompt) { yield { type: "result", result: "did:" + t.message.content }; return; }
+      })();
+      return (async function* () {                                 // restart life: healthy
+        yield { type: "system", subtype: "init", session_id: "sdk-1" };
+        for await (const t of prompt) yield { type: "result", result: "ok:" + t.message.content };
+      })();
+    };
+    let pending: (() => void) | undefined;
+    const sup = new DaemonSupervisor({ query: fq }, {              // daemon default restart is "no" — only the RECORD says on-failure
+      dir: d, rehydrate: true, isAlive: () => false, scheduleRestart: (fn) => { pending = fn; return () => {}; },
+    });
+    await sup.submit("sess-1", "hi", () => {});                    // revive → turn → crash
+    await flush();
+    expect(sup.list()[0].status).toBe("restarting");              // restart scheduled ⇒ the record's policy survived
+    pending!();
+    expect(cap[1].resume).toBe("sdk-1");                         // restart RESUMES the captured id
+    await sup.shutdown();
+  });
+  it("stop on a claimed-not-live session removes it WITHOUT spawning a subprocess", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1" });
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureInitQuery(sink, "sdk-1") }, { dir: d, rehydrate: true, isAlive: () => false });
+    await sup.stop("sess-1");
+    expect(sink).toHaveLength(0);                                 // never revived → no query()
+    expect(sup.list()).toEqual([]);                              // record removed
+    await sup.shutdown();
+  });
+  it("rehydrate:false (default) reaps orphaned records; an op on them throws unknown", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1" });
+    const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: d, isAlive: () => false });   // no rehydrate flag
+    expect(sup.list()).toEqual([]);                              // reapStale removed the orphan
+    await expect(sup.submit("sess-1", "x", () => {})).rejects.toThrow(/unknown session/);
     await sup.shutdown();
   });
 });
