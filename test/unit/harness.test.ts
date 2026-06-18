@@ -78,4 +78,9 @@ describe("createHarness", () => {
     const h = createHarness({}, { query: fakeQuery });
     expect((h.options as any).mcpServers?.["cc-context"]).toBeUndefined();
   });
+  it("createHarness rejects a malformed config with HarnessConfigError", async () => {
+    const { createHarness } = await import("../../src/harness.js");
+    const { HarnessConfigError } = await import("../../src/config/validate.js");
+    expect(() => createHarness({ permissionMode: "bogus" as any })).toThrow(HarnessConfigError);
+  });
 });

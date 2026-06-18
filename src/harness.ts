@@ -1,6 +1,7 @@
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 import type { HarnessConfig } from "./config/types.js";
 import { resolveOptions } from "./config/resolveOptions.js";
+import { validateHarnessConfig } from "./config/validate.js";
 import { TaskStore } from "./tasks/store.js";
 import { createTaskMcpServer } from "./tasks/server.js";
 import { SwarmRuntime } from "./swarm/runtime.js";
@@ -29,6 +30,7 @@ export interface Harness {
 }
 
 export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}): Harness {
+  validateHarnessConfig(config);
   const query = deps.query ?? sdkQuery;
   const options = resolveOptions(config);
 

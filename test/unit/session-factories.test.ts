@@ -32,4 +32,9 @@ describe("openSession / resumeSession", () => {
     expect(sink[0].resume).toBe("sid-xyz");
     await s.dispose();
   });
+  it("openSession rejects a malformed config with HarnessConfigError", async () => {
+    const { openSession } = await import("../../src/session/index.js");
+    const { HarnessConfigError } = await import("../../src/config/validate.js");
+    expect(() => openSession({ maxTurns: 0 } as any)).toThrow(HarnessConfigError);
+  });
 });

@@ -616,6 +616,10 @@ describe("DaemonSupervisor", () => {
     expect(sup.list()).toEqual([]);                              // record removed
     await sup.shutdown();
   });
+  it("rejects a malformed DaemonOptions at construction", async () => {
+    const { HarnessConfigError } = await import("../../src/config/validate.js");
+    expect(() => new DaemonSupervisor({ query: fakeQuery }, { dir: dir(), restart: "sometimes" as any })).toThrow(HarnessConfigError);
+  });
   it("rehydrate:false (default) reaps orphaned records; an op on them throws unknown", async () => {
     const d = dir();
     seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1" });

@@ -35,4 +35,8 @@ describe("public API", () => {
     for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
       expect(api).not.toHaveProperty(name);
   });
+  it("exports the config validator + error (api-hardening)", () => {
+    expect(typeof api.validateHarnessConfig).toBe("function");
+    expect(typeof api.HarnessConfigError).toBe("function");
+  });
 });

@@ -2,6 +2,7 @@ import { SessionRegistry } from "./registry.js";
 import { DaemonSession } from "./session.js";
 import { DaemonError } from "./types.js";
 import type { DaemonOptions, RestartPolicy, SessionRecord } from "./types.js";
+import { validateDaemonOptions } from "../config/validate.js";
 import type { QueryFn } from "../swarm/types.js";
 import { TaskStore } from "../tasks/store.js";
 import { createTaskMcpServer } from "../tasks/server.js";
@@ -56,6 +57,7 @@ export class DaemonSupervisor {
   private compactTool: boolean;
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
+    validateDaemonOptions(opts);
     this.registry = new SessionRegistry({ dir: opts.dir, isAlive: opts.isAlive });
     this.maxSessions = opts.maxSessions ?? 32;
     this.idleTimeoutMs = opts.idleTimeoutMs ?? 30 * 60_000;
