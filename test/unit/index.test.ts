@@ -20,6 +20,11 @@ describe("public API", () => {
     expect(typeof api.Session).toBe("function");
     expect(typeof api.forkSession).toBe("function");
   });
+  it("exports the session-store mutation wrappers", () => {
+    expect(typeof api.renameSession).toBe("function");
+    expect(typeof api.tagSession).toBe("function");
+    expect(typeof api.deleteSession).toBe("function");
+  });
   it("exports the hook builders and mergeHooks", () => {
     expect(typeof api.injectContext).toBe("function");
     expect(typeof api.guardTool).toBe("function");

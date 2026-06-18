@@ -13,8 +13,8 @@ export { DaemonSupervisor, DaemonServer, SessionRegistry, daemonRequest, daemonS
 export type { SessionRecord, SessionStatus, DaemonOptions } from "./daemon/index.js";
 export { KairosAssistant, createBriefMcpServer, stdoutBriefSink, applyAssistantPersona, resolveAssistantPosture } from "./kairos/index.js";
 export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig } from "./kairos/index.js";
-export { listSessions, getSessionMessages, getSessionInfo, forkSession } from "./sessions/index.js";
-export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts, ForkSessionOpts } from "./sessions/index.js";
+export { listSessions, getSessionMessages, getSessionInfo, forkSession, renameSession, tagSession, deleteSession } from "./sessions/index.js";
+export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts, ForkSessionOpts, MutateSessionOpts } from "./sessions/index.js";
 export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/index.js";
 export type { RawContextUsage, ContextUsageSummary, QueryHolder } from "./context/index.js";
 export { createCompactMcpServer, parseCompactOutcome, COMPACT_TOOL } from "./compaction/index.js";
