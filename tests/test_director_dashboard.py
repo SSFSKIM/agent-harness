@@ -254,6 +254,188 @@ class DashboardHTTPTest(unittest.TestCase):
         for marker in ("codex_totals", "rate_limits", "seconds_running", "tokens"):
             self.assertIn(marker, html)
 
+    def test_page_injects_token_and_action_controls(self):
+        # M2: the page embeds the per-server CSRF token and wires the write path — a
+        # token meta with the live token, the POST to the answer route with the token
+        # header, and a control per answerable kind.
+        code, _, body = self._req("/")
+        self.assertEqual(code, 200)
+        html = body.decode("utf-8")
+        self.assertIn("__DIRECTOR_TOKEN__", dash.PAGE)          # placeholder in the template
+        self.assertIn(f'content="{self.httpd.token}"', html)   # ...substituted live
+        self.assertNotIn("__DIRECTOR_TOKEN__", html)
+        self.assertIn("/api/v1/answer", html)
+        self.assertIn("X-Director-Token", html)
+        self.assertIn("renderPending", html)
+        # the per-kind controls (button labels are JS args; kinds are branch literals)
+        for marker in ('btn("reply"', 'btn("done"', 'btn("accept"', 'btn("decline"',
+                       'btn("requeue"', 'btn("abandon"',
+                       'kind === "turnReview"', 'kind === "mergeReview"'):
+            self.assertIn(marker, html)
+
+
+class ValidatorUnitTest(unittest.TestCase):
+    def test_validate_disposition(self):
+        ok = [{"kind": "reply", "reply": "do X"},
+              {"kind": "escalate", "reason": "taste"},
+              {"kind": "terminal", "outcome": {"status": "done"}},
+              {"kind": "terminal", "outcome": {"status": "blocked"}}]
+        for d in ok:
+            self.assertIsNone(dash._validate_disposition(d), d)
+        bad = ["nope", {}, {"kind": "weird"}, {"kind": "reply", "reply": "  "},
+               {"kind": "terminal"}, {"kind": "terminal", "outcome": {"status": "huh"}}]
+        for d in bad:
+            self.assertIsNotNone(dash._validate_disposition(d), d)
+
+    def test_host_is_local(self):
+        for v in ("127.0.0.1:8787", "localhost", "http://127.0.0.1:8787",
+                  "http://localhost:8787", "[::1]:8787"):
+            self.assertTrue(dash._host_is_local(v), v)
+        for v in (None, "", "evil.com:80", "http://evil.com", "10.0.0.5:8787"):
+            self.assertFalse(dash._host_is_local(v), v)
+
+
+_VALID = "__USE_VALID__"
+
+
+class AnswerRouteTest(unittest.TestCase):
+    """The write path: POST /api/v1/answer resolves a pending request via director_min,
+    fenced (token + origin), idempotent (409), validated (400) — the M1 surface."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.status_dir = Path(self.tmp) / "director-status"
+        self.queue_dir = Path(self.tmp) / "director-queue"
+        self.httpd = dash.serve(0, self.status_dir, self.queue_dir)
+        self.port = self.httpd.server_address[1]
+        self.token = self.httpd.token
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _pend(self, req):
+        req.setdefault("ticket_id", "T1")
+        dq.append_request(req, base=self.queue_dir)
+
+    def _post(self, payload, *, token=_VALID, origin=None, raw=None):
+        url = f"http://127.0.0.1:{self.port}/api/v1/answer"
+        data = raw if raw is not None else json.dumps(payload).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        tok = self.token if token == _VALID else token
+        if tok is not None:
+            headers["X-Director-Token"] = tok
+        if origin is not None:
+            headers["Origin"] = origin
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            resp = urllib.request.urlopen(req, timeout=2)
+            return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    def test_turn_review_reply_written_and_unblocks(self):
+        self._pend({"request_id": "r1", "kind": "turnReview",
+                    "payload": {"final_message": "A or B?"}})
+        code, body = self._post({"request_id": "r1", "kind": "turnReview",
+                                 "disposition": {"kind": "reply", "reply": "do A"}})
+        self.assertEqual(code, 200, body)
+        self.assertTrue(body["written"])
+        ans = dq.read_answer("r1", base=self.queue_dir)
+        self.assertEqual(ans["disposition"], {"kind": "reply", "reply": "do A"})
+        self.assertEqual(ans["answered_by"], "console")
+        self.assertNotIn("r1", [r["request_id"] for r in dq.read_pending(base=self.queue_dir)])
+
+    def test_terminal_requires_outcome_status(self):
+        self._pend({"request_id": "rt", "kind": "turnReview", "payload": {}})
+        bad = self._post({"request_id": "rt", "kind": "turnReview",
+                          "disposition": {"kind": "terminal"}})
+        self.assertEqual(bad[0], 400)
+        self.assertIsNone(dq.read_answer("rt", base=self.queue_dir))  # nothing written
+        ok = self._post({"request_id": "rt", "kind": "turnReview",
+                         "disposition": {"kind": "terminal", "outcome": {"status": "done"}}})
+        self.assertEqual(ok[0], 200)
+
+    def test_command_approval_decision(self):
+        self._pend({"request_id": "c1", "kind": "commandApproval",
+                    "payload": {"command": ["ls"]}})
+        self.assertEqual(self._post({"request_id": "c1", "kind": "commandApproval",
+                                     "decision": "yolo"})[0], 400)  # bad enum
+        code, _ = self._post({"request_id": "c1", "kind": "commandApproval",
+                              "decision": "accept"})
+        self.assertEqual(code, 200)
+        self.assertEqual(dq.read_answer("c1", base=self.queue_dir)["decision"], "accept")
+
+    def test_user_input_answers(self):
+        self._pend({"request_id": "u1", "kind": "userInput",
+                    "payload": {"questions": "which env?"}})
+        code, _ = self._post({"request_id": "u1", "kind": "userInput",
+                              "answers": {"env": "staging"}})
+        self.assertEqual(code, 200)
+        self.assertEqual(dq.read_answer("u1", base=self.queue_dir)["answers"], {"env": "staging"})
+
+    def test_merge_review_abandon_and_requeue(self):
+        self._pend({"request_id": "m1", "kind": "mergeReview",
+                    "payload": {"pr": "#7", "branch": "feat/x", "attempt": 1,
+                                "result": "conflict"}})
+        code, _ = self._post({"request_id": "m1", "kind": "mergeReview",
+                              "action": "abandon", "note": "drop it"})
+        self.assertEqual(code, 200)
+        self.assertIn("merge_review_disposition", dq.read_answer("m1", base=self.queue_dir))
+        # requeue posts a fresh mergeRequest at attempt+1
+        self._pend({"request_id": "m2", "kind": "mergeReview",
+                    "payload": {"pr": "#8", "branch": "feat/y", "attempt": 1}})
+        code, body = self._post({"request_id": "m2", "kind": "mergeReview",
+                                 "action": "requeue", "note": "rebase then merge"})
+        self.assertEqual(code, 200, body)
+
+    def test_merge_request_not_answerable(self):
+        self._pend({"request_id": "mr", "kind": "mergeRequest",
+                    "payload": {"pr": "#9", "branch": "b"}})
+        self.assertEqual(self._post({"request_id": "mr", "kind": "mergeRequest"})[0], 409)
+
+    def test_missing_token_is_403_and_leaves_pending(self):
+        self._pend({"request_id": "f1", "kind": "turnReview", "payload": {}})
+        code, _ = self._post({"request_id": "f1", "kind": "turnReview",
+                              "disposition": {"kind": "escalate"}}, token=None)
+        self.assertEqual(code, 403)
+        self.assertIsNone(dq.read_answer("f1", base=self.queue_dir))  # not answered
+        self.assertEqual(self._post({"request_id": "f1", "kind": "turnReview",
+                                     "disposition": {"kind": "escalate"}},
+                                    token="wrong")[0], 403)
+
+    def test_foreign_origin_is_403(self):
+        self._pend({"request_id": "o1", "kind": "turnReview", "payload": {}})
+        code, _ = self._post({"request_id": "o1", "kind": "turnReview",
+                              "disposition": {"kind": "escalate"}},
+                             origin="http://evil.example")
+        self.assertEqual(code, 403)
+
+    def test_already_answered_is_409(self):
+        self._pend({"request_id": "a1", "kind": "turnReview", "payload": {}})
+        self.assertEqual(self._post({"request_id": "a1", "kind": "turnReview",
+                                     "disposition": {"kind": "escalate"}})[0], 200)
+        self.assertEqual(self._post({"request_id": "a1", "kind": "turnReview",
+                                     "disposition": {"kind": "escalate"}})[0], 409)
+
+    def test_unknown_request_is_404(self):
+        self.assertEqual(self._post({"request_id": "ghost", "kind": "turnReview",
+                                     "disposition": {"kind": "escalate"}})[0], 404)
+
+    def test_kind_mismatch_is_400(self):
+        self._pend({"request_id": "k1", "kind": "turnReview", "payload": {}})
+        self.assertEqual(self._post({"request_id": "k1", "kind": "commandApproval",
+                                     "decision": "accept"})[0], 400)
+
+    def test_malformed_body_is_400_and_server_survives(self):
+        self.assertEqual(self._post(None, raw=b"not json")[0], 400)
+        # server still serves a good GET afterward (fail-soft, R7)
+        resp = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/v1/state", timeout=2)
+        self.assertEqual(resp.status, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

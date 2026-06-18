@@ -27,14 +27,27 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 import director.queue as dq
+from director import director_min as dm
 from director import status
 
 # The single versioned, read-only data route (Symphony §13.7 alignment).
 _STATE_PATH = "/api/v1/state"
+# The single write route — answer a pending Director-queue request (operator console).
+_ANSWER_PATH = "/api/v1/answer"
 _DEFAULT_PORT = 8787
+
+# Queue kinds a human/console answers. Excludes `mergeRequest` (the serialized
+# merger's worklist — answering it would silently consume a merge) and `runReport`
+# (informational). Shared with `director.notify` (the park-notify filter).
+HUMAN_BOUND_KINDS = ("turnReview", "commandApproval", "fileChange",
+                     "userInput", "elicitation", "mergeReview")
+# Localhost hostnames accepted on a write (Origin/Host fence).
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 # Pending-request summary cap: glance-able, not a full payload dump (plan Decision log).
 _SUMMARY_LIMIT = 140
@@ -102,6 +115,35 @@ def _read_pending(queue_dir) -> list[dict]:
         return []
 
 
+def _host_is_local(value) -> bool:
+    """A Host (`127.0.0.1:8787`) or Origin (`http://127.0.0.1:8787`) header whose
+    hostname is loopback. Empty/foreign → False (the write fence, R5)."""
+    if not value:
+        return False
+    host = urlparse(value).hostname if "//" in value else value.rsplit(":", 1)[0].strip("[]")
+    return host in _LOCAL_HOSTS
+
+
+def _validate_disposition(disp) -> str | None:
+    """None if `disp` is a turn-review disposition the orchestrator will execute,
+    else a human-readable reason. Mirrors `decider.disposition_from_answer`'s contract
+    (kind ∈ terminal|reply|escalate, non-empty reply) and additionally requires a
+    terminal to carry `outcome.status ∈ done|blocked` — so the console never writes an
+    answer that reconcile would treat as `terminal_unknown`."""
+    if not isinstance(disp, dict):
+        return "disposition must be an object"
+    kind = disp.get("kind")
+    if kind not in ("terminal", "reply", "escalate"):
+        return "disposition.kind must be terminal|reply|escalate"
+    if kind == "reply" and not (disp.get("reply") or "").strip():
+        return "a reply disposition needs a non-empty reply"
+    if kind == "terminal":
+        outcome = disp.get("outcome")
+        if not isinstance(outcome, dict) or outcome.get("status") not in ("done", "blocked"):
+            return "a terminal disposition needs outcome.status in done|blocked"
+    return None
+
+
 def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     """Normalize the run snapshot + pending queue into one read-only view dict.
 
@@ -142,6 +184,7 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>director dashboard</title>
+<meta name="director-token" content="__DIRECTOR_TOKEN__">
 <style>
   body { background:#0e1116; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:1.2rem; }
   h1 { font-size:15px; font-weight:600; margin:0 0 .6rem; }
@@ -152,6 +195,11 @@ PAGE = """<!doctype html>
   .badge { background:#3a1d1d; border:1px solid #6b2b2b; color:#ffb4b4; border-radius:.4rem; padding:.05rem .45rem; }
   .item { padding:.12rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
   .ok { color:#6ee7a8; } .bad { color:#ff9b9b; }
+  .pitem { padding:.3rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
+  .ctl { margin-top:.25rem; display:flex; gap:.3rem; align-items:center; flex-wrap:wrap; }
+  .ctl textarea { background:#0b0e13; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; font:inherit; min-width:15rem; height:1.7rem; padding:.15rem .35rem; }
+  button.act { background:#1b2230; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; padding:.12rem .55rem; cursor:pointer; font:inherit; }
+  button.act:hover { background:#26304199; }
 </style></head><body>
 <h1>director dashboard <span id="updated" class="muted"></span></h1>
 <div id="run" class="run"></div>
@@ -200,9 +248,56 @@ function render(v) {
     [(r.status === "completed" ? "✓ " : "✗ ") + (r.ticket||r.ticket_id)
       + " · " + fmtTokens(r.tokens) + (r.session_id ? " · " + r.session_id : ""),
      r.status === "completed" ? "item ok" : "item bad"]));
-  fill("pending", (v.pending||[]).map(p =>
-    [p.kind + " · " + (p.ticket_id||"") + (p.summary ? " · " + p.summary : "")]));
+  renderPending(v.pending || []);
   $("updated").textContent = "· updated " + (v.generated_at || "");
+}
+function btn(label, onclick) { const b = el("button", label, "act"); b.onclick = onclick; return b; }
+async function answer(payload) {
+  const meta = document.querySelector('meta[name=director-token]');
+  const token = meta ? meta.content : "";
+  let r;
+  try {
+    r = await fetch("/api/v1/answer", { method: "POST",
+      headers: { "Content-Type": "application/json", "X-Director-Token": token },
+      body: JSON.stringify(payload) });
+  } catch (e) { alert("answer failed: " + e); return; }
+  if (!r.ok) {
+    let msg = r.status;
+    try { const j = await r.json(); if (j.error) msg = j.error.message; } catch (e) {}
+    alert("answer failed: " + msg);
+  }
+  poll();  // refresh now; an answered item drops on the next /api/v1/state
+}
+function renderPending(items) {
+  const box = $("pending"); box.innerHTML = "";
+  if (!items.length) { box.appendChild(el("div", "—", "muted")); return; }
+  for (const p of items) {
+    const rid = p.request_id, kind = p.kind;
+    const row = el("div", null, "pitem");
+    row.appendChild(el("div", kind + " · " + (p.ticket_id || "") + (p.summary ? " · " + p.summary : "")));
+    const ctl = el("div", null, "ctl");
+    if (kind === "turnReview") {
+      const ta = el("textarea"); ta.placeholder = "reply / escalate reason"; ctl.appendChild(ta);
+      ctl.appendChild(btn("reply", () => answer({ request_id: rid, kind, disposition: { kind: "reply", reply: ta.value } })));
+      ctl.appendChild(btn("done", () => answer({ request_id: rid, kind, disposition: { kind: "terminal", outcome: { status: "done" } } })));
+      ctl.appendChild(btn("blocked", () => answer({ request_id: rid, kind, disposition: { kind: "terminal", outcome: { status: "blocked" } } })));
+      ctl.appendChild(btn("escalate", () => answer({ request_id: rid, kind, disposition: { kind: "escalate", reason: ta.value } })));
+    } else if (kind === "commandApproval" || kind === "fileChange") {
+      ctl.appendChild(btn("accept", () => answer({ request_id: rid, kind, decision: "accept" })));
+      ctl.appendChild(btn("decline", () => answer({ request_id: rid, kind, decision: "decline" })));
+    } else if (kind === "userInput" || kind === "elicitation") {
+      const ta = el("textarea"); ta.placeholder = "answer"; ctl.appendChild(ta);
+      ctl.appendChild(btn("send", () => answer({ request_id: rid, kind, answers: { response: ta.value } })));
+    } else if (kind === "mergeReview") {
+      const ta = el("textarea"); ta.placeholder = "note (for requeue)"; ctl.appendChild(ta);
+      ctl.appendChild(btn("requeue", () => answer({ request_id: rid, kind, action: "requeue", note: ta.value })));
+      ctl.appendChild(btn("abandon", () => answer({ request_id: rid, kind, action: "abandon", note: ta.value })));
+    } else {
+      ctl.appendChild(el("span", "(read-only)", "muted"));
+    }
+    row.appendChild(ctl);
+    box.appendChild(row);
+  }
 }
 async function poll() {
   try { const r = await fetch("/api/v1/state"); render(await r.json()); }
@@ -210,6 +305,13 @@ async function poll() {
 }
 setInterval(poll, 1000); poll();
 </script></body></html>"""
+
+
+def PAGE_html(token: str) -> str:
+    """The served page with the per-server CSRF token injected into its
+    `<meta name="director-token">`. The token is url-safe (`secrets.token_urlsafe`),
+    so it is safe inside the attribute value (no quote/markup escaping needed)."""
+    return PAGE.replace("__DIRECTOR_TOKEN__", token)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -251,16 +353,116 @@ class _Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
 
+    # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
+    _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
+
     def _route(self):
         path = self.path.split("?", 1)[0]
-        if path not in ("/", _STATE_PATH):
-            return self._error(404, f"no such route: {path}")  # undefined → 404
-        if self.command != "GET":
-            return self._error(405, f"method not allowed: {self.command}")  # defined+wrong verb → 405
+        allowed = self._ROUTES.get(path)
+        if allowed is None:
+            return self._error(404, f"no such route: {path}")          # undefined → 404
+        if self.command not in allowed:
+            return self._error(405, f"method not allowed: {self.command}")  # wrong verb → 405
         if path == "/":
-            return self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
-        view = build_view(self.server.status_dir, self.server.queue_dir)
-        return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+            return self._send(200, PAGE_html(self.server.token).encode("utf-8"),
+                              "text/html; charset=utf-8")
+        if path == _STATE_PATH:
+            view = build_view(self.server.status_dir, self.server.queue_dir)
+            return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+        return self._answer()  # _ANSWER_PATH + POST
+
+    def _answer(self) -> None:
+        """Resolve one pending Director-queue request from the browser (R1/R2). Fenced
+        (R5), idempotent (R6), and validated against the downstream writer's contract
+        before any write — a bad body is a 400, never a queued-but-unconsumable answer."""
+        if not self._authorized():
+            return self._error(403, "forbidden: missing/invalid token or non-local origin")
+        body = self._read_json_body()
+        if body is None:
+            return self._error(400, "malformed or missing JSON body")
+        request_id, kind = body.get("request_id"), body.get("kind")
+        if not isinstance(request_id, str) or not isinstance(kind, str):
+            return self._error(400, "request_id and kind are required strings")
+        qbase = self.server.queue_dir
+        # Locate the still-pending request (R6): read_pending excludes answered ones, so
+        # "not pending" means either already-answered (409) or unknown (404).
+        try:
+            pending = dq.read_pending(base=qbase)
+        except (OSError, ValueError, KeyError):
+            pending = []
+        req = next((r for r in pending if r.get("request_id") == request_id), None)
+        if req is None:
+            if dq.read_answer(request_id, base=qbase) is not None:
+                return self._error(409, "already answered")
+            return self._error(404, f"no pending request: {request_id}")
+        if req.get("kind") != kind:
+            return self._error(400, f"kind mismatch: queued {req.get('kind')!r}")
+        if kind not in HUMAN_BOUND_KINDS:
+            return self._error(409, f"kind not answerable from console: {kind!r}")
+        ok, detail = self._dispatch_answer(kind, request_id, body, req, qbase)
+        if not ok:
+            return self._error(400, detail)
+        return self._send(200, json.dumps({"written": True, "request_id": request_id,
+                                           "kind": kind, "detail": detail}).encode("utf-8"),
+                          "application/json")
+
+    def _dispatch_answer(self, kind, request_id, body, req, qbase):
+        """Route one validated answer to its canonical director_min writer; returns
+        (ok, detail). `answered_by="console"` records the operator-surface in the audit."""
+        if kind == "turnReview":
+            disp = body.get("disposition")
+            err = _validate_disposition(disp)
+            if err:
+                return False, err
+            dm.answer_turn(request_id, disp, base=qbase, answered_by="console")
+            return True, f"disposition {disp.get('kind')}"
+        if kind in ("commandApproval", "fileChange"):
+            decision = body.get("decision")
+            if decision not in dq.APPROVAL_DECISIONS:
+                return False, f"decision must be one of {list(dq.APPROVAL_DECISIONS)}"
+            dm.answer(request_id, decision, base=qbase, answered_by="console")
+            return True, f"decision {decision}"
+        if kind in ("userInput", "elicitation"):
+            answers = body.get("answers")
+            if not isinstance(answers, dict):
+                return False, "answers must be an object"
+            dm.answer(request_id, answers=answers, base=qbase, answered_by="console")
+            return True, "answers recorded"
+        if kind == "mergeReview":
+            action, note = body.get("action"), body.get("note") or ""
+            if action == "requeue":
+                res = dm.requeue_merge(req, note=note, base=qbase, answered_by="console")
+                return True, f"requeue {res}"
+            if action in ("abandon", "human"):
+                dm.answer_merge_review(request_id, {"action": action, "note": note},
+                                       base=qbase, answered_by="console")
+                return True, f"merge {action}"
+            return False, "action must be requeue|abandon|human"
+        return False, f"unsupported kind: {kind!r}"  # defensive; HUMAN_BOUND_KINDS gates above
+
+    def _authorized(self) -> bool:
+        """Write fence (R5): the per-server CSRF token AND a loopback Host (and Origin,
+        when the browser sends one). GET routes never call this — reads are unfenced."""
+        if self.headers.get("X-Director-Token") != self.server.token:
+            return False
+        if not _host_is_local(self.headers.get("Host")):
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or _host_is_local(origin)
+
+    def _read_json_body(self):
+        """The POST body as a dict, or None for any malformed/absent/over-typed body."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            return None
+        if length <= 0:
+            return None
+        try:
+            data = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
 
     def _send(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)
@@ -278,10 +480,14 @@ class _DashboardServer(ThreadingHTTPServer):
     """Carries the status/queue dirs the handler reads from (set once at construction,
     never per-request) — an explicit field instead of a monkey-attribute."""
 
-    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None):
+    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None, token=None):
         super().__init__(addr, handler)
         self.status_dir = status_dir
         self.queue_dir = queue_dir
+        # Per-server CSRF token: minted once, embedded in the served page, required on
+        # every write (POST). A foreign page in the browser cannot read it (same-origin)
+        # so cannot forge a write to localhost. `token=` is injectable for tests.
+        self.token = token or secrets.token_urlsafe(32)
 
 
 def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None) -> _DashboardServer:

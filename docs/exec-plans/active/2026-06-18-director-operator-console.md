@@ -163,9 +163,27 @@ without attaching to the session. Concretely, observable:
   Expect: GREEN gate; the browser submit unblocks the worker; the webhook fires.
 
 ## Progress log
-- [ ] (2026-06-18) plan created; base_commit 82449c2; review_level standard.
+- [x] (2026-06-18) plan created; base_commit 82449c2; review_level standard.
+- [x] (2026-06-18) **M1 done** — `POST /api/v1/answer` in `dashboard.py`: route/verb
+  matrix (`_ROUTES`), kind-dispatch to `director_min` (`answer`/`answer_turn`/
+  `answer_merge_review`/`requeue_merge`, `answered_by="console"`), CSRF-token +
+  Origin/Host fence (`_authorized`), `_validate_disposition`/`_host_is_local` pure
+  helpers, 400/404/409/403 matrix, fail-soft. 14 new tests (per-kind + fence +
+  idempotency + malformed) — `test_director_dashboard.py` 28 green.
+- [x] (2026-06-18) **M2 done** — per-kind UI in `PAGE`: `PAGE_html(token)` injects the
+  CSRF token into a `<meta>`; `renderPending` builds a control per kind (reply/done/
+  blocked/escalate · accept/decline · send · requeue/abandon) posting `/api/v1/answer`
+  with the `X-Director-Token` header; values still via `textContent`. 1 new test
+  (token + controls present) — 29 green. `build_view` left UNCHANGED (see Decision).
+- [ ] M3 — `director/notify.py` webhook park-notifier (next).
+- [ ] M4 — DIRECTOR.md section + playwright E2E + completion gate.
 
 ## Surprises & discoveries
+- 2026-06-18: `build_view` needed **no enrichment** for M2 after all — the existing
+  `pending[].summary` already carries each kind's human context (command, final_message,
+  result/reason, questions), and the controls' other inputs are operator-typed. So M2 is
+  a pure `PAGE` change; `build_view`'s pass-through view is byte-unchanged (smaller diff,
+  honors R8's "additive" intent more tightly than the plan assumed).
 
 ## Decision log
 - 2026-06-18: review_level = **standard** (review-arch + review-reliability) **plus
