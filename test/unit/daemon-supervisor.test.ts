@@ -55,6 +55,15 @@ describe("DaemonSupervisor", () => {
     expect(sup.list()[0].status).toBe("idle");
     await sup.shutdown();
   });
+  it("spawn persists the restart policy onto the record (for boot-rehydration)", async () => {
+    const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: dir(), restart: "on-failure" });
+    const a = sup.spawn();                          // inherits the daemon-wide default
+    const b = sup.spawn({ restart: "no" });         // explicit per-session override
+    const byId = Object.fromEntries(sup.list().map((r) => [r.id, r.restart]));
+    expect(byId[a]).toBe("on-failure");
+    expect(byId[b]).toBe("no");
+    await sup.shutdown();
+  });
   it("enforces maxSessions and throws on unknown ids", async () => {
     const sup = new DaemonSupervisor({ query: fakeQuery }, { dir: dir(), maxSessions: 1 });
     sup.spawn();

@@ -92,7 +92,7 @@ export class DaemonSupervisor {
     this.configs.set(id, cfg);
     this.pool.set(id, this.makeSession(id, cfg, opts.resume));
     const t = this.now();
-    this.registry.register({ id, daemonPid: process.pid, status: "idle", model: opts.model, createdAt: t, lastActiveAt: t });
+    this.registry.register({ id, daemonPid: process.pid, status: "idle", model: opts.model, restart: cfg.restart, createdAt: t, lastActiveAt: t });
     return id;
   }
 
