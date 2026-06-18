@@ -218,9 +218,9 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
         if ext.get("state_type") in _TERMINAL_TYPES and workspace_root is not None:
             ws = run.workspace_path(tid, workspace_root)
             if run.is_contained(ws, workspace_root):
-                try:
-                    shutil.rmtree(ws, ignore_errors=True)
-                except Exception as exc:  # best-effort, recorded like a board-write miss
+                try:  # NOT ignore_errors: a real delete failure is recorded in the
+                    shutil.rmtree(ws)  # summary (reconcile_error), like a board-write miss
+                except Exception as exc:
                     errs.append(f"workspace cleanup: {exc}")
         summary = summarize("cancelled", final)
     elif kind == "stuck":
@@ -642,6 +642,9 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
             if str(ws) in protected:
                 continue  # a queued PR-merge still needs this branch's workspace
             if run.is_contained(ws, workspace_root):
+                # ignore_errors here is deliberate: a single stale workspace that won't
+                # delete is silently best-effort so the loop still cleans the rest (a
+                # FETCH error is what the outer except surfaces, not a per-dir failure).
                 shutil.rmtree(ws, ignore_errors=True)
     except Exception as exc:
         # daemon diagnostics go to stderr; stdout is the program's data payload stream

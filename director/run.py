@@ -70,9 +70,12 @@ def load_ticket(path: str | Path) -> dict:
 
 
 def workspace_key(identifier) -> str:
-    """Sanitize a board identifier into a safe workspace directory NAME (Symphony §9.5
-    invariant 3): every character outside `[A-Za-z0-9._-]` becomes `_`. A board id with
-    `/` or `..` can no longer reshape the path or escape the workspace root."""
+    """Sanitize a board identifier into a single-component workspace directory NAME
+    (Symphony §9.5 invariant 3): every character outside `[A-Za-z0-9._-]` becomes `_`, so
+    a `/` can no longer split the key into multiple path segments. Note `.` IS allowed, so
+    a degenerate id (`""`/`.`/`..`) still yields a key that resolves to the root or its
+    parent — sanitization alone is NOT sufficient containment. `is_contained` (applied at
+    every derive and every delete site) is the mandatory guard that rejects those."""
     return re.sub(r"[^A-Za-z0-9._-]", "_", str(identifier))
 
 

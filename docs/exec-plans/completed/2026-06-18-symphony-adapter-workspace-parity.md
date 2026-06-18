@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-18
 owner: harness
 base_commit: f2748b5e0137f417c05dcc29a7c41673cd7ecc87
@@ -210,8 +210,11 @@ re-derive it):
   equality; stderr diagnostics. Tests +4 (degenerate-id-to-root raises, is_contained
   strict, act-before-consume ordering). 115 module tests + full gate GREEN. Rules promoted:
   SECURITY T14, RELIABILITY R19/R20. Smoke re-confirmed.
-- [ ] Re-review (spec-compliance + reliability must clear; re-confirm arch/security on the
-  changed diff) → then code-quality → finalize.
+- [x] (2026-06-18) Re-review round 2 on the fixed diff: **all five SATISFIED** —
+  spec-compliance (Codex), reliability, arch, security all returned no findings;
+  code-quality (Codex) SATISFIED with 2 P2s (workspace_key docstring precision;
+  reconcile rmtree `ignore_errors` made its except dead). Both P2s fixed inline +
+  annotated; 93 module tests + full gate GREEN. Slice COMPLETE.
 
 ## Surprises & discoveries
 - 2026-06-18 (M2): the spec's first sanitization example (`feat/ABC..XY → feat_ABC__XY`)
@@ -263,4 +266,52 @@ Round-1 reviews (all findings resolved inline before finalization):
   and naming `run.workspace_path` in ARCHITECTURE invariant 8's examples — promote in a future
   doc pass (the code already conforms).
 
+Round-2 reviews (re-review on the fixed diff) — **all five SATISFIED**:
+- **spec-compliance (Codex), review-reliability, review-arch, review-security** — no findings;
+  the two round-1 P1s confirmed resolved (strict containment; act-before-consume), the rm-rf-root
+  hole confirmed closed at all three call sites, R19/R20/T14 confirmed matching the code.
+- **review-code-quality (Codex) — SATISFIED**, 2 P2s, both fixed inline:
+  - `workspace_key` docstring overpromised ("`..` can no longer reshape the path") while `..`
+    actually survives the sanitizer → tightened to state containment is the mandatory guard.
+  - reconcile's cleanup `shutil.rmtree(ws, ignore_errors=True)` made its `try/except → errs`
+    dead (rmtree never raises) → dropped `ignore_errors` so a real delete failure is recorded;
+    `_startup_recovery`'s loop keeps `ignore_errors=True` (deliberate best-effort, annotated).
+
 ## Outcomes & retrospective
+**Shipped (slices 1–3):** the three leftover Symphony adapter/workspace gaps are closed.
+- **R1** `board/linear.py` paginates the candidate poll (`first:50`+`after`+`pageInfo`,
+  order-preserving, `linear_missing_end_cursor` + non-advancing-cursor raises) and adds the
+  paginated `fetch_issues_by_states` op (empty-guard); shared `_paginate` + `_normalize_candidate`.
+- **R2** `run.py` `workspace_key`/`workspace_path`/`is_contained` are the single workspace-safety
+  derivation (consumed by dispatch + merge-enqueue + both cleanup paths); containment is
+  strict-descendant; pre-launch cwd-equality check.
+- **R3** `run_forever` does startup terminal-workspace cleanup (excluding pending-merge paths) +
+  orphaned-`started`→`ready` re-attach (fail-soft); reconcile cleans a mid-flight-cancelled-to-
+  terminal workspace (by `state_type`), never a normal `done`/`blocked`; `done` now enqueues the
+  merge before the terminal transition.
+
+**Verification:** full gate GREEN; behavioral smoke drove `run_forever` with a seeded crash-orphan
++ stale terminal workspace → orphan re-dispatched to Done, stale workspace cleaned at startup.
++17 tests across the three modules. Five-persona review (spec-compliance + code-quality via Codex;
+arch/reliability/security personas) all SATISFIED after one fix round.
+
+**What the reviews caught that the gate didn't (the value of the pass):** (1) a strict-vs-reflexive
+containment gap that let a degenerate id `rmtree` the entire workspace root — found independently by
+spec-compliance AND security; (2) the act-before-consume ordering (enqueue-before-`done`) without
+which restart-GC could delete an un-enqueued PR branch — exactly the [[queue-act-before-consume-ordering]]
+class. Both were latent (unreachable via today's UUID ids / crash-timing) but real, and now closed +
+written as rules (SECURITY T14, RELIABILITY R19/R20).
+
+**Rules promoted:** SECURITY T14 (Director workspace write/delete surface), RELIABILITY R19
+(durable-handoff-before-terminal + restart-GC) & R20 (control-path cursor loops must terminate).
+**Deferred (tracker doc-debt):** stderr daemon-diagnostic convention; naming `run.workspace_path`
+in ARCHITECTURE invariant 8 examples.
+
+**Deferred by design:** R4 workspace lifecycle hooks (the repo-population bridge) — load-bearing only
+once workers run on a real repo; specced as a future slice of this same parity track.
+
+**Retro:** running the three risk personas in parallel with spec-compliance paid off — their findings
+held regardless of the (eventual) compliance failure, and the two P1s converged with the security/
+reliability reviews rather than duplicating them. The spec's own first sanitization example was wrong
+(`..` "survives"), caught mid-build; lesson: when a sanitizer charset allows `.`, containment — not the
+sanitizer — owns the `..`/root-equality cases, and the spec should say so up front.
