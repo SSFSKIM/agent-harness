@@ -201,7 +201,17 @@ re-derive it):
   `tests/test_director_orchestrator.py` +7 (cleanup-except-pending-merge, orphan
   re-attach, fetch fail-soft, run_forever wiring, cancelled-terminal cleans,
   cancelled-nonterminal keeps, normal-done keeps). 77 pass; full gate GREEN.
-- [ ] Completion gate next: behavioral check + reviews.
+- [x] (2026-06-18) Completion gate, round 1: gate GREEN; behavioral smoke (run_forever
+  with a seeded orphan + stale terminal workspace → orphan re-dispatched to Done, stale
+  cleaned). 4 reviews dispatched (spec-compliance via Codex; arch/reliability/security
+  Claude personas). 2 NOT-SATISFIED (P1s) + 3 P2s — see Feedback. All fixed inline.
+- [x] (2026-06-18) Review fixes applied: strict-descendant `is_contained`; act-before-
+  consume reorder (enqueue before `done`); `_paginate` cursor-progress guard; R2d cwd
+  equality; stderr diagnostics. Tests +4 (degenerate-id-to-root raises, is_contained
+  strict, act-before-consume ordering). 115 module tests + full gate GREEN. Rules promoted:
+  SECURITY T14, RELIABILITY R19/R20. Smoke re-confirmed.
+- [ ] Re-review (spec-compliance + reliability must clear; re-confirm arch/security on the
+  changed diff) → then code-quality → finalize.
 
 ## Surprises & discoveries
 - 2026-06-18 (M2): the spec's first sanitization example (`feat/ABC..XY → feat_ABC__XY`)
@@ -224,7 +234,33 @@ re-derive it):
 - 2026-06-18: completion review = standard (arch + reliability) **plus review-security**
   — the diff adds a filesystem write surface (path containment + `rmtree`) that warrants
   a security pass even though it is not the hooks/.harness.json live-exec surface.
+- 2026-06-18 (review fix): `is_contained` is **strict-descendant** (root-equality not
+  contained), not the original reflexive "at/under root" — closes the rm-rf-root footgun
+  at the guard for both dispatch and cleanup; chose this single-point fix over also
+  rejecting degenerate keys in `workspace_key` (the "`..` survives sanitize" story stays).
+- 2026-06-18 (review fix): `reconcile` enqueues the merge **before** the `done` transition
+  (act-before-consume, RELIABILITY R19) — the durable handoff precedes the consume-enabling
+  board write so restart-GC's pending-merge exclusion is sound.
 
 ## Feedback (from completion gate)
+Round-1 reviews (all findings resolved inline before finalization):
+- **spec-compliance (Codex) — NOT SATISFIED → fixed.** P1: `is_contained` was "at/under
+  root" (reflexive) but spec R2b says the workspace's *parent* is the root (strict); a
+  derived `.`/`""` resolved to the root itself. Fixed: `is_contained` now requires a strict
+  descendant (root-equality + parent not contained). Spec R2b/acceptance-3 wording tightened.
+- **review-reliability — NOT SATISFIED → fixed.** P1: `reconcile` set `done` BEFORE the
+  merge enqueue → a crash between strands a `done` ticket whose un-enqueued PR branch
+  startup cleanup would rmtree. Fixed: enqueue-before-`set_state(done)` (act-before-consume,
+  RELIABILITY R19). P2a: `_paginate` could loop forever on a non-advancing cursor → fixed
+  with a cursor-progress guard (RELIABILITY R20). P2b: R2d was `is_dir()` not the spec's
+  cwd-equality → fixed (independent re-derivation + equality check in `_prepare`).
+- **review-arch — SATISFIED.** P2: `_startup_recovery` diagnostics printed to stdout →
+  fixed to `file=sys.stderr` (matches the `poll_failed`/`poll_recovered` convention).
+- **review-security — SATISFIED.** P2: the same root-equality rmtree-the-root hole as the
+  spec-compliance P1 → closed by the strict `is_contained`. New threat SECURITY T14
+  (Director workspace write/delete surface) written.
+- **Deferred doc-debt (tracker, not blocking):** the "daemon diagnostics → stderr" convention
+  and naming `run.workspace_path` in ARCHITECTURE invariant 8's examples — promote in a future
+  doc pass (the code already conforms).
 
 ## Outcomes & retrospective

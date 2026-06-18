@@ -132,6 +132,20 @@ class WorkspaceSafetyTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             run._workspace_for({"id": ".."}, self.tmp / "root")
 
+    def test_derived_id_resolving_to_root_itself_raises(self):
+        # a degenerate id ('.' / '') resolves to the ROOT itself — strict containment
+        # rejects it so cleanup can never rmtree the whole root (security/spec P1)
+        for degenerate in (".", ""):
+            with self.assertRaises(RuntimeError):
+                run._workspace_for({"id": degenerate}, self.tmp / "root")
+
+    def test_is_contained_is_strict_descendant(self):
+        root = self.tmp / "root"
+        self.assertFalse(run.is_contained(root, root))             # root itself: NOT contained
+        self.assertFalse(run.is_contained(root / "..", root))      # parent: NOT contained
+        self.assertTrue(run.is_contained(root / "abc", root))      # a child: contained
+        self.assertTrue(run.is_contained(root / "a" / "b", root))  # a descendant: contained
+
     def test_explicit_workspace_override_is_exempt_from_containment(self):
         # the trusted single-ticket-CLI/test affordance may target an arbitrary path
         outside = self.tmp / "outside"

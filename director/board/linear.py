@@ -139,6 +139,7 @@ def _paginate(query: str, variables: dict, *, api_key: str | None,
     (so a non-paginating fake/transport degrades to one fetch, never an infinite loop)."""
     nodes: list[dict] = []
     after = None
+    seen_cursors: set[str] = set()
     while True:
         data = _post(query, {**variables, "after": after},
                      api_key=api_key, endpoint=endpoint, http_post=http_post)
@@ -151,6 +152,13 @@ def _paginate(query: str, variables: dict, *, api_key: str | None,
         if not after:
             raise RuntimeError("Linear pagination integrity error: hasNextPage with no "
                                "endCursor (linear_missing_end_cursor)")
+        # Bound the loop against a Byzantine server that advertises hasNextPage forever
+        # with a non-advancing/repeating cursor (each POST is timeout-bounded, but the
+        # loop itself must terminate — control-path read, not telemetry).
+        if after in seen_cursors:
+            raise RuntimeError("Linear pagination integrity error: cursor did not "
+                               "advance (repeated endCursor)")
+        seen_cursors.add(after)
 
 
 def normalize_issue(issue: dict) -> dict:

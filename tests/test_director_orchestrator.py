@@ -706,6 +706,23 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertFalse(out["summary"]["merge_enqueued"])
         self.assertEqual(self._merge_reqs(), [])
 
+    def test_done_enqueues_merge_before_terminal_transition(self):
+        # act-before-consume (review-reliability P1): the PR-merge must be enqueued BEFORE
+        # the `done` board write, so a crash between them never strands an un-enqueued PR
+        # branch that startup cleanup would then rmtree. Spy records the board transitions
+        # observed AT enqueue time — they must be empty (done not yet written).
+        seen = {}
+        orig = orch._maybe_enqueue_merge
+
+        def spy(tid, *a, **k):
+            seen["transitions_at_enqueue"] = list(self.board.transitions.get(tid, []))
+            return orig(tid, *a, **k)
+
+        with mock.patch.object(orch, "_maybe_enqueue_merge", spy):
+            self._reconcile(self._done(pr_url="http://pr", pr_branch="b"))
+        self.assertEqual(seen["transitions_at_enqueue"], [])          # done NOT yet written
+        self.assertIn(self.states["done"], self.board.transitions["u1"])  # done written, after
+
     def test_blocked_with_pr_fields_still_does_not_enqueue(self):
         # only `done` feeds the merge queue — blocked means the work didn't finish.
         disp = {"kind": "terminal",

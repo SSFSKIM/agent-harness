@@ -86,12 +86,19 @@ def workspace_path(identifier, workspace_root) -> Path:
 
 
 def is_contained(path, workspace_root) -> bool:
-    """True iff `path` resolves to a location at/under `workspace_root` (Symphony §9.5
-    invariant 2). Pure path comparison (no fs writes); the workspace-safety guard shared
-    by dispatch (reject an escaping derived path) and cleanup (never rmtree outside the
-    root). A path that cannot be resolved/compared is treated as NOT contained (safe)."""
+    """True iff `path` resolves to a STRICT descendant of `workspace_root` — under the
+    root AND not the root itself (spec R2b / Symphony §9.5 invariant 2: a workspace is
+    "a directory whose parent is the workspace root", never the root). Strictness is
+    load-bearing because the cleanup paths `rmtree` this: a degenerate sanitized key
+    (`""`/`.`/`..`) resolves to the root or its parent, and must NOT count as a contained
+    workspace, or cleanup could delete the entire root (review-security/spec-compliance
+    P1). Pure path comparison (no fs writes); shared by dispatch (reject an escaping
+    derived path) and cleanup (never rmtree at/above the root). An unresolvable/
+    incomparable path is NOT contained (fail safe)."""
     try:
-        return Path(path).resolve().is_relative_to(Path(workspace_root).resolve())
+        resolved = Path(path).resolve()
+        root = Path(workspace_root).resolve()
+        return resolved != root and resolved.is_relative_to(root)
     except (OSError, ValueError):
         return False
 
@@ -128,12 +135,16 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
     (director/worker/policy.py) — a worker never inherits the Director's host secrets
     (SECURITY.md T11, env-inheritance channel)."""
     ws = _workspace_for(ticket, workspace_root)
-    # §9.5 invariant 1: validate before launch that the worker's cwd is the prepared
-    # workspace directory (we pass cwd=ws below). Held by construction; the explicit
-    # check guards a future refactor that lets the launch cwd drift off the contained
-    # workspace, and a torn/non-dir path.
+    # §9.5 invariant 1 (R2d): before launch, the worker's cwd (we pass cwd=ws below) must
+    # be a real directory AND resolve to exactly the canonical workspace path. `expected`
+    # is re-derived independently of `_workspace_for`, so this catches a future refactor
+    # that lets the launch cwd drift off the contained workspace, not just a torn path.
+    expected = Path(ticket["workspace"]) if ticket.get("workspace") \
+        else workspace_path(ticket["id"], workspace_root)
     if not ws.is_dir():
         raise RuntimeError(f"workspace path is not a directory before launch: {ws}")
+    if ws.resolve() != expected.resolve():
+        raise RuntimeError(f"launch cwd {ws} != expected workspace {expected}")
     if install_skills:
         install_workspace_skills(ws)
     if worker_env is None:

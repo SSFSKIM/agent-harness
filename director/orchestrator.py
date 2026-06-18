@@ -167,12 +167,18 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
         outcome = disp.get("outcome") or {}
         ostatus = outcome.get("status")
         if ostatus == "done":
+            # Act-before-consume ([[queue-act-before-consume-ordering]], review-reliability
+            # P1): ENQUEUE the PR-merge (the durable downstream handoff) BEFORE the terminal
+            # `done` transition. A crash between them must never leave a `done`-on-board
+            # ticket whose un-enqueued PR branch the next startup cleanup would rmtree —
+            # if we crash pre-enqueue the ticket stays `started` (orphan-recovered + the
+            # workspace is reused), and once it reaches `done` the merge is already queued
+            # (so startup cleanup's pending-merge exclusion protects the branch).
+            enqueued = _maybe_enqueue_merge(tid, ticket, outcome, queue_base,
+                                            workspace_root, errs)
             set_state(states["done"])
             reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
             comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
-            # R4 handoff: a done worker that opened a PR feeds the serialized merger.
-            enqueued = _maybe_enqueue_merge(tid, ticket, outcome, queue_base,
-                                            workspace_root, errs)
             summary = summarize("completed", "done", merge_enqueued=enqueued)
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
@@ -638,7 +644,10 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
             if run.is_contained(ws, workspace_root):
                 shutil.rmtree(ws, ignore_errors=True)
     except Exception as exc:
-        print(json.dumps({"daemon": "startup_cleanup_skipped", "error": str(exc)}))
+        # daemon diagnostics go to stderr; stdout is the program's data payload stream
+        # (matches the poll_failed/poll_recovered convention below).
+        print(json.dumps({"daemon": "startup_cleanup_skipped", "error": str(exc)}),
+              file=sys.stderr)
     try:  # (b) orphan re-attach
         for ticket in board.fetch_issues_by_states(team, [states["started"]]):
             try:
@@ -646,9 +655,10 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
             except Exception as exc:
                 print(json.dumps({"daemon": "orphan_reattach_failed",
                                   "ticket": ticket.get("identifier") or ticket.get("id"),
-                                  "error": str(exc)}))
+                                  "error": str(exc)}), file=sys.stderr)
     except Exception as exc:
-        print(json.dumps({"daemon": "orphan_fetch_skipped", "error": str(exc)}))
+        print(json.dumps({"daemon": "orphan_fetch_skipped", "error": str(exc)}),
+              file=sys.stderr)
 
 
 def run_forever(board, command: list[str], *, team: str, states: dict,

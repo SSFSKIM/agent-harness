@@ -124,3 +124,22 @@ cite them in findings.
   non-2xx + reason), never return a generic success envelope for a no-op. Reporting a
   declined write as written leaves the operator believing they acted when the request is
   still open — the write analog of R12/R14's "never a wrong value / never a false gate".
+- **R19 — Durable handoff precedes the consume-enabling transition; restart GC trusts it,
+  not just board state.** A generalization of [[queue-act-before-consume-ordering]] to
+  restart-time cleanup. When finishing a unit of work writes BOTH a board-terminal state
+  AND a durable downstream handoff (e.g. `reconcile` marking a ticket `done` AND enqueuing
+  its PR to the serialized merger), the **handoff enqueue MUST happen before the terminal
+  board write** — so a crash in between leaves the ticket pre-terminal (recoverable via
+  orphan re-attach) rather than terminal-without-handoff. Correspondingly, any restart-time
+  GC keyed on board-terminal state (`_startup_recovery`'s workspace cleanup) MUST treat
+  "terminal on board" as **insufficient** evidence that a resource is disposable when a
+  separate durable queue owns the remaining work: it excludes anything still referenced by
+  that queue (the pending-`mergeRequest` workspace set). Deleting a workspace whose un-landed
+  PR branch it holds is unrecoverable — the ordering + the exclusion together close it.
+- **R20 — Control-path cursor loops must terminate.** A paginated fetch on a control path
+  (`board/linear.py` `_paginate`, behind candidate-poll + startup recovery) must be bounded
+  against a Byzantine/looping server: a `hasNextPage: true` with a missing/empty `endCursor`
+  raises (`linear_missing_end_cursor`), AND a repeated/non-advancing cursor raises rather than
+  looping forever. Per-request timeouts bound a single POST, not the loop; the loop itself must
+  make progress or fail loud (the daemon's `poll_failed` catch then absorbs it). Distinct from
+  R12 (telemetry totality) — this governs control-path *termination*, not parse safety.

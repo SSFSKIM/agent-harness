@@ -14,7 +14,8 @@ Grounding document for the review-security persona. Threats are numbered.
 > execution), **T8** (lint-exemption scope), **T9** (`.harness.json` /
 > `.claude/lints` executable config), **T10** (worker tool authority — the
 > Director's live exec surface), **T11** (autonomous worker posture), **T12**
-> (operator-console write surface), **T13** (notifier outbound egress). The full
+> (operator-console write surface), **T13** (notifier outbound egress), **T14**
+> (Director workspace write/delete surface). The full
 > model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
@@ -241,3 +242,20 @@ Grounding document for the review-security persona. Threats are numbered.
   `file://`/`ftp://` fails loud at startup, never honored); the POST payload carries **queue
   metadata only** (`request_id`/`kind`/`ticket_id`/clipped `summary`/`created_at`) — never
   credentials or `.env` contents — and the URL itself is never echoed to logs.
+- **T14 — Director workspace write/delete surface.** The Director process itself
+  creates (`mkdir`) and destroys (`shutil.rmtree`) per-ticket workspace trees keyed by a
+  **board-controlled identifier** (`director/run.py` `_workspace_for`;
+  `director/orchestrator.py` `_startup_recovery` startup cleanup + `reconcile`'s cancelled
+  mid-flight cleanup). This is distinct from **T11** (the *worker's* OS sandbox) and **T12**
+  (the operator-console write surface): here the *Director* deletes trees, so a board id
+  that escaped containment could `rmtree` outside the workspace root. Rules: (1) the
+  workspace key is sanitized to `[A-Za-z0-9._-]` (`run.workspace_key`), collapsing any path
+  separator so no multi-segment traversal survives; (2) every derive and every `rmtree`
+  passes `run.is_contained`, which requires a **strict descendant** of the resolved root —
+  the root itself and its parent are NOT contained, so a degenerate key (`""`/`.`/`..`) that
+  resolves to/above the root is rejected and can never delete the whole root;
+  (3) containment resolves symlinks (`Path.resolve()`) before comparing, so a symlinked leaf
+  pointing outside the root fails; (4) the explicit-`workspace`-override exemption is
+  reachable only from the trusted single-ticket CLI (`load_ticket`), never the board/daemon
+  path (`normalize_issue` emits no `workspace` key). Any future workspace-lifecycle code (the
+  deferred §9.4 hooks slice) MUST route its paths through these same two helpers.

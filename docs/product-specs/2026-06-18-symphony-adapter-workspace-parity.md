@@ -68,9 +68,12 @@ reconcile/daemon — already matches):
     Note `.` is in the allowed set (Symphony's charset), so a literal `..` survives
     sanitization — the **R2b containment check** is what blocks a `..` escape, not the
     sanitizer; the two invariants are complementary.
-  - **R2b** The derived workspace path is **contained**: it resolves to a directory
-    whose parent is the resolved workspace root; a path that would resolve outside
-    the root **raises** before any `mkdir` or worker launch.
+  - **R2b** The derived workspace path is **contained**: it resolves to a **strict
+    descendant** of the resolved workspace root — under the root AND not the root itself.
+    A path that resolves outside the root (`..`) OR *to* the root (a degenerate `.`/``
+    sanitized key) is **not contained** and **raises** before any `mkdir` or worker
+    launch — so the cleanup paths that `rmtree` a contained workspace can never target
+    the root and wipe every ticket's workspace.
   - **R2c** The path derivation (key sanitization + join) is a **single shared
     helper** used by dispatch, merge-enqueue, and cleanup — all three compute the
     identical directory for a given (id, root). (ARCHITECTURE invariant 8.)
@@ -85,7 +88,12 @@ reconcile/daemon — already matches):
     `mergeRequest` in the Director queue (those PR branches are needed by the
     serialized merger). Each rmtree is guarded by the R2b containment check. The
     whole step is **fail-soft**: a fetch or delete error logs and startup continues
-    (§8.6, §11.4).
+    (§8.6, §11.4). **Act-before-consume invariant:** for the pending-merge exclusion to
+    be sound, `reconcile` MUST enqueue the merge **before** it transitions a ticket to
+    `done` (the durable handoff precedes the consume-enabling terminal write) — else a
+    crash in between leaves a `done`-on-board ticket whose un-enqueued PR branch this
+    cleanup would delete with no recovery path. A crash *before* the enqueue leaves the
+    ticket in `started`, where R3b re-attaches it (workspace reused).
   - **R3b** *Orphan recovery.* On `run_forever` entry, before the first tick, fetch
     issues in the `started` state (via R1b) — on a fresh process every such ticket
     is a prior-crash orphan (the live running-map is empty) — and transition each
@@ -163,14 +171,19 @@ the decider, the queue, or the merger's own logic.
     best-effort (per-orphan try/except), so the first `list_ready_issues` poll
     re-claims and re-dispatches it. (Goes through the normal claim path; no new
     dispatch branch.)
-- **`reconcile`** (R3c) — in the `cancelled` branch (`:190`), when `external_state`
-  is one of the terminal state names, `rmtree` the ticket's `run.workspace_path(...)`
-  (R2b-guarded, best-effort, recorded in `errs` on failure like other writes). The
-  `done`/`blocked`/non-terminal-cancelled branches are unchanged (no cleanup).
-- The "terminal states" set for R3a/R3c is derived from `resolve_states` output —
-  `done` plus the optional `blocked`/`failed` when configured (the same logical
-  states reconcile already writes). `run_forever` is given the terminal state ids/
-  names it needs (additive parameter or derived from `states`).
+- **`reconcile`** (R3c) — in the `cancelled` branch, when the observed external state's
+  `state_type` is terminal (`completed`/`canceled`), `rmtree` the ticket's
+  `run.workspace_path(...)` (R2b-guarded, best-effort, recorded in `errs` on failure like
+  other writes). The `blocked`/non-terminal-cancelled branches do no cleanup. The `done`
+  branch does no cleanup **and** is reordered to enqueue the merge **before** the `done`
+  board transition (R3a act-before-consume).
+- The terminal-state set for **R3a's fetch** is derived from `resolve_states` output —
+  `done` plus the optional `blocked`/`failed` ids when configured (the logical states
+  reconcile already writes); `_startup_recovery` derives it from `states`. **R3c** instead
+  keys off the observed Linear `state_type` (`completed`/`canceled`), not the configured
+  names — so a human-chosen terminal state outside our config (e.g. "Canceled") is still
+  detected. The two use different signals deliberately (fetch needs ids; mid-flight
+  cleanup needs the type the refresh already carries).
 
 ### Errors, edges, integration
 
@@ -218,7 +231,8 @@ the decider, the queue, or the merger's own logic.
    `[]`; a populated multi-page case returns normalized, re-dispatchable tickets.
 3. **R2a/R2b:** a test asserts `workspace_key("feat/ABC XY") == "feat_ABC_XY"` (and
    that `.` survives, so `".."` is preserved); a *derived* id that resolves outside the
-   root (e.g. `".."`) raises before mkdir.
+   root (`".."`) OR *to* the root (`"."`/`""`) raises before mkdir; `is_contained` is
+   strict (root-equality and the parent are NOT contained, a child/descendant is).
 4. **R2c:** dispatch, merge-enqueue, and cleanup are shown to call the one
    `workspace_path` helper (same path for the same id+root) — e.g. a test asserts
    `_maybe_enqueue_merge` and `_workspace_for` agree.
