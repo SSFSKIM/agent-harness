@@ -12,6 +12,8 @@ function fakeQuery({ prompt, options }: any) {
   q.supportedCommands = async () => [{ name: "clear" }];
   q.getContextUsage = async () => ({ totalTokens: 42 });
   q.accountInfo = async () => ({ apiProvider: "anthropic" });
+  q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET = async () => ({ session: { total_cost_usd: 1 } });
+  q.initializationResult = async () => ({ models: ["m"], account: { apiProvider: "anthropic" } });
   return q;
 }
 
@@ -56,6 +58,16 @@ describe("createHarness", () => {
   it("getContextUsage() throws before a query starts", async () => {
     const h = createHarness({}, { query: fakeQuery });
     await expect(h.getContextUsage()).rejects.toThrow(/start a query first/);
+  });
+  it("usage()/initializationResult() delegate to the active query", async () => {
+    const h = createHarness({}, { query: fakeQuery });
+    const it = h.stream("ping"); await it.next(); // start a query
+    expect(await h.usage()).toEqual({ session: { total_cost_usd: 1 } });
+    expect(await h.initializationResult()).toEqual({ models: ["m"], account: { apiProvider: "anthropic" } });
+  });
+  it("usage() throws before a query starts", async () => {
+    const h = createHarness({}, { query: fakeQuery });
+    await expect(h.usage()).rejects.toThrow(/start a query first/);
   });
   it("contextTool mounts the cc-context server and allowlists its tool", () => {
     const h = createHarness({ contextTool: true }, { query: fakeQuery });

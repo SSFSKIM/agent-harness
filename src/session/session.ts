@@ -110,6 +110,11 @@ export class Session implements ControllableSession {
   async getContextUsage(): Promise<unknown> { this.assertRunning(); return this.callQValue("getContextUsage"); }
   async accountInfo(): Promise<unknown> { this.assertRunning(); return this.callQValue("accountInfo"); }
 
+  // Experimental SDK method name (it warns it will change); the wrapper insulates callers behind usage().
+  async usage(): Promise<unknown> { this.assertRunning(); return this.callQValue("usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"); }
+  async initializationResult(): Promise<unknown> { this.assertRunning(); return this.callQValue("initializationResult"); }
+  async applyFlagSettings(settings: Record<string, unknown>): Promise<void> { this.assertRunning(); await this.callQ("applyFlagSettings", settings); }
+
   /** Rewind the file checkpoint to a prior user-prompt message. The anchor must be a real user-prompt UUID
    *  from the transcript (getSessionMessages), NOT a live-stream type:"user" frame. */
   async rewind(userMessageId: string, opts?: { dryRun?: boolean }): Promise<unknown> {

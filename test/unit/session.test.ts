@@ -37,6 +37,17 @@ function initQuery(ids: string[]) {
   })();
 }
 
+// returns a generator-object carrying the introspection control methods
+function methodQuery(rec: any) {
+  return ({ prompt }: any) => {
+    const it: any = (async function* () { for await (const t of prompt) yield { type: "result", subtype: "success", result: "did:" + t.message.content }; })();
+    it.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET = async () => ({ session: { total_cost_usd: 2 } });
+    it.initializationResult = async () => ({ models: ["m"], account: {} });
+    it.applyFlagSettings = async (s: any) => { rec.applied = s; };
+    return it;
+  };
+}
+
 describe("Session", () => {
   it("submit streams non-result messages then resolves with the turn result", async () => {
     const chunks: any[] = [];
@@ -152,5 +163,19 @@ describe("Session", () => {
     const seen: any[] = [];
     for await (const m of s.stream("hi")) seen.push(m);
     expect(seen).toEqual([{ type: "error", error: "x is not running" }]);
+  });
+  it("usage()/initializationResult() delegate; applyFlagSettings forwards its arg", async () => {
+    const rec: any = {};
+    const s = new Session({ query: methodQuery(rec) }, {});
+    expect(await s.usage()).toEqual({ session: { total_cost_usd: 2 } });
+    expect(await s.initializationResult()).toEqual({ models: ["m"], account: {} });
+    await s.applyFlagSettings({ outputStyle: "explanatory" });
+    expect(rec.applied).toEqual({ outputStyle: "explanatory" });
+    await s.dispose();
+  });
+  it("usage() rejects once the session has ended", async () => {
+    const s = new Session({ query: methodQuery({}) }, {}, { label: "lib-sess" });
+    await s.dispose();
+    await expect(s.usage()).rejects.toThrow(/lib-sess is not running/);
   });
 });

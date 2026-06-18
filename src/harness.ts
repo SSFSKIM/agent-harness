@@ -22,6 +22,8 @@ export interface Harness {
   supportedAgents(): Promise<unknown>;
   getContextUsage(): Promise<unknown>;
   accountInfo(): Promise<unknown>;
+  usage(): Promise<unknown>;
+  initializationResult(): Promise<unknown>;
   tasks?: TaskStore;
   swarm?: SwarmRuntime;
 }
@@ -105,6 +107,8 @@ export function createHarness(config: HarnessConfig = {}, deps: HarnessDeps = {}
     supportedAgents: call("supportedAgents"),
     getContextUsage: call("getContextUsage"),
     accountInfo: call("accountInfo"),
+    usage: call("usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"),
+    initializationResult: call("initializationResult"),
     tasks,
     swarm,
   };
