@@ -35,6 +35,9 @@ describe("public API", () => {
     expect(typeof api.connectDaemon).toBe("function");
     expect(typeof api.collect).toBe("function");
   });
+  it("exports the permission seam (advanced-seam, increment 3)", () => {
+    expect(typeof api.createPermissionGate).toBe("function");
+  });
   it("does NOT export internal plumbing from the package root (boundary curation)", () => {
     for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
       expect(api).not.toHaveProperty(name);
@@ -68,6 +71,7 @@ describe("public API", () => {
       "createCompactMcpServer",
       "createContextMcpServer",
       "createHarness",
+      "createPermissionGate",
       "createSwarmMcpServer",
       "createTaskMcpServer",
       "daemonRequest",

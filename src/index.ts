@@ -33,3 +33,5 @@ export type {
   HooksMap, HookDecision, HookEvent, HookInput, HookCallback, HookJSONOutput, HookCallbackMatcher,
   PreToolUseHookInput, PostToolUseHookInput, UserPromptSubmitHookInput, StopHookInput, SubagentStopHookInput,
 } from "./hooks/index.js";
+export { createPermissionGate } from "./permissions/gate.js";
+export type { PermissionBroker, PermissionDecision, PermissionRequest } from "./permissions/types.js";

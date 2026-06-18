@@ -50,3 +50,7 @@ The tiers below document intent, not enforced contracts. `stable` exports follow
 | `summarizeUsage` | advanced-seam |
 | `connectDaemon` | advanced-seam |
 | `collect` | advanced-seam |
+| `createPermissionGate` | advanced-seam |
+| `PermissionBroker` (type) | advanced-seam |
+| `PermissionDecision` (type) | advanced-seam |
+| `PermissionRequest` (type) | advanced-seam |
