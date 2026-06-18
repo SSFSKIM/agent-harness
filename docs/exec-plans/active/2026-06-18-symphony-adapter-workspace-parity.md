@@ -174,7 +174,15 @@ re-derive it):
   (by type), not on non-terminal-cancelled nor normal `done` (spec acceptance 5–7).
 
 ## Progress log
-- [ ] (2026-06-18) Plan created from spec; base_commit recorded. Next: M1.
+- [x] (2026-06-18) Plan created from spec; base_commit recorded.
+- [x] (2026-06-18) M1 done. `board/linear.py`: `_CANDIDATE_FIELDS` shared fragment;
+  `_READY_ISSUES`/`_ISSUES_BY_STATES` paginated (`first:50`+`after`+`pageInfo`);
+  `_paginate` helper (order-preserving, missing-end-cursor raise, no-pageInfo→single
+  page); `_normalize_candidate` extracted; `list_ready_issues` paginates;
+  `fetch_issues_by_states(team, state_ids)` + LinearBoard method (empty-guard).
+  `tests/test_director_linear.py` +6 (2-page order, missing-cursor raise, no-pageInfo,
+  empty-guard, by-states paginate+normalize, board method). 22 pass; full gate GREEN.
+- [ ] M2 next.
 
 ## Surprises & discoveries
 

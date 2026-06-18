@@ -19,6 +19,28 @@ def _capturing_post(captured, response):
         return response
     return post
 
+def _paged_post(pages, captured=None):
+    """A fake http_post returning successive page responses (pagination tests): each
+    call pops the next response in `pages`, recording every request body in
+    `captured["bodies"]` when given."""
+    seq = list(pages)
+    n = {"i": 0}
+
+    def post(url, data, headers):
+        if captured is not None:
+            captured.setdefault("bodies", []).append(json.loads(data.decode("utf-8")))
+        resp = seq[n["i"]]
+        n["i"] += 1
+        return resp
+    return post
+
+
+def _page(nodes, *, has_next=False, cursor=None):
+    """A one-page `issues` connection response with pageInfo."""
+    return {"data": {"issues": {"nodes": nodes,
+                                "pageInfo": {"hasNextPage": has_next, "endCursor": cursor}}}}
+
+
 _ISSUE = {"id": "uuid-1", "identifier": "ABC-123", "title": "Add a health check",
           "description": "Return 200 OK at /health.", "state": {"name": "Todo"}}
 
@@ -99,7 +121,8 @@ class LinearWriteMethodsTest(unittest.TestCase):
         self.assertEqual(out[0]["identifier"], "ABC-1")
         self.assertEqual(out[0]["state_id"], "s1")
         self.assertIn("T1", out[0]["prompt"])
-        self.assertEqual(cap["body"]["variables"], {"team": "team-1", "state": "s1"})
+        self.assertEqual(cap["body"]["variables"],
+                         {"team": "team-1", "state": "s1", "after": None})
 
     def test_list_ready_issues_parses_labels(self):
         cap = {}
@@ -185,6 +208,69 @@ class LinearWriteMethodsTest(unittest.TestCase):
         out = board.list_ready_issues("team-1", "s1")
         self.assertEqual(out, [])
         self.assertEqual(cap["headers"]["Authorization"], "bound")
+
+
+class PaginationTest(unittest.TestCase):
+    def _node(self, uid, ident):
+        return {"id": uid, "identifier": ident, "title": ident, "description": "d",
+                "state": {"id": "s1", "name": "Todo"}}
+
+    def test_list_ready_issues_paginates_in_order(self):
+        cap = {}
+        pages = [_page([self._node("u1", "A-1")], has_next=True, cursor="c1"),
+                 _page([self._node("u2", "A-2")], has_next=False)]
+        out = linear.list_ready_issues("team-1", "s1", api_key="k",
+                                       http_post=_paged_post(pages, cap))
+        # all nodes from both pages, in fetch order
+        self.assertEqual([t["id"] for t in out], ["u1", "u2"])
+        # the second request carried after=endCursor of the first page
+        self.assertEqual(cap["bodies"][0]["variables"]["after"], None)
+        self.assertEqual(cap["bodies"][1]["variables"]["after"], "c1")
+        self.assertEqual(len(cap["bodies"]), 2)
+
+    def test_list_ready_issues_raises_on_missing_end_cursor(self):
+        # hasNextPage true but no endCursor → pagination-integrity error, never silent truncation
+        pages = [_page([self._node("u1", "A-1")], has_next=True, cursor=None)]
+        with self.assertRaises(RuntimeError):
+            linear.list_ready_issues("team-1", "s1", api_key="k",
+                                     http_post=_paged_post(pages))
+
+    def test_list_ready_issues_single_page_without_pageinfo(self):
+        # a response with no pageInfo degrades to one fetch (no infinite loop)
+        resp = {"data": {"issues": {"nodes": [self._node("u1", "A-1")]}}}
+        out = linear.list_ready_issues("team-1", "s1", api_key="k",
+                                       http_post=_capturing_post({}, resp))
+        self.assertEqual([t["id"] for t in out], ["u1"])
+
+    def test_fetch_issues_by_states_empty_makes_no_call(self):
+        def boom(url, data, headers):
+            raise AssertionError("http_post must not be called for empty state_ids")
+        self.assertEqual(
+            linear.fetch_issues_by_states("team-1", [], api_key="k", http_post=boom), [])
+
+    def test_fetch_issues_by_states_paginates_and_normalizes(self):
+        cap = {}
+        pages = [_page([self._node("u1", "A-1")], has_next=True, cursor="c1"),
+                 _page([self._node("u2", "A-2")], has_next=False)]
+        out = linear.fetch_issues_by_states("team-1", ["sDone", "sCancelled"],
+                                            api_key="k", http_post=_paged_post(pages, cap))
+        self.assertEqual([t["id"] for t in out], ["u1", "u2"])
+        # re-dispatchable shape: prompt + state_id + labels + blockers present
+        self.assertIn("A-1", out[0]["prompt"])
+        self.assertEqual(out[0]["state_id"], "s1")
+        self.assertEqual(out[0]["labels"], [])
+        self.assertEqual(out[0]["blockers"], [])
+        self.assertEqual(cap["bodies"][0]["variables"]["states"], ["sDone", "sCancelled"])
+        self.assertIn("in:", cap["bodies"][0]["query"].replace(" ", ""))
+
+    def test_fetch_issues_by_states_board_method_delegates(self):
+        cap = {}
+        board = linear.LinearBoard(api_key="bound",
+                                   http_post=_capturing_post(cap, _page([])))
+        self.assertEqual(board.fetch_issues_by_states("team-1", ["s1"]), [])
+        # the bound key + state-set filter reached the transport
+        self.assertEqual(cap["headers"]["Authorization"], "bound")
+        self.assertEqual(cap["body"]["variables"]["states"], ["s1"])
 
 
 if __name__ == "__main__":

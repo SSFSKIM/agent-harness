@@ -39,17 +39,37 @@ query DirectorTeamStates($id: String!) {
 }
 """.strip()
 
-_READY_ISSUES = """
-query DirectorReadyIssues($team: ID!, $state: ID!) {
-  issues(filter: { team: { id: { eq: $team } }, state: { id: { eq: $state } } }) {
-    nodes {
+_CANDIDATE_FIELDS = """
       id identifier title description state { id name }
       labels { nodes { name } }
       inverseRelations { nodes { type issue { id state { id name type } } } }
+""".strip("\n")
+
+_READY_ISSUES = """
+query DirectorReadyIssues($team: ID!, $state: ID!, $after: String) {
+  issues(first: 50, after: $after,
+         filter: { team: { id: { eq: $team } }, state: { id: { eq: $state } } }) {
+    nodes {
+%s
     }
+    pageInfo { hasNextPage endCursor }
   }
 }
-""".strip()
+""" % _CANDIDATE_FIELDS
+_READY_ISSUES = _READY_ISSUES.strip()
+
+_ISSUES_BY_STATES = """
+query DirectorIssuesByStates($team: ID!, $states: [ID!], $after: String) {
+  issues(first: 50, after: $after,
+         filter: { team: { id: { eq: $team } }, state: { id: { in: $states } } }) {
+    nodes {
+%s
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+""" % _CANDIDATE_FIELDS
+_ISSUES_BY_STATES = _ISSUES_BY_STATES.strip()
 
 _UPDATE_STATE = """
 mutation DirectorSetState($id: String!, $state: String!) {
@@ -106,6 +126,31 @@ def _post(query: str, variables: dict, *, api_key: str | None,
     if resp.get("errors"):
         raise RuntimeError(f"Linear GraphQL error: {resp['errors']}")
     return resp.get("data") or {}
+
+
+def _paginate(query: str, variables: dict, *, api_key: str | None,
+              endpoint: str, http_post: Callable[[str, bytes, dict], dict]) -> list[dict]:
+    """Fetch ALL `issues.nodes` for a candidate query across pages (Symphony §11.2:
+    pagination REQUIRED for candidate issues). Threads `after=endCursor` until
+    `pageInfo.hasNextPage` is false, concatenating nodes in fetch order (order
+    preserved across pages). A `hasNextPage: true` with a falsy `endCursor` is a
+    pagination-integrity violation and RAISES (`linear_missing_end_cursor`) — never a
+    silent truncation. A response without `pageInfo` is treated as a single final page
+    (so a non-paginating fake/transport degrades to one fetch, never an infinite loop)."""
+    nodes: list[dict] = []
+    after = None
+    while True:
+        data = _post(query, {**variables, "after": after},
+                     api_key=api_key, endpoint=endpoint, http_post=http_post)
+        conn = data.get("issues") or {}
+        nodes.extend(conn.get("nodes") or [])
+        page = conn.get("pageInfo") or {}
+        if not page.get("hasNextPage"):
+            return nodes
+        after = page.get("endCursor")
+        if not after:
+            raise RuntimeError("Linear pagination integrity error: hasNextPage with no "
+                               "endCursor (linear_missing_end_cursor)")
 
 
 def normalize_issue(issue: dict) -> dict:
@@ -168,23 +213,46 @@ def _parse_labels(issue: dict) -> list[str]:
     return [n["name"] for n in nodes if n.get("name")]
 
 
+def _normalize_candidate(issue: dict) -> dict:
+    """A raw candidate issue -> a re-dispatchable ticket dict: the base normalization
+    plus the current `state_id`, `blockers` ([{id, state_type}] — DAG predecessors),
+    and `labels` (names — the dev-stage type). Shared by every candidate query so the
+    ready-poll and the by-states fetch produce identical, re-dispatchable shapes."""
+    ticket = normalize_issue(issue)
+    ticket["state_id"] = (issue.get("state") or {}).get("id")
+    ticket["blockers"] = _parse_blockers(issue)
+    ticket["labels"] = _parse_labels(issue)
+    return ticket
+
+
 def list_ready_issues(team_id: str, ready_state_id: str, *, api_key: str | None = None,
                       endpoint: str = DEFAULT_ENDPOINT,
                       http_post: Callable[[str, bytes, dict], dict] = urllib_post) -> list[dict]:
     """Issues in one team currently in the given (ready) workflow state, each
     normalized to a ticket dict with its current `state_id`, `blockers`
-    ([{id, state_type}] — DAG predecessors), and `labels` (names — the dev-stage type)."""
-    data = _post(_READY_ISSUES, {"team": team_id, "state": ready_state_id},
-                 api_key=api_key, endpoint=endpoint, http_post=http_post)
-    nodes = ((data.get("issues") or {}).get("nodes")) or []
-    out = []
-    for issue in nodes:
-        ticket = normalize_issue(issue)
-        ticket["state_id"] = (issue.get("state") or {}).get("id")
-        ticket["blockers"] = _parse_blockers(issue)
-        ticket["labels"] = _parse_labels(issue)
-        out.append(ticket)
-    return out
+    ([{id, state_type}] — DAG predecessors), and `labels` (names — the dev-stage type).
+    Paginated (§11.2): ALL ready issues across pages, not just the first 50."""
+    nodes = _paginate(_READY_ISSUES, {"team": team_id, "state": ready_state_id},
+                      api_key=api_key, endpoint=endpoint, http_post=http_post)
+    return [_normalize_candidate(issue) for issue in nodes]
+
+
+def fetch_issues_by_states(team_id: str, state_ids, *, api_key: str | None = None,
+                           endpoint: str = DEFAULT_ENDPOINT,
+                           http_post: Callable[[str, bytes, dict], dict] = urllib_post
+                           ) -> list[dict]:
+    """Issues in one team currently in ANY of the given workflow states, normalized to
+    re-dispatchable ticket dicts (same shape as `list_ready_issues`). Symphony §11.1 op
+    #2 — the read behind startup terminal-workspace cleanup (pass the terminal state
+    ids) and crash-orphan recovery (pass the `started` state id). Paginated like the
+    candidate poll. An **empty `state_ids` makes NO API call** (returns `[]`; mirrors
+    `fetch_issue_states_by_ids`'s empty-guard, §17.3)."""
+    ids = list(state_ids)
+    if not ids:
+        return []
+    nodes = _paginate(_ISSUES_BY_STATES, {"team": team_id, "states": ids},
+                      api_key=api_key, endpoint=endpoint, http_post=http_post)
+    return [_normalize_candidate(issue) for issue in nodes]
 
 
 def update_issue_state(issue_id: str, state_id: str, *, api_key: str | None = None,
@@ -252,6 +320,10 @@ class LinearBoard:
     def list_ready_issues(self, team_id: str, ready_state_id: str) -> list[dict]:
         return list_ready_issues(team_id, ready_state_id, api_key=self.api_key,
                                  endpoint=self.endpoint, http_post=self.http_post)
+
+    def fetch_issues_by_states(self, team_id: str, state_ids) -> list[dict]:
+        return fetch_issues_by_states(team_id, state_ids, api_key=self.api_key,
+                                      endpoint=self.endpoint, http_post=self.http_post)
 
     def update_issue_state(self, issue_id: str, state_id: str) -> bool:
         return update_issue_state(issue_id, state_id, api_key=self.api_key,
