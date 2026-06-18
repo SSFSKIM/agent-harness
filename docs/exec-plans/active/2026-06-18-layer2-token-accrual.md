@@ -174,6 +174,19 @@ rate-limit, R4–R6) is a separate linked plan; Phase B (cross-run history) a th
   sum, accrue→terminal no-double-count, unknown/terminated no-op, malformed ignored,
   no-accrue back-compat) — RED first (6 errors + KeyError), then GREEN. Full gate GREEN
   (477 tests). `app_server.py` untouched (D-2). `NoopStatusWriter` unchanged.
+- [x] (2026-06-18) **M2 done** — marshal seam. `director/run.py`: `_prepare`/`drive`/
+  `run_ticket` accept `on_event=None` and forward to `AppServerClient(on_event=…)` (default
+  None → existing no-op; non-orchestrator callers byte-unchanged). `director/orchestrator.py`:
+  `import queue` + `from director.worker import app_server`; `_RunState.accrual = queue.Queue()`;
+  `_enqueue_usage(tid, ev)` (worker-thread: extract_usage → put, ONLY a put — R13);
+  `drain_accrual()` (main-thread: drain + coalesce latest-per-tid → `status.accrue`); `submit()`
+  binds `on_event=lambda: _enqueue_usage(tid, …)` per-submit (like `cancel_event`); both
+  `_dispatch_wave` and `run_forever` call `drain_accrual()` after `reap`. 4 new tests
+  (enqueue-only-never-touches-writer, drain coalesces latest-per-tid, live accrual e2e through
+  drain w/ real StatusWriter, on_event reaches the client over the mock `usage` scenario).
+  Existing `TelemetryPersistenceTest` (run_once over `usage`) still GREEN — proves the on_event
+  plumbing end-to-end without breaking the run. Full gate GREEN (481 tests). All dispatch
+  monkeypatches already take `**kw`, so the new `on_event` kwarg is absorbed (no test churn).
 
 ## Surprises & discoveries
 

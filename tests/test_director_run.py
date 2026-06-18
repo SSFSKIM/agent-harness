@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.queue as dq  # noqa: E402
 import director.director_min as dmin  # noqa: E402
 import director.run as run  # noqa: E402
+from director.worker.app_server import extract_usage  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
@@ -81,6 +82,22 @@ class RunEndToEndTest(unittest.TestCase):
                              tool_executor=texec)
         self.assertEqual(res["status"], "completed")
         self.assertEqual(seen, ["linear_graphql"])
+
+    def test_run_ticket_threads_on_event_to_client(self):
+        # Layer-2 M2: an on_event passed to run_ticket reaches the AppServerClient and
+        # fires per notification — at least one carries usage extract_usage recognizes.
+        # Proves the run.py→_prepare→AppServerClient on_event plumbing (the seam the
+        # orchestrator binds its per-ticket usage marshal to).
+        events = []
+        ticket = run.load_ticket(self._ticket_path())
+        res = run.run_ticket(ticket, command=[sys.executable, MOCK, "usage"],
+                             queue_base=self.qbase, workspace_root=self.tmp / "wsr_ev",
+                             on_event=lambda ev: events.append(ev))
+        self.assertEqual(res["status"], "completed")
+        self.assertTrue(events, "on_event should fire for the turn-stream notifications")
+        self.assertTrue(
+            any(extract_usage(e.get("method"), e.get("params", {})) is not None for e in events),
+            "at least one streamed event should carry recognizable usage")
 
     def test_install_skills_does_not_follow_symlink_target(self):
         # P1: a pre-existing symlinked skill target must not be written through.

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import queue
 import shutil
 import signal
 import sys
@@ -27,7 +28,7 @@ from pathlib import Path
 import director.queue as dq
 from director import config, decider, merger, run, status as status_mod, taxonomy
 from director.board import linear as board_linear
-from director.worker import autonomy
+from director.worker import app_server, autonomy
 
 # Default logical-state → Linear workflow-state-name mapping. The VALUES are owned by
 # `config.DEFAULTS["states"]` (single source — declarative-config slice); aliased so
@@ -347,16 +348,50 @@ class _RunState:
         self.cancelled_states: dict = {} # tid -> observed external state dict at cancel
         self.results: dict = {}          # tid -> terminal summary
         self.claim_failed: set = set()   # tids whose claim raised/returned False
+        # Layer-2 live token accrual marshal (R13/R16): worker-pool threads observe
+        # per-event usage and only ever `put` onto this thread-safe Queue; the MAIN
+        # tick loop drains it into the StatusWriter (`drain_accrual`). The single
+        # cross-thread object besides each worker's `cancel_event` — the writer model
+        # is never touched off the main thread.
+        self.accrual: "queue.Queue" = queue.Queue()
+
+    def _enqueue_usage(self, tid, ev) -> None:
+        """Per-ticket `on_event` callback — runs on the WORKER-POOL thread. Extracts
+        the latest absolute usage from one turn-stream notification (total fn — None on
+        anything else) and enqueues `(tid, usage)`. Does ONLY a thread-safe `put`: it
+        never reaches into the StatusWriter (R13). Reuses the producer's `extract_usage`
+        (no `app_server` change — spec D-2)."""
+        usage = app_server.extract_usage(ev.get("method"), ev.get("params", {}))
+        if usage is not None:
+            self.accrual.put((tid, usage))
+
+    def drain_accrual(self) -> None:
+        """Drain the accrual queue on the MAIN thread and apply live usage to the
+        StatusWriter (R13). Coalesces to the LATEST usage per tid so a chatty turn
+        (many usage notifications) yields one `accrue` — bounding status.json rewrites
+        to ~one per tick regardless of event volume. `accrue` is a no-op for a tid that
+        already terminated (its in-flight entry popped), so draining is order-independent."""
+        latest: dict = {}
+        while True:
+            try:
+                tid, usage = self.accrual.get_nowait()
+            except queue.Empty:
+                break
+            latest[tid] = usage
+        for tid, usage in latest.items():
+            self.status.accrue(tid, usage)
 
     def submit(self, ticket) -> None:
         # FRESH cancel Event per attempt — a retried ticket starts cancellable-clean
         # (the prior attempt's event is discarded). The main thread sets it during
         # reconciliation; the worker thread reads it (Event is thread-safe).
         ev = threading.Event()
-        self.cancel_events[ticket["id"]] = ev
+        tid = ticket["id"]
+        self.cancel_events[tid] = ev
         fut = self.pool.submit(
             dispatch, ticket, queue_base=self.queue_base, workspace_root=self.workspace_root,
-            attempt=self.attempts.get(ticket["id"], 1), cancel_event=ev,
+            attempt=self.attempts.get(tid, 1), cancel_event=ev,
+            on_event=lambda ev_: self._enqueue_usage(tid, ev_),  # Layer-2: live usage marshal
             **self._dispatch_kwargs)
         self.futures[fut] = ticket
         self.status.dispatched(ticket)
@@ -477,6 +512,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
             done, _ = wait(list(state.futures), timeout=reconcile_interval_s,
                            return_when=FIRST_COMPLETED)
             state.reap(done)
+            state.drain_accrual()  # Layer-2: apply live in-flight token usage (main thread, R13)
             now = time.monotonic()
             if state.futures and now - last_reconcile >= reconcile_interval_s:
                 state.reconcile_in_flight()
@@ -805,6 +841,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 done, _ = wait(list(state.futures), timeout=poll_interval_s,
                                return_when=FIRST_COMPLETED)
                 state.reap(done, on_retry=schedule_retry)  # failed→retry is SCHEDULED (A)
+                state.drain_accrual()  # Layer-2: apply live in-flight token usage (main thread, R13)
             elif not draining:
                 shutdown_event.wait(_idle_wait_s(poll_interval_s, idle_streak, backoff_cap_s))
                 idle_streak += 1  # consecutive idle tick → next idle wait doubles (cap)
