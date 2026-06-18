@@ -360,10 +360,20 @@ class _RunState:
         the latest absolute usage from one turn-stream notification (total fn — None on
         anything else) and enqueues `(tid, usage)`. Does ONLY a thread-safe `put`: it
         never reaches into the StatusWriter (R13). Reuses the producer's `extract_usage`
-        (no `app_server` change — spec D-2)."""
-        usage = app_server.extract_usage(ev.get("method"), ev.get("params", {}))
-        if usage is not None:
-            self.accrual.put((tid, usage))
+        (no `app_server` change — spec D-2).
+
+        Exception-total at its own boundary (R12/R14): this fires INSIDE the app-server
+        turn-read loop, which does NOT isolate the callback — so any raise here would
+        propagate up `run_turn` → `drive` and turn a healthy turn into a `failed`
+        disposition. Instrumentation must never gate the primary path, so a hiccup drops
+        the event silently (and stays R13-clean: the except path touches no shared state
+        but this thread-safe queue)."""
+        try:
+            usage = app_server.extract_usage(ev.get("method"), ev.get("params", {}))
+            if usage is not None:
+                self.accrual.put((tid, usage))
+        except Exception:
+            pass  # telemetry side-channel: drop on any hiccup, never gate the observed turn
 
     def drain_accrual(self) -> None:
         """Drain the accrual queue on the MAIN thread and apply live usage to the

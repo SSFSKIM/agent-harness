@@ -204,6 +204,21 @@ class Layer2AccrualMarshalTest(unittest.TestCase):
         finally:
             state.shutdown()
 
+    def test_enqueue_usage_is_exception_total_never_gates_the_turn(self):
+        # review-reliability P2: the callback fires inside run_turn's read loop, which
+        # does NOT isolate it — a raise would propagate up and fail a healthy turn. It
+        # must be exception-total: a hiccup drops silently, never raises, never enqueues.
+        spy = _RecordingStatus()
+        state = self._state(spy)
+        try:
+            with mock.patch("director.orchestrator.app_server.extract_usage",
+                            side_effect=RuntimeError("boom")):
+                state._enqueue_usage("u1", _usage_event(100))  # must NOT raise
+            self.assertTrue(state.accrual.empty())  # nothing enqueued on the hiccup
+            self.assertEqual(spy.accrued, [])
+        finally:
+            state.shutdown()
+
     def test_drain_accrual_coalesces_latest_per_tid_on_main_thread(self):
         # Coalesce: many queued events for a tid → ONE accrue with the LATEST usage
         # (bounds status.json rewrites to ~one per tick); applied on the main thread.
