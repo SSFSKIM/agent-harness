@@ -132,7 +132,14 @@ and have the harness read them — observably. Definition of done:
   any single new key.
 
 ## Progress log
-- [ ] (2026-06-18) Plan created; base_commit recorded. Starting M1.
+- [x] (2026-06-18) Plan created; base_commit recorded.
+- [x] (2026-06-18) **M1 done.** `read_frontmatter` upgraded (flow `[a,b]` + block
+  `- a` → list; scalars unchanged; empty-value stays `""` unless `- ` follows).
+  Blast radius verified: 7 callers all `.get()`/`in` on scalar keys, no
+  value-iteration; no existing list-valued frontmatter in the corpus. 7 new tests
+  in `tests/test_harness_lib.py` (flow/block/indented/empty/quoted/scalar-regression/
+  colon-in-value/empty-stays-scalar/mixed). Proven fail-before via `git stash` of
+  the parser, pass-after; full gate GREEN (all tests).
 
 ## Surprises & discoveries
 

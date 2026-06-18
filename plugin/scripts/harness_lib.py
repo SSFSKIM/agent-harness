@@ -71,8 +71,30 @@ def state_dir(root):
     return d
 
 
+def _fm_clean_item(s):
+    """Strip whitespace and one layer of matching quotes from a list item."""
+    s = s.strip()
+    if len(s) >= 2 and s[0] in "\"'" and s[-1] == s[0]:
+        s = s[1:-1]
+    return s
+
+
+def _fm_flow_list(val):
+    """Parse a YAML flow list `[a, b, c]` into list[str]; `[]` -> []."""
+    inner = val[1:-1].strip()
+    if not inner:
+        return []
+    return [_fm_clean_item(x) for x in inner.split(",")]
+
+
 def read_frontmatter(path):
-    """Parse flat `key: value` YAML frontmatter. dict, or None if absent/broken."""
+    """Parse flat `key: value` frontmatter.
+
+    Values are `str`, except `list[str]` when the source uses a YAML list — flow
+    form `key: [a, b]` or block form (`key:` then `- a` lines, indented or not).
+    Scalar lines are byte-for-byte the prior behavior. dict, or None if
+    frontmatter is absent/broken.
+    """
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
@@ -80,12 +102,27 @@ def read_frontmatter(path):
     if not lines or lines[0].strip() != "---":
         return None
     fm = {}
+    pending = None  # empty-value key a following `- item` line may turn into a list
     for line in lines[1:]:
         if line.strip() == "---":
             return fm
+        stripped = line.strip()
+        if pending is not None and stripped.startswith("- "):
+            if not isinstance(fm.get(pending), list):
+                fm[pending] = []  # promote the empty-string seed to a list
+            fm[pending].append(_fm_clean_item(stripped[2:]))
+            continue
+        pending = None
         if ":" in line and not line.startswith((" ", "\t", "#")):
             key, _, val = line.partition(":")
-            fm[key.strip()] = val.strip()
+            key = key.strip()
+            val = val.strip()
+            if val.startswith("[") and val.endswith("]"):
+                fm[key] = _fm_flow_list(val)
+            else:
+                fm[key] = val
+                if val == "":
+                    pending = key  # block list if `- ` lines follow; else stays ""
     return None
 
 

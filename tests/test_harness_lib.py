@@ -26,6 +26,55 @@ class TestHarnessLib(unittest.TestCase):
             p.write_text("---\nstatus: draft\n# body without closing fence\n")
             self.assertIsNone(hl.read_frontmatter(p))
 
+    def _fm(self, body):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "x.md"
+            p.write_text(body, encoding="utf-8")
+            return hl.read_frontmatter(p)
+
+    def test_frontmatter_tags_flow_list(self):
+        # canonical authored form: YAML flow inline -> Python list
+        fm = self._fm("---\ntype: knowledge\ntags: [alpha, beta, gamma]\n---\n#h\n")
+        self.assertEqual(fm["tags"], ["alpha", "beta", "gamma"])
+        self.assertEqual(fm["type"], "knowledge")  # scalar alongside the list
+
+    def test_frontmatter_tags_flow_empty_and_quoted(self):
+        self.assertEqual(self._fm("---\ntags: []\n---\n")["tags"], [])
+        fm = self._fm("---\ntags: ['a b', \"c\", d]\n---\n")
+        self.assertEqual(fm["tags"], ["a b", "c", "d"])  # quotes/space stripped
+
+    def test_frontmatter_tags_block_list(self):
+        # OKF block form tolerated on read — both non-indented and indented
+        flat = self._fm("---\ntags:\n- x\n- y\n---\n")
+        self.assertEqual(flat["tags"], ["x", "y"])
+        indented = self._fm("---\ntags:\n  - x\n  - y\n---\n")
+        self.assertEqual(indented["tags"], ["x", "y"])
+
+    def test_frontmatter_scalar_unchanged_regression(self):
+        # the byte-for-byte backward-compat guarantee: scalars are still strings
+        fm = self._fm("---\nstatus: stable\nlast_verified: 2026-06-18\nowner: a\n---\n")
+        self.assertEqual(fm["status"], "stable")
+        self.assertIsInstance(fm["owner"], str)
+
+    def test_frontmatter_colon_in_value_preserved(self):
+        # partition on first colon only — a colon inside a description survives
+        fm = self._fm("---\ndescription: Triage: do the thing\n---\n")
+        self.assertEqual(fm["description"], "Triage: do the thing")
+
+    def test_frontmatter_empty_value_stays_scalar(self):
+        # an empty-value key with no following `- ` items must NOT become a list
+        fm = self._fm("---\nowner:\nstatus: stable\n---\n")
+        self.assertEqual(fm["owner"], "")
+        self.assertEqual(fm["status"], "stable")
+
+    def test_frontmatter_mixed_scalar_flow_block(self):
+        fm = self._fm(
+            "---\ntype: adr\ntitle: T\ntags: [one, two]\nrefs:\n- a\n- b\n---\n")
+        self.assertEqual(fm["type"], "adr")
+        self.assertEqual(fm["title"], "T")
+        self.assertEqual(fm["tags"], ["one", "two"])
+        self.assertEqual(fm["refs"], ["a", "b"])
+
     def test_is_headless_reads_env(self):
         import os
         os.environ.pop(hl.HEADLESS_ENV, None)
