@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-18
 owner: imprint-job
 type: knowledge
 tags: [hooks, recursion-guard, headless, subprocess]

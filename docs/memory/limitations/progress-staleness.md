@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-18
 owner: harness
 type: limitation
 tags: [memory, progress, staleness, hooks]

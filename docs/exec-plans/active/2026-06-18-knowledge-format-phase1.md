@@ -155,16 +155,26 @@ and have the harness read them — observably. Definition of done:
   proof: stripped `type`+`tags` from a page → gate still GREEN → restored.
 
 ## Surprises & discoveries
-- M4: **Deviated from spec D-6's "bump `last_verified`" instruction** — left all 7
-  pages' `last_verified` unchanged. Adding navigation metadata is not a genuine
-  re-verification of a page's *claims* against reality, so bumping would falsely
-  reset the staleness clock the `doc-gardener` loop depends on. All 7 pages are
-  well within `STALE_DAYS` (30), so there is no gate pressure to bump. Honesty of
-  the staleness signal > literal spec adherence here (see Decision log).
 - M4: `resource` landed on only 1 of 7 pages (`recursion-guard.md`). The ADRs and
   open-questions document *decisions/questions*, not single code assets, so adding
   `resource` to them would overclaim the field's meaning. Matches spec R6 ("when
   the page documents a concrete code asset").
+- **Completion-review found a worktree gremlin (spec regression).** The spec's
+  title/description edits committed in `933fffe` were silently lost by the next
+  commit `0ff9be3`, which was authored on a working tree that had reverted to the
+  pre-`933fffe` (three-keys) state (the worktree-isolation hazard from memory).
+  Result: HEAD's spec said "three optional keys" + NG-2-deferred while
+  `KNOWLEDGE_FORMAT.md` + the backfill used `description` — a spec↔impl
+  contradiction the green gate cannot see, caught by the codex review. Fixed by
+  restoring the five-keys spec from `933fffe` via `git checkout` and re-applying
+  the roadmap on top.
+- **Review found a real D4 crash regression (both reviewers, P2 → fixed now).**
+  A required key authored as a list (`last_verified: [..]`) now parses to a list,
+  and D4's `fromisoformat` raised an *uncaught* `TypeError` (crash) where it
+  previously gave a graceful `ValueError`-caught FAIL. Not a green→red flip (valid
+  dates are scalars), but a gate-robustness regression. Fixed by widening D4's
+  except to `(ValueError, TypeError)` + a regression test
+  (`test_d4_list_valued_last_verified_fails_gracefully`).
 
 ## Decision log
 - 2026-06-18: Chose parser-first execution (Approach A) — the shared-parser change
@@ -172,10 +182,31 @@ and have the harness read them — observably. Definition of done:
 - 2026-06-18: `tags` flow item normalization = strip whitespace + surrounding
   quotes; block form tolerated on read, flow form authored.
 - 2026-06-18: index.md pages excluded from the backfill (spec R6 = concept pages).
-- 2026-06-18: **`last_verified` NOT bumped on backfill** (deviation from D-6) —
-  preserves the integrity of the staleness signal; metadata-add ≠ claim
-  re-verification; no page is stale anyway. Recorded as the honest call.
+- 2026-06-18: **`last_verified` bumped to 2026-06-18 on all 7 backfilled pages.**
+  (Initially left unbumped for staleness-signal honesty; the completion review
+  correctly flagged that this contradicts `KNOWLEDGE_FORMAT.md` §2.1's own rule
+  "editing a page is a re-verification: bump this" and spec D-6 — an internal
+  inconsistency. Resolved by bumping; I engaged with each page's content this turn
+  to write its description/tags, and spot-verified `recursion-guard`'s `resource`
+  (`is_headless`/`headless_env` still in `harness_lib.py`), so the bumps are honest.)
 
 ## Feedback (from completion gate)
+
+Round 1 reviews: codex (spec-compliance + code-quality) and `review-reliability`.
+
+- **[P1, codex] Spec↔impl contradiction** — HEAD's spec said "three optional keys"
+  + NG-2-deferred while the build uses five (incl. `description`). Root cause: the
+  `0ff9be3` commit lost `933fffe`'s edits (worktree regression). **Fixed:** restored
+  five-keys spec + re-applied roadmap.
+- **[P1, codex] `last_verified` not bumped** contradicts `KNOWLEDGE_FORMAT.md` +
+  D-6. **Fixed:** bumped all 7 pages (see Decision log).
+- **[P2, codex + reliability] D4 `TypeError` crash** on a list-valued required key.
+  **Fixed now** (not deferred — a crashing gate is worse than the P2-defers rule;
+  core-beliefs fix-forward): widened D4 except + regression test.
+- **[P2, reliability] Latent list-`description` slice** in `gen_inventory.py` /
+  `scaffold.py` (`fm.get("description","")[:100]` would slice a list). No current
+  page authors a list `description`, so no gate flip. **Deferred → tech-debt-tracker.**
+- **[reliability] Proposed rule:** "a parser shared between a gate and instrumentation
+  must keep all gate consumers total" — captured for RELIABILITY.md. **→ tech-debt-tracker.**
 
 ## Outcomes & retrospective

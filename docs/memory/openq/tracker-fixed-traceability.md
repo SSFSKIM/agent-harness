@@ -1,6 +1,6 @@
 ---
 status: open
-last_verified: 2026-06-12
+last_verified: 2026-06-18
 owner: imprint-job
 type: openq
 tags: [tech-debt, tracker, traceability, provenance]

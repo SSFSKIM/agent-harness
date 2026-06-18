@@ -141,9 +141,12 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
                     _fail(errors, "D4", _rel(p, root),
                           f"stale: last_verified {lv} is over {sd} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
-            except ValueError:
-                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv[:40]}`.",
-                      "Use ISO format YYYY-MM-DD.")
+            except (ValueError, TypeError):
+                # TypeError: a required key authored as a YAML list (the
+                # list-aware parser returns a list) — degrade to a clean D4 FAIL,
+                # never crash the gate. str() keeps the message safe for non-str lv.
+                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{str(lv)[:40]}`.",
+                      "Use a scalar ISO date YYYY-MM-DD (not a list).")
 
 
 def check_links(root, errors, host=(), cfg=None):

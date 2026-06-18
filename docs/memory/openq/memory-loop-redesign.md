@@ -1,6 +1,6 @@
 ---
 status: open
-last_verified: 2026-06-13
+last_verified: 2026-06-18
 owner: harness
 type: openq
 tags: [memory, feeder, imprint, hooks, redesign]

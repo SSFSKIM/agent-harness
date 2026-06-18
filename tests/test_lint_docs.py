@@ -53,6 +53,14 @@ class TestLintDocs(unittest.TestCase):
         p.write_text(fm(status="archived", last_verified="2020-01-01") + "# old\n")
         self.assertFalse(any("D4" in e for e in run_all(self.root)))
 
+    def test_d4_list_valued_last_verified_fails_gracefully(self):
+        # a required key authored as a YAML list — the list-aware parser returns a
+        # list, and D4 must degrade to a clean FAIL, never crash the gate (TypeError).
+        p = self.root / "docs" / "design-docs" / "core-beliefs.md"
+        p.write_text("---\nstatus: stable\nlast_verified: [2026-06-18]\nowner: a\n---\n# x\n")
+        errs = run_all(self.root)  # must not raise
+        self.assertTrue(any("D4" in e and "bad last_verified" in e for e in errs), errs)
+
     def test_d10_machine_docs_missing(self):
         errs = []
         lint_docs.check_machine_refs(self.root, errs)
