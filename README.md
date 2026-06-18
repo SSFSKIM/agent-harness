@@ -156,6 +156,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { SwarmRuntime } from "cc-harness";
 
 const swarm = new SwarmRuntime({ query }, { cwd: process.cwd() });
+swarm.createTeam("core");
 swarm.spawnTeammate({ name: "reviewer", teamId: "core", prompt: "Review the diff for bugs." });
 // … coordinate via swarm.bus / swarm.tasks …
 await swarm.disposeAll();
@@ -277,7 +278,7 @@ echo "FILE CONTENT" | npm run cli -- "Summarize the piped text." --max-turns 1
 ```
 
 The packaged bin is `cc-harness` (`dist/cli.js`). Flags: `--model`, `--output-style`,
-`--permission-mode`, `--max-turns`, `--cwd`, `--no-project-context`, `--sandbox`. The CLI defaults to
+`--permission-mode`, `--max-turns`, `--cwd`, `--resume`, `--no-project-context`, `--no-persist`, `--sandbox`. The CLI defaults to
 `permissionMode: bypassPermissions` for headless runs; non-TTY stdin is appended to the prompt.
 
 ## CC-faithful defaults (the bridges)
