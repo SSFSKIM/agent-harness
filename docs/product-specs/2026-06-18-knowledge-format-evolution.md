@@ -33,25 +33,15 @@ knowledge page is." OKF's contribution is precisely that it is *specified* and
 Phase-2 navigation tool a stable contract to build against — the format must
 become an explicit, versioned artifact.
 
-A fifth, navigation-oriented gap: pages are not **self-describing**. A page's
-one-line summary lives in its category `index.md` (hand-written), not in the page
-itself — so an agent reading the page, or a tool cataloguing the corpus by code
-execution over frontmatter alone, has no "what is this page" without parsing the
-body. OKF's `title`/`description` keys close this: a `description` is the snippet a
-navigator surfaces and the basis for a *generated* (rather than dual-maintained)
-index. This pairs with `type`/`tags` — together `(path, type, tags, description)`
-is a queryable table-of-contents an agent can filter without loading any body.
-
 Two facts constrain the solution:
 
 - **The frontmatter parser is flat.** `harness_lib.read_frontmatter` parses only
   `key: value` scalar lines; it skips indented/`-` lines. It cannot read a YAML
   list. So `tags` (a list) is not merely "a new key" — its value representation
-  must be chosen so our own stack can read it. (The other four new keys are
-  scalars the flat parser already reads.)
+  must be chosen so our own stack can read it.
 - **The gate must stay permissive on new keys.** Per the product decision, the
-  new keys are all *optional*; `check.py` must not start failing pages that omit
-  them, and authors must not be forced to backfill the entire corpus.
+  three new keys are *optional*; `check.py` must not start failing pages that
+  omit them, and authors must not be forced to backfill the entire corpus.
 
 This is **Phase 1** of a two-phase arc. Phase 1 evolves the *format and recording
 structure*. Phase 2 (a separate future spec) builds the *query / navigation tool*
@@ -61,15 +51,14 @@ that consumes this format. Phase 1 is shippable and verifiable on its own.
 
 Each is independently checkable by a human.
 
-- **R1 — Five optional frontmatter keys are defined and documented**, in two
-  tiers: *routing/binding* (`type`, `tags`, `resource`) and *display* (`title`,
-  `description`). Each has written semantics; `type` has a recommended
-  vocabulary, `tags` a canonical authored form. A reader can determine, for any
-  page, whether its frontmatter uses them correctly.
+- **R1 — Three optional frontmatter keys are defined and documented.** `type`,
+  `tags`, `resource` have written semantics, a recommended `type` vocabulary, and
+  a canonical authored form for `tags`. A reader can determine, for any page,
+  whether its frontmatter uses them correctly.
 - **R2 — The keys are genuinely optional.** `check.py` is GREEN on the repo both
-  before and after the change with pages that omit all five keys. No new blocking
-  lint rule keys on `type`/`tags`/`resource`/`title`/`description`. `D3` still
-  requires exactly `status / last_verified / owner`.
+  before and after the change with pages that omit all three keys. No new
+  blocking lint rule keys on `type`/`tags`/`resource`. `D3` still requires
+  exactly `status / last_verified / owner`.
 - **R3 — `read_frontmatter` reads list-valued keys.** Given a page whose
   frontmatter contains `tags` in the canonical form, `read_frontmatter` returns a
   Python `list` of strings for `tags`. Given any pre-existing scalar key, it
@@ -84,28 +73,21 @@ Each is independently checkable by a human.
   alone, without reading `lint_docs.py`.
 - **R5 — The authoring guidance reflects the new keys.** The `docs-tree` skill's
   frontmatter procedure and `docs/memory/MEMORY.md`'s write rules mention the
-  optional keys and point to `docs/KNOWLEDGE_FORMAT.md` as the authority.
+  three optional keys and point to `docs/KNOWLEDGE_FORMAT.md` as the authority.
 - **R6 — A representative slice of the corpus uses the new keys.** Every concept
   page under `docs/memory/{knowledge,adr,limitations,openq}/` (excluding
-  `index.md`) carries `type`, `tags`, and a one-sentence `description`, and
-  carries `resource` when the page documents a concrete code asset. This proves
-  the format end-to-end and gives Phase 2 real data to consume. (`title` is
-  authored only where the H1 is a poor display label; index pages MAY carry
-  `type`.)
+  `index.md`) carries `type`, carries `tags`, and carries `resource` when the
+  page documents a concrete code asset. This proves the format end-to-end and
+  gives Phase 2 real data to consume. Index pages MAY carry `type`.
 - **R7 — Everything stays GREEN.** `python3 plugin/scripts/check.py` passes
   (lints + full unittest suite), including the new parser tests.
 
 ## Design
 
-### D-1. The five keys (R1)
+### D-1. The three keys (R1)
 
-All five are **optional**, added to the *recommended* tier of the frontmatter
-schema (required tier `status / last_verified / owner` unchanged). They split by
-cost and purpose:
-
-- **Routing/binding** — `type`, `tags`, `resource`: machine axes the Phase-2 tool
-  filters and traverses on. `tags` is the only one that drove the parser change.
-- **Display** — `title`, `description`: zero-cost scalar labels for navigation.
+All three are **optional** and added to the *recommended* tier of the frontmatter
+schema. Required tier (`status / last_verified / owner`) is unchanged.
 
 **`type` — concept-kind, made explicit and queryable.** A scalar string naming
 the *epistemic kind* of the page, lifting our directory-implicit taxonomy into a
@@ -146,19 +128,6 @@ parser additionally *tolerates* the OKF block form (`tags:` then `- a` lines) on
 read, so we can consume foreign OKF bundles, but our own pages author the flow
 form.
 
-**`description` — the navigation snippet.** An optional scalar: a *single
-sentence* summarizing the page, self-contained (readable without the body). It is
-the highest-value navigation key — what a code-execution catalog or the Phase-2
-tool surfaces per page, and the basis for *generating* category indexes instead of
-hand-maintaining them. Especially recommended for long pages; short pages where
-the H1 + first line already say it MAY omit it. Scalar → flat parser reads it.
-
-**`title` — optional display override.** An optional scalar display name. Because
-every page already carries an H1 (and OKF itself derives title from the H1/
-filename when absent), `title` is authored **only** when the H1 is a poor display
-label (e.g. an H1 with inline code, or a filename-driven heading). Low value for
-us; included for OKF parity and the occasional override. Scalar.
-
 ### D-2. Parser upgrade — `harness_lib.read_frontmatter` (R3)
 
 `read_frontmatter` gains list handling, strictly additively:
@@ -190,7 +159,7 @@ test module).
 
 No new D-rule. `lint_docs.py` is touched only as needed to:
 
-- leave `FM_REQUIRED` and `D3` exactly as they are (the new keys are never
+- leave `FM_REQUIRED` and `D3` exactly as they are (the three new keys are never
   required); and
 - confirm (via the existing tests + a new assertion) that a page carrying the new
   keys — including a `list`-valued `tags` — passes all current rules unchanged.
@@ -207,13 +176,12 @@ A new top-level governed doc, peer to `PLANS.md`/`DESIGN.md`, that makes the
 format explicit. Sections:
 
 - **Version.** Declares **Knowledge Format v1.0** (the required-key core is
-  production-proven; `type`/`tags`/`resource`/`title`/`description` are the keys
-  this version introduces). Versioning convention mirrors OKF's `<major>.<minor>`
-  (minor = backward-compatible additions, major = breaking).
+  production-proven; `type`/`tags`/`resource` are the keys this version
+  introduces). Versioning convention mirrors OKF's `<major>.<minor>` (minor =
+  backward-compatible additions, major = breaking).
 - **Frontmatter schema.** Required (`status`, `last_verified`, `owner`) with
-  their meaning + the staleness contract; recommended, in two tiers —
-  routing/binding (`type`, `resource`, `tags`) and display (`title`,
-  `description`) — with D-1's semantics and the recommended `type` vocabulary.
+  their meaning + the staleness contract; recommended (`type`, `resource`,
+  `tags`) with D-1's semantics and the recommended `type` vocabulary.
 - **Reserved filenames.** `index.md` (category listing, registered per D8),
   `MEMORY.md` (bootloader). 
 - **Link semantics.** Markdown links form the cross-cutting graph; `D5` rejects
@@ -225,7 +193,7 @@ format explicit. Sections:
   the gate are two views of one contract.
 - **Relationship to OKF.** A short pointer to `okf-comparison.md`: shared
   substrate, the permissive-vs-enforced divergence, and that `type`/`tags`/
-  `resource`/`title`/`description` are the adopted keys.
+  `resource` are the adopted keys.
 
 It carries standard frontmatter (`status: stable`) and is added to the `AGENTS.md`
 Map table so it is discoverable.
@@ -244,7 +212,7 @@ keep this phase focused (Non-goal NG-4).
   and pointing to `docs/KNOWLEDGE_FORMAT.md` for their semantics.
 - `docs/memory/MEMORY.md`: the write-rules bullet that states "Every page carries
   frontmatter `status / last_verified / owner` (lint D3)" gains a sentence on the
-  optional keys + the spec pointer.
+  three optional keys + the spec pointer.
 
 ### D-6. Representative backfill (R6)
 
@@ -253,30 +221,20 @@ Add the new keys to existing concept pages under
 
 - `type` on every such page, matching the D-1 vocabulary for its directory.
 - `tags` on every such page (2–5 facets each, flow form).
-- `description` on every such page — one self-contained sentence (often
-  liftable from the page's existing `index.md` one-liner, which makes the
-  duplication visible and sets up Phase-2 index generation).
 - `resource` on pages that document one concrete code asset (e.g.
   `knowledge/recursion-guard.md` → `plugin/scripts/harness_lib.py`); omitted for
   purely abstract pages.
-- `title` is **not** backfilled (every page's H1 is already a fine label).
 
 This is a bounded set (currently a handful of pages), proves the format
-end-to-end, and seeds Phase-2 with real `type`/`tag`/`resource`/`description`
-data. The `last_verified` of each touched page is bumped to the edit date (the
-edit *is* a re-verification of the page against reality, per D4 semantics).
+end-to-end, and seeds Phase-2 with real `type`/`tag`/`resource` data. The
+`last_verified` of each touched page is bumped to the edit date (the edit *is* a
+re-verification of the page against reality, per D4 semantics).
 
 ### Decisions resolved autonomously (recorded per methodology)
 
 - **`type` = epistemic kind, free vocabulary.** Chosen over an OKF-style
   subject-kind and over a lint-enforced closed vocabulary: it lifts the taxonomy
   we already have into a queryable field while honoring the permissive mandate.
-- **Add `description` (high value) + `title` (parity only); both optional, no
-  gate.** `description` is the navigation snippet — the same introduce-now /
-  consume-in-Phase-2 shape as `resource`, which is why deferring it (the original
-  NG-2) was inconsistent. `title` is mostly redundant with our H1, so it is in
-  the schema for OKF parity but authored only as an override. Neither is
-  gate-checked (permissive, per D-3).
 - **`tags` canonical = YAML flow inline `[a, b]`, block form tolerated on read.**
   Chosen over (a) inline-string-without-parsing and (b) comma-separated scalar:
   it is real (minimal) YAML, gives Phase-2 genuine lists, and makes us able to
@@ -291,12 +249,14 @@ edit *is* a re-verification of the page against reality, per D4 semantics).
 
 ## Non-goals
 
+Each NG below is fenced out of Phase 1 but carried forward to a named home in the
+"Next phase — deferred roadmap" section; none is dropped.
+
 - **NG-1 — The query / navigation tool.** No backlinks index, graph view, type/
   tag filter, or `viz.html`. That is Phase 2, built *on* this format.
-- **NG-2 — Generating indexes from `description`.** The `description` field is
-  introduced and populated, but `index.md` files stay hand-maintained this phase;
-  auto-generating them from page descriptions (resolving the index/description
-  duplication) is a Phase-2 consumer, like drift detection for `resource`.
+- **NG-2 — `title` / `description` frontmatter keys.** OKF also recommends these;
+  our H1 + index one-liners cover them today. Deferred (revisit if Phase-2 index
+  auto-generation wants `description`).
 - **NG-3 — Drift detection.** `resource` is introduced and populated but no code
   compares it against `last_verified` this phase.
 - **NG-4 — Protected-doc / porting wiring for `KNOWLEDGE_FORMAT.md`.** Not added
@@ -310,28 +270,60 @@ edit *is* a re-verification of the page against reality, per D4 semantics).
 ## Acceptance criteria
 
 1. `docs/KNOWLEDGE_FORMAT.md` exists, declares Knowledge Format v1.0, documents
-   the required + the five optional keys (`type`/`tags`/`resource`/`title`/
-   `description`) with the `type` vocabulary and the `tags` canonical form, maps
-   conformance to D-rule IDs, and is linked from the `AGENTS.md` Map. (R1, R4)
+   the required + three optional keys with the `type` vocabulary and the `tags`
+   canonical form, maps conformance to D-rule IDs, and is linked from the
+   `AGENTS.md` Map. (R1, R4)
 2. A unittest for `read_frontmatter` asserts: a flow-form `tags: [a, b]` parses to
    `["a", "b"]`; a block-form list parses to the same; an existing scalar key
    parses to its unchanged string. The test fails on the pre-change parser and
    passes after. (R3)
 3. `python3 plugin/scripts/check.py` is GREEN, with the corpus containing pages
-   that both use and omit the new keys. Removing any of the new keys from any
-   page keeps it GREEN; no D-rule names them. (R2, R7)
+   that both use and omit the new keys. Removing all three keys from any page
+   keeps it GREEN; no D-rule names them. (R2, R7)
 4. Every page under `docs/memory/{knowledge,adr,limitations,openq}/` except
-   `index.md` carries `type`, `tags`, and a one-sentence `description`; pages
-   documenting one code asset carry `resource`. (R6)
+   `index.md` carries `type` and `tags`; pages documenting one code asset carry
+   `resource`. (R6)
 5. `plugin/skills/docs-tree/SKILL.md` and `docs/memory/MEMORY.md` mention the
-   optional keys and point to `docs/KNOWLEDGE_FORMAT.md`. (R5)
+   three optional keys and point to `docs/KNOWLEDGE_FORMAT.md`. (R5)
 
-## Next phase
+## Next phase — deferred roadmap (durable; do not drop)
 
-Phase 2 — **Knowledge navigation/query tool + agentic skill** (separate spec):
-consumes `type`/`tags`/`description` + `resource` + the D5 link graph to provide a
-queryable catalog (`(path, type, tags, description)` an agent filters without
-loading bodies), backlinks ("what links here"), kind/tag/status filters, and
-stale/orphan detection — surfaced both as a code-execution tool and an agentic
-docs-navigation skill, optionally with an OKF-style graph view. `description`
-unlocks generated indexes (NG-2); `resource` unlocks drift detection (NG-3).
+Everything Phase 1 fences out (the NG-* list) has a named future home here, so the
+roadmap survives this spec. Nothing below is built in Phase 1.
+
+### Phase 2 — Knowledge navigation/query tool + agentic skill (separate spec)
+
+The *consumer* of the Phase-1 format. Consumes `type`/`tags`/`description` +
+`resource` + the D5 link graph to provide a queryable catalog
+(`(path, type, tags, description)` an agent filters without loading bodies),
+backlinks ("what links here"), kind/tag/status filters, and stale/orphan
+detection — surfaced both as a code-execution tool and an agentic docs-navigation
+skill, optionally with an OKF-style graph view. Phase 2 absorbs these Phase-1
+deferrals:
+
+- **Drift detection** (from NG-3) — diff each page's `resource` against its
+  `last_verified` (git state / hash) and flag pages whose code moved under them.
+  The `resource` field exists precisely to enable this.
+- **Generated indexes** (from NG-2) — auto-build `index.md` listings from page
+  `description`s, retiring the hand-maintained index/description duplication.
+- **Full-corpus backfill** (from NG-5) — extend the keys past the memory
+  concept-page slice to the rest of the corpus, tool-assisted (the Phase-2 tool
+  identifies pages missing keys). Mechanical sweep, cheap once the tool exists.
+
+### Later — format & governance evolutions (post-Phase-2, own specs)
+
+- **Typed link relationships** (from NG-6) — a future *format* minor version
+  (KF v1.1+): give links a relationship kind (`supersedes`, `refines`,
+  `depends-on`) instead of untyped edges. Format-layer change, versioned per the
+  `KNOWLEDGE_FORMAT.md` scheme; worth doing only if Phase-2 navigation shows the
+  untyped graph is too coarse.
+- **Lint validation of the new keys** (from NG-7) — a future *governance*
+  tightening: once the keys are proven in daily use, optionally promote some from
+  permissive to checked (e.g. validate `type` against the vocabulary, verify a
+  repo-relative `resource` resolves the way D5 does for links). Deliberately last
+  — we keep OKF's permissive stance until there is evidence a check earns its
+  blocking cost.
+- **Protected-doc / porting wiring for `KNOWLEDGE_FORMAT.md`** (from NG-4) — add
+  it to `MANAGED_DOCS`/`MACHINE_DOCS` + a `scaffold.py` seed so every ported host
+  carries the format spec, protected from staleness-loosening. Do this when the
+  porting path is next exercised.
