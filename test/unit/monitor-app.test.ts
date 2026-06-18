@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EventEmitter } from "node:events";
-import { runMonitor, type MonitorOpts } from "../../src/monitor/app.js";
+import { runMonitor } from "../../src/monitor/app.js";
 import type { MonitorClient } from "../../src/monitor/snapshot.js";
 
 function fakeOut() { const chunks: string[] = []; return { chunks, write: (s: string) => { chunks.push(s); }, isTTY: true }; }
@@ -40,7 +40,8 @@ describe("runMonitor", () => {
     expect(all).toContain("[?1049l");  // left alt screen on teardown
     expect(input.raw).toBe(false);           // raw mode restored
     expect(sched.cancels.length).toBe(1);    // timer cancelled exactly once
-    input.key("q");                          // a second quit is a no-op (no throw, already torn down)
+    input.key("q");                          // a second quit is a no-op (already torn down)
+    expect(sched.cancels.length).toBe(1);    // idempotent: the 2nd q must NOT cancel again (tornDown guard has teeth)
   });
 
   it("skips a tick while a prior collect is still in flight", async () => {
