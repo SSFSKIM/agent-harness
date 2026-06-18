@@ -1,11 +1,9 @@
 import type { ListEntry } from "../daemon/types.js";
 import type { ProactiveState } from "../proactive/types.js";
+import type { MonitorClient } from "../daemon/connect.js";
 
-/** The minimal daemon-read surface the dashboard needs (injected → unit-testable without a socket). */
-export interface MonitorClient {
-  list(): Promise<ListEntry[]>;
-  contextUsage(id: string): Promise<unknown>;
-}
+/** Re-exported so existing importers (app.ts, client.ts, tests) keep their `./snapshot.js` import. */
+export type { MonitorClient } from "../daemon/connect.js";
 
 export interface SessionRow {
   id: string;
