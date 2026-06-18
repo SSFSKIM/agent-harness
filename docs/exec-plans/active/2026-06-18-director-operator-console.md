@@ -175,7 +175,13 @@ without attaching to the session. Concretely, observable:
   blocked/escalate · accept/decline · send · requeue/abandon) posting `/api/v1/answer`
   with the `X-Director-Token` header; values still via `textContent`. 1 new test
   (token + controls present) — 29 green. `build_view` left UNCHANGED (see Decision).
-- [ ] M3 — `director/notify.py` webhook park-notifier (next).
+- [x] (2026-06-18) **M3 done** — `director/notify.py`: pure `webhook_payload`,
+  `make_webhook_notifier(url) -> notify(event)->bool` (2xx=True, transport error
+  swallowed), and `run(...)` tailing the queue via `watch.new_pending` (dedup + human
+  kind filter), fail-soft bounded-retry (`retry_cap`, leave-unseen-to-retry then
+  abandon+log), `--webhook`/`$DIRECTOR_WEBHOOK_URL`. New `test_director_notify.py` (8
+  tests: payload, 2xx/non2xx/raise, fire-once + skip-non-human, retry-then-abandon,
+  transient-recover, torn-queue fail-soft, missing-url errors). Full gate GREEN.
 - [ ] M4 — DIRECTOR.md section + playwright E2E + completion gate.
 
 ## Surprises & discoveries
