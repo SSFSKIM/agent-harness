@@ -188,7 +188,26 @@ rate-limit, R4–R6) is a separate linked plan; Phase B (cross-run history) a th
   plumbing end-to-end without breaking the run. Full gate GREEN (481 tests). All dispatch
   monkeypatches already take `**kw`, so the new `on_event` kwarg is absorbed (no test churn).
 
+- [x] (2026-06-18) **M3 done** — live render + behavioral E2E + docs. `director/dashboard.py`
+  `PAGE`: the in-flight row now appends `fmtTokens(e.tokens)` when present (the headline
+  `codex_totals` already rendered, so the live sum shows with no change). `docs/DIRECTOR.md`
+  §10: live-accrual note (run total + in-flight tokens climb mid-turn; R13/R16 marshal). 2 new
+  dashboard tests (build_view passes live in_flight tokens + live run total; PAGE wires
+  `fmtTokens(e.tokens)`) — 33 green. **Behavioral E2E captured (both):**
+  - *Producer sequence (deterministic):* claim→accrue(400)→accrue(600)→2nd-ticket(150)→
+    terminal(620) printed run.total `0 → 400 → 600 → 750 → 770` — live climb (R1), per-ticket
+    in-flight tokens (R2), no double-count at terminal (770 = 620 ended + 150 in-flight, R3).
+  - *Web surface (playwright):* served the dashboard against a seeded status dir; the browser
+    DOM rendered run header `750 tok (in 450 / out 300)` and in-flight rows
+    `OBS-1 · running · a1/w1 · 600 tok (in 360 / out 240)` + `OBS-2 · … · 150 tok (in 90 / out 60)`
+    — live tokens, mid-turn, no terminal. (Only console error: a benign `/favicon.ico` 404.)
+  Full gate GREEN (483 tests).
+
 ## Surprises & discoveries
+- 2026-06-18: M3's "minimal dashboard render" needed only ONE line in `PAGE` (the in-flight
+  row) — the run-level live total required ZERO dashboard change, because `codex_totals` was
+  already rendered and the producer's `snapshot()` now returns it as a live sum. The dashboard
+  is a pure consumer of the producer's enrichment, exactly as the read-dashboard design intended.
 
 ## Decision log
 - 2026-06-18: review_level = **standard** — the marshal seam is the one

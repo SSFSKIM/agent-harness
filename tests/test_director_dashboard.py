@@ -84,6 +84,21 @@ class BuildViewTest(unittest.TestCase):
         self.assertEqual(v["counts"], {"in_flight": 1, "stuck": 0,
                                        "recent": 1, "pending": 1})
 
+    def test_inflight_live_tokens_pass_through_and_run_total_is_live(self):
+        # Layer-2 (R1/R2): an accrued in-flight ticket → build_view carries
+        # in_flight[].tokens AND run.codex_totals reflects the LIVE (ended+in-flight) sum.
+        w = ds.StatusWriter(base=self.status_dir)
+        w.claimed(_ticket("T1", "ABC-1"), wave=1, attempt=1)
+        w.accrue("T1", {"input": 200, "output": 200, "total": 400})
+        v = self._view()
+        self.assertEqual(v["in_flight"][0]["tokens"], {"input": 200, "output": 200, "total": 400})
+        self.assertEqual(v["run"]["codex_totals"]["total"], 400)  # live, no ended ticket yet
+
+    def test_page_renders_inflight_live_tokens(self):
+        # M3: the in-flight row shows its live tokens (reusing fmtTokens) — the consumer
+        # of the producer's new in_flight[].tokens field.
+        self.assertIn("fmtTokens(e.tokens)", dash.PAGE)
+
     def test_no_run_is_tolerant(self):
         # No status.json (no run) and an empty queue → run:None, zero counts, valid dict.
         v = self._view()

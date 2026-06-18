@@ -243,7 +243,8 @@ function render(v) {
   $("counts").textContent = "in-flight " + (c.in_flight||0) + " · stuck " + (c.stuck||0)
     + " · recent " + (c.recent||0) + " · pending " + (c.pending||0);
   fill("inflight", (v.in_flight||[]).map(e =>
-    [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave]));
+    [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave
+      + (e.tokens ? " · " + fmtTokens(e.tokens) : "")]));  // Layer-2: live mid-turn tokens
   fill("stuck", (v.stuck||[]).map(s =>
     [s.ticket + " ← " + (s.blocked_by||[]).map(b => b.id).join(", ")]));
   fill("recent", (v.recent||[]).map(r =>

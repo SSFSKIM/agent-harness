@@ -251,10 +251,17 @@ python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir>
 
 **Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
 + `director.queue` pending), re-polled ~1s in the browser (no SSE, no reload): the run header
-with **cost/usage** (cumulative tokens, runtime seconds, latest rate-limit), in-flight tickets
-(phase·attempt/wave), what is stuck and why, the recent-outcomes tail (✓/✗ + per-ticket
-tokens/session), and the pending Director queue. No run / torn snapshot → "no active run"
-(visibility is never a gate).
+with **cost/usage** (cumulative tokens — a **LIVE sum** that climbs mid-turn as in-flight
+workers burn tokens, not only at terminal; runtime seconds; latest rate-limit), in-flight tickets
+(phase·attempt/wave + their **live mid-turn tokens** as they accrue), what is stuck and why, the
+recent-outcomes tail (✓/✗ + per-ticket tokens/session), and the pending Director queue. No run /
+torn snapshot → "no active run" (visibility is never a gate).
+
+> **Live token accrual (Layer-2).** The run total and each in-flight row's tokens update *during*
+> a turn, not just at its end: the orchestrator marshals per-event usage from worker-pool threads
+> to its main tick loop (a `queue.Queue` drained into the `StatusWriter` — RELIABILITY R13/R16),
+> and `snapshot()` sums ended + in-flight tokens like it already does for `seconds_running`. A
+> terminating ticket moves its tokens ended↔live atomically, so the total never double-counts.
 
 **Answer.** Each pending item shows a kind-appropriate control: a `turnReview` gets
 reply / done / blocked / escalate (with a text box); an approval gets accept / decline; a
