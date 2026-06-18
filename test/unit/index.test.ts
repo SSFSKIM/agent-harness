@@ -31,6 +31,10 @@ describe("public API", () => {
     expect(typeof api.observe).toBe("function");
     expect(typeof api.mergeHooks).toBe("function");
   });
+  it("exports the daemon client + dashboard snapshot (advanced-seam, increment 2)", () => {
+    expect(typeof api.connectDaemon).toBe("function");
+    expect(typeof api.collect).toBe("function");
+  });
   it("does NOT export internal plumbing from the package root (boundary curation)", () => {
     for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
       expect(api).not.toHaveProperty(name);
@@ -58,6 +62,8 @@ describe("public API", () => {
       "TaskStore",
       "applyAssistantPersona",
       "blockTool",
+      "collect",
+      "connectDaemon",
       "createBriefMcpServer",
       "createCompactMcpServer",
       "createContextMcpServer",

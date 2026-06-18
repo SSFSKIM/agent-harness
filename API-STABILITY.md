@@ -48,3 +48,5 @@ The tiers below document intent, not enforced contracts. `stable` exports follow
 | `CONTEXT_TOOL` | advanced-seam |
 | `COMPACT_TOOL` | advanced-seam |
 | `summarizeUsage` | advanced-seam |
+| `connectDaemon` | advanced-seam |
+| `collect` | advanced-seam |

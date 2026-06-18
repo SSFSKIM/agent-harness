@@ -11,6 +11,12 @@ export { SwarmRuntime, createSwarmMcpServer, SwarmError } from "./swarm/index.js
 export type { Message, MessageKind, TeammateSpec, SwarmOptions } from "./swarm/index.js";
 export { DaemonSupervisor, DaemonServer, daemonRequest, daemonSocketPath, DaemonError } from "./daemon/index.js";
 export type { SessionRecord, SessionStatus, DaemonOptions } from "./daemon/index.js";
+export { connectDaemon } from "./daemon/connect.js";
+export type { DaemonClient, MonitorClient } from "./daemon/connect.js";
+export type { ListEntry } from "./daemon/types.js";
+export type { ControlFrame, ControlResponse } from "./bridge/types.js";
+export { collect } from "./monitor/snapshot.js";
+export type { DashboardSnapshot, SessionRow, CollectOpts } from "./monitor/snapshot.js";
 export { KairosAssistant, createBriefMcpServer, stdoutBriefSink, applyAssistantPersona, resolveAssistantPosture } from "./kairos/index.js";
 export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig } from "./kairos/index.js";
 export { listSessions, getSessionMessages, getSessionInfo, forkSession, renameSession, tagSession, deleteSession } from "./sessions/index.js";
