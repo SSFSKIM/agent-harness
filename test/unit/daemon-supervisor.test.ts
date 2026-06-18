@@ -624,4 +624,14 @@ describe("DaemonSupervisor", () => {
     await expect(sup.submit("sess-1", "x", () => {})).rejects.toThrow(/unknown session/);
     await sup.shutdown();
   });
+  it("shutdown also clears boot-claimed-but-never-revived rehydrated records", async () => {
+    const d = dir();
+    seed(d, { id: "sess-1", sessionId: "sdk-1", model: "m1" });
+    const sink: any[] = [];
+    const sup = new DaemonSupervisor({ query: captureInitQuery(sink, "sdk-1") }, { dir: d, rehydrate: true, isAlive: () => false });
+    expect(sup.list().map((r) => r.id)).toEqual(["sess-1"]);   // claimed at boot
+    await sup.shutdown();
+    expect(sink).toHaveLength(0);                              // never revived (no spawn)
+    expect(sup.list()).toEqual([]);                           // graceful shutdown forgot the unrevived claim
+  });
 });

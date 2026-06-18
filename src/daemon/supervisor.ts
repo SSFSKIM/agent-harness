@@ -253,6 +253,8 @@ export class DaemonSupervisor {
     await Promise.all([...this.proactive.values()].map((l) => l.stop("shutdown")));
     this.proactive.clear();
     await Promise.all([...this.pool].map(async ([id, s]) => { await s.dispose(); this.registry.remove(id); }));
+    for (const id of this.rehydratable) this.registry.remove(id);   // claimed-not-revived records: forget on graceful shutdown
+    this.rehydratable.clear();
     this.pool.clear();
     this.configs.clear();
   }
