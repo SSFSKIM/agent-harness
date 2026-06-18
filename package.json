@@ -1,6 +1,11 @@
 {
   "name": "cc-harness",
   "version": "0.1.0",
+  "description": "Headless TypeScript harness over the Claude Agent SDK with Claude Code-faithful defaults — one-shot runs, interactive sessions, a multi-session daemon, hooks, swarm, and durable tasks.",
+  "keywords": ["claude", "claude-code", "claude-agent-sdk", "anthropic", "agent", "llm", "ai", "harness", "headless"],
+  "homepage": "https://github.com/SSFSKIM/codex_somersault/tree/main/CC-to-SDK/harness#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/SSFSKIM/codex_somersault.git", "directory": "CC-to-SDK/harness" },
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
