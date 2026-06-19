@@ -246,15 +246,34 @@ watches AND answers a run directly from a browser, without entering your session
 
 ```
 python3 -m director.dashboard            # http://127.0.0.1:8787/
-python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir>
+python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir> --history-dir <dir>
 ```
 
 **Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
-+ `director.queue` pending), re-polled ~1s in the browser (no SSE, no reload): the run header
-with **cost/usage** (cumulative tokens, runtime seconds, latest rate-limit), in-flight tickets
-(phase·attempt/wave), what is stuck and why, the recent-outcomes tail (✓/✗ + per-ticket
-tokens/session), and the pending Director queue. No run / torn snapshot → "no active run"
-(visibility is never a gate).
++ `director.queue` pending), **server-pushed** over SSE (`GET /api/v1/stream` emits a frame the
+instant the snapshot changes; the page consumes it via `EventSource` and **falls back to a ~1s
+poll** if the stream can't hold — so it never regresses to blank): the run header
+with **cost/usage** (cumulative tokens — a **LIVE sum** that climbs mid-turn as in-flight
+workers burn tokens, not only at terminal; runtime seconds; **rate-limit headroom** rendered as a
+glance-able gauge + "resets ~Xm", tolerant of an odd payload), in-flight tickets
+(phase·attempt/wave + their **live mid-turn tokens** as they accrue), what is stuck and why, the
+recent-outcomes tail (✓/✗ + per-ticket tokens/session), the pending Director queue, and a
+**cross-run history** panel — the last N *completed* runs (each with its token total, runtime,
+✓/✗ outcome counts, and stopped-reason), persisted across runs so trends survive a run ending. No
+run / torn snapshot → "no active run"; no history yet → an empty panel (visibility is never a gate).
+
+> **Cross-run history (Phase B).** The orchestrator appends a compact run-summary to an
+> append-only `director/history.py` store (`runs.jsonl` under `$DIRECTOR_HISTORY_DIR` /
+> `.claude/harness/director-history`) at each run's completion (best-effort — never a gate); the
+> dashboard reads it via `GET /api/v1/history` (a slow 10s poll, independent of the live view).
+> The run aggregate (tokens, runtime) is exact; outcome counts derive from the bounded `recent`
+> tail. Rotation/multi-run aggregation are non-goals.
+
+> **Live token accrual (Layer-2).** The run total and each in-flight row's tokens update *during*
+> a turn, not just at its end: the orchestrator marshals per-event usage from worker-pool threads
+> to its main tick loop (a `queue.Queue` drained into the `StatusWriter` — RELIABILITY R13/R16),
+> and `snapshot()` sums ended + in-flight tokens like it already does for `seconds_running`. A
+> terminating ticket moves its tokens ended↔live atomically, so the total never double-counts.
 
 **Answer.** Each pending item shows a kind-appropriate control: a `turnReview` gets
 reply / done / blocked / escalate (with a text box); an approval gets accept / decline; a

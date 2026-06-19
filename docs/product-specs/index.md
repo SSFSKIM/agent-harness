@@ -179,3 +179,18 @@ owner: harness
   host's `after_create` clone, not harness logic (§9.3 VCS-agnostic). Live-validated on a
   throwaway GitHub repo: ticket → worker PR → merger land. New SECURITY T15 (hook privilege).
   Additive — config.py + run.py + orchestrator.py cleanup sites; parity slices 1–3 unchanged.
+- [Deferred observability polish](2026-06-18-observability-polish.md)
+  — the deferred non-goals / Layer-2 follow-ups the read-dashboard
+  ([observability-dashboard](2026-06-16-director-observability-dashboard.md)) and telemetry
+  slice ([worker-telemetry-capture](2026-06-16-worker-telemetry-capture.md)) named, now the
+  surface is actionable ([operator-console](2026-06-18-director-operator-console.md)).
+  **v1 (R1–R6):** *Layer-2 in-flight token accrual* — `codex_totals` becomes a LIVE sum
+  (ended + in-flight) at `snapshot()` mirroring `seconds_running`; per-event usage marshals
+  worker-pool→main-thread via a `queue.Queue` drained per tick (R13/R16), no double-count at
+  `terminal()`; `app_server` unchanged (reuse `on_event`+`extract_usage`). *SSE* —
+  `GET /api/v1/stream` server-pushes `build_view` on change with a poll fallback (fail-soft,
+  R14). *Rate-limit representation* — tolerant `fmtRateLimits` (no raw `JSON.stringify`).
+  **Phase B (R7–R8):** *cross-run history* — new append-only `director/history.py`
+  (`append_run`/`read_history`, written at run completion) + `GET /api/v1/history` + a panel.
+  **Deferred:** multi-run aggregate view (no producer fan-out scenario yet). Additive;
+  `/api/v1/state` stays a superset.

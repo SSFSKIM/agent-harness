@@ -28,18 +28,30 @@ import argparse
 import datetime
 import json
 import secrets
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import director.queue as dq
 from director import director_min as dm
+from director import history
 from director import status
 
 # The single versioned, read-only data route (Symphony §13.7 alignment).
 _STATE_PATH = "/api/v1/state"
+# The server-push variant of _STATE_PATH: an SSE stream of build_view, pushed on change.
+_STREAM_PATH = "/api/v1/stream"
+# Cross-run history: the last N completed-run summaries (Phase B), read-only.
+_HISTORY_PATH = "/api/v1/history"
 # The single write route — answer a pending Director-queue request (operator console).
 _ANSWER_PATH = "/api/v1/answer"
 _DEFAULT_PORT = 8787
+
+# SSE cadence: re-read the (file-backed) snapshot this often server-side and push only a
+# CHANGED view; a heartbeat keeps the connection alive / detects a dead peer between changes.
+_STREAM_POLL_S = 0.5
+_STREAM_HEARTBEAT_S = 15.0
 
 # Queue kinds a human/console answers. Excludes `mergeRequest` (the serialized
 # merger's worklist — answering it would silently consume a merge) and `runReport`
@@ -179,6 +191,44 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
     }
 
 
+def _stream_loop(write, view_fn, *, sleep, now, should_run, heartbeat_s, poll_s) -> None:
+    """Push the view as Server-Sent Events until the peer disconnects.
+
+    Emits a `data: <json>\\n\\n` frame ONLY when the view's CONTENT changes — the
+    always-fresh `generated_at` timestamp is excluded from the change key, so an idle
+    run doesn't stream a frame every tick (the pushed event still carries new state —
+    less client churn than the fixed poll),
+    else a `: ping\\n\\n` comment heartbeat after `heartbeat_s` of no change (keeps the
+    connection alive and surfaces a dead peer). A `write` raising the client-disconnect
+    errno family ends the loop quietly (R14 — never a crash, never stderr).
+
+    Pure and fully injectable (`write`/`view_fn`/`sleep`/`now`/`should_run`) so the push
+    logic is unit-tested without a socket — the same testability lever as `build_view`
+    (the HTTP `_stream` shim below is a ~5-line adapter over this)."""
+    last = None
+    last_beat = now()
+    while should_run():
+        view = view_fn()
+        payload = json.dumps(view)
+        # Change-detect on a STABLE projection: build_view() stamps a fresh `generated_at`
+        # every call, so diffing the whole payload would mark every tick "changed" — a data
+        # frame each poll and the heartbeat branch never reached. Exclude that one volatile
+        # field from the key (the SENT frame still carries it).
+        key = json.dumps({k: v for k, v in view.items() if k != "generated_at"}) \
+            if isinstance(view, dict) else payload
+        try:
+            if key != last:
+                write(("data: " + payload + "\n\n").encode("utf-8"))
+                last = key
+                last_beat = now()
+            elif now() - last_beat >= heartbeat_s:
+                write(b": ping\n\n")
+                last_beat = now()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            return  # peer gone mid-write — quiet drop (R14), the daemon thread ends
+        sleep(poll_s)
+
+
 # The whole client: one self-contained HTML string (CSS + vanilla JS poller), no
 # framework, no bundler, no external asset — offline-OK (stdlib-only grain). It polls
 # GET /api/v1/state ~1s and re-renders the DOM. Every data value is written via
@@ -210,6 +260,7 @@ PAGE = """<!doctype html>
 <h2>stuck</h2><div id="stuck"></div>
 <h2>recent</h2><div id="recent"></div>
 <h2>pending (director queue)</h2><div id="pending"></div>
+<h2>history (recent runs)</h2><div id="history"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 function el(tag, text, cls) {
@@ -221,6 +272,29 @@ function el(tag, text, cls) {
 function fmtTokens(t) {
   if (!t || t.total == null) return "—";
   return t.total + " tok (in " + t.input + " / out " + t.output + ")";
+}
+function fmtRateLimits(rl) {
+  // Tolerant (client-side R12): render a glance-able summary from recognizable fields,
+  // degrade to a compact key=value summary for an odd shape, "" for null — never a raw
+  // JSON dump, never throw on a missing field. Real codex shape pinned in the E2E.
+  if (!rl || typeof rl !== "object") return "";
+  let pct = null;
+  if (typeof rl.used_percent === "number") pct = rl.used_percent;
+  else if (typeof rl.usedPercent === "number") pct = rl.usedPercent;
+  else if (typeof rl.remaining === "number" && typeof rl.limit === "number" && rl.limit > 0)
+    pct = 100 * (1 - rl.remaining / rl.limit);
+  let resets = null;
+  if (typeof rl.resets_in_seconds === "number") resets = rl.resets_in_seconds;
+  else if (typeof rl.reset_in_seconds === "number") resets = rl.reset_in_seconds;
+  else if (typeof rl.window_minutes === "number") resets = rl.window_minutes * 60;
+  const parts = [];
+  if (pct !== null) {
+    const f = Math.max(0, Math.min(10, Math.round(pct / 10)));
+    parts.push("rate " + "▮".repeat(f) + "▯".repeat(10 - f) + " " + Math.round(pct) + "%");
+  }
+  if (resets !== null) parts.push("resets ~" + Math.round(resets / 60) + "m");
+  if (parts.length) return parts.join(" · ");
+  return "rate " + Object.keys(rl).map(k => k + "=" + rl[k]).join(" ").slice(0, 60);
 }
 function fill(id, lines) {
   const box = $(id); box.innerHTML = "";
@@ -237,13 +311,14 @@ function render(v) {
     const ct = run.codex_totals || {};
     h.appendChild(el("span", fmtTokens(ct), "tag"));
     h.appendChild(el("span", "runtime " + Math.round(ct.seconds_running || 0) + "s", "tag"));
-    if (run.rate_limits) h.appendChild(el("span", "rate " + JSON.stringify(run.rate_limits), "tag"));
+    const rl = fmtRateLimits(run.rate_limits); if (rl) h.appendChild(el("span", rl, "tag"));
   }
   const c = v.counts || {};
   $("counts").textContent = "in-flight " + (c.in_flight||0) + " · stuck " + (c.stuck||0)
     + " · recent " + (c.recent||0) + " · pending " + (c.pending||0);
   fill("inflight", (v.in_flight||[]).map(e =>
-    [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave]));
+    [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave
+      + (e.tokens ? " · " + fmtTokens(e.tokens) : "")]));  // Layer-2: live mid-turn tokens
   fill("stuck", (v.stuck||[]).map(s =>
     [s.ticket + " ← " + (s.blocked_by||[]).map(b => b.id).join(", ")]));
   fill("recent", (v.recent||[]).map(r =>
@@ -305,7 +380,48 @@ async function poll() {
   try { const r = await fetch("/api/v1/state"); render(await r.json()); }
   catch (e) { $("updated").textContent = "· fetch error: " + e; }
 }
-setInterval(poll, 1000); poll();
+function fmtRun(r) {  // one history row: when · cost · runtime · outcomes · why-it-ended
+  const ct = r.codex_totals || {};
+  const started = (r.started_at || "").slice(0, 19).replace("T", " ");
+  const outs = Object.keys(r.outcomes || {}).map(k => (k === "completed" ? "✓" : "✗") + r.outcomes[k]).join(" ");
+  return started + " · " + (ct.total != null ? ct.total + " tok" : "—")
+    + " · " + Math.round(ct.seconds_running || 0) + "s"
+    + (outs ? " · " + outs : "") + (r.stopped_reason ? " · " + r.stopped_reason : "");
+}
+function renderHistory(runs) { fill("history", (runs || []).slice().reverse().map(r => [fmtRun(r)])); }  // newest first
+async function loadHistory() {  // history changes only at run end → a slow, independent poll
+  try { const r = await fetch("/api/v1/history"); renderHistory(await r.json()); }
+  catch (e) {}
+}
+function fallbackPoll() {                  // the ~1s degradation path — idempotent (never double-loops)
+  if (fallbackPoll.armed) return;
+  fallbackPoll.armed = true;
+  setInterval(poll, 1000); poll();
+}
+function startStream() {
+  // Prefer server-push (SSE): render each pushed view. Fall back to polling when the
+  // stream can't deliver — BEFORE the first event, or after a sustained post-delivery
+  // outage — so the surface never regresses to blank nor freezes on stale data (R4).
+  if (!window.EventSource) { fallbackPoll(); return; }
+  let delivered = false, outage = null;
+  const es = new EventSource("/api/v1/stream");
+  es.onmessage = (e) => {
+    // mark delivered only AFTER a successful render — a malformed-only stream must not
+    // suppress the fallback by looking healthy.
+    try { render(JSON.parse(e.data)); delivered = true; if (outage) { clearTimeout(outage); outage = null; } }
+    catch (x) {}                           // malformed frame → keep last view
+  };
+  es.onerror = () => {
+    // never delivered → the stream can't hold: poll now (no blank surface).
+    if (!delivered) { es.close(); fallbackPoll(); return; }
+    // a drop after delivery: EventSource auto-reconnects, so flag staleness — but if it
+    // can't recover within ~2 heartbeat windows, stop trusting it and poll (the safety net).
+    $("updated").textContent = "· stream reconnecting…";
+    if (!outage) outage = setTimeout(() => { es.close(); fallbackPoll(); }, 30000);
+  };
+}
+startStream();
+loadHistory(); setInterval(loadHistory, 10000);  // cross-run history (slow, independent of the live view)
 </script></body></html>"""
 
 
@@ -356,7 +472,8 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
 
     # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
-    _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
+    _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _STREAM_PATH: {"GET"},
+               _HISTORY_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
 
     def _route(self):
         path = self.path.split("?", 1)[0]
@@ -371,7 +488,34 @@ class _Handler(BaseHTTPRequestHandler):
         if path == _STATE_PATH:
             view = build_view(self.server.status_dir, self.server.queue_dir)
             return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+        if path == _STREAM_PATH:
+            return self._stream()
+        if path == _HISTORY_PATH:
+            runs = history.read_history(base=self.server.history_dir)
+            return self._send(200, json.dumps(runs).encode("utf-8"), "application/json")
         return self._answer()  # _ANSWER_PATH + POST
+
+    def _stream(self) -> None:
+        """Server-push the view as SSE (R4): hold the connection open and emit a frame
+        on each snapshot change (server-side change-detect over the same `build_view`),
+        plus a heartbeat. NOT via `_send` — an event-stream sends no `Content-Length`;
+        the connection stays open and the body is flushed frame-by-frame. Fail-soft per
+        R14: `_stream_loop` swallows the client-disconnect errno family, so a closed tab
+        just ends this (daemon) thread — never a crash, never stderr."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        def write(chunk: bytes) -> None:
+            self.wfile.write(chunk)
+            self.wfile.flush()
+
+        _stream_loop(write,
+                     lambda: build_view(self.server.status_dir, self.server.queue_dir),
+                     sleep=time.sleep, now=time.monotonic,
+                     should_run=self.server.serving.is_set,  # ends promptly on shutdown()
+                     heartbeat_s=_STREAM_HEARTBEAT_S, poll_s=_STREAM_POLL_S)
 
     def _answer(self) -> None:
         """Resolve one pending Director-queue request from the browser (R1/R2). Fenced
@@ -489,22 +633,34 @@ class _DashboardServer(ThreadingHTTPServer):
     """Carries the status/queue dirs the handler reads from (set once at construction,
     never per-request) — an explicit field instead of a monkey-attribute."""
 
-    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None, token=None):
+    def __init__(self, addr, handler, *, status_dir=None, queue_dir=None,
+                 history_dir=None, token=None):
         super().__init__(addr, handler)
         self.status_dir = status_dir
         self.queue_dir = queue_dir
+        self.history_dir = history_dir   # the cross-run history store the /api/v1/history route reads
         # Per-server CSRF token: minted once, embedded in the served page, required on
         # every write (POST). A foreign page in the browser cannot read it (same-origin)
         # so cannot forge a write to localhost. `token=` is injectable for tests.
         self.token = token or secrets.token_urlsafe(32)
+        # Server-liveness flag the SSE stream loop polls (`should_run`): an in-process
+        # `shutdown()` clears it so quiet/idle streams end at their next tick (≤ poll_s)
+        # instead of lingering until the next failed write — clean teardown (review P2).
+        self.serving = threading.Event()
+        self.serving.set()
+
+    def shutdown(self) -> None:
+        self.serving.clear()   # signal open SSE streams to stop, then stop the accept loop
+        super().shutdown()
 
 
-def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None) -> _DashboardServer:
+def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None,
+          history_dir=None) -> _DashboardServer:
     """Bind a read-only dashboard server on 127.0.0.1 (LAN never exposed, D-5). A bind
     failure (e.g. port in use) propagates immediately — no retry loop. Caller runs
     serve_forever(); tests bind port 0 and drive it over urllib."""
-    return _DashboardServer(("127.0.0.1", port), _Handler,
-                            status_dir=status_dir, queue_dir=queue_dir)
+    return _DashboardServer(("127.0.0.1", port), _Handler, status_dir=status_dir,
+                            queue_dir=queue_dir, history_dir=history_dir)
 
 
 def main(argv=None) -> int:
@@ -514,8 +670,9 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=_DEFAULT_PORT, help="bind port (default 8787)")
     ap.add_argument("--status-dir", default=None, help="status dir override")
     ap.add_argument("--queue-dir", default=None, help="queue dir override")
+    ap.add_argument("--history-dir", default=None, help="cross-run history dir override")
     args = ap.parse_args(argv)
-    httpd = serve(args.port, args.status_dir, args.queue_dir)
+    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir)
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"director.dashboard: http://{host}:{port}/  (read-only; Ctrl-C to stop)")
     try:

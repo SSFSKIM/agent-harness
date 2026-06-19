@@ -177,7 +177,8 @@ def _workspace_for(ticket: dict, workspace_root) -> tuple[Path, bool]:
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              read_timeout_s, tool_executor, install_skills,
              worker_env: dict | None = None, cancel_event=None,
-             hooks: dict | None = None, hook_timeout_s: float = 60.0) -> AppServerClient:
+             hooks: dict | None = None, hook_timeout_s: float = 60.0,
+             on_event=None) -> AppServerClient:
     """Build (but do not start) the worker client for one ticket: resolve+create the
     workspace, run the create/run lifecycle hooks, optionally install the vendored skills,
     and wire the approval seam. Shared by the single-turn `run_ticket` and the multi-turn
@@ -214,7 +215,7 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
     return AppServerClient(command, cwd=ws, on_server_request=seam,
                            tool_executor=tool_executor, read_timeout_s=read_timeout_s,
-                           env=worker_env, cancel_event=cancel_event)
+                           env=worker_env, cancel_event=cancel_event, on_event=on_event)
 
 
 def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
@@ -223,7 +224,8 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                tools=None, tool_executor=None, install_skills: bool = False,
                approval_policy: str = "untrusted",
                sandbox: str = "workspace-write",
-               hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
+               hooks: dict | None = None, hook_timeout_s: float = 60.0,
+               on_event=None) -> dict:
     """Drive one worker through ONE turn; returns {status, turn_id, final_message}.
 
     The single-turn primitive (kept for callers that want one turn). The multi-turn
@@ -234,7 +236,7 @@ def run_ticket(ticket: dict, *, command: list[str], queue_base=None,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=tool_executor,
                       install_skills=install_skills, hooks=hooks,
-                      hook_timeout_s=hook_timeout_s)
+                      hook_timeout_s=hook_timeout_s, on_event=on_event)
     try:
         with client as c:
             c.initialize()
@@ -257,7 +259,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
           tools=None, tool_executor=None, install_skills: bool = False,
           approval_policy: str = "untrusted", sandbox: str = "workspace-write",
           max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1, cancel_event=None,
-          hooks: dict | None = None, hook_timeout_s: float = 60.0) -> dict:
+          hooks: dict | None = None, hook_timeout_s: float = 60.0,
+          on_event=None) -> dict:
     """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
     until the worker is terminal (or `max_turns` is hit). This is the multi-turn
     slice's core: a ticket is a thread, a turn end is an *event* not a completion,
@@ -293,7 +296,7 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=combined,
                       install_skills=install_skills, cancel_event=cancel_event,
-                      hooks=hooks, hook_timeout_s=hook_timeout_s)
+                      hooks=hooks, hook_timeout_s=hook_timeout_s, on_event=on_event)
     turns = 0
     turn_id = None
     thread_id = None

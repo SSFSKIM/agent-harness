@@ -4,6 +4,10 @@ __pycache__/
 .DS_Store
 .env
 
+# playwright-cli snapshot/console artifacts from local behavioral QA — generated,
+# not source; keep them out of the tree (Codex review flagged the churn risk).
+.playwright-cli/
+
 # Verbatim vendored OpenAI Symphony reference (Apache-2.0) — local oracle only,
 # mirroring the /tmp/symphony-research pattern. Lint-scoped via docs/.harnessignore.
 docs/symphony-original/

@@ -136,6 +136,81 @@ class StatusWriterTest(unittest.TestCase):
         self.assertEqual(snap["run"]["codex_totals"]["total"], 0)
         self.assertIsNone(snap["run"]["rate_limits"])
 
+    # -- Layer-2 in-flight token accrual (live mid-turn cost; spec R1-R3) --------
+    def _usage(self, total):
+        return {"input": total // 2, "output": total // 2, "total": total}
+
+    def test_inflight_tokens_default_none(self):
+        # claimed() seeds the in-flight entry with tokens: None (additive field) —
+        # nothing has accrued yet (R2).
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        self.assertIsNone(self._snap()["in_flight"][0]["tokens"])
+
+    def test_accrue_populates_inflight_and_run_total_live(self):
+        # R1/R2: accrue mid-turn → the in-flight row carries live tokens AND the run
+        # total includes them, with NO ended ticket. Advancing usage moves the total.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        w.accrue("u1", self._usage(400))
+        snap = self._snap()
+        self.assertEqual(snap["in_flight"][0]["tokens"], {"input": 200, "output": 200, "total": 400})
+        self.assertEqual(snap["run"]["codex_totals"]["total"], 400)  # 0 ended + 400 in-flight
+        w.accrue("u1", self._usage(600))                              # turn advances
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 600)  # no new ended ticket
+
+    def test_live_sum_is_ended_plus_inflight(self):
+        # R1: codex_totals = Σ(ended) + Σ(in-flight latest), mirroring seconds_running.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1", "D-1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1", "D-1"), self._tel_summary(1000, ident="D-1"))  # ended 1000
+        w.claimed(_ticket("u2", "D-2"), wave=1, attempt=1)
+        w.accrue("u2", self._usage(400))                                        # in-flight 400
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 1400)
+
+    def test_accrue_then_terminal_no_double_count(self):
+        # R3: a terminating ticket's tokens move live→ended ATOMICALLY (terminal folds
+        # + pops the in-flight entry in one call) → the run total stays continuous,
+        # never doubled.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1", "D-1"), wave=1, attempt=1)
+        w.accrue("u1", self._usage(400))
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 400)  # live
+        w.terminal(_ticket("u1", "D-1"), self._tel_summary(420, ident="D-1"))
+        snap = self._snap()
+        self.assertEqual(snap["in_flight"], [])
+        self.assertEqual(snap["run"]["codex_totals"]["total"], 420)  # final, NOT 400+420
+
+    def test_accrue_unknown_or_terminated_tid_is_noop(self):
+        # Order-independence: a usage event drained after the ticket terminated (its
+        # in-flight entry already popped) is a no-op — no error, no resurrection.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1"), self._tel_summary(100))
+        w.accrue("u1", self._usage(999))   # u1 no longer in flight
+        w.accrue("nope", self._usage(999))  # never seen
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 100)  # unchanged
+
+    def test_accrue_malformed_usage_ignored(self):
+        # R12: a partial/garbage usage payload leaves the in-flight tokens + the run
+        # total unchanged (tolerant — never a wrong value, never raises).
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        w.accrue("u1", {"input": 5})       # missing output/total
+        w.accrue("u1", "garbage")           # not a dict
+        w.accrue("u1", None)
+        self.assertIsNone(self._snap()["in_flight"][0]["tokens"])
+        self.assertEqual(self._snap()["run"]["codex_totals"]["total"], 0)
+
+    def test_no_accrue_run_is_backward_compatible(self):
+        # Additive: a run that never calls accrue is byte-identical to today — the
+        # live sum over an empty/None in-flight token set equals the ended totals.
+        w = ds.StatusWriter(base=self.base)
+        w.claimed(_ticket("u1"), wave=1, attempt=1)
+        w.terminal(_ticket("u1"), self._tel_summary(200))
+        ct = self._snap()["run"]["codex_totals"]
+        self.assertEqual((ct["input"], ct["output"], ct["total"]), (100, 100, 200))
+
     def test_flush_swallows_serialize_error_never_raises(self):
         # R3 contract: a status-write failure (here a non-serializable timestamp)
         # is recorded, never raised — visibility must never break dispatch.

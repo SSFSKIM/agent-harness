@@ -8,6 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.director_min as dmin  # noqa: E402
+import director.history as dh  # noqa: E402
 import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.run as run  # noqa: E402
@@ -161,6 +162,128 @@ class TelemetryPersistenceTest(unittest.TestCase):
         # run aggregate = sum across the 2 tickets; runtime is a live non-negative aggregate
         self.assertEqual(snap["run"]["codex_totals"]["total"], 200)
         self.assertGreaterEqual(snap["run"]["codex_totals"]["seconds_running"], 0.0)
+
+
+class CrossRunHistoryHookTest(unittest.TestCase):
+    """Phase B (R7): a completed run appends ONE summary record to the cross-run history,
+    derived from the final snapshot — and a Noop (visibility-off) run writes nothing."""
+
+    def _run(self, status, hbase, tmp):
+        board = orch.MockBoard.demo()  # u1, u2 ready
+        states = orch.resolve_states(board, "T")
+        orch.run_until_drained(board, command=[sys.executable, MOCK, "usage"],
+                               team="T", states=states, concurrency=2,
+                               workspace_root=Path(tmp) / "ws", status=status,
+                               history_base=hbase)
+
+    def test_run_until_drained_appends_one_history_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hbase = Path(tmp) / "h"
+            self._run(ds.StatusWriter(base=Path(tmp) / "s"), hbase, tmp)
+            recs = dh.read_history(base=hbase)
+        self.assertEqual(len(recs), 1)
+        rec = recs[0]
+        self.assertEqual(rec["stopped_reason"], "drained")
+        self.assertEqual(rec["codex_totals"]["total"], 200)   # 2 tickets × absolute 100
+        self.assertEqual(rec["outcomes"].get("completed"), 2)
+        self.assertEqual(rec["ticket_count"], 2)
+
+    def test_noop_status_writes_no_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hbase = Path(tmp) / "h"
+            self._run(None, hbase, tmp)  # status=None → NoopStatusWriter
+            self.assertEqual(dh.read_history(base=hbase), [])  # history is off when visibility is off
+
+
+class _RecordingStatus:
+    """A StatusWriter spy: records accrue() calls; every other transition is a no-op.
+    Lets a test assert the marshal touches the writer ONLY via accrue, on the main thread."""
+    def __init__(self):
+        self.accrued = []
+
+    def accrue(self, tid, usage):
+        self.accrued.append((tid, usage))
+
+    def __getattr__(self, _name):
+        return lambda *a, **k: None
+
+
+def _usage_event(total):
+    # the absolute-total wrapper extract_usage trusts on any event (§13.5).
+    return {"method": "thread/tokenUsage/updated",
+            "params": {"total_token_usage": {"input": total, "output": 0, "total": total}}}
+
+
+class Layer2AccrualMarshalTest(unittest.TestCase):
+    """M2: per-event usage is observed on the worker-pool thread but applied to the
+    StatusWriter ONLY on the main thread (R13), via a thread-safe queue (R16)."""
+
+    def _state(self, status):
+        return orch._RunState(board=None, states={}, status=status, retry_budget=0,
+                              concurrency=1, queue_base=None, workspace_root=None)
+
+    def test_enqueue_usage_only_puts_never_touches_writer(self):
+        # R13: the worker-thread callback ONLY enqueues — it never calls a writer method.
+        spy = _RecordingStatus()
+        state = self._state(spy)
+        try:
+            state._enqueue_usage("u1", _usage_event(100))
+            self.assertEqual(spy.accrued, [])              # writer untouched off the main thread
+            tid, usage = state.accrual.get_nowait()
+            self.assertEqual((tid, usage["total"]), ("u1", 100))
+            state._enqueue_usage("u1", {"method": "item/completed", "params": {}})  # no usage
+            self.assertTrue(state.accrual.empty())          # extract_usage → None → nothing enqueued
+        finally:
+            state.shutdown()
+
+    def test_enqueue_usage_is_exception_total_never_gates_the_turn(self):
+        # review-reliability P2: the callback fires inside run_turn's read loop, which
+        # does NOT isolate it — a raise would propagate up and fail a healthy turn. It
+        # must be exception-total: a hiccup drops silently, never raises, never enqueues.
+        spy = _RecordingStatus()
+        state = self._state(spy)
+        try:
+            with mock.patch("director.orchestrator.app_server.extract_usage",
+                            side_effect=RuntimeError("boom")):
+                state._enqueue_usage("u1", _usage_event(100))  # must NOT raise
+            self.assertTrue(state.accrual.empty())  # nothing enqueued on the hiccup
+            self.assertEqual(spy.accrued, [])
+        finally:
+            state.shutdown()
+
+    def test_drain_accrual_coalesces_latest_per_tid_on_main_thread(self):
+        # Coalesce: many queued events for a tid → ONE accrue with the LATEST usage
+        # (bounds status.json rewrites to ~one per tick); applied on the main thread.
+        spy = _RecordingStatus()
+        state = self._state(spy)
+        try:
+            state.accrual.put(("u1", {"input": 1, "output": 1, "total": 100}))
+            state.accrual.put(("u1", {"input": 1, "output": 1, "total": 250}))  # newer
+            state.accrual.put(("u2", {"input": 1, "output": 1, "total": 70}))
+            state.drain_accrual()
+            self.assertEqual({tid: u["total"] for tid, u in spy.accrued}, {"u1": 250, "u2": 70})
+            self.assertEqual(len(spy.accrued), 2)            # 3 events coalesced to 2 accrues
+            self.assertTrue(state.accrual.empty())           # fully drained
+        finally:
+            state.shutdown()
+
+    def test_live_accrual_end_to_end_through_drain(self):
+        # The full marshal against a REAL StatusWriter, deterministically (no subprocess
+        # race): claim → enqueue usage (as a worker would) → drain → snapshot shows the
+        # in-flight ticket's LIVE tokens AND the run total including them, before terminal.
+        with tempfile.TemporaryDirectory() as tmp:
+            sdir = Path(tmp) / "s"
+            w = ds.StatusWriter(base=sdir)
+            state = self._state(w)
+            try:
+                w.claimed({"id": "u1", "identifier": "D-1"}, wave=1, attempt=1)
+                state._enqueue_usage("u1", _usage_event(100))
+                state.drain_accrual()
+                snap = ds.read_status(base=sdir)
+                self.assertEqual(snap["in_flight"][0]["tokens"]["total"], 100)
+                self.assertEqual(snap["run"]["codex_totals"]["total"], 100)  # live, pre-terminal
+            finally:
+                state.shutdown()
 
 
 class RunOnceConcurrencyTest(unittest.TestCase):

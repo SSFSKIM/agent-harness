@@ -84,6 +84,46 @@ class BuildViewTest(unittest.TestCase):
         self.assertEqual(v["counts"], {"in_flight": 1, "stuck": 0,
                                        "recent": 1, "pending": 1})
 
+    def test_inflight_live_tokens_pass_through_and_run_total_is_live(self):
+        # Layer-2 (R1/R2): an accrued in-flight ticket → build_view carries
+        # in_flight[].tokens AND run.codex_totals reflects the LIVE (ended+in-flight) sum.
+        w = ds.StatusWriter(base=self.status_dir)
+        w.claimed(_ticket("T1", "ABC-1"), wave=1, attempt=1)
+        w.accrue("T1", {"input": 200, "output": 200, "total": 400})
+        v = self._view()
+        self.assertEqual(v["in_flight"][0]["tokens"], {"input": 200, "output": 200, "total": 400})
+        self.assertEqual(v["run"]["codex_totals"]["total"], 400)  # live, no ended ticket yet
+
+    def test_page_renders_inflight_live_tokens(self):
+        # M3: the in-flight row shows its live tokens (reusing fmtTokens) — the consumer
+        # of the producer's new in_flight[].tokens field.
+        self.assertIn("fmtTokens(e.tokens)", dash.PAGE)
+
+    def test_page_uses_sse_with_poll_fallback_and_legible_rate(self):
+        # M2 (R4/R6): the page prefers EventSource(/api/v1/stream), keeps the ~1s poll as
+        # the fallback path, and renders rate limits via the tolerant helper — never the
+        # raw JSON dump.
+        self.assertIn('new EventSource("/api/v1/stream")', dash.PAGE)
+        self.assertIn("fallbackPoll", dash.PAGE)
+        self.assertIn("setInterval(poll, 1000)", dash.PAGE)        # fallback preserved
+        self.assertIn("fmtRateLimits(run.rate_limits)", dash.PAGE)
+        self.assertNotIn("JSON.stringify(run.rate_limits)", dash.PAGE)  # raw dump removed
+
+    def test_page_poll_fallback_reengages_after_post_delivery_failure(self):
+        # P2 (R4): a stream that delivers and THEN fails permanently must still degrade to
+        # polling — not strand the surface on "reconnecting…" forever. onerror arms a
+        # bounded timer that calls fallbackPoll, fallbackPoll is idempotent (no double
+        # poll loop), and "delivered" is set only after a successful render so a
+        # malformed-only stream cannot suppress the fallback.
+        self.assertIn("setTimeout", dash.PAGE)             # bounded post-delivery outage → poll
+        self.assertIn("fallbackPoll.armed", dash.PAGE)     # idempotent guard against double-start
+
+    def test_page_wires_history_panel(self):
+        # Phase B (R8): the page has a history section it loads from /api/v1/history.
+        self.assertIn('id="history"', dash.PAGE)
+        self.assertIn('fetch("/api/v1/history")', dash.PAGE)
+        self.assertIn("renderHistory", dash.PAGE)
+
     def test_no_run_is_tolerant(self):
         # No status.json (no run) and an empty queue → run:None, zero counts, valid dict.
         v = self._view()
@@ -174,8 +214,9 @@ class DashboardHTTPTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.status_dir = Path(self.tmp) / "director-status"
         self.queue_dir = Path(self.tmp) / "director-queue"
+        self.history_dir = Path(self.tmp) / "director-history"
         _seed_run(self.status_dir)  # so /api/v1/state has real telemetry to serve
-        self.httpd = dash.serve(0, self.status_dir, self.queue_dir)  # port 0 = ephemeral
+        self.httpd = dash.serve(0, self.status_dir, self.queue_dir, self.history_dir)  # port 0 = ephemeral
         self.port = self.httpd.server_address[1]
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
@@ -205,6 +246,53 @@ class DashboardHTTPTest(unittest.TestCase):
         code, ctype, _ = self._req("/")
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
+
+    def test_stream_route_pushes_initial_event(self):
+        # M1 integration (R4): GET /api/v1/stream holds a text/event-stream open and
+        # emits an initial data: frame = the current build_view. Read one frame, then
+        # close (the server's next write fails → its stream loop ends cleanly, R14).
+        url = f"http://127.0.0.1:{self.port}/api/v1/stream"
+        resp = urllib.request.urlopen(url, timeout=2)
+        self.assertIn("text/event-stream", resp.headers.get("Content-Type"))
+        data = None
+        for _ in range(10):
+            line = resp.readline().decode("utf-8")
+            if line.startswith("data:"):
+                data = line[len("data:"):].strip()
+                break
+        resp.close()
+        self.assertIsNotNone(data, "stream should emit an initial data: frame")
+        view = json.loads(data)
+        self.assertEqual(view["run"]["codex_totals"]["total"], 100)  # the seeded run, pushed
+
+    def test_shutdown_clears_serving_so_quiet_streams_end(self):
+        # review P2 (arch+reliability): an in-process shutdown() must signal open SSE
+        # streams to stop (their should_run = serving.is_set) — not leave them lingering
+        # until the next failed write. serving is set while up, cleared on shutdown.
+        self.assertTrue(self.httpd.serving.is_set())
+        self.httpd.shutdown()                          # in-process shutdown
+        self.assertFalse(self.httpd.serving.is_set())  # streams' should_run now False
+        # tearDown's shutdown()/server_close() are idempotent after this.
+
+    def test_history_route_empty_when_no_store(self):
+        # Phase B (R8): no history store yet → [] (tolerant), 200 json.
+        code, ctype, body = self._req("/api/v1/history")
+        self.assertEqual(code, 200)
+        self.assertIn("application/json", ctype)
+        self.assertEqual(json.loads(body), [])
+
+    def test_history_route_returns_seeded_records(self):
+        import director.history as dh
+        dh.append_run({"started_at": "2026-06-19T00:00:00", "stopped_reason": "drained",
+                       "codex_totals": {"total": 100, "seconds_running": 3},
+                       "outcomes": {"completed": 1}}, base=self.history_dir)
+        dh.append_run({"started_at": "2026-06-19T01:00:00", "stopped_reason": "stuck",
+                       "codex_totals": {"total": 250, "seconds_running": 7},
+                       "outcomes": {"completed": 2, "blocked": 1}}, base=self.history_dir)
+        code, _, body = self._req("/api/v1/history")
+        self.assertEqual(code, 200)
+        runs = json.loads(body)
+        self.assertEqual([r["codex_totals"]["total"] for r in runs], [100, 250])  # oldest-first
 
     def test_undefined_route_is_404_envelope(self):
         code, ctype, body = self._req("/nope")
@@ -272,6 +360,83 @@ class DashboardHTTPTest(unittest.TestCase):
                        'btn("requeue"', 'btn("abandon"',
                        'kind === "turnReview"', 'kind === "mergeReview"'):
             self.assertIn(marker, html)
+
+
+class SSEStreamLoopTest(unittest.TestCase):
+    """M1: the SSE push logic is a pure, injectable loop — unit-tested without a socket
+    (the read-dashboard testability lever). Emits a `data:` frame only when the view
+    CHANGES, a `: ping` heartbeat after no-change, and stops on a write disconnect (R14)."""
+
+    def test_emits_initial_frame_then_only_on_change(self):
+        frames = []
+        views = iter([{"a": 1}, {"a": 1}, {"a": 2}])  # initial · unchanged · changed
+        n = {"i": 0}
+        def should_run():
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        dash._stream_loop(frames.append, lambda: next(views), sleep=lambda _: None,
+                          now=lambda: 0.0, should_run=should_run, heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        self.assertEqual(len(datas), 2)              # initial + the change; the unchanged tick emitted nothing
+        self.assertIn(b'"a": 1', datas[0])
+        self.assertIn(b'"a": 2', datas[1])
+
+    def test_heartbeat_after_no_change(self):
+        frames = []
+        clock = {"t": 0.0}
+        n = {"i": 0}
+        def should_run():
+            clock["t"] += 20.0       # advance past heartbeat each tick
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        dash._stream_loop(frames.append, lambda: {"same": 1}, sleep=lambda _: None,
+                          now=lambda: clock["t"], should_run=should_run,
+                          heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        pings = [f for f in frames if f == b": ping\n\n"]
+        self.assertEqual(len(datas), 1)              # only the initial state
+        self.assertEqual(len(pings), 2)              # then heartbeats while unchanged
+
+    def test_stops_on_write_disconnect_without_raising(self):
+        calls = {"n": 0}
+        def write(_b):
+            calls["n"] += 1
+            raise BrokenPipeError()                  # peer gone mid-write
+        n = {"i": 0}
+        def should_run():
+            keep = n["i"] < 5
+            n["i"] += 1
+            return keep
+        dash._stream_loop(write, lambda: {"a": 1}, sleep=lambda _: None, now=lambda: 0.0,
+                          should_run=should_run, heartbeat_s=15.0, poll_s=0.0)  # must NOT raise
+        self.assertEqual(calls["n"], 1)              # returned on the first failed write (R14)
+
+    def test_change_detect_ignores_volatile_generated_at(self):
+        # Regression: build_view() stamps a FRESH generated_at every call, so a naive
+        # whole-payload diff is always "changed" → a data frame every tick and the
+        # heartbeat branch is unreachable. Change-detection must compare a projection
+        # that excludes generated_at: stable content → one frame then heartbeats, but the
+        # SENT frame still carries the timestamp.
+        frames = []
+        clock = {"t": 0.0}
+        n = {"i": 0}
+        def should_run():
+            clock["t"] += 20.0                       # advance past heartbeat each tick
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        def view_fn():                               # content stable, generated_at volatile
+            return {"run": {"x": 1}, "generated_at": "T" + str(clock["t"])}
+        dash._stream_loop(frames.append, view_fn, sleep=lambda _: None,
+                          now=lambda: clock["t"], should_run=should_run,
+                          heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        pings = [f for f in frames if f == b": ping\n\n"]
+        self.assertEqual(len(datas), 1)              # generated_at churn must NOT force frames
+        self.assertEqual(len(pings), 2)              # heartbeats fire while content is unchanged
+        self.assertIn(b'"generated_at"', datas[0])   # …but the pushed frame still carries it
 
 
 class ValidatorUnitTest(unittest.TestCase):
