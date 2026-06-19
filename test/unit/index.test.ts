@@ -42,6 +42,11 @@ describe("public API", () => {
     const _pe: api.PendingEntry = { sessionId: "s", toolUseID: "t", toolName: "Edit", input: {}, createdAt: 0 };
     expect(_pe.toolUseID).toBe("t");
   });
+  it("exports the daemon permission client methods on connectDaemon's return (advanced-seam, increment 4)", () => {
+    const c = api.connectDaemon("/x", (async () => []) as any);
+    expect(typeof c.pendingPermissions).toBe("function");
+    expect(typeof c.respondPermission).toBe("function");
+  });
   it("does NOT export internal plumbing from the package root (boundary curation)", () => {
     for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
       expect(api).not.toHaveProperty(name);

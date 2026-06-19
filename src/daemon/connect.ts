@@ -3,11 +3,14 @@ import type { ListEntry, RestartPolicy } from "./types.js";
 import type { ControlFrame, ControlResponse } from "../bridge/types.js";
 import type { CompactOutcome } from "../compaction/index.js";
 import type { ProactiveStatus, ProactiveConfigInput } from "../proactive/types.js";
+import type { PendingEntry } from "./permissions.js";
+import type { PermissionDecision } from "../permissions/types.js";
 
 /** The minimal daemon-read surface collect() needs (injected → unit-testable without a socket). */
 export interface MonitorClient {
   list(): Promise<ListEntry[]>;
   contextUsage(id: string): Promise<unknown>;
+  pendingPermissions?(): Promise<PendingEntry[]>;
 }
 
 /** The full operator client: the read subset + the drive ops. Each method wraps daemonRequest with the
@@ -22,6 +25,8 @@ export interface DaemonClient extends MonitorClient {
   fork(id: string): Promise<{ id: string; sessionId?: string }>;
   startProactive(id: string, config?: ProactiveConfigInput): Promise<ProactiveStatus>;
   stopProactive(id: string): Promise<void>;
+  pendingPermissions(): Promise<PendingEntry[]>;
+  respondPermission(toolUseID: string, decision: PermissionDecision): Promise<void>;
 }
 
 export type RequestFn = (socketPath: string, op: unknown, onLine?: (o: unknown) => void) => Promise<any[]>;
@@ -50,5 +55,7 @@ export function connectDaemon(socketPath: string, request: RequestFn = daemonReq
     async fork(id) { const r = await one({ op: "fork", id }); return { id: r.id, sessionId: r.sessionId }; },
     async startProactive(id, config) { return (await one({ op: "start_proactive", id, ...(config ? { config } : {}) })).status as ProactiveStatus; },
     async stopProactive(id) { await one({ op: "stop_proactive", id }); },
+    async pendingPermissions() { return (await one({ op: "pending_permissions" })).pending as PendingEntry[]; },
+    async respondPermission(toolUseID, decision) { await one({ op: "permission_response", toolUseID, decision }); },
   };
 }
