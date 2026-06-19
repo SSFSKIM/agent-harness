@@ -54,3 +54,5 @@ The tiers below document intent, not enforced contracts. `stable` exports follow
 | `PermissionBroker` (type) | advanced-seam |
 | `PermissionDecision` (type) | advanced-seam |
 | `PermissionRequest` (type) | advanced-seam |
+| `PendingEntry` (type) | advanced-seam |
+| `DaemonClient.pendingPermissions()` / `DaemonClient.respondPermission()` | advanced-seam |
