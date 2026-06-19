@@ -167,6 +167,20 @@ this is the execution shape.
   the full concurrent run (timing-based bounded-claim test) — failed once in a full-gate run,
   passed 3/3 in isolation and on gate re-run. Unrelated to this work (it uses default states,
   `merging` unconfigured → unchanged path). Noted for the tech-debt tracker if it recurs.
+- 2026-06-19 (review): the spec named only `config.DEFAULTS` + `resolve_states` for R1, but the
+  RUNTIME path `resolve_settings` (orchestrator.py:1089) enumerated the 5 old state keys and
+  **dropped `merging`** — so a `.harness.json director.states.merging` never reached
+  `resolve_states` on the real CLI/daemon path (feature inert in production despite the unit
+  tests passing). Caught by codex spec-compliance (P1). Fixed: added `merging` to the
+  resolve_settings loop + a `--merging-state` CLI flag (parity with the 5 siblings) + a
+  regression test `test_merging_state_flows_from_config_to_runtime`.
+- 2026-06-19 (review): the `run_forever` sweep was initially nested inside `if free > 0:`,
+  coupling merge finalization to free dispatch slots (a saturated pool would delay finalizing a
+  landed parent). The spec's call site says "beside `reconcile_in_flight`" (unconditional) and
+  the docstring says "once per tick". Caught by codex (P1) + arch (withheld SATISFIED) +
+  reliability (P2). Fixed: hoisted to the top of the `if not draining:` block (unconditional,
+  before the poll) + a deterministic regression test `test_run_forever_sweep_runs_under_
+  saturation` (concurrency=0 → free<=0 → the gated version would never sweep).
 
 ## Decision log
 - 2026-06-19: `merge_outcome` helper lives in `director/merger.py` (not the orchestrator) —

@@ -257,7 +257,7 @@ class WiringTest(unittest.TestCase):
 
     def _args(self, **over):
         base = dict(team=None, ready_state=None, started_state=None, done_state=None,
-                    failed_state=None, blocked_state=None, done_types=None,
+                    failed_state=None, blocked_state=None, merging_state=None, done_types=None,
                     concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
                     read_timeout=None, turn_review_timeout=None, reconcile_interval=None,
                     poll_interval=None, backoff_base=None, backoff_cap=None, codex=None,
@@ -282,6 +282,16 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s["team"], "T-cfg")
         self.assertEqual(s["states"]["ready"], "Backlog")
         self.assertEqual(s["states"]["started"], "In Progress")  # default kept
+
+    def test_merging_state_flows_from_config_to_runtime(self):
+        # merge-gated-eligibility R1/R7 (review P1): a configured `merging` must reach the
+        # runtime settings — resolve_settings used to enumerate only 5 state keys, dropping it.
+        from director import orchestrator
+        cfg = config._build({"states": {"merging": "Merging"}})
+        s = orchestrator.resolve_settings(self._args(), cfg)
+        self.assertEqual(s["states"]["merging"], "Merging")
+        self.assertIsNone(orchestrator.resolve_settings(self._args(), config.defaults())
+                          ["states"]["merging"])  # absent → None (inert)
 
     def test_cli_overrides_config(self):
         from director import orchestrator

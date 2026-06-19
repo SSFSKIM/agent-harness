@@ -882,6 +882,11 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                     ev.set()
 
             if not draining:
+                # Merge-gated eligibility (R3): finalize merging→done EACH TICK, before the
+                # poll — unconditional of free slots (like reconcile_in_flight), so a parent
+                # whose PR just landed clears its children's blocker promptly even under a
+                # saturated pool (no-op when `merging` is unconfigured; fail-soft).
+                _reconcile_merges(board, team=team, states=states, queue_base=state.queue_base)
                 # DUE RETRIES (A): re-dispatch any pending whose backoff elapsed (now first
                 # so they count in futures below). Guarded by `not draining` — a shutdown
                 # abandons pending retries (D-81), left In Progress for board-as-truth.
@@ -892,11 +897,6 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 free = concurrency - len(state.futures) - len(pending_retry)
                 blocked: list = []
                 if free > 0:
-                    # Merge-gated eligibility (R3): finalize merging→done BEFORE this tick's
-                    # poll, so a parent whose PR just landed clears its children's blocker on
-                    # the eligibility computation below (no-op when `merging` unconfigured).
-                    _reconcile_merges(board, team=team, states=states,
-                                      queue_base=state.queue_base)
                     # CLAIM RE-ADMISSION (D, D-79): a claim that failed is excluded only
                     # until its backoff elapses — re-admit due ones (transient board hiccup
                     # recovers; a permanent failure just retries at most every `cap`).
@@ -1087,7 +1087,7 @@ def resolve_settings(args, cfg) -> dict:
     `main()` and the tests exercise (precedence R4). `done_types` is the one knob a
     CLI flag delivers as a comma-string vs. the config's tuple."""
     states = {k: _pick(getattr(args, f"{k}_state", None), cfg.states[k])
-              for k in ("ready", "started", "done", "failed", "blocked")}
+              for k in ("ready", "started", "done", "failed", "blocked", "merging")}
     done_types = (tuple(s.strip() for s in args.done_types.split(",") if s.strip())
                   if args.done_types else cfg.done_types)
     return {
@@ -1144,6 +1144,9 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--blocked-state", default=None,
                     help="optional workflow state for a worker-reported blocked terminal "
                          "(else stay started + comment)")
+    ap.add_argument("--merging-state", default=None,
+                    help="optional workflow state a PR-bearing done parks in until the merger "
+                         "lands its PR (merge-gated eligibility; else done immediately)")
     ap.add_argument("--max-turns", type=int, default=None,
                     help="multi-turn drive bound per ticket (R6); over it → stuck")
     ap.add_argument("--concurrency", type=int, default=None)

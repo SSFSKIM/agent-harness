@@ -1653,6 +1653,18 @@ class MergeReconcileTest(unittest.TestCase):
         self._sweep()
         self.assertEqual(self.board._issues["u2"]["state_id"], "st_done")  # u2 unaffected
 
+    def test_run_forever_sweep_runs_under_saturation(self):
+        # review fix: the sweep must run UNCONDITIONALLY each tick, not gated on free slots.
+        # concurrency=0 forces free<=0 every tick, so a sweep nested inside `if free > 0`
+        # would NEVER run — the landed `merging` ticket finalizing proves it is unconditional.
+        dq.append_merge_request("u1", pr="p", attempt=1, base=self.qbase)
+        self._answer("u1", 1, "merged")
+        orch.run_forever(self.board, command=["x"], team="T", states=self.states,
+                         queue_base=self.qbase, concurrency=0, max_ticks=2,
+                         shutdown_event=threading.Event(), force_event=threading.Event(),
+                         install_signals=False, poll_interval_s=0.01)
+        self.assertEqual(self.board.state_name("u1"), "Done")  # finalized despite no free slot
+
 
 class MergeGatedEligibilityE2ETest(unittest.TestCase):
     """Behavioral E2E (merge-gated-eligibility acceptance 6): a child does NOT dispatch
