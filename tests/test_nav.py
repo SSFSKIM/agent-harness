@@ -346,5 +346,28 @@ class TestNavTreeCycle(unittest.TestCase):
             self.assertEqual(back["children"], [])  # and not re-expanded
 
 
+class TestNavTreeDedup(unittest.TestCase):
+    def test_duplicate_links_collapse_in_tree_not_relations(self):
+        # asymmetric dedup: relations() is faithful 1:1 to the link list, but the
+        # tree/adjacency view collapses repeated (src,dst) to one child.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _page(root / "docs/exec-plans/active/p.md",
+                  ["status: active", "last_verified: 2026-06-19", "owner: h",
+                   "type: exec-plan", "description: links target twice."],
+                  body="[s](../../product-specs/s.md) and again "
+                       "[s](../../product-specs/s.md)\n")
+            _page(root / "docs/product-specs/s.md",
+                  ["status: stable", "last_verified: 2026-06-19", "owner: h",
+                   "type: product-spec", "description: target."])
+            records = nav.build_index(root)
+            edges = [e for e in nav.relations(records)
+                     if e["dst"] == "docs/product-specs/s.md"]
+            self.assertEqual(len(edges), 2)  # relations: faithful to the links
+            t = nav.tree(records, "docs/exec-plans/active/p.md")
+            kids = [c["path"] for c in t["children"]]
+            self.assertEqual(kids.count("docs/product-specs/s.md"), 1)  # tree: once
+
+
 if __name__ == "__main__":
     unittest.main()
