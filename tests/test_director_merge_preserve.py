@@ -178,6 +178,14 @@ class UnresolvedThreadCountTest(unittest.TestCase):
     def test_gh_error_is_none(self):
         self.assertIsNone(mp.unresolved_thread_count(_PR, run=_hygiene_run(graphql_rc=1)))
 
+    def test_second_page_fails_closed(self):
+        # >100 threads (hasNextPage) → cannot confirm zero unresolved from page 1 → None.
+        def run(argv, **kw):
+            return _FakeProc(0, json.dumps({"data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": [{"isResolved": True}],
+                                  "pageInfo": {"hasNextPage": True}}}}}}))
+        self.assertIsNone(mp.unresolved_thread_count(_PR, run=run))
+
 
 if __name__ == "__main__":
     unittest.main()

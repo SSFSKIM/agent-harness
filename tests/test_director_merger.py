@@ -721,6 +721,32 @@ class GateIntegrationTest(unittest.TestCase):
             merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
         self.assertIn("protocol_misfire", buf.getvalue())
 
+    def test_no_sweep_evidence_logged_when_absent(self):
+        # R5 audit: a done WITHOUT evidence still lands, and the merger logs the degraded case.
+        import contextlib
+        import io
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)})
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertEqual(results[0]["result"], "merged")        # lands despite no evidence
+        self.assertIn("no_sweep_evidence", buf.getvalue())
+
+    def test_evidence_verified_logged_on_consistent_clean(self):
+        import contextlib
+        import io
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws",
+                                evidence={"checks_state": "green", "unresolved_threads": 0},
+                                base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)})
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertIn("sweep_evidence_verified", buf.getvalue())
+
     def test_merger_module_has_no_board_import(self):
         # R6: the merger stays board-free — the queue is its only hand-off.
         src = Path(merger.__file__).read_text()

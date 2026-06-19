@@ -1,9 +1,9 @@
 ---
 name: land
 description:
-  Land a PR by monitoring conflicts, resolving them, waiting for checks, and
-  squash-merging when green; use when asked to land, merge, or shepherd a PR to
-  completion.
+  Prepare a PR to land — monitor and resolve conflicts, keep CI green, reply to and
+  resolve review threads — then report it ready; the serialized merger performs the
+  squash-merge after its code gate. Use when asked to land, merge, or shepherd a PR.
 ---
 
 # Land

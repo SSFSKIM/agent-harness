@@ -52,6 +52,8 @@ MERGE_REQUEST_KIND = "mergeRequest"
 # config.DEFAULTS["merger"]["max_merges"] (single source); a host overrides via
 # .harness.json director.merger.max_merges (merger.main resolves the live value).
 DEFAULT_MAX_MERGES = config.DEFAULTS["merger"]["max_merges"]
+# Aliased from DEFAULTS (ARCHITECTURE invariant 5: no parallel default literal in director/).
+DEFAULT_REQUIRE_RESOLVED_THREADS = config.DEFAULTS["merger"]["require_resolved_threads"]
 
 _LAND_PROMPT = """\
 You are the PR-MERGER landing ONE pull request. Follow the `land` skill exactly:
@@ -290,23 +292,35 @@ def _finalize_merge(req: dict, *, intended, require_resolved_threads: bool,
             "gate_reason": "gh pr merge failed (fail-closed)"}
 
 
-def _log_misfire(req: dict, fin: dict) -> None:
-    """R4 audit: if the worker's self-reported sweep evidence claimed the PR was clean but
-    the code gate WITHHELD it, emit a structured protocol-misfire line (the worker's sweep
-    missed something the merger caught) for the human/Director to learn from. Best-effort —
-    no evidence (R5 degraded) means nothing to compare; never raises."""
+def _log_evidence_audit(req: dict, fin: dict) -> None:
+    """R4/R5 audit: record the worker's self-reported sweep evidence vs what the code gate
+    independently verified, on a finalized (merged/escalated) result. Three structured lines:
+      - no evidence (R5 degraded)            → `no_sweep_evidence`;
+      - evidence + gate withheld a claim-clean PR → `protocol_misfire` (the sweep missed
+        something the merger caught — the signal the human/Director learns from);
+      - evidence + consistent                → `sweep_evidence_verified`.
+    Skipped for `deferred` (verification is incomplete — CI still pending). Best-effort;
+    never raises (a daemon-diagnostic line, like the orchestrator's `*_skipped` logs)."""
+    result = fin.get("result")
+    if result == "deferred":
+        return
+    ticket = req.get("ticket_id")
     ev = (req.get("payload") or {}).get("evidence") or {}
     if not ev:
+        print(json.dumps({"merger": "no_sweep_evidence", "ticket": ticket,
+                          "verified_result": result}), file=sys.stderr)
         return
     claimed_clean = ev.get("checks_state") in (None, "green") and not ev.get("unresolved_threads")
-    if claimed_clean and fin.get("result") == "escalated":
-        print(json.dumps({"merger": "protocol_misfire", "ticket": req.get("ticket_id"),
-                          "claimed": ev, "gate_reason": fin.get("gate_reason")}),
-              file=sys.stderr)
+    misfire = claimed_clean and result == "escalated"
+    print(json.dumps({"merger": "protocol_misfire" if misfire else "sweep_evidence_verified",
+                      "ticket": ticket, "claimed": ev, "verified_result": result,
+                      "gate_reason": fin.get("gate_reason"), "misfire": misfire}),
+          file=sys.stderr)
 
 
 def process_request(req: dict, *, driver: Callable = run.drive,
-                    decide: Callable = autonomous_decide, require_resolved_threads: bool = True,
+                    decide: Callable = autonomous_decide,
+                    require_resolved_threads: bool = DEFAULT_REQUIRE_RESOLVED_THREADS,
                     sh=subprocess.run, finalize: Callable = _finalize_merge,
                     **drive_kwargs) -> dict:
     """Run ONE merge request: capture the PR's intended diff, drive the land lane to PREPARE
@@ -330,12 +344,13 @@ def process_request(req: dict, *, driver: Callable = run.drive,
         return {**base, "result": classify(disp), "disposition": disp}
     fin = finalize(req, intended=intended,
                    require_resolved_threads=require_resolved_threads, run=sh)
-    _log_misfire(req, fin)
+    _log_evidence_audit(req, fin)
     return {**base, "disposition": disp, **fin}
 
 
 def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonomous_decide,
-          max_merges: int = DEFAULT_MAX_MERGES, require_resolved_threads: bool = True,
+          max_merges: int = DEFAULT_MAX_MERGES,
+          require_resolved_threads: bool = DEFAULT_REQUIRE_RESOLVED_THREADS,
           sh=subprocess.run, finalize: Callable = _finalize_merge, **drive_kwargs) -> list[dict]:
     """Drain the merge queue SERIALLY: pop the oldest pending PR, run it through the land
     lane + code gate, mark it consumed (or DEFER it), repeat — one PR in flight at a time
@@ -380,7 +395,8 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
 
 def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
              decide: Callable = autonomous_decide, max_merges: int = DEFAULT_MAX_MERGES,
-             require_resolved_threads: bool = True, **drive_kwargs) -> int:
+             require_resolved_threads: bool = DEFAULT_REQUIRE_RESOLVED_THREADS,
+             **drive_kwargs) -> int:
     """The standalone merger's body: drain the merge queue, then either exit (`once`) or
     keep watching for new PRs (the drain-runner; spec Open Q resolved to a standalone,
     event-woken process — D-47/R7). `once` runs a single drain pass and returns (cron /

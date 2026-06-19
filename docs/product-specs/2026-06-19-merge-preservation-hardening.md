@@ -86,8 +86,13 @@ Each R is independently verifiable (a human can check the stated condition).
   Verifiable: the skill text directs an explicit preservation check + escalate-on-
   doubt before declaring the PR ready.
 - **R3 — Hygiene gate (code, secondary).** Before a PR lands, code verifies via
-  `gh`: (a) the PR's required checks are **green**, and (b) there are **zero
-  unresolved review threads**. Tri-state outcome:
+  `gh`: (a) the PR's **CI checks** (the `statusCheckRollup`) are **green**, and (b)
+  there are **zero unresolved review threads**. *(a) classifies the whole rollup, not a
+  "required" subset: this repo runs no branch-protection required checks (the land
+  lane's local integration gate is the real test gate), and "a bad merge is worse than a
+  delayed one" makes blocking on **any** red check the fail-safe direction — a
+  non-required check the Director judges irrelevant is cleared via the
+  approve-and-requeue path, same as a tripwire false-positive.* Tri-state outcome:
   - **green** → proceed to land;
   - **failing** → withhold + escalate (`mergeReview`, reason = which check failed);
   - **pending** (CI still running, e.g. re-triggered by the merger's rebase) →

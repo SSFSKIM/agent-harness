@@ -302,4 +302,34 @@ The spec fixed the design; these are the build choices:
 
 ## Feedback (from completion gate)
 
+**Round 1 (2026-06-19).** review-spec-compliance (codex gpt-5.5) → **NOT-SATISFIED**;
+review-arch (Claude persona) → **SATISFIED**. Findings processed:
+- **P1 (codex) — audit incomplete (R4/R5).** `_log_misfire` only logged contradictions; the
+  spec requires recording claim-vs-verified AND a "no sweep evidence" log. **Fixed:**
+  `_log_evidence_audit` emits `no_sweep_evidence` / `protocol_misfire` / `sweep_evidence_verified`
+  on every finalized (non-deferred) result. +2 tests.
+- **P1 (codex) — hygiene gated all checks, spec said "required".** **Fixed by clarifying the
+  spec** (R3-vs-Design imprecision; the Design always said "classify the rollup"): R3 now reads
+  "CI checks (the statusCheckRollup)", with a recorded rationale — this repo runs no required
+  checks, blocking on any red check is the fail-safe direction, and a non-required red is
+  cleared via approve-and-requeue. `classify_checks` gains the same comment.
+- **P1 (codex) — reviewThreads `first:100` could miss page 2.** **Fixed:** the query requests
+  `pageInfo{hasNextPage}` and `unresolved_thread_count` fails closed (None → withhold) when
+  there is a next page. +1 test.
+- **P2 (codex) — land skill frontmatter still advertised "squash-merging".** **Fixed:** the
+  description now says it prepares the PR and the merger lands it.
+- **P2 (arch) — `require_resolved_threads` default literal duplicated DEFAULTS** (ARCHITECTURE
+  invariant 5). **Fixed:** `DEFAULT_REQUIRE_RESOLVED_THREADS` aliased from DEFAULTS, used as the
+  signature default in process_request/drain/run_loop.
+- **P2 (arch) — a deferred (CI-pending) PR re-drives the FULL land lane on every poll** (the
+  spec's "no busy-spin" intent; the per-pass `deferred` set prevents head-of-line within a pass
+  but not cross-poll re-drive). **Tracked** (tech-debt-tracker) — the correct fix needs cross-poll
+  prepared+intended state so a re-check runs the gate only; not a correctness/data-loss bug
+  (the PR is never wrongly landed or lost), so fix-forward per arch's P2 rating.
+- **Proposed rules (arch, non-blocking) — tracked:** (1) a DESIGN.md note that merger `gh` calls
+  address the PR by full URL (cwd-independent); (2) a rule clarifying misfire scope (worker-claim-
+  false vs gate-caught-uncovered). Below P2; promote on recurrence.
+
+Re-review (spec-compliance re-run + reliability + code-quality) follows the gate re-run.
+
 ## Outcomes & retrospective

@@ -52,7 +52,7 @@ _PENDING_STATUS = {"QUEUED", "IN_PROGRESS", "PENDING", "WAITING", "REQUESTED"}
 _THREADS_QUERY = (
     "query($owner:String!,$repo:String!,$number:Int!){"
     "repository(owner:$owner,name:$repo){pullRequest(number:$number){"
-    "reviewThreads(first:100){nodes{isResolved}}}}}"
+    "reviewThreads(first:100){nodes{isResolved} pageInfo{hasNextPage}}}}}"
 )
 
 # A path's added lines must fall to <= this fraction of the intended count AND by at least
@@ -111,7 +111,12 @@ def classify_checks(rollup: list | None) -> str:
     Each entry is a CheckRun (has `status`/`conclusion`) or a StatusContext (has `state`).
     Precedence: any failed completed check → "failing"; else any unfinished check →
     "pending"; else "green". An empty/None rollup → "green" (no checks to fail — this repo
-    has no required checks, so a PR with none lands on the integration gate alone, R5)."""
+    has no required checks, so a PR with none lands on the integration gate alone, R5).
+
+    We classify the WHOLE rollup, not a "required" subset (spec R3): this repo runs no
+    branch-protection required checks, and blocking on ANY red check is the fail-safe
+    direction ("a bad merge is worse than a delayed one"). A non-required check the Director
+    deems irrelevant is cleared via approve-and-requeue, like a tripwire false-positive."""
     any_pending = False
     for c in rollup or []:
         status = (c.get("status") or "").upper()
@@ -159,8 +164,13 @@ def unresolved_thread_count(pr: str, *, run=subprocess.run) -> int | None:
                      "-f", f"owner={owner}", "-f", f"repo={repo}", "-F", f"number={number}"],
                     run=run)
     try:
-        nodes = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]
+        nodes = threads["nodes"]
     except (TypeError, KeyError):
+        return None
+    # Fail-closed if there is a second page (>100 threads): we cannot confirm zero unresolved
+    # from page 1 alone, so withhold rather than risk landing over an unresolved thread.
+    if (threads.get("pageInfo") or {}).get("hasNextPage"):
         return None
     return sum(1 for n in nodes if not n.get("isResolved", False))
 
