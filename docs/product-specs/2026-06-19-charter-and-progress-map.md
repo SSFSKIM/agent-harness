@@ -45,11 +45,24 @@ roadmap, the progress state, and the pivot/evolution log are all *derived*.
 ## Requirements
 
 - **R1 — Repo charter.** `docs/CHARTER.md` exists with `type: charter` and these
-  sections: **Mission** (why the repo exists / the ultimate goal), **What "done"
-  looks like** (top-level success, observable), **Locked assumptions** (the
-  explicit human↔AI assumptions taken as given — the anti-drift contract), and
-  **Initiatives** (one line per major initiative, each linking its parent spec).
-  Verifiable: file exists, sections present, gate GREEN.
+  five sections:
+  - **Mission** — why the repo exists / the ultimate goal.
+  - **What "done" looks like** — top-level success, observable.
+  - **Design philosophy (기획의도)** — the connected product-conception reasoning:
+    *why the product is shaped this way* and the deliberate tradeoffs consciously
+    taken. Each strand is one line + a pointer to the design-doc/ADR that
+    elaborates (depth stays behind the pointer — map, not encyclopedia; no new doc
+    type). This is the layer **pivots mutate**, so it pairs with the derived
+    evolution view (R6).
+  - **Locked assumptions** — the fixed **axioms** taken as given and *not
+    re-litigated* (the anti-drift floor). Distinct in kind from Design philosophy:
+    an axiom is a given we don't revisit; a philosophy strand is *chosen reasoning*
+    we believe in but that may mature or pivot. (A strand that turns out to be
+    truly fixed graduates into an assumption; a "given" we find ourselves
+    re-arguing was really a philosophy strand.)
+  - **Initiatives** — one line per major initiative, each linking its parent spec.
+
+  Verifiable: file exists, all five sections present, gate GREEN.
 - **R2 — Orient wiring.** The self-host `AGENTS.md` operating-model step 1
   ("Orient") names the charter as the first read; the `harness-init`
   `agents-md.md` template does the same (host-agnostic wording). Verifiable: both
@@ -71,11 +84,14 @@ roadmap, the progress state, and the pivot/evolution log are all *derived*.
   persisted). A plan lacking `phase` **inherits** it from the spec it
   `implements` (via the existing `relations()` edge). `--json` for machines.
   Verifiable: command groups real specs by phase with live status.
-- **R6 — Pivots visible.** The roadmap annotates a node with its inferred
-  `superseded-by` / `refined-by` edge (reusing nav's `INVERSE`), so a design
-  pivot shows inline (e.g. `spec X  [superseded-by Y]`) and the ADR rationale is
-  one link away. No separate hand-maintained changelog. Verifiable: a superseded
-  node renders its successor.
+- **R6 — Pivots visible (the evolution view).** The roadmap annotates a node with
+  its inferred `superseded-by` / `refined-by` edge (reusing nav's `INVERSE`), so a
+  design pivot shows inline (e.g. `spec X  [superseded-by Y]`) and the ADR
+  rationale is one link away. This is the derived counterpart to the charter's
+  **Design philosophy** strands — a pivot is an ADR/spec that supersedes or
+  refines a strand, and this view is *how the 기획의도 moved over time*. No
+  separate hand-maintained changelog. Verifiable: a superseded node renders its
+  successor.
 - **R7 — Portability (belief 13).** The `phase` key + `charter` type ship via
   `KNOWLEDGE_FORMAT.md` (a MACHINE_DOC, propagated byte-identical, with the
   `harness-init` host template bumped identically); the `roadmap` command lives
@@ -93,7 +109,12 @@ roadmap, the progress state, and the pivot/evolution log are all *derived*.
 
 **The split.** One authored seed (the charter) + four derived views (roadmap,
 progress state, parent linkage, pivot log). Nothing about progress is
-hand-maintained.
+hand-maintained. The charter itself splits two kinds of content by *volatility*:
+**Locked assumptions** are axioms (stable — they do not appear in the evolution
+view because they do not move), while **Design philosophy (기획의도)** is chosen
+reasoning that matures — each philosophy strand is exactly what a pivot mutates,
+so the strand (authored, current) and the derived evolution view (R6, *how it
+moved*) are two halves of the same thing.
 
 **Components & changes**
 
