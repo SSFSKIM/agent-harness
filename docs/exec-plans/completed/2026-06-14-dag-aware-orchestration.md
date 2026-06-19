@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [orchestrator, dag, dispatch, director]
+description: Made the orchestrator re-poll until the ticket DAG is drained, dispatching only tickets that are ready and whose blocked_by blockers are all done, so a chained A→B→C run dispatches in dependency order and ends with stopped_reason "drained".
 base_commit: 64ab600a5dceb2d0501889d7406938444991357d
 review_level: standard
 ---

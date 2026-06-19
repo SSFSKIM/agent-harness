@@ -1,7 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-12
+last_verified: 2026-06-18
 owner: harness
+type: limitation
+tags: [memory, progress, staleness, hooks]
+description: Work via external orchestrators (no SessionEnd/PreCompact hooks) leaves progress/current.md stale unless the committing agent updates it explicitly.
 ---
 # Progress staleness when work bypasses hooked sessions
 

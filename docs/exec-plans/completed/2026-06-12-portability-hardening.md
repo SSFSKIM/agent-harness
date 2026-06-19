@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: harness
+type: exec-plan
+tags: [portability, porting, lint, scaffold, reliability]
+description: Hardened the harness for porting into other hosts by removing self-host layout assumptions, adding scaffold/lint coverage for every doc the machine reads, mechanically gating commits via a pre-commit hook, and adopting cheap upstream practices.
 base_commit: 3744c4e8bc175cd82e8d0a43cd1841713428fb66
 ---
 # Portability hardening + upstream adoptions (gap-analysis must-fix)

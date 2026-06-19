@@ -215,3 +215,47 @@ owner: harness
   pending→defer; threads-knob configurable) and only then squash-merges. Sweep result becomes
   structured `report_outcome` evidence the merger audits (R4, claim-vs-verified misfire log).
   Additive; merger stays board-free; `check.py`-on-rebased-main stays the independent second net.
+- [Knowledge Format evolution — OKF 기반 키 + versioned 포맷 spec (Phase 1)](2026-06-18-knowledge-format-evolution.md)
+  — [`okf-comparison.md`](../design-docs/okf-comparison.md) 가 고른 채택안을 집행: optional
+  frontmatter 키 `type`(머신리더블 concept-kind, 디렉토리와 직교) + `tags`(flow 인라인 리스트,
+  cross-cutting facet) + `resource`(페이지↔코드 자산 바인딩, Phase-2 drift 감지 선행) 추가 —
+  모두 optional, 린트 permissive 유지(D3 불변). 평면 `read_frontmatter` 를 리스트 인식하도록
+  additive 업그레이드(스칼라 byte-불변, OKF 블록폼 read-tolerant). 포맷을 implicit-in-lint →
+  explicit `docs/KNOWLEDGE_FORMAT.md`(KF v1.0, conformance↔D-rule 매핑)으로 굳힘. memory
+  concept-page 대표 backfill. 쿼리/navigation tool 은 Phase 2(별도 spec). 보호/포팅 wiring 은
+  NG-4 로 연기.
+- [Knowledge navigation tool — live query over the Phase-1 format (Phase 2)](2026-06-18-knowledge-navigation-tool.md)
+  — Phase 1 포맷의 *consumer*. `plugin/scripts/nav.py`(library+CLI) + `docs-nav` 스킬이
+  `type`/`tags`/`description`/`resource` + D5 링크 그래프를 **live**(매 호출 frontmatter 에서
+  재계산, 영속 artifact 0)로 쿼리: `catalog`(type/tag/status 필터, `--json`, 바디 안 읽음),
+  `links`/`backlinks`, `stale`(D4 재사용), `orphans`, `drift`(resource 의 git last-commit vs
+  `last_verified`, advisory). `LINK`/staleness 를 `harness_lib` 로 추출해 lint·nav 단일 정의
+  (core-belief 5). 커밋 catalog/생성 index.md/graph view(viz.html) 모두 NON-GOAL — index.md 는
+  curation 유지(NG-2 reframe), agent-소비 우선. 게이트 비차단(read-only, on-demand).
+  포팅: 도구·스킬이 `plugin/` 에 있어 자동 동행 + AGENTS.md/템플릿 포인터(belief 13).
+- [Derived hierarchy — inferred typed graph + `nav.py tree`](2026-06-19-nav-derived-hierarchy.md)
+  — Phase 2 nav 의 후속(typed-link Step 1). 새 frontmatter 키 없이 `(src.type,
+  dst.type, 링크방향)` 에서 관계종류를 **추론**(`implements`/`refines`/`supersedes`/
+  `grounded-in`; 미매칭은 untyped `links` 로 graceful)하는 `relations()` + 디렉토리를
+  안 보고 frontmatter+링크만으로 **유도 계층(derived hierarchy)** 을 그리는 `nav.py
+  tree`(forward=의존, `--reverse`=의존받음, cycle-safe). 한 트리에 ≥2 디렉토리 페이지가
+  관계로 묶여 "구조 = 메타데이터의 projection(디렉토리 아님)" 을 눈으로 증명. read-only·
+  live·게이트 비차단. 선언적 typed 키(KF v1.1)·viz.html·파일 재배치는 NON-GOAL. draft.
+- [Charter & derived progress map — 의도 레이어](2026-06-19-charter-and-progress-map.md)
+  — 긴 세션에서 묻히는 초기 빅픽처/기획 의도를 잡는 메타-docs 레이어. **author 하는 건
+  하나** — 최상위 `docs/CHARTER.md`(`type: charter`, 5 섹션: mission + "done" +
+  **Design philosophy(기획의도)**(왜 이렇게 빚었나 — 선택된 추론, pivot이 바꾸는 층,
+  evolution view 와 짝) + **Locked assumptions**(안 따지는 axiom, anti-drift 바닥) +
+  Initiatives), Orient 스텝 1에 편입. **나머지는 전부 derive**: 메서드론이 약속만 하고 미구현이던 derived
+  roadmap 을 실제로 — 구조화된 optional `phase` 키(KF v1.1) + `nav.py roadmap` 가
+  initiative→phase→status 를 typed 그래프에서 projection(디렉토리 무관, 영속 0, plan 은
+  `implements` 로 phase 상속), pivot 은 supersedes/refines 엣지로 인라인 표시(손으로 쓰는
+  logs.md 아님). 포팅: 키/타입은 KNOWLEDGE_FORMAT 으로 byte-전파, charter 는 FILL
+  템플릿 seed. 선언적 typed 키·viz.html·파일 재배치·enforcement 는 NON-GOAL.
+  `2026-06-19-nav-derived-hierarchy.md` 의 후속(그 typed 그래프 위에 projection). draft.
+- [Map depth — declared pivots + follow-up drill-down](2026-06-19-map-depth-pivots-followups.md)
+  — charter-rooted `map` 위에 두 깊이 레이어. **③ pivot**: KF에 선언적 `supersedes` 키(KF
+  v1.2, 첫 declared edge — 진짜 pivot인 supersession만) → roadmap/map에 `[superseded-by]`
+  inline(희소·load-bearing). **② follow-up**: `nav.py followups`가 tech-debt-tracker 행을
+  source 노드별로 묶는 drill-down + map에는 `[N follow-ups]` **카운트 배지**만(다량·맥락적이라
+  inline 안 함 — volatility 원칙, pivot-flood 회피). charter-and-progress-map 후속. draft.

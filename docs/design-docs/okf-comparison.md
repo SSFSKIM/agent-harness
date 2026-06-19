@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-17
 owner: harness
+type: design-doc
+tags: [okf, knowledge-format, comparison, parity]
+description: A holistic comparison of Google's Open Knowledge Format against this harness's docs and memory knowledge system.
 ---
 # OKF parity — Google's Open Knowledge Format vs our docs/memory system
 
@@ -235,7 +238,14 @@ exchangeable* as OKF's while keeping it as *fresh and governed* as it already is
 
 ## 6. Derived work
 
-If adoptions 1–3 are pursued, they need a product-spec (new optional frontmatter
-keys, `lint_docs.py` left permissive on them, `docs-tree` + `MEMORY.md` updated).
-Adoption 4 (graph view) is a standalone script + ExecPlan. None is committed work
-until specced; this doc is the observational comparison the OKF track cites.
+Adoptions 1–3 + 5 are specced as Phase 1:
+[`../product-specs/2026-06-18-knowledge-format-evolution.md`](../product-specs/2026-06-18-knowledge-format-evolution.md)
+— optional `type`/`tags`/`resource` keys (lint stays permissive), a flat-parser
+list upgrade, and a versioned `docs/KNOWLEDGE_FORMAT.md` formalizing the
+implicit-in-lint format. The navigation/consumer half (adoptions 1–4's read side)
+is Phase 2:
+[`../product-specs/2026-06-18-knowledge-navigation-tool.md`](../product-specs/2026-06-18-knowledge-navigation-tool.md)
+— a live-query `nav.py` tool + `docs-nav` skill (catalog/backlinks/stale/drift).
+It consciously **declines adoption 4's `viz.html`**: the consumer here is the
+agent (queries JSON), not a human browsing, so the graph view is deferred. This
+doc remains the observational comparison both phases cite.

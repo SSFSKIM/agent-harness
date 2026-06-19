@@ -2,6 +2,9 @@
 status: archived
 last_verified: 2026-06-12
 owner: imprint-job
+type: session-digest
+tags: [e2e-test, recursion-guard, documentation, no-op]
+description: Session digest for an e2e test where a request to comment on the HARNESS_HEADLESS recursion guard in harness_lib.py resulted in no changes because the guard was already self-documenting.
 ---
 # Session 2026-06-12 — e2e test / recursion guard review
 

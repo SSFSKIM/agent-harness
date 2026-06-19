@@ -2,6 +2,9 @@
 status: active
 last_verified: 2026-06-17
 owner: harness
+type: methodology
+tags: [principles, decision-taste, lights-out, director]
+description: The human's decision-making principles written down so the Director can simulate the call the human would make at a taste fork instead of waking them.
 ---
 # PRINCIPLES.md — the human's externalized decision-taste
 

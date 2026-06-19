@@ -21,6 +21,11 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
   scaffold.py after moving the repo or plugin and the hook is rewritten).
   Must be GREEN before every commit; the `harness-lint` skill interprets
   failures. `--no-verify` only for emergencies — fix forward right after.
+- Navigate docs: the `docs-nav` skill runs `nav.py` (alongside the gate's
+  `check.py` in the plugin) — read-only over the corpus, queried from frontmatter
+  + the link graph instead of bulk-reading: `map`/`roadmap` (the whole picture /
+  progress), `tree`/`relations` (typed relationships), `catalog`/`links`/
+  `backlinks`, `followups`, and `stale`/`orphans`/`drift`. Not in the gate.
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
   `HARNESS_TEST_CMD="pytest -q"`) or `.harness.json` `test_cmd`; default is
   unittest discovery when a `tests/` directory exists, skipped otherwise.
@@ -64,8 +69,10 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
 Procedure for a new harness-managed page: kebab-case filename → frontmatter
-(`status / last_verified / owner`) → write → register in that directory's
-`index.md` → cross-link → run the gate (the `docs-tree` skill owns this).
+(required `status / last_verified / owner`; optional `type / tags / resource /
+title / description` per `docs/KNOWLEDGE_FORMAT.md`) → write → register in that
+directory's `index.md` → cross-link → run the gate (the `docs-tree` skill owns
+this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md`.
 Host-owned project roots may use the structure that best fits the repo unless
 they are opted into managed governance.
 

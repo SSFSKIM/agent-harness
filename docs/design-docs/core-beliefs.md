@@ -1,7 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-14
+last_verified: 2026-06-18
 owner: harness
+type: design-doc
+tags: [core-beliefs, golden-rules, agent-first]
+description: The agent-first golden rules that serve as defaults for the self-hosting reference repo and seed material that hosts adopt, amend, or reject at harness-init.
 ---
 # Core beliefs (golden rules)
 
@@ -41,3 +44,16 @@ violations should become blocking lints.
     `product-design` skill); otherwise it stays a thin inline layer in the
     ExecPlan. Pick the entry mode (throwaway / Product Design / ExecPlan) by
     judgment, not a fixed gate.
+13. **General by identity; harness changes propagate to the portable layer.**
+    The harness exists to be a portable, adaptable substrate for *any* repo;
+    this self-hosting repo (`plugin/` + its own `docs/`) is the machine's first
+    host and proving ground, **not the destination**. So any change to how the
+    harness *works* must land in the **portable layer** — `plugin/` code,
+    `harness-init` templates, `scaffold.py` seeds, generic skills — and stay
+    host-agnostic (no self-host paths; lint S7), not only in self-host `docs/`.
+    **What lands only self-host does not exist for ported hosts.** Mechanize the
+    propagation wherever possible (e.g. every machine doc must have a scaffold
+    seed — `tests/test_scaffold.py::test_machine_docs_all_propagate_to_hosts`);
+    where a check can't, it is a completion/handoff checklist item. (This rule is
+    itself self-host *development* discipline — it is not a default a host project
+    adopts, so it is not seeded into the host `core-beliefs.md` template.)

@@ -2,6 +2,10 @@
 status: draft
 last_verified: 2026-06-16
 owner: harness
+phase: symphony/04-worker-qa-merge
+type: product-spec
+tags: [worker, qa, merger, pr-merge]
+description: Has workers self-QA and open a PR, then routes done-and-QA'd PRs through a serialized merge queue where a single PR-merger rebases and squash-merges one at a time, escalating only conflicts, risk, or taste to the Director.
 ---
 # 워커 self-QA + 직렬화된 PR-merge (Phase 4 꼬리)
 

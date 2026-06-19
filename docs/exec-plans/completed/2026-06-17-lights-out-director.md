@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-17
 owner: harness
+type: exec-plan
+tags: [director, autonomy, worker, board]
+description: Makes the harness ready for a human-absent Director by adding a PRINCIPLES.md seed, a lights-out decision procedure and three-mode model in DIRECTOR.md, an issueUpdate authority refusal, and a canonical board progress-comment discipline for the worker.
 base_commit: 1a2efd08b6a1169003d732dbe738b3197ce4cdd2
 review_level: targeted
 ---

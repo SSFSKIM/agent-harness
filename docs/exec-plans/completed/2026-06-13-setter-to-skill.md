@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: harness
+type: exec-plan
+tags: [architecture, taste, skill, enforcement, host-governance]
+description: Reworked architecture and taste enforcement setup to be driven by a skill the main agent follows with full repo context rather than a dispatched persona, routing each concern to its right enforcement FORM — deterministic lint, host guide-skill, persona review, or fix-forward.
 base_commit: 35deac5df7fd5efd08d289ba865f95d29e360322
 ---
 # Architecture-setter: agent → skill, output FORM-routed

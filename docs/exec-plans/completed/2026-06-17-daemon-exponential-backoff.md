@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-17
 owner: harness
+type: exec-plan
+tags: [daemon, director, reliability]
+description: Gives the daemon exponential backoff so a failed worker is re-dispatched after a growing delay, an idle daemon grows its poll interval on a quiet board, and a failed claim is re-admitted after a backoff, while batch paths keep immediate retry.
 base_commit: c78dce4
 review_level: standard
 ---

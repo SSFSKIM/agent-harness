@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [orchestrator, dispatch, worker, reconcile, director]
+description: Built the thin watched orchestrator loop that polls a board for ready tickets, dispatches them to workers up to a concurrency cap, reconciles each result back to the board (success→Done, failure→one retry→failure comment), and routes approval requests through a shared queue for the Director to answer.
 base_commit: ef5c0e641abf4bd7fdcb9bbae6f4975aecfe31a4
 review_level: standard
 ---

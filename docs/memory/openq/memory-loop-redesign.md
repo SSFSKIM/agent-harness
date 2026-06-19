@@ -1,7 +1,10 @@
 ---
 status: open
-last_verified: 2026-06-13
+last_verified: 2026-06-18
 owner: harness
+type: openq
+tags: [memory, feeder, imprint, hooks, redesign]
+description: The automatic memory loop (feeder/imprint hooks) is disabled pending a redesign that earns its place in every session.
 ---
 # Open question: redesign the automatic memory loop
 

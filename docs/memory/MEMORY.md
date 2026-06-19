@@ -11,12 +11,18 @@ you; follow manually if no context pack was injected.
    - `adr/index.md` — decisions and why
    - `limitations/index.md` — known landmines
    - `archive/sessions/` — per-session digests (raw history; rarely needed)
+   - or **query** instead of reading indexes: the `docs-nav` skill (`nav.py`)
+     filters the whole corpus by `type`/`tag`/`status`, follows backlinks, and
+     reports stale/orphan/drift — all from frontmatter, without opening bodies.
 
 Write rules:
 - Imprint jobs and /dream write here. In-session: update
   `progress/current.md` plus the page your work touched; register new pages
   in their directory's index.md.
-- Every page carries frontmatter `status / last_verified / owner` (lint D3).
+- Every page carries frontmatter `status / last_verified / owner` (lint D3). May
+  also carry the optional, ungated keys from `../KNOWLEDGE_FORMAT.md` —
+  `type` / `tags` / `resource` / `description` / `title` — which make a page
+  queryable and self-describing (concept pages here are the recommended place).
 - Session digests are `status: archived` (stale-exempt, immutable). Filename
   contract: `YYYY-MM-DD-{sid8}-{event_slug}.md` (event_slug = `session-end` or
   `pre-compact`). No two digests may share a name — the event suffix makes

@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+phase: symphony/03-dev-stage-taxonomy
+type: product-spec
+tags: [taxonomy, ticket-type, methodology, orchestration]
+description: Maps ticket types (planning/research/design/spec/impl) to harness doc-pipeline stages so each type routes to a methodology, output doc, and typed children, turning the agent org into a typed ticket DAG.
 ---
 # Dev-stage taxonomy — 티켓 type → 하네스 워크플로 (Phase 3b)
 

@@ -1,7 +1,10 @@
 ---
 status: active
-last_verified: 2026-06-14
+last_verified: 2026-06-18
 owner: dreamer
+type: progress
+tags: [harness, memory, completion-gate, success-criteria]
+description: Current state of the agent-harness build, recording that Phases 0-6 are complete and the Task 17 completion gate and §7 success criteria have passed validation.
 ---
 # Current state
 
@@ -100,6 +103,21 @@ owner: dreamer
   checks that `AGENTS.md` exists; `D7` size failures and `.harness.json`
   `size_limits` / `default_size_limit` behavior were removed. Map-like docs are
   still a taste/review expectation, not a numeric blocking gate.
+- 2026-06-18: **Knowledge Format Phase 1 + Phase 2 complete** (branch
+  `knowledge-format`). Phase 1 (OKF-grounded): five optional frontmatter keys
+  (`type`/`tags`/`resource`/`title`/`description`), `read_frontmatter` upgraded to
+  read YAML lists, a versioned `docs/KNOWLEDGE_FORMAT.md` (KF v1.0) making the
+  implicit-in-lint format explicit, full-corpus backfill, protected-doc wiring
+  (NG-4), and core belief 13 (general by identity → propagate to the portable
+  layer). Phase 2 (consumer): `plugin/scripts/nav.py` — a live-query knowledge
+  navigator (catalog/links/backlinks/stale/orphans/drift, read-only, nothing
+  persisted) + the `docs-nav` skill; shared LINK/staleness/exempt primitives
+  centralized in `harness_lib`. Both shipped spec→ExecPlan with gate GREEN and
+  all completion reviews SATISFIED (incl. an arch-caught P1 crash fixed). Specs:
+  `docs/product-specs/2026-06-18-knowledge-{format-evolution,navigation-tool}.md`;
+  grounding `docs/design-docs/okf-comparison.md`. Query/graph layer beyond
+  current nav is the next knowledge-format frontier (typed links, lint validation
+  of the new keys — both deferred with named homes in the specs).
 - Next: (a) memory-loop redesign (openq) — the deferred sophistication;
   (b) optionally migrate a wave of Lingual's declared legacy trees;
   (c) complete review/close `flexible-host-governance` if subagent dispatch is

@@ -1,7 +1,10 @@
 ---
 status: accepted
-last_verified: 2026-06-16
+last_verified: 2026-06-18
 owner: harness
+type: adr
+tags: [decomposition, spec-system, methodology]
+description: Work too large for one spec decomposes recursively via product-design + execplan, not a new meta-spec system.
 ---
 # Recursive decomposition suffices — no higher-order spec system
 

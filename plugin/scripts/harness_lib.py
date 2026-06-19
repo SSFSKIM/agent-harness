@@ -7,6 +7,7 @@ Pure stdlib. Portable: never hardcodes an absolute path.
 import datetime
 import json
 import os
+import re
 import shlex
 from pathlib import Path
 
@@ -71,8 +72,30 @@ def state_dir(root):
     return d
 
 
+def _fm_clean_item(s):
+    """Strip whitespace and one layer of matching quotes from a list item."""
+    s = s.strip()
+    if len(s) >= 2 and s[0] in "\"'" and s[-1] == s[0]:
+        s = s[1:-1]
+    return s
+
+
+def _fm_flow_list(val):
+    """Parse a YAML flow list `[a, b, c]` into list[str]; `[]` -> []."""
+    inner = val[1:-1].strip()
+    if not inner:
+        return []
+    return [_fm_clean_item(x) for x in inner.split(",")]
+
+
 def read_frontmatter(path):
-    """Parse flat `key: value` YAML frontmatter. dict, or None if absent/broken."""
+    """Parse flat `key: value` frontmatter.
+
+    Values are `str`, except `list[str]` when the source uses a YAML list — flow
+    form `key: [a, b]` or block form (`key:` then `- a` lines, indented or not).
+    Scalar lines are byte-for-byte the prior behavior. dict, or None if
+    frontmatter is absent/broken.
+    """
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
@@ -80,12 +103,27 @@ def read_frontmatter(path):
     if not lines or lines[0].strip() != "---":
         return None
     fm = {}
+    pending = None  # empty-value key a following `- item` line may turn into a list
     for line in lines[1:]:
         if line.strip() == "---":
             return fm
+        stripped = line.strip()
+        if pending is not None and stripped.startswith("- "):
+            if not isinstance(fm.get(pending), list):
+                fm[pending] = []  # promote the empty-string seed to a list
+            fm[pending].append(_fm_clean_item(stripped[2:]))
+            continue
+        pending = None
         if ":" in line and not line.startswith((" ", "\t", "#")):
             key, _, val = line.partition(":")
-            fm[key.strip()] = val.strip()
+            key = key.strip()
+            val = val.strip()
+            if val.startswith("[") and val.endswith("]"):
+                fm[key] = _fm_flow_list(val)
+            else:
+                fm[key] = val
+                if val == "":
+                    pending = key  # block list if `- ` lines follow; else stays ""
     return None
 
 
@@ -96,13 +134,30 @@ def iter_md(base):
     return sorted(p for p in base.rglob("*.md"))
 
 
+# The ONE definition of a knowledge link: a markdown link whose target is a
+# `.md` page (optionally with a `#fragment`). Consumed by lint_docs D5 AND by
+# nav.py's graph — keeping them on one regex stops the gate and the navigator
+# from disagreeing about what an edge is (core-belief 5).
+LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
+
+
+def links_in(text):
+    """Repo-relative `.md` link targets appearing in `text`, in document order."""
+    return [m.group(1) for m in LINK.finditer(text)]
+
+
 # Doc trees the harness always governs — never exemptable via .harnessignore,
 # so a host can't un-govern (and silently poison) the memory/design/product tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
 # (the persona grounding + execplan docs that the review gate itself rides on).
 MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
                  "product-specs")
-MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
+# docs/ subtrees that carry no governed frontmatter — skipped by content lints
+# AND by nav's catalog scope. One definition both consume (core-belief 5);
+# consumers may append their own extras (e.g. host .harnessignore roots).
+DOC_EXEMPT = ("generated/", "superpowers/")
+MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "KNOWLEDGE_FORMAT.md",
+                "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")
 
 
@@ -139,6 +194,17 @@ def exempt_roots(root):
             continue
         out.append(norm)
     return tuple(out)
+
+
+def is_exempt(rel, prefixes):
+    """True if docs-relative posix `rel` is under (or equals) any of `prefixes`.
+
+    Matched on path-segment boundaries (a trailing `/` on a prefix is optional):
+    `business` matches the `business/` tree and the file `business`, but never a
+    sibling `business-plan.md`. The one definition shared by lint_docs (content
+    lints) and nav.py (catalog scope) — see core-belief 5.
+    """
+    return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in prefixes)
 
 
 def gate_config(root):
@@ -193,3 +259,30 @@ def gate_command(cfg, key, env_name):
 
 def today():
     return datetime.date.today()
+
+
+STALE_DAYS = 30  # default staleness window in days; a host may override it
+
+
+def stale_window(cfg):
+    """Effective staleness window from a gate config: the `stale_days` override
+    when it is a real int (bool excluded), else the STALE_DAYS default. The one
+    window resolver shared by the gate and nav so `nav stale` agrees with D4."""
+    v = cfg.get("stale_days")
+    return v if isinstance(v, int) and not isinstance(v, bool) else STALE_DAYS
+
+
+def is_stale(last_verified, stale_days, status):
+    """The ONE definition of staleness (lint D4 + nav `stale`).
+
+    Parses `last_verified` first, so a bad or non-scalar date (e.g. a YAML
+    list, which `read_frontmatter` returns as `list`) raises ValueError /
+    TypeError — the caller owns the reporting UX (lint → D4 FAIL with its
+    message + list-date guard; nav → skip the page). A well-formed date with
+    `status` in {archived, completed} is never stale. Otherwise stale iff
+    `today - last_verified > stale_days`.
+    """
+    d = datetime.date.fromisoformat(last_verified)  # raises on bad/non-scalar
+    if status in ("archived", "completed"):
+        return False
+    return (today() - d).days > stale_days

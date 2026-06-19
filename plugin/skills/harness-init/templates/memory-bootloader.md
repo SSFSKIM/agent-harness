@@ -11,6 +11,9 @@ you; follow manually if no context pack was injected.
    - `adr/index.md` — decisions and why
    - `limitations/index.md` — known landmines
    - `archive/sessions/` — per-session digests (raw history; rarely needed)
+   - or **query** instead of reading indexes: the `docs-nav` skill (`nav.py`)
+     filters the corpus by `type`/`tag`/`status`, follows backlinks, and reports
+     stale/orphan/drift — from frontmatter, without opening bodies.
 
 Write rules:
 - Imprint jobs and /dream write here. In-session: update

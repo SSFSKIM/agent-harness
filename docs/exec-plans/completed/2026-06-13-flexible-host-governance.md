@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: codex
+type: exec-plan
+tags: [host-governance, porting, execplan, review, autonomy]
+description: Made the harness less bureaucratic for ported hosts while keeping the machine-critical surface strict — host-specific docs become agentically shaped by harness-init, ExecPlan review cost becomes risk-budgeted, and review personas can flag demonstrable bugs without inventing taste rules.
 base_commit: f89b5a50c8ce268ece146a7c031182a2ea9f2cb8
 review_level: standard
 ---

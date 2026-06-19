@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-18
 owner: review-arch
+type: methodology
+tags: [design-taste, review-arch, scripts]
+description: The grounding document of design taste for building harness components, used by the review-arch persona alongside ARCHITECTURE.md.
 ---
 # DESIGN.md — taste for building harness components
 

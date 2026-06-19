@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+phase: symphony/02-orchestrator-dispatch
+type: product-spec
+tags: [orchestrator, dispatch, reconcile, worker]
+description: A thin watched first cut of the orchestrator that polls ready tickets, dispatches several workers concurrently, and reconciles results back to the board with queue-concurrency safety.
 ---
 # 오케스트레이터 — poll→dispatch→reconcile 루프 (thin, watched)
 

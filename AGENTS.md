@@ -6,16 +6,24 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** The automatic context feeder is disabled. Read
+1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
+   philosophy (기획의도), and locked assumptions — to anchor on intent before a
+   long session drifts; `python3 plugin/scripts/nav.py map` renders the whole
+   picture against it (charter → initiatives → phases → status). The automatic context feeder is disabled: read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
-   protocol.
+   protocol. When you need to explore the docs corpus — its structure,
+   relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
+   querying, not bulk-reading.
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
    must be settled before the *how*; otherwise a living ExecPlan in
    `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
-   style. New knowledge pages: the `docs-tree` skill decides where they live.
+   style. New knowledge pages: the `docs-tree` skill decides where they live; the
+   `docs-nav` skill (`nav.py`) queries existing docs — `map`/`tree` for the
+   picture and relationships, `catalog`/`backlinks` to find and pre-check — query,
+   don't bulk-read.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
 5. **Review.** Always self-review. A conditional **behavioral check** (run the plan's
@@ -30,7 +38,9 @@ Deep truth lives in `docs/` — follow the pointers.
 
 | Path | What it is |
 |---|---|
+| `docs/CHARTER.md` | Top-level intent: mission, design philosophy (기획의도), locked assumptions — the Orient anchor |
 | `ARCHITECTURE.md` | Codemap, layer law, invariants, data flows |
+| `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v1.1): frontmatter schema, optional keys (`type`/`tags`/`resource`/`phase`/`title`/`description`), conformance↔D-rule map |
 | `docs/design-docs/core-beliefs.md` | Golden rules + agent-first operating principles |
 | `docs/design-docs/index.md` | Design docs catalog |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |
@@ -65,6 +75,13 @@ Deep truth lives in `docs/` — follow the pointers.
 - **Preferred paths, not negative space.** Named commands and skills are the
   routine path. Extra CLI exploration is allowed when it serves the task; if it
   repeats, promote it into docs, a skill, or the gate.
+- **General by identity; propagate to the portable layer.** This repo is both the
+  portable *machine* and its first *host*. A change to how the harness works must
+  land in the portable layer (`plugin/` + `harness-init` templates + `scaffold.py`
+  seeds + generic skills, host-agnostic — lint S7), not only self-host `docs/` —
+  what lands only self-host doesn't exist for ported hosts. Mechanize the
+  propagation where you can (e.g. the machine-doc→seed guard). Full text: core
+  belief 13.
 
 ## Porting
 

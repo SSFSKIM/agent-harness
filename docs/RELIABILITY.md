@@ -1,7 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-18
+last_verified: 2026-06-19
 owner: review-reliability
+type: methodology
+tags: [reliability, idempotency, review-reliability]
+description: The numbered reliability rules that ground the review-reliability persona, covering concerns such as idempotent memory imprinting.
 ---
 # RELIABILITY.md
 
@@ -143,3 +146,18 @@ cite them in findings.
   looping forever. Per-request timeouts bound a single POST, not the loop; the loop itself must
   make progress or fail loud (the daemon's `poll_failed` catch then absorbs it). Distinct from
   R12 (telemetry totality) — this governs control-path *termination*, not parse safety.
+- **R21 — Read-only corpus projections (`nav.py`) are total.** `nav.py` is a
+  read-only navigator over the docs corpus; every query and projection
+  (`build_index`, `relations`, `roadmap`, `tree`, `charter_map`, `followups`,
+  `drift`, and the `_emit_*` renderers) must be a TOTAL function over a hostile
+  corpus. Each of these degrades — skip the page, drop the edge, render empty —
+  and the tool still emits a complete result for the rest and exits 0; none may
+  raise: a malformed page or frontmatter value, an unresolvable link / `supersedes`
+  target, a non-numeric phase `NN`, a supersession cycle, an empty result set, and
+  a **transient I/O failure** (a file present at index time but gone/renamed/
+  unreadable at a later re-read — e.g. `followups` re-reading the tracker; wrap the
+  read, fall back to empty). Generalizes R12 (instrumentation totality) and R8
+  (per-entry isolation) to the corpus-query surface — nav must never become a gate
+  on the corpus it only observes. (Promoted from three tech-debt rows on the third
+  recurrence: per-page/per-edge isolation, empty-set emit totality, and this I/O
+  re-read gap.)

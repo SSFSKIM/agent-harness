@@ -2,6 +2,9 @@
 status: stable
 last_verified: 2026-06-16
 owner: harness
+type: design-doc
+tags: [symphony, orchestrator, parity, gap-analysis]
+description: A holistic gap analysis comparing this harness's orchestrator against the original OpenAI Symphony specification and workflow.
 ---
 # Symphony parity — gap analysis
 

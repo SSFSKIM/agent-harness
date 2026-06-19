@@ -22,6 +22,7 @@ DIRS = (
 SEEDS = (  # (template, destination relative to host root)
     ("agents-md.md", "AGENTS.md"),
     ("claude-md.md", "CLAUDE.md"),
+    ("charter.md", "docs/CHARTER.md"),  # top-level intent — authored FILL seed (not a MACHINE_DOC)
     ("agent-harness.md", "docs/design-docs/agent-harness.md"),
     ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
     ("design-docs-index.md", "docs/design-docs/index.md"),
@@ -34,6 +35,7 @@ SEEDS = (  # (template, destination relative to host root)
     # docs the machine reads (lint D10) — gate/personas break without them:
     ("plans-md.md", "docs/PLANS.md"),
     ("design-md.md", "docs/DESIGN.md"),
+    ("knowledge-format.md", "docs/KNOWLEDGE_FORMAT.md"),  # the format contract a host authors docs against
     ("architecture-md.md", "ARCHITECTURE.md"),
     ("quality-score.md", "docs/QUALITY_SCORE.md"),
     ("product-sense.md", "docs/PRODUCT_SENSE.md"),

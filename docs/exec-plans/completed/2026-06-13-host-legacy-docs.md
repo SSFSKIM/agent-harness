@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-13
 owner: harness
+type: exec-plan
+tags: [porting, docs, lint, host-governance]
+description: Let a doc-heavy host adopt the harness and reach a GREEN gate without force-migrating its pre-existing docs/ content, via a docs/.harnessignore exemption that drops legacy frontmatter failures to zero while still governing docs outside the declared legacy roots.
 base_commit: ae0e7cf7b9cf6987225412f41146ec51b26101a2
 ---
 # Host legacy-doc exemption (`docs/.harnessignore`)

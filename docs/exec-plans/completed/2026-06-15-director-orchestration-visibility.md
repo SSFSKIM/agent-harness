@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-15
 owner: harness
+type: exec-plan
+tags: [director, telemetry, visibility, orchestrator, escalation]
+description: Persisted the orchestrator's previously in-memory run state (in-flight, attempt, wave, stuck, recent outcomes) to an atomic on-disk status snapshot and gave the Director a Python read-API plus skill to pull that picture for inline escalation.
 base_commit: 733c0b5c4c0eee3276c9361be997a479f939ed77
 review_level: standard
 ---

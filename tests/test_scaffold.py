@@ -23,6 +23,7 @@ class TestScaffold(unittest.TestCase):
 
     def test_tree_created(self):
         for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md",
+                    "docs/CHARTER.md",
                     "docs/memory/MEMORY.md",
                     "docs/memory/progress/current.md",
                     "docs/memory/openq/index.md",
@@ -30,9 +31,24 @@ class TestScaffold(unittest.TestCase):
                     "docs/exec-plans/tech-debt-tracker.md",
                     "docs/generated/component-inventory.md",
                     "docs/PLANS.md", "docs/DESIGN.md", "docs/QUALITY_SCORE.md",
+                    "docs/KNOWLEDGE_FORMAT.md",
                     "docs/PRODUCT_SENSE.md", "docs/product-specs/index.md",
                     "docs/references/index.md"):
             self.assertTrue((self.root / rel).exists(), rel)
+
+    def test_machine_docs_all_propagate_to_hosts(self):
+        # PROPAGATION GUARD (harness portability): every protected machine doc
+        # must be seeded into a host, else a ported host is missing a doc the gate
+        # (D10) requires it to have. Mechanizes the previously-comment-only
+        # "scaffold.py seeds all of them" invariant — adding a machine doc without
+        # wiring its seed now fails here instead of silently breaking hosts.
+        import lint_docs
+        seeded = {dest for _, dest in scaffold.SEEDS}
+        for rel in lint_docs.MACHINE_DOCS:
+            self.assertIn(rel, seeded, f"MACHINE_DOC {rel} has no scaffold seed")
+        for name in scaffold.hl.MANAGED_DOCS:
+            self.assertIn(f"docs/{name}", seeded,
+                          f"protected MANAGED_DOC docs/{name} has no scaffold seed")
 
     def test_harnessignore_seeded_empty(self):
         f = self.root / "docs" / ".harnessignore"

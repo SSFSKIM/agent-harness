@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-14
 owner: harness
+type: exec-plan
+tags: [director, worker, approval, seam, codex]
+description: Proved the Phase 1 core by having a Python worker-client run a codex app-server turn in an isolated workspace, surface a mid-turn approval/input request to the Director queue, and resume the same codex turn (same turn id) to completion once the Director answers.
 base_commit: fc8b3ea4adb67be74df13be941102d5bc9a9f22b
 review_level: standard
 ---

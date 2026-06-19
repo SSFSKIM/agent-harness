@@ -2,6 +2,10 @@
 status: draft
 last_verified: 2026-06-17
 owner: harness
+phase: symphony/06-daemon-backoff
+type: product-spec
+tags: [daemon, backoff, retry, orchestrator]
+description: Daemon stage 3 that completes the retry model with a single exponential backoff for failed-worker re-dispatch, idle polling, and claim-failure re-admission, while keeping the batch path's immediate retry unchanged.
 ---
 # Daemon exponential backoff (daemon stage 3 — 마지막)
 

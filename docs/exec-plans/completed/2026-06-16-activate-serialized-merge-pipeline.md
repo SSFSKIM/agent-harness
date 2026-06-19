@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [merger, worker, board, reliability]
+description: Wires the serialized PR-merge pipeline to run end-to-end by enqueuing a mergeRequest when a worker opens a PR and draining the queue one PR at a time via a standalone merger process.
 base_commit: f406da02b9d9633fcad000a3e4123de8b808d775
 review_level: standard
 ---

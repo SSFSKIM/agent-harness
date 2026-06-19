@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [director, daemon, reconciliation, worker]
+description: Lets the orchestrator periodically re-read tracker state and cancel an in-flight worker whose ticket a human moved out of the started state, giving operators a stop lever without retrying or re-transitioning the board.
 base_commit: 6bb12b81d855f856caff0ac37e76e9add53eb0fd
 review_level: standard
 ---

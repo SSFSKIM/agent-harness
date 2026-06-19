@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-16
 owner: harness
+type: exec-plan
+tags: [worker, telemetry, observability]
+description: Captures per-ticket token usage, turn counts, and session ids plus run-level aggregate codex_totals and rate_limits from the codex stream and persists them additively into status.json as non-failing instrumentation.
 base_commit: 5a833fb781ce40654e1988d53221a95454f55e3d
 review_level: standard
 ---

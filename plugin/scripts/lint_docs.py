@@ -8,13 +8,12 @@ product-specs strict while additional project-specific docs stay host-owned
 unless opted into governance.
 Exit 0 = green; exit 1 = at least one FAIL.
 """
-import datetime
 import re
 import sys
 
 import harness_lib as hl
 
-STALE_DAYS = 30
+STALE_DAYS = hl.STALE_DAYS  # the one default lives in harness_lib (shared with nav)
 FM_REQUIRED = ("status", "last_verified", "owner")
 INDEXED_DIRS = ("design-docs", "product-specs", "references",
                 "memory/adr", "memory/knowledge", "memory/openq",
@@ -25,9 +24,10 @@ HOST_INDEXED_DIRS = ("design-docs", "product-specs", "memory/adr",
 # generated pages are frontmatter-exempt and guarded from .harnessignore
 # un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it.
 HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
-FM_EXEMPT = ("generated/", "superpowers/")
+FM_EXEMPT = hl.DOC_EXEMPT  # the shared exempt set (one definition in harness_lib)
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
+    "docs/KNOWLEDGE_FORMAT.md",
     "docs/QUALITY_SCORE.md", "docs/PRODUCT_SENSE.md", "docs/RELIABILITY.md",
     "docs/SECURITY.md", "docs/design-docs/agent-harness.md",
 )
@@ -40,7 +40,8 @@ PROTECTED_PATHS = frozenset(
     ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
-LINK = re.compile(r"\]\(([^)#\s]+\.md)(?:#[^)\s]*)?\)")
+# LINK / staleness now live in harness_lib (the one definition shared with
+# nav.py) — see hl.links_in / hl.is_stale.
 
 
 def _fail(errors, rule, path, problem, fix):
@@ -52,12 +53,9 @@ def _rel(p, root):
 
 
 def _exempt(p, docs, parts):
-    # Match on path-segment boundaries, never bare substring: an entry `business`
-    # exempts the `business/` tree and the file `business`, but NOT a sibling
-    # `business-plan.md`. This is what stops a partial prefix (`mem`) from
-    # reaching `memory/…` and what makes the trailing `/` optional/forgiving.
-    rel = p.relative_to(docs).as_posix()
-    return any(rel == x or rel.startswith(x.rstrip("/") + "/") for x in parts)
+    # Segment-boundary match (never bare substring) lives in harness_lib so the
+    # gate and nav.py share one definition (core-belief 5 / S1).
+    return hl.is_exempt(p.relative_to(docs).as_posix(), parts)
 
 
 def _strict_doc_governance(root, cfg=None, plugin=None):
@@ -131,19 +129,20 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
                       f"Add `{k}:` to the frontmatter block.")
         lv = fm.get("last_verified", "")
         if "last_verified" in fm:
+            sd = stale_days
+            if p.relative_to(root).as_posix() in PROTECTED_PATHS:
+                sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
             try:
-                d = datetime.date.fromisoformat(lv)
-                sd = stale_days
-                if p.relative_to(root).as_posix() in PROTECTED_PATHS:
-                    sd = min(sd, STALE_DAYS)  # override may only tighten managed docs
-                stale = (hl.today() - d).days > sd
-                if stale and fm.get("status") not in ("archived", "completed"):
+                if hl.is_stale(lv, sd, fm.get("status")):
                     _fail(errors, "D4", _rel(p, root),
                           f"stale: last_verified {lv} is over {sd} days old.",
                           "Re-read the page against reality; fix or retire content, then bump last_verified.")
-            except ValueError:
-                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{lv[:40]}`.",
-                      "Use ISO format YYYY-MM-DD.")
+            except (ValueError, TypeError):
+                # TypeError: a required key authored as a YAML list (the
+                # list-aware parser returns a list) — degrade to a clean D4 FAIL,
+                # never crash the gate. str() keeps the message safe for non-str lv.
+                _fail(errors, "D4", _rel(p, root), f"bad last_verified `{str(lv)[:40]}`.",
+                      "Use a scalar ISO date YYYY-MM-DD (not a list).")
 
 
 def check_links(root, errors, host=(), cfg=None):
@@ -156,8 +155,7 @@ def check_links(root, errors, host=(), cfg=None):
             targets.append(root / name)
     for p in targets:
         text = p.read_text(encoding="utf-8")
-        for m in LINK.finditer(text):
-            t = m.group(1)
+        for t in hl.links_in(text):
             if t.startswith(("http://", "https://")):
                 continue
             if not ((p.parent / t).exists() or (root / t).exists()):

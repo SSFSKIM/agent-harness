@@ -1,7 +1,10 @@
 ---
 status: accepted
-last_verified: 2026-06-17
+last_verified: 2026-06-18
 owner: harness
+type: adr
+tags: [autonomy, director, lights-out, principles]
+description: Human-absent autonomy — the Director judges with the human's externalized taste (PRINCIPLES.md), woken only on the residual the doc can't resolve.
 ---
 # Lights-out Director — human-absent autonomy via the Core Principle doc
 

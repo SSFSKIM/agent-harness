@@ -1,7 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-14
+last_verified: 2026-06-18
 owner: harness
+type: design-doc
+tags: [harness, plugin, docs-as-memory, self-host]
+description: An overview of the installed agent-harness plugin that operates this repo, covering its docs-as-memory system, taste lints, review personas, and memory loop.
 ---
 # agent-harness — the installed harness
 
@@ -17,6 +20,10 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
   hand-maintained until redesign.
 - Gate: `python3 plugin/scripts/check.py` must be GREEN before every commit.
   The `harness-lint` skill interprets failures.
+- Navigate docs: `python3 plugin/scripts/nav.py map|roadmap|tree|relations|catalog|links|backlinks|followups|stale|orphans|drift`
+  — read-only live query over the corpus (the `docs-nav` skill): `map`/`roadmap`
+  for the whole picture, `tree`/`relations` for typed relationships, `followups`
+  for derived work, the rest for catalog/graph/gardening. Not in the gate.
 - The gate is mechanical: scaffold installs `.git/hooks/pre-commit` running
   it (`--no-verify` only for emergencies — fix forward right after).
 - Tests in the gate: wired via the `HARNESS_TEST_CMD` env var (e.g.
@@ -43,6 +50,7 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Kind | Name | What it does |
 |---|---|---|
 | skill | `architecture-setup` | Use to set up/revise a repo's architecture & taste enforcement — derives invariants, routes |
+| skill | `docs-nav` | Use when finding/orienting — the whole picture (`map`/`roadmap`), typed relationships (`tree`/`relations`), follow-ups, catalog/backlinks, stale/orphan/drift (nav.py) |
 | skill | `docs-tree` | Use when adding or relocating knowledge — decides where a page belongs in the docs tree, a |
 | skill | `dream` | Use periodically (or after several work sessions) to consolidate memory — dispatches the d |
 | skill | `execplan` | Use when starting non-trivial work (multi-session, ≥3 components, architecture/memory chan |
@@ -76,8 +84,10 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
 Procedure for a new harness-managed page: kebab-case filename → frontmatter
-(`status / last_verified / owner`) → write → register in that directory's
-`index.md` → cross-link → run the gate (the `docs-tree` skill owns this).
+(required `status / last_verified / owner`; optional `type / tags / resource /
+title / description` per `docs/KNOWLEDGE_FORMAT.md`) → write → register in that
+directory's `index.md` → cross-link → run the gate (the `docs-tree` skill owns
+this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md` (KF v1.0).
 Host-owned project roots may use the structure that best fits the repo unless
 they are opted into managed governance.
 
