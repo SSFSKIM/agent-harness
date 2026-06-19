@@ -20,8 +20,9 @@ does NOT run `gh pr merge`; on a prepared `done` the merger runs a code gate —
 a preservation tripwire (`merge_preserve`, R1: did the PR's change survive the rebase?)
 then a hygiene gate (R3: CI green + threads resolved) — and only then issues the
 squash-merge itself. Any gate failure withholds + escalates (a `mergeReview`); CI still
-running defers (retry later). It never silently merges, and the irreversible act is
-gated by code, not the land worker's prose judgment.
+running defers (retry later — a deferred PR's later poll re-runs the code gate ALONE, not
+the full land lane, via `run_loop`'s cross-poll prepared-cache). It never silently merges,
+and the irreversible act is gated by code, not the land worker's prose judgment.
 
 This module owns the drain + classification. The Director-escalation wiring and the
 worker→enqueue call site are M3; the live serializer wire-pin is M4.
