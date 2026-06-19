@@ -173,3 +173,9 @@ owner: harness
   logs.md 아님). 포팅: 키/타입은 KNOWLEDGE_FORMAT 으로 byte-전파, charter 는 FILL
   템플릿 seed. 선언적 typed 키·viz.html·파일 재배치·enforcement 는 NON-GOAL.
   `2026-06-19-nav-derived-hierarchy.md` 의 후속(그 typed 그래프 위에 projection). draft.
+- [Map depth — declared pivots + follow-up drill-down](2026-06-19-map-depth-pivots-followups.md)
+  — charter-rooted `map` 위에 두 깊이 레이어. **③ pivot**: KF에 선언적 `supersedes` 키(KF
+  v1.2, 첫 declared edge — 진짜 pivot인 supersession만) → roadmap/map에 `[superseded-by]`
+  inline(희소·load-bearing). **② follow-up**: `nav.py followups`가 tech-debt-tracker 행을
+  source 노드별로 묶는 drill-down + map에는 `[N follow-ups]` **카운트 배지**만(다량·맥락적이라
+  inline 안 함 — volatility 원칙, pivot-flood 회피). charter-and-progress-map 후속. draft.

@@ -4,11 +4,11 @@ last_verified: {{TODAY}}
 owner: harness
 type: methodology
 tags: [knowledge-format, frontmatter, lint]
-description: The Knowledge Format v1.1 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint D-gate.
+description: The Knowledge Format v1.2 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint D-gate.
 ---
 # KNOWLEDGE_FORMAT.md — the harness knowledge format
 
-**Knowledge Format (KF) v1.1.** The contract every knowledge page in this repo
+**Knowledge Format (KF) v1.2.** The contract every knowledge page in this repo
 follows: a markdown body under a YAML-ish frontmatter block, governed by the
 lint **D-rules**. This document makes the format *explicit* — until now it
 lived implicitly in the lint. Author a conformant page from this doc alone; you
@@ -62,6 +62,7 @@ them (KF keeps OKF's permissive stance for optional keys).
 | `tags` | **list** | Cross-cutting facets — short lowercase strings. Canonical authored form is YAML flow inline: `tags: [a, b, c]`. (The parser also tolerates the block form `- a` on read for OKF-bundle interop; author the flow form.) |
 | `resource` | scalar | A repo-relative path (preferred) or URL identifying the single primary asset the page documents (e.g. `src/auth/session.py`). Absent for abstract pages. The precondition for future drift detection (compare the asset's state against `last_verified`). |
 | `phase` | scalar | The initiative + phase this page belongs to, convention `<initiative>/<NN>-<slug>` (e.g. `payments/04-refunds`; a bare `<initiative>` is the initiative umbrella). The **group-by axis for the derived roadmap** (`nav.py roadmap`): `NN` orders phases within an initiative, bare-initiative sorts first, a non-numeric `NN` sorts last. Absent → the page is unphased. A plan with no `phase` inherits it from the spec it `implements`. |
+| `supersedes` | scalar **or list** | Repo-relative `.md` path(s) this page **replaces** — a *declared* pivot edge, the one genuine "design changed" signal. `nav.py` emits a `supersedes` relation to each target (additive to the inferred archived-supersession), surfaced inline in `roadmap`/`map` as `[superseded-by …]`. This is KF's **first declared edge**; all other relationship kinds stay inferred from the link graph (KF v1.2). |
 
 **Display** — labels for navigation, zero machine cost:
 
@@ -143,11 +144,13 @@ text — `[the completion gate](PLANS.md)`, never `[here](PLANS.md)`:
 - **Never hand-maintain backlinks.** The reverse graph is computed live
   (`nav.py backlinks <page>`); author *forward* links only — no "Cited by" lists.
 
-Relationship kind (depends-on, supersedes, …) lives in the surrounding **prose**,
-not the link: links are untyped edges (typed relationships are a possible future
-KF minor version). For *when* a relationship earns a link at all — and the
-anti-orphan rule that every page needs an inbound one — see the `docs-tree`
-authoring procedure.
+Relationship *kind* is otherwise not written on the link: links are untyped edges,
+and `nav.py` **infers** the kind from the endpoints' `type` (`implements`,
+`refines`, `grounded-in`, …). The one exception is **`supersedes`**, which may be
+**declared** as a frontmatter key (§2.2) — the single genuine pivot signal; all
+other relationship kinds stay inferred. For *when* a relationship earns a link at
+all — and the anti-orphan rule that every page needs an inbound one — see the
+`docs-tree` authoring procedure.
 
 ## 5. Conformance — the spec and the gate are two views of one contract
 
@@ -176,9 +179,11 @@ backward-compatible options (a new optional key, a new conventional section); a
 
 - **v1.0** — the required-key core, plus the optional keys `type`, `tags`,
   `resource`, `title`, and `description`.
-- **v1.1** (current) — adds the optional `phase` key (the derived-roadmap
-  group-by) and the `charter` value to the `type` vocabulary. Additive: every
-  v1.0 page stays conformant.
+- **v1.1** — adds the optional `phase` key (the derived-roadmap group-by) and the
+  `charter` value to the `type` vocabulary.
+- **v1.2** (current) — adds the optional `supersedes` key, KF's first **declared**
+  edge (all other relationships stay inferred from the link graph). Additive:
+  every earlier page stays conformant.
 
 ## 7. Relationship to OKF
 

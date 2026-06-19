@@ -39,6 +39,7 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 | What a page is built on / what builds on it | `nav.py tree <path> [--reverse]` |
 | A progress map: initiative → phase → status | `nav.py roadmap` |
 | The whole picture: charter → initiatives → roadmap | `nav.py map` |
+| Tech-debt rows grouped by the node they derive from | `nav.py followups [<path>]` |
 
 Every command takes `--json` for machine consumption; the library functions
 (`build_index`, `catalog`, `backlinks`, `stale`, `drift`) are importable for the
@@ -103,6 +104,18 @@ but anchored by no charter link renders flagged (`⚠ not anchored in charter`),
 drift between the authored charter and the derived initiative set is visible rather
 than silent. Start here to grasp the whole project at once; drop to `roadmap`/`tree`
 for a slice.
+
+Two depth layers sit under the overview (the volatility principle — inline what is
+sparse and load-bearing, drill down on what is high-volume):
+
+- **Pivots** are sparse, so they render **inline** as `[superseded-by …]`. A pivot
+  is a supersession: inferred (a page → an `archived` page of its kind) or, since
+  KF v1.2, **declared** via a `supersedes:` frontmatter key (the one authored edge;
+  `relations` marks it `basis: declared`). A structural `refines` is not a pivot.
+- **Follow-ups** (tech-debt) are high-volume, so the map shows only a `[N follow-ups]`
+  count badge; the rows live behind **`nav.py followups [<node>]`**, which parses
+  `tech-debt-tracker.md` and groups rows by the source node linked in each row's
+  Source cell (rows with none → `(unsourced)`).
 
 This is the consumer half of the knowledge format — the queryable axes come from
 `docs/KNOWLEDGE_FORMAT.md` (`type`/`tags`/`description`/`resource`); see

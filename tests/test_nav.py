@@ -575,5 +575,109 @@ class TestNavMap(unittest.TestCase):
                                                "unphased": []})
 
 
+class TestNavDeclaredSupersedes(unittest.TestCase):
+    """KF v1.2: a declared `supersedes` frontmatter key -> a pivot edge."""
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        # `new` declares it supersedes `old` AND markdown-links it; the declared
+        # edge must win over the inferred refines, with no duplicate (src,dst).
+        _page(self.root / "docs/product-specs/new.md",
+              ["status: active", "last_verified: 2026-06-19", "owner: h",
+               "type: product-spec", "phase: x/02-new", "supersedes: old.md"],
+              body="replaces [old](old.md)\n")
+        _page(self.root / "docs/product-specs/old.md",
+              ["status: active", "last_verified: 2026-06-19", "owner: h",
+               "type: product-spec", "phase: x/01-old"])
+        self.records = nav.build_index(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_declared_supersedes_edge_wins_and_is_unique(self):
+        edges = [e for e in nav.relations(self.records)
+                 if e["dst"] == "docs/product-specs/old.md"]
+        self.assertEqual(edges, [{"src": "docs/product-specs/new.md",
+                                  "dst": "docs/product-specs/old.md",
+                                  "rel": "supersedes", "basis": "declared"}])
+
+    def test_declared_supersedes_surfaces_as_roadmap_pivot(self):
+        rm = nav.roadmap(self.records)
+        old = next(i for b in rm["initiatives"] for p in b["phases"]
+                   for i in p["items"] if i["path"].endswith("old.md"))
+        self.assertIn(("superseded-by", "docs/product-specs/new.md"), old["pivots"])
+
+    def test_unresolvable_supersedes_is_fail_soft(self):
+        _page(self.root / "docs/product-specs/z.md",
+              ["status: active", "last_verified: 2026-06-19", "owner: h",
+               "type: product-spec", "supersedes: nope-missing.md"])
+        recs = nav.build_index(self.root)  # must not raise
+        z = next(r for r in recs if r["path"].endswith("z.md"))
+        self.assertEqual(z["supersedes"], [])  # unresolvable target dropped
+
+
+class TestNavFollowups(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _page(self.root / "docs/exec-plans/completed/p1.md",
+              ["status: completed", "last_verified: 2026-06-19", "owner: h",
+               "type: exec-plan"])
+        # a tracker with two sourced rows (-> p1) and one unsourced row
+        tracker = (
+            "---\nstatus: stable\nlast_verified: 2026-06-19\nowner: h\n"
+            "type: tracker\n---\n# Tech debt\n\n"
+            "| Item | Severity | Found | Source | Status |\n"
+            "|---|---|---|---|---|\n"
+            "| First finding | Minor | 2026-06-19 | [p1](completed/p1.md) gate | open |\n"
+            "| Second finding | Minor | 2026-06-19 | [p1](completed/p1.md) dogfood | fixed |\n"
+            "| Orphan finding | Minor | 2026-06-19 | a gardening pass | open |\n")
+        (self.root / "docs/exec-plans").mkdir(parents=True, exist_ok=True)
+        (self.root / "docs/exec-plans/tech-debt-tracker.md").write_text(
+            tracker, encoding="utf-8")
+        self.records = nav.build_index(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_groups_rows_by_source_node(self):
+        g = nav.followups(self.records, self.root)
+        self.assertEqual(len(g["docs/exec-plans/completed/p1.md"]), 2)
+        self.assertEqual(len(g["(unsourced)"]), 1)
+        self.assertEqual(g["docs/exec-plans/completed/p1.md"][0]["summary"],
+                         "First finding")
+
+    def test_filter_by_node(self):
+        g = nav.followups(self.records, self.root,
+                          "docs/exec-plans/completed/p1.md")
+        self.assertEqual(set(g), {"docs/exec-plans/completed/p1.md"})
+        self.assertEqual(len(g["docs/exec-plans/completed/p1.md"]), 2)
+
+    def test_no_tracker_is_fail_soft(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _page(root / "docs/memory/knowledge/k.md",
+                  ["status: stable", "last_verified: 2026-06-19", "owner: h",
+                   "type: knowledge", "description: x."])
+            self.assertEqual(nav.followups(nav.build_index(root), root), {})
+
+    def test_map_badge_counts_followups(self):
+        # the map annotates a node with its follow-up count (rows NOT inlined)
+        counts = {k: len(v) for k, v in nav.followups(self.records, self.root).items()
+                  if k != "(unsourced)"}
+        m = nav.charter_map(self.records, counts)
+        # p1 is unphased here (no phase, no implements) -> in the unphased bucket
+        p1 = next(i for i in m["unphased"]
+                  if i["path"].endswith("completed/p1.md"))
+        self.assertEqual(p1["followups"], 2)
+        # rendering shows the badge, not the rows
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            nav._emit_map(m, as_json=False)
+        self.assertIn("[2 follow-ups]", buf.getvalue())
+        self.assertNotIn("First finding", buf.getvalue())  # rows stay behind `followups`
+
+
 if __name__ == "__main__":
     unittest.main()

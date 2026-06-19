@@ -98,6 +98,7 @@ def build_index(root):
             "description": (fm or {}).get("description"),
             "resource": (fm or {}).get("resource"),
             "phase": (fm or {}).get("phase"),
+            "supersedes": _resolve_links(p, root, _as_list((fm or {}).get("supersedes"))),
             "last_verified": (fm or {}).get("last_verified"),
             "links": _resolve_links(p, root, hl.links_in(text)),
             "catalog": fm is not None and p.name not in RESERVED,
@@ -266,14 +267,25 @@ def _infer_rel(src_type, dst_type, dst_status):
 def relations(records):
     """Type the link graph: one {src, dst, rel, basis} per intra-corpus link.
 
-    A pure projection over build_index records (build_index is untouched; links
-    are already repo-relative, so no root is needed). The relation is inferred via
-    `_infer_rel` from the endpoints' `type`/`status`; a target not in the page
-    graph (or a page without `type`) yields rel='links'."""
+    A pure projection over build_index records (links are already repo-relative, so
+    no root is needed). The relation is inferred via `_infer_rel` from the
+    endpoints' `type`/`status`; a target not in the page graph (or a page without
+    `type`) yields rel='links'. Plus the one *declared* edge: each `supersedes`
+    frontmatter target emits a `supersedes` edge (basis 'declared') that wins over
+    the inferred edge for that same (src,dst) pair (KF v1.2)."""
     by_path = {r["path"]: r for r in records}
     out = []
     for r in records:
+        # declared `supersedes` edges (KF v1.2) — the one authored relationship;
+        # they win over the inferred edge for the same (src,dst) pair.
+        declared = r.get("supersedes", [])
+        dset = set(declared)
+        for dst in declared:
+            out.append({"src": r["path"], "dst": dst, "rel": "supersedes",
+                        "basis": "declared"})
         for dst in r["links"]:
+            if dst in dset:
+                continue  # a declared supersedes already covers this edge
             d = by_path.get(dst) or {}
             rel, basis = _infer_rel(r.get("type"), d.get("type"), d.get("status"))
             out.append({"src": r["path"], "dst": dst, "rel": rel, "basis": basis})
@@ -417,7 +429,7 @@ def roadmap(records):
     return {"initiatives": out, "unphased": sorted(unphased, key=item_sort)}
 
 
-def charter_map(records):
+def charter_map(records, followup_counts=None):
     """Charter-rooted unified map: the Big Picture (the `charter` page) -> each
     initiative it anchors -> that initiative's roadmap (phases -> specs/plans ->
     pivots). It composes `roadmap()` (phase grouping) with the charter's outbound
@@ -427,7 +439,12 @@ def charter_map(records):
     between the authored charter and the derived initiative set is visible, not
     hidden). Pure projection, fail-soft (no charter -> everything unanchored).
 
+    `followup_counts` (optional {node_path: count}) annotates each item with a
+    `followups` count for the map's drill-down badge (the rows live behind
+    `followups`, never inlined here).
+
     Returns {charter, initiatives: [{…roadmap block…, anchored, anchor}], unphased}."""
+    fc = followup_counts or {}
     rm = roadmap(records)
     by_path = {r["path"]: r for r in records}
     charter = next((r for r in records if r.get("type") == "charter"), None)
@@ -438,6 +455,12 @@ def charter_map(records):
             key = _phase_key(d.get("phase")) if d.get("type") == "product-spec" else None
             if key:
                 anchor.setdefault(key[0], dst)
+    for b in rm["initiatives"]:
+        for ph in b["phases"]:
+            for it in ph["items"]:
+                it["followups"] = fc.get(it["path"], 0)
+    for it in rm["unphased"]:
+        it["followups"] = fc.get(it["path"], 0)
     inits = [{**b, "anchored": b["initiative"] in anchor,
               "anchor": anchor.get(b["initiative"])} for b in rm["initiatives"]]
     inits.sort(key=lambda b: (not b["anchored"], b["initiative"]))  # anchored first
@@ -456,14 +479,73 @@ def _emit_map(m, as_json):
         for ph in b["phases"]:
             print(f"    {ph['phase'] or '(umbrella)'}")
             for row in ph["items"]:
-                print(f"      {_roadmap_row(row)}")
+                print(f"      {_map_row(row)}")
     if m["unphased"]:
         print("  # (unphased)")
         for row in m["unphased"]:
-            print(f"      {_roadmap_row(row)}")
+            print(f"      {_map_row(row)}")
     anchored = sum(1 for b in m["initiatives"] if b["anchored"])
     print(f"# {anchored}/{len(m['initiatives'])} initiative(s) anchored in the "
           f"charter — derived, advisory")
+
+
+def _tracker_rows(text):
+    """Yield (source_cell, summary, severity, status) for each data row of the
+    tech-debt table. A data row is a `|`-delimited line with >=5 cells that is not
+    the header or the `---` separator. Tolerant — a non-table line is skipped."""
+    rows = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        item = cells[0]
+        if item == "Item" or set(item) <= set("-: "):  # header / separator
+            continue
+        rows.append((cells[3], item, cells[1], cells[4]))  # Source, Item, Severity, Status
+    return rows
+
+
+def followups(records, root, node=None):
+    """Tech-debt rows grouped by the source node they derive from (the drill-down
+    layer for the high-volume follow-up tier — kept out of the overview, surfaced
+    here on demand). Parses the `tech-debt-tracker.md` table; the source is the
+    first `.md` link in a row's Source cell, resolved to a repo path. A row with no
+    source link lands in `(unsourced)`. With `node`, returns only that node's
+    group. Pure read; fail-soft (no tracker / unparseable row -> skipped)."""
+    root = Path(root).resolve()
+    tracker = next((r for r in records if r.get("type") == "tracker"
+                    or r["path"].endswith("tech-debt-tracker.md")), None)
+    groups = {}
+    if tracker:
+        tpath = root / tracker["path"]
+        text = tpath.read_text(encoding="utf-8", errors="replace")
+        for source_cell, summary, severity, status in _tracker_rows(text):
+            srcs = _resolve_links(tpath, root, hl.links_in(source_cell))
+            key = srcs[0] if srcs else "(unsourced)"
+            groups.setdefault(key, []).append(
+                {"source": None if key == "(unsourced)" else key,
+                 "summary": summary[:80], "severity": severity, "status": status})
+    if node is not None:
+        nkey = _norm(node, root)
+        return {nkey: groups.get(nkey, [])}
+    return groups
+
+
+def _emit_followups(groups, as_json):
+    if as_json:
+        print(json.dumps(groups, indent=2, ensure_ascii=False))
+        return
+    total = 0
+    for src in sorted(groups):
+        rows = groups[src]
+        total += len(rows)
+        print(f"# {src if src == '(unsourced)' else _slug(src)}  ({len(rows)})")
+        for r in rows:
+            print(f"    [{r['status']}] {r['summary']}")
+    print(f"# {total} follow-up(s) — advisory")
 
 
 def _slug(path):
@@ -559,6 +641,14 @@ def _roadmap_row(row):
     return s
 
 
+def _map_row(row):
+    """A roadmap row plus the follow-up count badge (map only — a sparse glanceable
+    signal; the rows themselves stay behind `followups <node>`)."""
+    s = _roadmap_row(row)
+    n = row.get("followups", 0)
+    return s + (f"  [{n} follow-up{'s' if n != 1 else ''}]" if n else "")
+
+
 def _emit_roadmap(rm, as_json):
     if as_json:
         print(json.dumps(rm, indent=2, ensure_ascii=False))
@@ -619,6 +709,10 @@ def main(argv=None):
     cm = sub.add_parser("map",
                         help="charter-rooted unified map: charter -> initiatives -> roadmap")
     cm.add_argument("--json", action="store_true", help="emit JSON")
+    fp = sub.add_parser("followups",
+                        help="tech-debt rows grouped by the source node they derive from")
+    fp.add_argument("node", nargs="?", help="repo-relative node path (omit for all)")
+    fp.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
     records = build_index(root)
@@ -654,7 +748,11 @@ def main(argv=None):
     elif args.cmd == "roadmap":
         _emit_roadmap(roadmap(records), args.json)
     elif args.cmd == "map":
-        _emit_map(charter_map(records), args.json)
+        fups = followups(records, root)
+        counts = {k: len(v) for k, v in fups.items() if k != "(unsourced)"}
+        _emit_map(charter_map(records, counts), args.json)
+    elif args.cmd == "followups":
+        _emit_followups(followups(records, root, args.node), args.json)
 
 
 if __name__ == "__main__":
