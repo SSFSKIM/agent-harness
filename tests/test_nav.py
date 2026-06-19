@@ -270,6 +270,17 @@ class TestNavRelations(unittest.TestCase):
         self.assertEqual(self._r("memory/knowledge/notype.md",
                                  "product-specs/s1.md"), "links")
 
+    def test_orphans_type_filter(self):
+        allo = nav.orphans(self.records)
+        self.assertIn("docs/exec-plans/active/p1.md", allo)  # nothing links to it
+        self.assertIn("docs/memory/adr/a1.md", allo)
+        self.assertEqual(nav.orphans(self.records, kind="adr"),
+                         ["docs/memory/adr/a1.md"])
+        self.assertEqual(nav.orphans(self.records, kind="exec-plan"),
+                         ["docs/exec-plans/active/p1.md"])
+        # the knowledge tier is fully connected (k1 has an inbound link)
+        self.assertEqual(nav.orphans(self.records, kind="knowledge"), [])
+
     def test_basis_is_auditable(self):
         basis = {(e["src"], e["dst"]): e["basis"]
                  for e in nav.relations(self.records)}
@@ -324,6 +335,16 @@ class TestNavTree(unittest.TestCase):
                                          "docs/exec-plans/active/p1.md"))
         self.assertTrue(lines[0].startswith("exec-plan: p1"))
         self.assertTrue(any("─" in line for line in lines[1:]))
+
+    def test_default_excludes_untyped_links(self):
+        # notype.md -> s1 is an untyped 'links' edge; default tree drops it,
+        # --all (include_untyped) keeps it (the only edge, so children prove it)
+        t = nav.tree(self.records, "docs/memory/knowledge/notype.md")
+        self.assertEqual(t["children"], [])
+        t_all = nav.tree(self.records, "docs/memory/knowledge/notype.md",
+                         include_untyped=True)
+        kids = {c["path"]: c["rel"] for c in t_all["children"]}
+        self.assertEqual(kids.get("docs/product-specs/s1.md"), "links")
 
 
 class TestNavTreeCycle(unittest.TestCase):

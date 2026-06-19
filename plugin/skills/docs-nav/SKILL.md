@@ -32,7 +32,7 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 | What this page links to | `nav.py links docs/PLANS.md` |
 | What links to this page (backlinks) | `nav.py backlinks docs/PLANS.md` |
 | Pages past the staleness window | `nav.py stale` |
-| Content pages nothing links to | `nav.py orphans` |
+| Content pages nothing links to (optionally one type) | `nav.py orphans [--type knowledge]` |
 | Pages whose bound code moved since last_verified | `nav.py drift` |
 | Typed edges inferred from the link graph | `nav.py relations [--rel implements]` |
 | A derived hierarchy, ignoring directories | `nav.py tree --type product-spec` |
@@ -50,7 +50,9 @@ code-execution path (`from nav import build_index, backlinks`).
 - `stale`/`orphans`/`drift` are **advisory** — never a gate failure. `stale`
   agrees with what lint D4 would flag. `orphans` is graph-based: a page reachable
   only by a bare-text mention (not a `[](…)` link) counts as an orphan, so a
-  high count usually means index pages use prose, not markdown links.
+  high count usually means index pages use prose, not markdown links. Terminal /
+  historical tiers (exec-plans, session-digests) are orphaned by design — scope
+  with `orphans --type knowledge` to surface only the *concerning* ones.
 - `drift` compares each page's `resource` to its code's last git-commit date;
   `unknown` means no git / missing path / a URL (fail-soft, never an error).
 
@@ -73,8 +75,11 @@ directory layout**: a spec, the plan that `implements` it, and the design-doc it
 `grounded-in` appear in one tree though they live in three directories — structure
 is a projection of metadata, not of the file tree (`KNOWLEDGE_FORMAT.md` §2.2).
 Default follows dependencies (what a page is built on); `--reverse` shows
-dependents; `--rel a,b` restricts edge kinds; `--json` for machine use. Inference
-only — authored/declared relationship keys are a future format version (KF v1.1).
+dependents; `--rel a,b` restricts edge kinds; `--json` for machine use. `tree`
+shows only **typed** relationships by default (the generic untyped `links` edges —
+incidental mentions — are dropped so the hierarchy stays meaningful); pass `--all`
+to include them. Inference only — authored/declared relationship keys are a future
+format version (KF v1.1).
 
 This is the consumer half of the knowledge format — the queryable axes come from
 `docs/KNOWLEDGE_FORMAT.md` (`type`/`tags`/`description`/`resource`); see

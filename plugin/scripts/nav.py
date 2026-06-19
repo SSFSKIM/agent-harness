@@ -142,17 +142,20 @@ def backlinks(records, path, root):
     return sorted(r["path"] for r in records if target in r["links"])
 
 
-def orphans(records):
+def orphans(records, kind=None):
     """Catalog pages with no inbound markdown link (unreachable in the graph).
 
     Reserved spines (index.md/MEMORY.md) and the entry maps are not catalog
     pages, so they are never reported. A page linked only by a bare-text mention
-    (not a `[](…)` link) still counts as an orphan — this mirrors the D5 graph."""
+    (not a `[](…)` link) still counts as an orphan — this mirrors the D5 graph.
+    `kind` restricts the report to one `type` (e.g. only `knowledge`), useful
+    because terminal/historical tiers like exec-plans are orphaned by design."""
     linked = set()
     for r in records:
         linked.update(r["links"])
     return sorted(r["path"] for r in records
-                  if r["catalog"] and r["path"] not in linked)
+                  if r["catalog"] and r["path"] not in linked
+                  and (kind is None or r["type"] == kind))
 
 
 def stale(records, stale_days):
@@ -234,6 +237,7 @@ INVERSE = {  # forward relation -> reverse label (for `tree --reverse`)
     "supersedes": "superseded-by", "grounded-in": "grounds",
     "governed-by": "governs", "references": "referenced-by", "links": "linked-by",
 }
+UNTYPED = ("links", "linked-by")  # the generic fallback edge (incidental mentions)
 
 
 def _infer_rel(src_type, dst_type, dst_status):
@@ -269,10 +273,13 @@ def relations(records):
     return out
 
 
-def _adjacency(records, reverse, rels):
+def _adjacency(records, reverse, rels, include_untyped):
     """Adjacency map {src: [(dst, rel), …]} from the typed edges, oriented by
-    `reverse` (dependents vs dependencies) and filtered to `rels` if given.
+    `reverse` (dependents vs dependencies).
 
+    Filtering: if `rels` is given, keep exactly those relations; otherwise drop the
+    generic untyped edges (links/linked-by — incidental markdown mentions) unless
+    `include_untyped`, so a hierarchy shows real relationships by default.
     Collapses repeated links to the same target into one edge (a page that links a
     target twice is one relationship — the rel is deterministic per type-pair), so
     the hierarchy has no duplicate children."""
@@ -282,7 +289,10 @@ def _adjacency(records, reverse, rels):
             src, dst, rel = e["dst"], e["src"], INVERSE.get(e["rel"], e["rel"])
         else:
             src, dst, rel = e["src"], e["dst"], e["rel"]
-        if rels and rel not in rels:
+        if rels is not None:
+            if rel not in rels:
+                continue
+        elif not include_untyped and rel in UNTYPED:
             continue
         if (src, dst) in seen:
             continue
@@ -291,14 +301,17 @@ def _adjacency(records, reverse, rels):
     return adj
 
 
-def tree(records, start, reverse=False, rels=None, max_depth=20):
+def tree(records, start, reverse=False, rels=None, include_untyped=False,
+         max_depth=20):
     """Derived hierarchy rooted at `start`, following inferred typed edges.
 
     Built from frontmatter + links only — never the directory layout (that is the
-    'structure = projection' proof). Cycle-safe: a node is expanded once; a
-    re-encountered node renders with seen=True and is not re-expanded. Depth-bounded.
-    Returns a nested {path, type, rel, seen, children}."""
-    adj = _adjacency(records, reverse, rels)
+    'structure = projection' proof). By default follows only typed relationships
+    (the generic untyped `links` edges are dropped — pass include_untyped, CLI
+    `--all`, to keep them, or name them in `rels`). Cycle-safe: a node is expanded
+    once; a re-encountered node renders with seen=True and is not re-expanded.
+    Depth-bounded. Returns a nested {path, type, rel, seen, children}."""
+    adj = _adjacency(records, reverse, rels, include_untyped)
     by_path = {r["path"]: r for r in records}
     visited = set()
 
@@ -417,10 +430,12 @@ def main(argv=None):
         g.add_argument("path", help="repo-relative page path (e.g. docs/PLANS.md)")
         g.add_argument("--json", action="store_true", help="emit JSON")
     for name, helptext in (("stale", "pages past the staleness window (advisory)"),
-                           ("orphans", "catalog pages with no inbound link"),
                            ("drift", "resource-bound pages whose code moved")):
         h = sub.add_parser(name, help=helptext)
         h.add_argument("--json", action="store_true", help="emit JSON")
+    op = sub.add_parser("orphans", help="catalog pages with no inbound link")
+    op.add_argument("--type", dest="kind", help="restrict to a frontmatter type")
+    op.add_argument("--json", action="store_true", help="emit JSON")
     rp = sub.add_parser("relations", help="typed edges inferred from the link graph")
     rp.add_argument("--rel", help="filter to one relation kind (e.g. implements)")
     rp.add_argument("--json", action="store_true", help="emit JSON edges")
@@ -430,6 +445,8 @@ def main(argv=None):
     tp.add_argument("--reverse", action="store_true",
                     help="follow dependents instead of dependencies")
     tp.add_argument("--rel", help="comma-separated relation kinds to include")
+    tp.add_argument("--all", dest="include_untyped", action="store_true",
+                    help="include generic untyped 'links' edges (default: typed only)")
     tp.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
@@ -441,7 +458,7 @@ def main(argv=None):
     elif args.cmd == "backlinks":
         _emit_paths(backlinks(records, args.path, root), args.json)
     elif args.cmd == "orphans":
-        _emit_paths(orphans(records), args.json)
+        _emit_paths(orphans(records, args.kind), args.json)
     elif args.cmd == "stale":
         _emit(stale(records, hl.stale_window(hl.gate_config(root))), args.json)
     elif args.cmd == "drift":
@@ -459,7 +476,8 @@ def main(argv=None):
             roots = [_norm(args.path, root)]
         else:
             ap.error("tree needs a <path> or --type")
-        trees = [tree(records, s, reverse=args.reverse, rels=rels)
+        trees = [tree(records, s, reverse=args.reverse, rels=rels,
+                      include_untyped=args.include_untyped)
                  for s in roots]
         _emit_tree(trees, args.json, forest=bool(args.kind))
 
