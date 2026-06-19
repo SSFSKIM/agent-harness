@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-15
 owner: harness
+phase: symphony/04-director-visibility
 type: product-spec
 tags: [director, visibility, escalation, autonomy]
 description: Persists the orchestrator's in-memory run state as atomic snapshots that the Director reads via API and skills, supporting inline taste-vs-handle escalation judged by the main session rather than a separate headless process.

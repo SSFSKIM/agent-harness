@@ -2,6 +2,7 @@
 status: stable
 last_verified: 2026-06-15
 owner: harness
+phase: symphony/04-multi-turn
 type: product-spec
 tags: [worker, multi-turn, director, reconcile]
 description: Corrects the one-turn-equals-done model so a ticket spans many turns, with workers proposing structured outcomes (continuing/done/blocked/needs_human) that the Director enforces when watched or trusts and auto-continues when un-watched.

@@ -2,6 +2,7 @@
 status: stable
 last_verified: 2026-06-16
 owner: harness
+phase: symphony/01-orchestration
 type: product-spec
 tags: [symphony, director, orchestration, worker, dag]
 description: The parent vision for multi-agent software development organized by a ticket DAG, with Claude Code as Director and codex app-server workers, reimplementing the Symphony spec in Python across phased roadmap slices.

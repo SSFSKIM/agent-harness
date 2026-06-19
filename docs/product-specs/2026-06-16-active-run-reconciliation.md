@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-16
 owner: harness
+phase: symphony/06-daemon-reconciliation
 type: product-spec
 tags: [daemon, reconciliation, worker, orchestrator]
 description: Daemon stage 1 that periodically re-reads in-flight ticket states while workers run and cooperatively cancels workers whose tickets a human moved out of In Progress, reconciling between completions without breaking the single-writer model.

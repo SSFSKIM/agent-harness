@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-16
 owner: harness
+phase: symphony/06-declarative-config
 type: product-spec
 tags: [director, config, declarative, orchestration]
 description: Externalizes orchestration policy scattered across code and CLI flags into a director block in .harness.json so the harness runs in any repo by dropping in a single config, with CLI-over-config-over-default precedence.

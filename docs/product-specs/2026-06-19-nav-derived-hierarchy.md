@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-19
 owner: harness
+phase: knowledge-format/03-derived-hierarchy
 type: product-spec
 tags: [knowledge-format, navigation, graph, hierarchy, inference, tooling]
 description: A directory-independent navigation layer in nav.py that infers typed relationships from existing (type, type, link-direction) metadata — no new frontmatter — and renders a derived hierarchy tree, demonstrating that corpus structure is a projection of metadata rather than of the file tree.

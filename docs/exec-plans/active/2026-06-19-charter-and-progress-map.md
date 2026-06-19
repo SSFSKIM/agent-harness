@@ -105,10 +105,30 @@ gate (`python3 plugin/scripts/check.py`) GREEN.
   FILL seed; `scaffold.py` SEEDS + `test_scaffold.py`; Orient step 1 + Map in
   self-host AGENTS.md and the host template. Verified: fresh-host scaffold seeds
   CHARTER, no unrendered tokens, host lint OK.
-- [ ] M3
-- [ ] M4
+- [x] (2026-06-19) M3 — `nav.py roadmap` (`roadmap`/`_phase_key`/`_emit_roadmap`
+  + CLI), phase inheritance via `implements`, pivot annotation; 9 roadmap tests;
+  `docs-nav` SKILL documents it. Gate GREEN; empty corpus safe.
+- [x] (2026-06-19) M4 — `phase:` backfilled into 22 product-specs (metadata-only,
+  no `last_verified` bump). `nav.py roadmap` renders 3 initiatives (symphony,
+  knowledge-format, methodology) with phase-ordered children + live status.
 
 ## Surprises & discoveries
+- **Dogfooding caught a pivot-noise bug (M4).** The first `roadmap` render flooded
+  every parent spec with `[refined-by …]` (15 on the orchestration parent) plus
+  duplicates — because `product-spec→product-spec` infers `refines`, and a parent
+  linked by all its children accumulates the inverse. Fix: a pivot is a
+  **supersession only** (a newer page → an `archived` page of its kind), never a
+  structural `refines`; `supersedes` generalized from adr→archived-adr to any
+  same-type→archived-same-type; pivots deduped. Roadmap is now clean. Spec R6
+  narrowed to match.
+- **R7 "byte-identical" was wrong.** The host `knowledge-format.md` template is a
+  host-agnostic *variant* (generic examples, `{{TODAY}}`), not a byte copy of
+  canon — there is no test enforcing equality. Applied the v1.1 additions to both
+  with their own wording; corrected R7 + the design table.
+- The `(unphased)` bucket is mostly historical exec-plans whose Context does not
+  markdown-link their spec, so they cannot inherit a phase — honest, advisory.
+  Backfilling `phase` onto plans (or linting plan→spec links) is possible future
+  work, not this scope.
 
 ## Decision log
 - 2026-06-19: row universe = product-spec + exec-plan only — a roadmap is about

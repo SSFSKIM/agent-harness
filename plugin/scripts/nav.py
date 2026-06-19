@@ -246,10 +246,14 @@ def _infer_rel(src_type, dst_type, dst_status):
 
     basis names the rule that fired so the inference is auditable. Anything not
     matched stays ('links', 'untyped') — the existing undifferentiated edge."""
+    # Supersession is the most specific signal and the only genuine *pivot*: a page
+    # pointing at an ARCHIVED page of its own kind (a newer adr/spec/plan retiring
+    # the one it replaces). Checked before the generic same-type pair rule
+    # (e.g. product-spec->product-spec=refines), which is structural, not a pivot.
+    if src_type and src_type == dst_type and dst_status == "archived":
+        return "supersedes", f"{src_type}->archived-{dst_type}"
     if (src_type, dst_type) in EDGE_RULES:
         return EDGE_RULES[(src_type, dst_type)], f"{src_type}->{dst_type}"
-    if src_type == "adr" and dst_type == "adr" and dst_status == "archived":
-        return "supersedes", "adr->archived-adr"
     if dst_type == "methodology":
         return "governed-by", "*->methodology"
     if dst_type == "knowledge":
@@ -328,6 +332,81 @@ def tree(records, start, reverse=False, rels=None, include_untyped=False,
         return n
 
     return node(start, None, 0)
+
+
+def _phase_key(phase):
+    """Parse a `phase` value into (initiative, order, label) for the roadmap, or None.
+
+    Convention `<initiative>/<NN>-<slug>` -> (initiative, NN, '<NN>-<slug>'); a
+    non-numeric NN sorts last (order +inf). A bare `<initiative>` is the umbrella
+    and sorts first (order -1). A blank/None phase yields None (unphased)."""
+    if not phase or not str(phase).strip():
+        return None
+    phase = str(phase).strip()
+    if "/" in phase:
+        init, rest = phase.split("/", 1)
+        head = rest.split("-", 1)[0]
+        try:
+            order = int(head)
+        except ValueError:
+            order = 10 ** 9
+        return (init.strip(), order, rest.strip())
+    return (phase, -1, "")
+
+
+def roadmap(records):
+    """Derived progress map: initiatives -> phase-ordered specs/plans with status.
+
+    A pure projection over build_index — the unkept "roadmap is a derived view"
+    promise (PLANS.md; product-design skill). The phase comes from the `phase`
+    frontmatter key; a row with none inherits the phase of the spec it
+    `implements` (the inferred edge), else falls into the advisory '(unphased)'
+    bucket. Each row carries any pivot (superseded-by/refined-by) inferred from the
+    graph, so a design pivot shows inline. Row universe = product-spec + exec-plan
+    (the work tier); design-docs/ADRs surface only as pivot annotations, never
+    rows. Nothing persisted; live per call.
+
+    Returns {initiatives: [{initiative, phases: [{phase, order, items}]}], unphased}
+    where each item is {path, type, status, phase, pivots}."""
+    by_path = {r["path"]: r for r in records}
+    implements, pivots = {}, {}
+    for e in relations(records):
+        if e["rel"] == "implements":
+            implements.setdefault(e["src"], e["dst"])
+        elif e["rel"] == "supersedes":  # the only genuine pivot (not structural refines)
+            pivots.setdefault(e["dst"], set()).add((INVERSE[e["rel"]], e["src"]))
+
+    def phase_of(r):
+        if r.get("phase"):
+            return r["phase"]
+        spec = implements.get(r["path"])
+        return by_path.get(spec, {}).get("phase") if spec else None
+
+    inits, unphased = {}, []
+    for r in records:
+        if not r["catalog"] or r["type"] not in ("product-spec", "exec-plan"):
+            continue
+        row = {"path": r["path"], "type": r["type"], "status": r["status"],
+               "phase": phase_of(r), "pivots": sorted(pivots.get(r["path"], []))}
+        key = _phase_key(row["phase"])
+        if key is None:
+            unphased.append(row)
+            continue
+        init, order, label = key
+        ph = inits.setdefault(init, {}).setdefault(label, {"order": order, "items": []})
+        ph["items"].append(row)
+
+    def item_sort(x):  # specs before the plans that implement them, then by path
+        return (x["type"] != "product-spec", x["path"])
+
+    out = []
+    for init in sorted(inits):
+        phases = [{"phase": label, "order": blk["order"],
+                   "items": sorted(blk["items"], key=item_sort)}
+                  for label, blk in sorted(inits[init].items(),
+                                           key=lambda kv: (kv[1]["order"], kv[0]))]
+        out.append({"initiative": init, "phases": phases})
+    return {"initiatives": out, "unphased": sorted(unphased, key=item_sort)}
 
 
 def _slug(path):
@@ -416,6 +495,34 @@ def _emit_tree(trees, as_json, forest):
                 print(line)
 
 
+def _roadmap_row(row):
+    s = f"[{row['status'] or '-'}]  {row['type']}: {_slug(row['path'])}"
+    for rel, other in row["pivots"]:
+        s += f"  [{rel} {_slug(other)}]"
+    return s
+
+
+def _emit_roadmap(rm, as_json):
+    if as_json:
+        print(json.dumps(rm, indent=2, ensure_ascii=False))
+        return
+    for blk in rm["initiatives"]:
+        print(f"# {blk['initiative']}")
+        for ph in blk["phases"]:
+            print(f"  {ph['phase'] or '(umbrella)'}")
+            for row in ph["items"]:
+                print(f"    {_roadmap_row(row)}")
+        print()
+    if rm["unphased"]:
+        print("# (unphased)")
+        for row in rm["unphased"]:
+            print(f"  {_roadmap_row(row)}")
+        print()
+    total = (sum(len(p["items"]) for b in rm["initiatives"] for p in b["phases"])
+             + len(rm["unphased"]))
+    print(f"# {len(rm['initiatives'])} initiative(s), {total} page(s) — derived, advisory")
+
+
 def main(argv=None):
     root = hl.repo_root()
     ap = argparse.ArgumentParser(description="Knowledge navigator (read-only).")
@@ -449,6 +556,9 @@ def main(argv=None):
     tp.add_argument("--all", dest="include_untyped", action="store_true",
                     help="include generic untyped 'links' edges (default: typed only)")
     tp.add_argument("--json", action="store_true", help="emit JSON")
+    mp = sub.add_parser("roadmap",
+                        help="derived progress map: initiative -> phase -> status")
+    mp.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
     records = build_index(root)
@@ -481,6 +591,8 @@ def main(argv=None):
                       include_untyped=args.include_untyped)
                  for s in roots]
         _emit_tree(trees, args.json, forest=bool(args.kind))
+    elif args.cmd == "roadmap":
+        _emit_roadmap(roadmap(records), args.json)
 
 
 if __name__ == "__main__":

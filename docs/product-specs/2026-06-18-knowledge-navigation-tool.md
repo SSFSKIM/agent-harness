@@ -2,6 +2,7 @@
 status: active
 last_verified: 2026-06-18
 owner: harness
+phase: knowledge-format/02-navigation
 type: product-spec
 tags: [knowledge-format, navigation, query, tooling, porting]
 description: A live-query knowledge navigation tool (nav.py library+CLI) plus a docs-nav skill that consume the Phase-1 frontmatter (type/tags/description/resource) and the D5 link graph, so an agent navigates the corpus by querying instead of bulk-reading bodies.

@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-16
 owner: harness
+phase: symphony/05-telemetry
 type: product-spec
 tags: [worker, telemetry, observability, status]
 description: Captures Symphony-grade operational telemetry (per-ticket tokens, turn counts, session ids, run-level codex totals and rate limits) at turn and dispatch boundaries and persists it additively into status.json as the data producer ahead of the renderer.

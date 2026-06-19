@@ -2,6 +2,7 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+phase: methodology/01-product-design-phase
 type: product-spec
 tags: [methodology, product-design, execplan, entry-decision]
 description: A methodology spec adding a spec stage before ExecPlan plus a three-way entry decision (throwaway / Product Design / ExecPlan) that the agent picks before starting work.

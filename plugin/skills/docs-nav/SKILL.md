@@ -37,6 +37,7 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 | Typed edges inferred from the link graph | `nav.py relations [--rel implements]` |
 | A derived hierarchy, ignoring directories | `nav.py tree --type product-spec` |
 | What a page is built on / what builds on it | `nav.py tree <path> [--reverse]` |
+| A progress map: initiative → phase → status | `nav.py roadmap` |
 
 Every command takes `--json` for machine consumption; the library functions
 (`build_index`, `catalog`, `backlinks`, `stale`, `drift`) are importable for the
@@ -80,6 +81,18 @@ shows only **typed** relationships by default (the generic untyped `links` edges
 incidental mentions — are dropped so the hierarchy stays meaningful); pass `--all`
 to include them. Inference only — authored/declared relationship keys are a future
 format version (KF v1.1).
+
+`roadmap` is the **derived progress map** — the methodology's long-promised
+"roadmap is a derived view, not hand-maintained" (PLANS.md), delivered. It groups
+the work tier (product-spec + exec-plan) by the optional `phase` frontmatter key
+(`<initiative>/<NN>-<slug>`) into initiative → phase → `status:`, ordering phases
+by `NN`. A plan with no `phase` inherits it from the spec it `implements`; a page
+with neither lands in the advisory `(unphased)` bucket. Genuine design pivots show
+inline (`[superseded-by …]` — a newer page retiring an archived one of its kind,
+deduped) so the map doubles as the evolution view; a structural `refines` is not a
+pivot and is not shown. The authored intent lives in `docs/CHARTER.md`
+(`KNOWLEDGE_FORMAT.md` §2.2); the roadmap is its live projection. `--json` for
+machine use.
 
 This is the consumer half of the knowledge format — the queryable axes come from
 `docs/KNOWLEDGE_FORMAT.md` (`type`/`tags`/`description`/`resource`); see

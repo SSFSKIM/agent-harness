@@ -2,6 +2,7 @@
 status: stable
 last_verified: 2026-06-14
 owner: harness
+phase: symphony/03-dag-aware
 type: product-spec
 tags: [orchestration, dag, director, worker]
 description: A continuous DAG-aware wave loop that dispatches only ready tickets whose blockers are all done, lets completions unblock dependents, picks up worker-created tickets, and detects cycles and stuck states with board-as-truth.

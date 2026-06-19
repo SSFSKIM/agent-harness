@@ -390,5 +390,103 @@ class TestNavTreeDedup(unittest.TestCase):
             self.assertEqual(kids.count("docs/product-specs/s.md"), 1)  # tree: once
 
 
+def _roadmap_fixture(root):
+    """Two phased initiatives + an unphased page + a pivot + a non-row type."""
+    # alpha/01: spec + a plan that implements it (no own phase -> inherits)
+    _page(root / "docs/product-specs/sa1.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "phase: alpha/01-foo", "description: alpha one."])
+    _page(root / "docs/exec-plans/active/pa1.md",
+          ["status: completed", "last_verified: 2026-06-19", "owner: h",
+           "type: exec-plan", "description: builds sa1."],
+          body="implements [sa1](../../product-specs/sa1.md)\n")
+    # alpha/02: an ARCHIVED spec superseded by its replacement, same phase. The
+    # replacement links it twice — pivots must dedupe.
+    _page(root / "docs/product-specs/sa2.md",
+          ["status: archived", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "phase: alpha/02-bar", "description: retired."])
+    _page(root / "docs/product-specs/sa3.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "phase: alpha/02-bar", "description: replaces two."],
+          body="supersedes [sa2](sa2.md) — see also [sa2](sa2.md)\n")
+    # a design-doc carrying a phase: must NOT become a roadmap row (work tier only)
+    _page(root / "docs/design-docs/dd1.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: design-doc", "phase: alpha/01-foo", "description: not a row."])
+    # beta: a bare-initiative umbrella (no NN)
+    _page(root / "docs/product-specs/sb1.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "phase: beta", "description: beta umbrella."])
+    # unphased: no phase, no implements edge
+    _page(root / "docs/product-specs/su1.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "description: unphased."])
+
+
+class TestNavRoadmap(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _roadmap_fixture(self.root)
+        self.records = nav.build_index(self.root)
+        self.rm = nav.roadmap(self.records)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _init(self, name):
+        return next(b for b in self.rm["initiatives"] if b["initiative"] == name)
+
+    def test_groups_by_initiative_sorted(self):
+        self.assertEqual([b["initiative"] for b in self.rm["initiatives"]],
+                         ["alpha", "beta"])
+
+    def test_phases_ordered_by_NN(self):
+        self.assertEqual([p["phase"] for p in self._init("alpha")["phases"]],
+                         ["01-foo", "02-bar"])
+
+    def test_bare_initiative_is_umbrella(self):
+        self.assertEqual([p["phase"] for p in self._init("beta")["phases"]], [""])
+
+    def test_status_is_projected(self):
+        foo = self._init("alpha")["phases"][0]
+        st = {i["path"].rsplit("/", 1)[-1]: i["status"] for i in foo["items"]}
+        self.assertEqual(st["sa1.md"], "active")
+        self.assertEqual(st["pa1.md"], "completed")
+
+    def test_plan_inherits_phase_from_implemented_spec(self):
+        foo = self._init("alpha")["phases"][0]
+        paths = [i["path"] for i in foo["items"]]
+        self.assertIn("docs/exec-plans/active/pa1.md", paths)  # inherited alpha/01
+        self.assertEqual(foo["items"][0]["path"],  # spec sorts before its plan
+                         "docs/product-specs/sa1.md")
+
+    def test_unphased_bucket(self):
+        self.assertEqual([i["path"] for i in self.rm["unphased"]],
+                         ["docs/product-specs/su1.md"])
+
+    def test_pivot_annotation_inline_and_deduped(self):
+        # a supersession (newer page -> archived predecessor of its kind) shows
+        # inline; a structural `refines` does NOT; duplicate links collapse to one
+        bar = self._init("alpha")["phases"][1]
+        sa2 = next(i for i in bar["items"] if i["path"].endswith("sa2.md"))
+        self.assertEqual(sa2["pivots"],
+                         [("superseded-by", "docs/product-specs/sa3.md")])
+
+    def test_only_work_tier_pages_are_rows(self):
+        # dd1 (design-doc) carries phase alpha/01-foo but must not appear as a row
+        rows = [i["path"] for b in self.rm["initiatives"]
+                for p in b["phases"] for i in p["items"]]
+        rows += [i["path"] for i in self.rm["unphased"]]
+        self.assertNotIn("docs/design-docs/dd1.md", rows)
+        self.assertTrue(all(p.startswith(("docs/product-specs/",
+                                          "docs/exec-plans/")) for p in rows))
+
+    def test_render_and_empty_corpus(self):
+        # rendering does not raise, and an empty corpus is a no-crash empty map
+        nav._emit_roadmap(self.rm, as_json=False)
+        self.assertEqual(nav.roadmap([]), {"initiatives": [], "unphased": []})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-19
 owner: harness
+phase: knowledge-format/04-charter-roadmap
 type: product-spec
 tags: [methodology, knowledge-format, roadmap, charter, nav]
 description: A top-level authored CHARTER (mission + locked human-AI assumptions, the Orient anchor against long-session intent-drift) plus a derived progress map — nav.py projects initiative/phase/status from frontmatter instead of a hand-maintained roadmap.
@@ -85,20 +86,23 @@ roadmap, the progress state, and the pivot/evolution log are all *derived*.
   `implements` (via the existing `relations()` edge). `--json` for machines.
   Verifiable: command groups real specs by phase with live status.
 - **R6 — Pivots visible (the evolution view).** The roadmap annotates a node with
-  its inferred `superseded-by` / `refined-by` edge (reusing nav's `INVERSE`), so a
-  design pivot shows inline (e.g. `spec X  [superseded-by Y]`) and the ADR
-  rationale is one link away. This is the derived counterpart to the charter's
-  **Design philosophy** strands — a pivot is an ADR/spec that supersedes or
-  refines a strand, and this view is *how the 기획의도 moved over time*. No
-  separate hand-maintained changelog. Verifiable: a superseded node renders its
-  successor.
+  its inferred `superseded-by` edge (deduped, reusing nav's `INVERSE`), so a
+  genuine design pivot shows inline (e.g. `spec X  [superseded-by Y]`) and the
+  rationale is one link away. A **pivot is a supersession** — a newer page
+  retiring an `archived` page of its own kind — *not* a structural `refines`
+  (a child building on a parent), which floods the map with noise (dogfooding,
+  M4). `supersedes` is generalized from adr→archived-adr to any same-type page →
+  an archived same-type page. This is the derived counterpart to the charter's
+  **Design philosophy** strands — *how the 기획의도 moved over time*. No separate
+  hand-maintained changelog. Verifiable: a superseded node renders its successor.
 - **R7 — Portability (belief 13).** The `phase` key + `charter` type ship via
-  `KNOWLEDGE_FORMAT.md` (a MACHINE_DOC, propagated byte-identical, with the
-  `harness-init` host template bumped identically); the `roadmap` command lives
-  in `plugin/scripts/nav.py` so it travels; a **`charter` host template** is
-  seeded by `harness-init` (FILL placeholders, idempotent never-overwrite — like
-  `AGENTS.md`, *not* a verbatim MACHINE_DOC). Verifiable: scaffold seed +
-  propagation test; host knowledge-format template stays byte-identical to canon.
+  `KNOWLEDGE_FORMAT.md` (a MACHINE_DOC), with the `harness-init` host template
+  carrying the **same semantic additions** (the template is a host-agnostic
+  variant — generic examples + `{{TODAY}}` — *not* byte-identical to canon); the
+  `roadmap` command lives in `plugin/scripts/nav.py` so it travels; a **`charter`
+  host template** is seeded by `harness-init` (FILL placeholders, idempotent
+  never-overwrite — like `AGENTS.md`, *not* a verbatim MACHINE_DOC). Verifiable:
+  scaffold seed + propagation test; a fresh-scaffolded host lints GREEN.
 - **R8 — Dogfood backfill.** This repo's `docs/CHARTER.md` is authored, and the
   existing parent specs + their children carry `phase:` so `nav.py roadmap`
   renders the real initiatives (Symphony orchestration, knowledge-format) with
@@ -122,7 +126,7 @@ moved*) are two halves of the same thing.
 |---|---|
 | `docs/CHARTER.md` | **New, authored** (`type: charter`) — the Orient anchor. |
 | `docs/KNOWLEDGE_FORMAT.md` | Add `charter` to the §2.3 type vocabulary; add `phase` to the optional-keys table; bump §6 to **KF v1.1**. Lint stays permissive. |
-| `plugin/skills/harness-init/templates/knowledge-format.md` | Identical bump (byte-stable host copy). |
+| `plugin/skills/harness-init/templates/knowledge-format.md` | Same semantic bump (host-agnostic variant — generic examples + `{{TODAY}}`, not byte-identical). |
 | `plugin/skills/harness-init/templates/charter.md` | **New** host template (FILL placeholders for Mission / Done / Locked assumptions / Initiatives). |
 | `plugin/skills/harness-init/scaffold.py` (+ `tests/test_scaffold.py`) | Seed `docs/CHARTER.md` from the template (idempotent, never overwrite); test it propagates. |
 | `plugin/scripts/nav.py` | `roadmap(records)` builder + `_emit_roadmap` + CLI `roadmap` subcommand; phase inheritance via the `implements` edge; pivot annotation reusing `relations()`/`INVERSE`. |

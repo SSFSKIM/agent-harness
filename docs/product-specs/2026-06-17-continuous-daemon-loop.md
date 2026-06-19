@@ -2,6 +2,7 @@
 status: draft
 last_verified: 2026-06-17
 owner: harness
+phase: symphony/06-daemon-loop
 type: product-spec
 tags: [daemon, orchestrator, poll-loop, autonomy]
 description: Daemon stage 2 that folds the orchestrator's two barriers into a single continuous tick loop, adding a run_forever mode that keeps polling forever even when the board is empty, with bounded top-up, reaping, reconciliation, and graceful shutdown.
