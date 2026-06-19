@@ -109,17 +109,31 @@ Inference-only (NG-1 in the spec): no new frontmatter key, no change to
   groups pages from ≥2 directories (capture output in Progress log as the R5 proof).
 
 ## Progress log
-- [ ] M1 — inference layer
-- [ ] M2 — tree renderer
-- [ ] M3 — skill + behavioral + gate
+- [x] (2026-06-19) M1 — `EDGE_RULES` + `_infer_rel` + `relations()` +
+  `relations` CLI; `TestNavRelations` (each edge type + basis + missing-type → links).
+- [x] (2026-06-19) M2 — `_adjacency`/`tree`/`_tree_lines` + `tree` CLI
+  (`<path>`/`--type`/`--reverse`/`--rel`/`--json`); `TestNavTree` + `TestNavTreeCycle`.
+- [x] (2026-06-19) M3 — `docs-nav/SKILL.md` intents + rule-table summary +
+  cross-links; full gate GREEN (452 tests); behavioral R5 proof captured (one tree
+  rooted in `exec-plans/` reaches `product-specs/` + `design-docs/` — 3 dirs).
 
 ## Surprises & discoveries
+- **Pyright caught `root` unused** in `relations`/`_adjacency`/`tree`: the records
+  already carry resolved repo-relative links, so no root/filesystem access is needed
+  (unlike `drift`). Dropped the param from all three — also consistent with
+  `catalog`/`orphans`/`stale` which take no root.
+- **Duplicate children in the tree**: a page that markdown-links the same target
+  more than once produced repeated edges → repeated (seen-marked) children. Fixed by
+  collapsing `(src,dst)` in `_adjacency` (the rel is deterministic per type-pair, so
+  lossless); `relations()` stays faithful one-edge-per-link.
 
 ## Decision log
 - 2026-06-19: Approach B (projection over records, `build_index` untouched) — mirrors
   Phase-2 shape, lowest blast radius, per-edge testable.
 - 2026-06-19: `EDGE_RULES` in code not config; default tree direction forward;
   `documents`/resource edges excluded from tree — all per spec Design.
+- 2026-06-19: dropped the unused `root` param from the typed-graph functions
+  (records carry resolved links); dedupe `(src,dst)` in `_adjacency` only.
 
 ## Feedback (from completion gate)
 

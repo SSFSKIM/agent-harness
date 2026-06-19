@@ -34,6 +34,9 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 | Pages past the staleness window | `nav.py stale` |
 | Content pages nothing links to | `nav.py orphans` |
 | Pages whose bound code moved since last_verified | `nav.py drift` |
+| Typed edges inferred from the link graph | `nav.py relations [--rel implements]` |
+| A derived hierarchy, ignoring directories | `nav.py tree --type product-spec` |
+| What a page is built on / what builds on it | `nav.py tree <path> [--reverse]` |
 
 Every command takes `--json` for machine consumption; the library functions
 (`build_index`, `catalog`, `backlinks`, `stale`, `drift`) are importable for the
@@ -50,6 +53,28 @@ code-execution path (`from nav import build_index, backlinks`).
   high count usually means index pages use prose, not markdown links.
 - `drift` compares each page's `resource` to its code's last git-commit date;
   `unknown` means no git / missing path / a URL (fail-soft, never an error).
+
+## Inferred relationships & derived hierarchy
+
+`relations` / `tree` add a **typed** layer over the link graph with **no new
+frontmatter** — the edge kind is inferred from the endpoints' `type`:
+
+| from → to | relation |
+|---|---|
+| exec-plan → product-spec | `implements` |
+| product-spec → product-spec | `refines` |
+| adr → archived adr | `supersedes` |
+| adr/knowledge/spec/plan → design-doc | `grounded-in` |
+| any → methodology / knowledge | `governed-by` / `references` |
+| no rule (or page has no `type`) | `links` (untyped — graceful default) |
+
+`tree` renders a hierarchy from frontmatter + links alone, **ignoring the
+directory layout**: a spec, the plan that `implements` it, and the design-doc it is
+`grounded-in` appear in one tree though they live in three directories — structure
+is a projection of metadata, not of the file tree (`KNOWLEDGE_FORMAT.md` §2.2).
+Default follows dependencies (what a page is built on); `--reverse` shows
+dependents; `--rel a,b` restricts edge kinds; `--json` for machine use. Inference
+only — authored/declared relationship keys are a future format version (KF v1.1).
 
 This is the consumer half of the knowledge format — the queryable axes come from
 `docs/KNOWLEDGE_FORMAT.md` (`type`/`tags`/`description`/`resource`); see

@@ -216,6 +216,129 @@ def drift(records, root):
     return out
 
 
+# --- Inferred typed graph + derived hierarchy (spec 2026-06-19) -----------------
+# The edge KIND is inferred from each link's (source type, target type) pair (plus
+# the target status, for supersession) — NO new frontmatter key. A link matching no
+# rule keeps the generic untyped relation "links", so a page with no `type` degrades
+# gracefully. Precision over recall: only high-confidence pairs are typed.
+EDGE_RULES = {  # exact (src_type, dst_type) -> forward relation
+    ("exec-plan", "product-spec"): "implements",
+    ("product-spec", "product-spec"): "refines",
+    ("adr", "design-doc"): "grounded-in",
+    ("knowledge", "design-doc"): "grounded-in",
+    ("product-spec", "design-doc"): "grounded-in",
+    ("exec-plan", "design-doc"): "grounded-in",
+}
+INVERSE = {  # forward relation -> reverse label (for `tree --reverse`)
+    "implements": "implemented-by", "refines": "refined-by",
+    "supersedes": "superseded-by", "grounded-in": "grounds",
+    "governed-by": "governs", "references": "referenced-by", "links": "linked-by",
+}
+
+
+def _infer_rel(src_type, dst_type, dst_status):
+    """Infer an edge kind, most-specific first; returns (relation, basis).
+
+    basis names the rule that fired so the inference is auditable. Anything not
+    matched stays ('links', 'untyped') — the existing undifferentiated edge."""
+    if (src_type, dst_type) in EDGE_RULES:
+        return EDGE_RULES[(src_type, dst_type)], f"{src_type}->{dst_type}"
+    if src_type == "adr" and dst_type == "adr" and dst_status == "archived":
+        return "supersedes", "adr->archived-adr"
+    if dst_type == "methodology":
+        return "governed-by", "*->methodology"
+    if dst_type == "knowledge":
+        return "references", "*->knowledge"
+    return "links", "untyped"
+
+
+def relations(records):
+    """Type the link graph: one {src, dst, rel, basis} per intra-corpus link.
+
+    A pure projection over build_index records (build_index is untouched; links
+    are already repo-relative, so no root is needed). The relation is inferred via
+    `_infer_rel` from the endpoints' `type`/`status`; a target not in the page
+    graph (or a page without `type`) yields rel='links'."""
+    by_path = {r["path"]: r for r in records}
+    out = []
+    for r in records:
+        for dst in r["links"]:
+            d = by_path.get(dst) or {}
+            rel, basis = _infer_rel(r.get("type"), d.get("type"), d.get("status"))
+            out.append({"src": r["path"], "dst": dst, "rel": rel, "basis": basis})
+    return out
+
+
+def _adjacency(records, reverse, rels):
+    """Adjacency map {src: [(dst, rel), …]} from the typed edges, oriented by
+    `reverse` (dependents vs dependencies) and filtered to `rels` if given.
+
+    Collapses repeated links to the same target into one edge (a page that links a
+    target twice is one relationship — the rel is deterministic per type-pair), so
+    the hierarchy has no duplicate children."""
+    adj, seen = {}, set()
+    for e in relations(records):
+        if reverse:
+            src, dst, rel = e["dst"], e["src"], INVERSE.get(e["rel"], e["rel"])
+        else:
+            src, dst, rel = e["src"], e["dst"], e["rel"]
+        if rels and rel not in rels:
+            continue
+        if (src, dst) in seen:
+            continue
+        seen.add((src, dst))
+        adj.setdefault(src, []).append((dst, rel))
+    return adj
+
+
+def tree(records, start, reverse=False, rels=None, max_depth=20):
+    """Derived hierarchy rooted at `start`, following inferred typed edges.
+
+    Built from frontmatter + links only — never the directory layout (that is the
+    'structure = projection' proof). Cycle-safe: a node is expanded once; a
+    re-encountered node renders with seen=True and is not re-expanded. Depth-bounded.
+    Returns a nested {path, type, rel, seen, children}."""
+    adj = _adjacency(records, reverse, rels)
+    by_path = {r["path"]: r for r in records}
+    visited = set()
+
+    def node(path, rel, depth):
+        n = {"path": path, "type": by_path.get(path, {}).get("type"),
+             "rel": rel, "seen": path in visited, "children": []}
+        if path in visited or depth >= max_depth:
+            n["seen"] = True
+            return n
+        visited.add(path)
+        for dst, r in sorted(adj.get(path, [])):
+            n["children"].append(node(dst, r, depth + 1))
+        return n
+
+    return node(start, None, 0)
+
+
+def _slug(path):
+    name = path.rsplit("/", 1)[-1]
+    return name[:-3] if name.endswith(".md") else name
+
+
+def _tree_lines(node, prefix="", is_last=True, is_root=True):
+    """Render a tree() dict as indented ASCII lines (type: slug [rel] (↑ seen))."""
+    label = f"{node['type'] or '-'}: {_slug(node['path'])}"
+    if node["rel"]:
+        label += f"  [{node['rel']}]"
+    if node["seen"]:
+        label += "  (↑ seen)"
+    if is_root:
+        lines, child_prefix = [label], ""
+    else:
+        lines = [prefix + ("└─ " if is_last else "├─ ") + label]
+        child_prefix = prefix + ("   " if is_last else "│  ")
+    kids = node["children"]
+    for i, c in enumerate(kids):
+        lines += _tree_lines(c, child_prefix, i == len(kids) - 1, False)
+    return lines
+
+
 def _public(rec):
     """A record without the internal `catalog` flag, for JSON output."""
     return {k: v for k, v in rec.items() if k != "catalog"}
@@ -257,6 +380,28 @@ def _emit_drift(rows, as_json):
               f"({unknown} unknown) — advisory")
 
 
+def _emit_relations(edges, as_json):
+    if as_json:
+        print(json.dumps(edges, indent=2, ensure_ascii=False))
+    else:
+        for e in edges:
+            print(f"{e['src']}  --{e['rel']}-->  {e['dst']}  ({e['basis']})")
+        typed = sum(1 for e in edges if e["rel"] != "links")
+        print(f"# {len(edges)} edge(s), {typed} typed")
+
+
+def _emit_tree(trees, as_json, forest):
+    if as_json:
+        print(json.dumps(trees if forest else trees[0], indent=2,
+                         ensure_ascii=False))
+    else:
+        for i, tr in enumerate(trees):
+            if i:
+                print()
+            for line in _tree_lines(tr):
+                print(line)
+
+
 def main(argv=None):
     root = hl.repo_root()
     ap = argparse.ArgumentParser(description="Knowledge navigator (read-only).")
@@ -276,6 +421,16 @@ def main(argv=None):
                            ("drift", "resource-bound pages whose code moved")):
         h = sub.add_parser(name, help=helptext)
         h.add_argument("--json", action="store_true", help="emit JSON")
+    rp = sub.add_parser("relations", help="typed edges inferred from the link graph")
+    rp.add_argument("--rel", help="filter to one relation kind (e.g. implements)")
+    rp.add_argument("--json", action="store_true", help="emit JSON edges")
+    tp = sub.add_parser("tree", help="derived hierarchy from inferred typed edges")
+    tp.add_argument("path", nargs="?", help="root page (repo-relative); omit with --type")
+    tp.add_argument("--type", dest="kind", help="root at every page of this type (forest)")
+    tp.add_argument("--reverse", action="store_true",
+                    help="follow dependents instead of dependencies")
+    tp.add_argument("--rel", help="comma-separated relation kinds to include")
+    tp.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
     records = build_index(root)
@@ -291,6 +446,22 @@ def main(argv=None):
         _emit(stale(records, hl.stale_window(hl.gate_config(root))), args.json)
     elif args.cmd == "drift":
         _emit_drift(drift(records, root), args.json)
+    elif args.cmd == "relations":
+        edges = relations(records)
+        if args.rel:
+            edges = [e for e in edges if e["rel"] == args.rel]
+        _emit_relations(edges, args.json)
+    elif args.cmd == "tree":
+        rels = set(args.rel.split(",")) if args.rel else None
+        if args.kind:
+            roots = [r["path"] for r in records if r["type"] == args.kind]
+        elif args.path:
+            roots = [_norm(args.path, root)]
+        else:
+            ap.error("tree needs a <path> or --type")
+        trees = [tree(records, s, reverse=args.reverse, rels=rels)
+                 for s in roots]
+        _emit_tree(trees, args.json, forest=bool(args.kind))
 
 
 if __name__ == "__main__":

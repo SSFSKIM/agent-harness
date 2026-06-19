@@ -188,5 +188,152 @@ class TestNavDrift(unittest.TestCase):
         self.assertEqual(states["docs/memory/knowledge/missing.md"], "unknown")
 
 
+def _typed_fixture(root):
+    """A corpus exercising each inferred edge type across multiple directories."""
+    _page(root / "docs/exec-plans/active/p1.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: exec-plan", "description: a plan."],
+          body="implements [s1](../../product-specs/s1.md) on "
+               "[d1](../../design-docs/d1.md)\n")
+    _page(root / "docs/product-specs/s1.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "description: spec one."],
+          body="refines [s2](s2.md); governed by [plans](../PLANS.md)\n")
+    _page(root / "docs/product-specs/s2.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: product-spec", "description: spec two."])
+    _page(root / "docs/design-docs/d1.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: design-doc", "description: a design doc."])
+    _page(root / "docs/memory/adr/a1.md",
+          ["status: accepted", "last_verified: 2026-06-19", "owner: h",
+           "type: adr", "description: new decision."],
+          body="supersedes [a0](a0.md)\n")
+    _page(root / "docs/memory/adr/a0.md",
+          ["status: archived", "last_verified: 2026-06-19", "owner: h",
+           "type: adr", "description: old decision."])
+    _page(root / "docs/memory/knowledge/k1.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: knowledge", "description: a how-to."],
+          body="grounded in [d1](../../design-docs/d1.md)\n")
+    _page(root / "docs/PLANS.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: methodology", "description: the method."])
+    # no `type` key -> degrades gracefully to untyped 'links'
+    _page(root / "docs/memory/knowledge/notype.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "description: no type key."],
+          body="see [s1](../../product-specs/s1.md)\n")
+
+
+class TestNavRelations(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _typed_fixture(self.root)
+        self.records = nav.build_index(self.root)
+        self.rel = {(e["src"], e["dst"]): e["rel"]
+                    for e in nav.relations(self.records)}
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _r(self, src, dst):
+        return self.rel[(f"docs/{src}", f"docs/{dst}")]
+
+    def test_inferred_edge_types(self):
+        self.assertEqual(self._r("exec-plans/active/p1.md",
+                                 "product-specs/s1.md"), "implements")
+        self.assertEqual(self._r("exec-plans/active/p1.md",
+                                 "design-docs/d1.md"), "grounded-in")
+        self.assertEqual(self._r("product-specs/s1.md",
+                                 "product-specs/s2.md"), "refines")
+        self.assertEqual(self._r("product-specs/s1.md", "PLANS.md"), "governed-by")
+        self.assertEqual(self._r("memory/adr/a1.md",
+                                 "memory/adr/a0.md"), "supersedes")
+        self.assertEqual(self._r("memory/knowledge/k1.md",
+                                 "design-docs/d1.md"), "grounded-in")
+
+    def test_missing_type_degrades_to_links(self):
+        # source has no `type` and no dst-kind rule fires -> untyped
+        self.assertEqual(self._r("memory/knowledge/notype.md",
+                                 "product-specs/s1.md"), "links")
+
+    def test_basis_is_auditable(self):
+        basis = {(e["src"], e["dst"]): e["basis"]
+                 for e in nav.relations(self.records)}
+        self.assertEqual(basis[("docs/exec-plans/active/p1.md",
+                                "docs/product-specs/s1.md")],
+                         "exec-plan->product-spec")
+
+
+class TestNavTree(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _typed_fixture(self.root)
+        self.records = nav.build_index(self.root)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _flatten(self, node, acc=None):
+        acc = [] if acc is None else acc
+        acc.append(node)
+        for c in node["children"]:
+            self._flatten(c, acc)
+        return acc
+
+    def test_forward_tree_is_directory_independent(self):
+        # one derived tree groups pages from >=3 different directories — the proof
+        t = nav.tree(self.records, "docs/exec-plans/active/p1.md")
+        nodes = self._flatten(t)
+        paths = [n["path"] for n in nodes]
+        self.assertIn("docs/product-specs/s1.md", paths)
+        self.assertIn("docs/design-docs/d1.md", paths)
+        dirs = {p.rsplit("/", 1)[0] for p in paths}
+        self.assertGreaterEqual(len(dirs), 3)
+        s1 = next(n for n in nodes if n["path"] == "docs/product-specs/s1.md")
+        self.assertEqual(s1["rel"], "implements")  # typed, not bare 'links'
+
+    def test_reverse_tree_shows_dependents(self):
+        t = nav.tree(self.records, "docs/product-specs/s1.md", reverse=True)
+        kids = {c["path"]: c["rel"] for c in t["children"]}
+        self.assertEqual(kids.get("docs/exec-plans/active/p1.md"), "implemented-by")
+
+    def test_rel_filter_restricts_edges(self):
+        t = nav.tree(self.records, "docs/exec-plans/active/p1.md",
+                     rels={"implements"})
+        kids = [c["path"] for c in t["children"]]
+        self.assertIn("docs/product-specs/s1.md", kids)
+        self.assertNotIn("docs/design-docs/d1.md", kids)  # grounded-in excluded
+
+    def test_render_is_indented_ascii(self):
+        lines = nav._tree_lines(nav.tree(self.records,
+                                         "docs/exec-plans/active/p1.md"))
+        self.assertTrue(lines[0].startswith("exec-plan: p1"))
+        self.assertTrue(any("─" in line for line in lines[1:]))
+
+
+class TestNavTreeCycle(unittest.TestCase):
+    def test_cycle_does_not_loop(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _page(root / "docs/product-specs/s1.md",
+                  ["status: active", "last_verified: 2026-06-19", "owner: h",
+                   "type: product-spec", "description: one."], body="[s2](s2.md)\n")
+            _page(root / "docs/product-specs/s2.md",
+                  ["status: active", "last_verified: 2026-06-19", "owner: h",
+                   "type: product-spec", "description: two."], body="[s1](s1.md)\n")
+            records = nav.build_index(root)
+            t = nav.tree(records, "docs/product-specs/s1.md")  # must terminate
+            s2 = t["children"][0]
+            self.assertEqual(s2["path"], "docs/product-specs/s2.md")
+            back = s2["children"][0]  # s2 -> s1 again
+            self.assertEqual(back["path"], "docs/product-specs/s1.md")
+            self.assertTrue(back["seen"])      # marked seen
+            self.assertEqual(back["children"], [])  # and not re-expanded
+
+
 if __name__ == "__main__":
     unittest.main()
