@@ -119,7 +119,9 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
         ws = str(run.workspace_path(tid, workspace_root))
     try:
         return dq.append_merge_request(tid, pr=pr_url, branch=pr_branch,
-                                       workspace_path=ws, base=queue_base)
+                                       workspace_path=ws,
+                                       evidence=outcome.get("evidence"),
+                                       base=queue_base)
     except Exception as exc:
         errs.append(f"merge enqueue: {exc}")
         return False

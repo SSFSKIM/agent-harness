@@ -111,6 +111,7 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
                          workspace_path: str | None = None,
                          self_description: str | None = None,
                          guidance: str | None = None, attempt: int = 1,
+                         evidence: dict | None = None,
                          created_at: str | None = None,
                          base: Path | str | None = None) -> bool:
     """Enqueue a PR-merge worklist item for the serialized merger to drain.
@@ -122,14 +123,17 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
     one-open-per-ticket dedupe swallowing it (the re-enqueue loop), while a re-delivery
     of the SAME attempt still dedupes (at-least-once, R1/R4). `guidance` is the Director's
     directive for a guided retry (None on the first enqueue) — the merger renders it into
-    the land prompt. Returns True if newly queued, False if already present."""
+    the land prompt. `evidence` is the worker's optional PR-feedback-sweep result
+    (merge-preservation R4) — advisory audit data the merger records and compares against
+    what it independently verifies; never trusted in place of verification (D5). Returns
+    True if newly queued, False if already present."""
     return append_request({
         "request_id": f"merge|{ticket_id}|a{attempt}",
         "ticket_id": ticket_id,
         "session_id": f"{ticket_id}-merge-a{attempt}",
         "kind": "mergeRequest",
         "payload": {"pr": pr, "branch": branch, "self_description": self_description,
-                    "guidance": guidance, "attempt": attempt},
+                    "guidance": guidance, "attempt": attempt, "evidence": evidence},
         "workspace_path": workspace_path,
         "created_at": created_at or _now_iso(),
     }, base=base)

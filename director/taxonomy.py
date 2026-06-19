@@ -72,8 +72,14 @@ the PR and before report_outcome(done), gather the PR's checks and every comment
 (top-level comments, inline review comments, bot reviews, review summaries via `gh`) and
 treat each actionable item as blocking until it is addressed by a code/test/docs change
 OR an explicit, justified pushback reply on that thread; re-run validation after changes
-and repeat the sweep until nothing actionable is outstanding and checks are green. Only
-then call report_outcome(done)."""
+and repeat the sweep until nothing actionable is outstanding and checks are green.
+Explicitly RESOLVE each review thread you address — a reply alone does not resolve it,
+and the merger refuses to land while threads are unresolved. Then call report_outcome(done)
+with the sweep's result as structured evidence: checks_state (the CI state you observed),
+unresolved_threads (0 when you resolved them all), and acceptance_verified (whether you ran
+the ticket's Validation/Test Plan acceptance). The merger RE-VERIFIES preservation + these
+independently before landing — they are your audit record, not a substitute for the work
+being truly clean."""
 
 # institution-as-data: type -> stage workflow. child_types encodes the decomposition
 # policy (the pipeline planning -> {research,design} -> spec -> impl).

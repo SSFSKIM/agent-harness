@@ -849,6 +849,20 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertFalse(out["summary"]["merge_enqueued"])
         self.assertEqual(self._merge_reqs(), [])
 
+    def test_done_with_evidence_carries_it_into_payload(self):
+        # merge-preservation M1 (R4): the worker's optional sweep evidence rides
+        # outcome → _maybe_enqueue_merge → merge payload (advisory audit data).
+        self._reconcile(self._done(pr_url="http://pr/9", pr_branch="feat/y",
+                                   evidence={"checks_state": "green",
+                                             "unresolved_threads": 0}))
+        self.assertEqual(self._merge_reqs()[0]["payload"]["evidence"],
+                         {"checks_state": "green", "unresolved_threads": 0})
+
+    def test_done_with_pr_but_no_evidence_payload_evidence_is_none(self):
+        # R5 backward-compat: a PR-done without evidence still enqueues; payload evidence None.
+        self._reconcile(self._done(pr_url="http://pr/9", pr_branch="feat/y"))
+        self.assertIsNone(self._merge_reqs()[0]["payload"]["evidence"])
+
     def test_done_enqueues_merge_before_terminal_transition(self):
         # act-before-consume (review-reliability P1): the PR-merge must be enqueued BEFORE
         # the `done` board write, so a crash between them never strands an un-enqueued PR

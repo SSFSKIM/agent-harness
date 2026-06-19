@@ -211,6 +211,16 @@ The spec fixed the design; these are the build choices:
 
 ## Progress log
 - [x] (2026-06-19) Plan created from spec; base_commit a401be7, review_level standard.
+- [x] (2026-06-19) M1 done — R4 evidence channel. `report_outcome_spec` gains optional
+  `checks_state`/`unresolved_threads`/`acceptance_verified`; the executor groups present
+  fields into `outcome["evidence"]` (or None) — `is not None` keeps falsy-valid 0/False.
+  `taxonomy._IMPL_TEMPLATE` sweep step now mandates explicit thread resolution + ties
+  `report_outcome` evidence to the sweep result + notes the merger re-verifies.
+  `queue.append_merge_request(evidence=…)` carries it into the payload;
+  `orchestrator._maybe_enqueue_merge` forwards `outcome.get("evidence")`. Tests:
+  `ReportOutcomeTest` (5, test_director_tools) + taxonomy evidence/resolve-threads test +
+  2 orchestrator payload tests. Targeted suites 103 OK; full gate GREEN. Backward-compat
+  confirmed (mock `done` → `"evidence": null`).
 
 ## Surprises & discoveries
 

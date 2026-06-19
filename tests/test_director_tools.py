@@ -110,5 +110,49 @@ class GuardrailWiringTest(unittest.TestCase):
         self.assertEqual(calls, [])
 
 
+class ReportOutcomeTest(unittest.TestCase):
+    """report_outcome terminal signal + optional sweep evidence (merge-preservation R4)."""
+
+    def _record(self, args):
+        sink = {}
+        tools.make_report_outcome_executor(sink)("report_outcome", args)
+        return sink.get("outcome")
+
+    def test_done_without_evidence_is_valid(self):
+        # R5 backward-compat: a bare done (no sweep fields) still records a valid outcome
+        # and evidence is None — the merger then falls back to its own verification.
+        out = self._record({"status": "done", "reason": "shipped"})
+        self.assertEqual(out["status"], "done")
+        self.assertIsNone(out["evidence"])
+
+    def test_evidence_recorded_when_present(self):
+        out = self._record({"status": "done", "reason": "shipped",
+                            "checks_state": "green", "unresolved_threads": 0,
+                            "acceptance_verified": True})
+        self.assertEqual(out["evidence"], {"checks_state": "green",
+                                           "unresolved_threads": 0,
+                                           "acceptance_verified": True})
+
+    def test_falsy_valid_evidence_kept(self):
+        # 0 unresolved threads and acceptance_verified=False are meaningful, not "absent":
+        # `is not None` keeps them (a `if args.get(k)` truthiness test would drop them).
+        out = self._record({"status": "done", "reason": "x",
+                            "unresolved_threads": 0, "acceptance_verified": False})
+        self.assertEqual(out["evidence"],
+                         {"unresolved_threads": 0, "acceptance_verified": False})
+
+    def test_partial_evidence_only_present_keys(self):
+        out = self._record({"status": "done", "reason": "x", "checks_state": "pending"})
+        self.assertEqual(out["evidence"], {"checks_state": "pending"})
+
+    def test_spec_advertises_optional_evidence_fields(self):
+        props = tools.report_outcome_spec()["inputSchema"]["properties"]
+        for f in ("checks_state", "unresolved_threads", "acceptance_verified"):
+            self.assertIn(f, props)
+        # still terminal-only: status/reason required, evidence is not
+        req = tools.report_outcome_spec()["inputSchema"]["required"]
+        self.assertEqual(set(req), {"status", "reason"})
+
+
 if __name__ == "__main__":
     unittest.main()

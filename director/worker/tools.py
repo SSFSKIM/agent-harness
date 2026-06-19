@@ -58,6 +58,22 @@ def report_outcome_spec() -> dict:
                 "pr_branch": {"type": "string",
                               "description": "The PR's branch name (so the merger can land "
                                              "it). Include alongside pr_url on done."},
+                # Optional sweep evidence (merge-preservation R4): the structured RESULT of
+                # the PR feedback sweep. Advisory/audit only — the merger re-verifies
+                # preservation + CI + threads independently before landing (D5), so omitting
+                # these degrades observability, not safety.
+                "checks_state": {"type": "string",
+                                 "description": "When status=done: the PR's CI state you "
+                                                "observed in the feedback sweep (e.g. green / "
+                                                "failing / pending). Audit only."},
+                "unresolved_threads": {"type": "integer",
+                                       "description": "When status=done: review threads still "
+                                                      "unresolved after your sweep (0 when you "
+                                                      "resolved them all)."},
+                "acceptance_verified": {"type": "boolean",
+                                        "description": "When status=done: whether you ran the "
+                                                       "ticket's Validation/Test Plan "
+                                                       "acceptance items."},
             },
         },
     }
@@ -78,15 +94,23 @@ def make_report_outcome_executor(sink: dict) -> Callable[[str, dict], dict]:
             return {"success": False,
                     "output": f"report_outcome status must be one of "
                               f"{list(REPORT_OUTCOME_STATUSES)}"}
+        args = arguments or {}
+        # Optional sweep evidence (merge-preservation R4): group the present fields into one
+        # `evidence` dict (None when the worker supplied none). `is not None` keeps the valid
+        # falsy values 0 (no unresolved threads) and False (acceptance not run). Advisory only
+        # — the merger re-verifies independently (D5).
+        evidence = {k: args[k] for k in ("checks_state", "unresolved_threads",
+                                         "acceptance_verified") if args.get(k) is not None}
         sink["outcome"] = {
             "status": status,
-            "reason": (arguments or {}).get("reason"),
-            "spawned_ticket_ids": (arguments or {}).get("spawned_ticket_ids") or [],
+            "reason": args.get("reason"),
+            "spawned_ticket_ids": args.get("spawned_ticket_ids") or [],
             # PR handoff (done → serialized merger): the worker PROPOSES its PR here;
             # orchestrator.reconcile EXECUTES the mergeRequest enqueue (D-40). None when
             # the worker opened no PR — reconcile then enqueues nothing.
-            "pr_url": (arguments or {}).get("pr_url"),
-            "pr_branch": (arguments or {}).get("pr_branch"),
+            "pr_url": args.get("pr_url"),
+            "pr_branch": args.get("pr_branch"),
+            "evidence": evidence or None,
         }
         return {"success": True, "output": "outcome recorded"}
     return execute

@@ -157,6 +157,20 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("SELF-QA", out)
         self.assertIn("report_outcome(done)", out)
 
+    def test_impl_sweep_outputs_structured_evidence_and_resolves_threads(self):
+        # merge-preservation M1 (R4): the sweep step now instructs explicit thread
+        # resolution (a reply alone does not resolve) and ties report_outcome's structured
+        # evidence (checks_state / unresolved_threads / acceptance_verified) to the sweep's
+        # result, while flagging that the merger re-verifies independently.
+        out = tax.compose_worker_prompt({"identifier": "X-7", "prompt": "fix it",
+                                         "labels": ["impl"]})
+        low = out.lower()
+        self.assertIn("resolve each review thread", low)   # explicit thread resolution
+        self.assertIn("checks_state", out)                 # structured evidence fields
+        self.assertIn("unresolved_threads", out)
+        self.assertIn("acceptance_verified", out)
+        self.assertIn("re-verifies", low)                  # merger independently re-verifies
+
     def test_planning_prompt_decomposes(self):
         out = tax.compose_worker_prompt({"identifier": "X-4", "prompt": "ship feature",
                                          "labels": ["planning"]})
