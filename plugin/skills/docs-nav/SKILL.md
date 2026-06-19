@@ -38,6 +38,7 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 | A derived hierarchy, ignoring directories | `nav.py tree --type product-spec` |
 | What a page is built on / what builds on it | `nav.py tree <path> [--reverse]` |
 | A progress map: initiative → phase → status | `nav.py roadmap` |
+| The whole picture: charter → initiatives → roadmap | `nav.py map` |
 
 Every command takes `--json` for machine consumption; the library functions
 (`build_index`, `catalog`, `backlinks`, `stale`, `drift`) are importable for the
@@ -93,6 +94,15 @@ deduped) so the map doubles as the evolution view; a structural `refines` is not
 pivot and is not shown. The authored intent lives in `docs/CHARTER.md`
 (`KNOWLEDGE_FORMAT.md` §2.2); the roadmap is its live projection. `--json` for
 machine use.
+
+`map` is the single **charter-rooted** view: it makes `docs/CHARTER.md` the graph
+root (via the inferred `charters` edge: charter → the `product-spec` it links) and
+hangs each initiative's `roadmap` branch under it — the Big Picture → initiatives →
+phases → specs/plans + pivots in one descent. An initiative present in the roadmap
+but anchored by no charter link renders flagged (`⚠ not anchored in charter`), so a
+drift between the authored charter and the derived initiative set is visible rather
+than silent. Start here to grasp the whole project at once; drop to `roadmap`/`tree`
+for a slice.
 
 This is the consumer half of the knowledge format — the queryable axes come from
 `docs/KNOWLEDGE_FORMAT.md` (`type`/`tags`/`description`/`resource`); see

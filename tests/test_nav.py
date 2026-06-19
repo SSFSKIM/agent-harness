@@ -510,5 +510,70 @@ class TestNavRoadmap(unittest.TestCase):
         self.assertEqual(nav.roadmap([]), {"initiatives": [], "unphased": []})
 
 
+def _map_fixture(root):
+    """The roadmap corpus + a CHARTER that anchors only the `alpha` initiative."""
+    _roadmap_fixture(root)
+    _page(root / "docs/CHARTER.md",
+          ["status: stable", "last_verified: 2026-06-19", "owner: h",
+           "type: charter", "description: the charter."],
+          body="anchors [alpha](product-specs/sa1.md)\n")  # links alpha's spec, not beta's
+
+
+class TestNavMap(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _map_fixture(self.root)
+        self.records = nav.build_index(self.root)
+        self.m = nav.charter_map(self.records)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _block(self, name):
+        return next(b for b in self.m["initiatives"] if b["initiative"] == name)
+
+    def test_charter_is_root(self):
+        self.assertEqual(self.m["charter"], "docs/CHARTER.md")
+
+    def test_charters_edge_is_typed(self):
+        # charter -> product-spec must infer the new `charters` relation
+        rel = {(e["src"], e["dst"]): e["rel"] for e in nav.relations(self.records)}
+        self.assertEqual(rel[("docs/CHARTER.md", "docs/product-specs/sa1.md")],
+                         "charters")
+        self.assertEqual(nav.INVERSE["charters"], "chartered-by")
+
+    def test_anchored_initiative_carries_its_anchor(self):
+        alpha = self._block("alpha")
+        self.assertTrue(alpha["anchored"])
+        self.assertEqual(alpha["anchor"], "docs/product-specs/sa1.md")
+        # the roadmap phases are preserved under the initiative
+        self.assertEqual([p["phase"] for p in alpha["phases"]], ["01-foo", "02-bar"])
+
+    def test_unanchored_initiative_flagged(self):
+        # beta's spec is not linked by the charter -> not anchored
+        self.assertFalse(self._block("beta")["anchored"])
+
+    def test_anchored_sorts_before_unanchored(self):
+        names = [b["initiative"] for b in self.m["initiatives"]]
+        self.assertEqual(names, ["alpha", "beta"])  # alpha anchored -> first
+
+    def test_no_charter_is_fail_soft(self):
+        # a corpus with no charter page -> root None, every initiative unanchored
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _roadmap_fixture(root)  # no CHARTER.md
+            m = nav.charter_map(nav.build_index(root))
+            self.assertIsNone(m["charter"])
+            self.assertTrue(all(not b["anchored"] for b in m["initiatives"]))
+
+    def test_render_and_serializable(self):
+        nav._emit_map(self.m, as_json=False)
+        nav._emit_map(self.m, as_json=True)
+        self.assertEqual(json.loads(json.dumps(self.m))["charter"], "docs/CHARTER.md")
+        self.assertEqual(nav.charter_map([]), {"charter": None, "initiatives": [],
+                                               "unphased": []})
+
+
 if __name__ == "__main__":
     unittest.main()

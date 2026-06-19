@@ -226,6 +226,7 @@ def drift(records, root):
 # rule keeps the generic untyped relation "links", so a page with no `type` degrades
 # gracefully. Precision over recall: only high-confidence pairs are typed.
 EDGE_RULES = {  # exact (src_type, dst_type) -> forward relation
+    ("charter", "product-spec"): "charters",
     ("exec-plan", "product-spec"): "implements",
     ("product-spec", "product-spec"): "refines",
     ("adr", "design-doc"): "grounded-in",
@@ -237,6 +238,7 @@ INVERSE = {  # forward relation -> reverse label (for `tree --reverse`)
     "implements": "implemented-by", "refines": "refined-by",
     "supersedes": "superseded-by", "grounded-in": "grounds",
     "governed-by": "governs", "references": "referenced-by", "links": "linked-by",
+    "charters": "chartered-by",
 }
 UNTYPED = ("links", "linked-by")  # the generic fallback edge (incidental mentions)
 
@@ -415,6 +417,55 @@ def roadmap(records):
     return {"initiatives": out, "unphased": sorted(unphased, key=item_sort)}
 
 
+def charter_map(records):
+    """Charter-rooted unified map: the Big Picture (the `charter` page) -> each
+    initiative it anchors -> that initiative's roadmap (phases -> specs/plans ->
+    pivots). It composes `roadmap()` (phase grouping) with the charter's outbound
+    `charters` edges (the initiative anchors): an initiative is *anchored* when the
+    charter links a `product-spec` whose `phase` initiative it is. Initiatives in
+    the roadmap that no charter link anchors are surfaced separately (so a drift
+    between the authored charter and the derived initiative set is visible, not
+    hidden). Pure projection, fail-soft (no charter -> everything unanchored).
+
+    Returns {charter, initiatives: [{…roadmap block…, anchored, anchor}], unphased}."""
+    rm = roadmap(records)
+    by_path = {r["path"]: r for r in records}
+    charter = next((r for r in records if r.get("type") == "charter"), None)
+    anchor = {}  # initiative name -> the charter-linked product-spec anchoring it
+    if charter:
+        for dst in charter["links"]:
+            d = by_path.get(dst, {})
+            key = _phase_key(d.get("phase")) if d.get("type") == "product-spec" else None
+            if key:
+                anchor.setdefault(key[0], dst)
+    inits = [{**b, "anchored": b["initiative"] in anchor,
+              "anchor": anchor.get(b["initiative"])} for b in rm["initiatives"]]
+    inits.sort(key=lambda b: (not b["anchored"], b["initiative"]))  # anchored first
+    return {"charter": charter["path"] if charter else None,
+            "initiatives": inits, "unphased": rm["unphased"]}
+
+
+def _emit_map(m, as_json):
+    if as_json:
+        print(json.dumps(m, indent=2, ensure_ascii=False))
+        return
+    print(f"charter: {_slug(m['charter']) if m['charter'] else '(none)'}")
+    for b in m["initiatives"]:
+        flag = "" if b["anchored"] else "   (⚠ not anchored in charter)"
+        print(f"  # {b['initiative']}{flag}")
+        for ph in b["phases"]:
+            print(f"    {ph['phase'] or '(umbrella)'}")
+            for row in ph["items"]:
+                print(f"      {_roadmap_row(row)}")
+    if m["unphased"]:
+        print("  # (unphased)")
+        for row in m["unphased"]:
+            print(f"      {_roadmap_row(row)}")
+    anchored = sum(1 for b in m["initiatives"] if b["anchored"])
+    print(f"# {anchored}/{len(m['initiatives'])} initiative(s) anchored in the "
+          f"charter — derived, advisory")
+
+
 def _slug(path):
     name = path.rsplit("/", 1)[-1]
     return name[:-3] if name.endswith(".md") else name
@@ -565,6 +616,9 @@ def main(argv=None):
     mp = sub.add_parser("roadmap",
                         help="derived progress map: initiative -> phase -> status")
     mp.add_argument("--json", action="store_true", help="emit JSON")
+    cm = sub.add_parser("map",
+                        help="charter-rooted unified map: charter -> initiatives -> roadmap")
+    cm.add_argument("--json", action="store_true", help="emit JSON")
     args = ap.parse_args(argv)
 
     records = build_index(root)
@@ -599,6 +653,8 @@ def main(argv=None):
         _emit_tree(trees, args.json, forest=bool(args.kind))
     elif args.cmd == "roadmap":
         _emit_roadmap(roadmap(records), args.json)
+    elif args.cmd == "map":
+        _emit_map(charter_map(records), args.json)
 
 
 if __name__ == "__main__":
