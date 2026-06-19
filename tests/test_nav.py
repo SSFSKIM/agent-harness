@@ -1,4 +1,4 @@
-import datetime, subprocess, sys, tempfile, unittest
+import datetime, json, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugin" / "scripts"))
@@ -483,8 +483,13 @@ class TestNavRoadmap(unittest.TestCase):
                                           "docs/exec-plans/")) for p in rows))
 
     def test_render_and_empty_corpus(self):
-        # rendering does not raise, and an empty corpus is a no-crash empty map
+        # both render modes do not raise; the JSON path is serializable and the
+        # parsed JSON preserves the structure (tuples become arrays); an empty
+        # corpus is a no-crash empty map
         nav._emit_roadmap(self.rm, as_json=False)
+        nav._emit_roadmap(self.rm, as_json=True)
+        parsed = json.loads(json.dumps(self.rm))  # serializable, no raise
+        self.assertEqual(parsed["initiatives"][0]["initiative"], "alpha")
         self.assertEqual(nav.roadmap([]), {"initiatives": [], "unphased": []})
 
 

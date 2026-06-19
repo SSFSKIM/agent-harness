@@ -72,6 +72,10 @@ them (KF keeps OKF's permissive stance for optional keys).
 
 Together `(path, type, tags, description)` is a queryable table-of-contents an
 agent can filter by code execution over frontmatter, without loading any body.
+These axes are also what make **structure a projection of metadata, not the file
+tree**: `nav.py` derives the hierarchy (`tree`) and the progress map (`roadmap`)
+from `type` + `phase` + the link graph, independent of where files physically
+live — so indexes and roadmaps are computed, never hand-maintained.
 
 ### 2.3 Recommended `type` vocabulary
 

@@ -144,8 +144,9 @@ moved*) are two halves of the same thing.
 - **Roadmap projection:** read frontmatter → bucket specs/plans by phase
   initiative → order phases by `NN` → each node renders `path · type · status`
   plus any inferred pivot edge. A plan with no `phase` inherits the phase of the
-  spec it `implements`; if still none, it lands in an advisory **`(unphased)`**
-  bucket. Live per call, nothing persisted (consistent with the rest of nav).
+  spec it `implements` (the earliest phase, by initiative/`NN`, if it implements
+  several — deterministic, not link-order); if still none, it lands in an advisory
+  **`(unphased)`** bucket. Live per call, nothing persisted (consistent with nav).
 - **Charter is a seeded template, not a MACHINE_DOC:** its *content* is
   host-specific and authored, so it is seeded once (FILL placeholders) and never
   overwritten — the byte-stable MACHINE_DOC path is for the format spec, not the

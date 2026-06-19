@@ -372,15 +372,19 @@ def roadmap(records):
     implements, pivots = {}, {}
     for e in relations(records):
         if e["rel"] == "implements":
-            implements.setdefault(e["src"], e["dst"])
+            implements.setdefault(e["src"], []).append(e["dst"])
         elif e["rel"] == "supersedes":  # the only genuine pivot (not structural refines)
             pivots.setdefault(e["dst"], set()).add((INVERSE[e["rel"]], e["src"]))
 
     def phase_of(r):
         if r.get("phase"):
             return r["phase"]
-        spec = implements.get(r["path"])
-        return by_path.get(spec, {}).get("phase") if spec else None
+        # no own phase -> inherit from the spec(s) it implements; if it implements
+        # several, pick the earliest phase deterministically (lowest initiative/NN),
+        # never the link-order-dependent first edge
+        cand = [by_path[s]["phase"] for s in implements.get(r["path"], [])
+                if by_path.get(s, {}).get("phase")]
+        return min(cand, key=lambda p: _phase_key(p) or ("", 0, "")) if cand else None
 
     inits, unphased = {}, []
     for r in records:

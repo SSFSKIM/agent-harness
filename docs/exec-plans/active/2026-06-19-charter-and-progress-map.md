@@ -138,4 +138,24 @@ gate (`python3 plugin/scripts/check.py`) GREEN.
 
 ## Feedback (from completion gate)
 
+Reviews: review-arch SATISFIED, review-reliability SATISFIED (P2s only);
+review-spec-compliance (Codex gpt-5.5) and review-code-quality (Codex) — see below.
+
+P2s fixed inline (cheap, self-introduced correctness):
+- (arch) `AGENTS.md` Map row said "KF v1.0" and omitted `phase` after the v1.1
+  bump → updated to v1.1 + `phase`.
+- (arch) `CHARTER.md`/spec/`docs-nav` cited `KNOWLEDGE_FORMAT §2.2` for the
+  "structure = projection" thesis, but §2.2 had no such sentence → added the
+  thesis line to §2.2 in both the canonical and host KF docs; the pointers now land.
+- (reliability) a plan implementing multiple specs inherited a link-order-dependent
+  phase → `phase_of` now picks the earliest phase deterministically (min by
+  initiative/`NN`); spec contract updated.
+- (spec-compliance, Codex interim) `roadmap --json` emission path was untested →
+  added JSON-emit + round-trip assertions to `TestNavRoadmap.test_render_and_empty_corpus`.
+
+P2s deferred to `tech-debt-tracker.md` (proposed rules/conventions, non-blocking):
+- generalize RELIABILITY R12 to the nav.py projection surface (totality contract);
+- KNOWLEDGE_FORMAT §2.2 `phase` `NN` uniqueness-within-initiative convention;
+- decide open-vs-curated roadmap initiative set.
+
 ## Outcomes & retrospective
