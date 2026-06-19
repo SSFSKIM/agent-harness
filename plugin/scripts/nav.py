@@ -75,7 +75,7 @@ def build_index(root):
     MEMORY.md) — that is the content corpus the `catalog`/`orphans` queries act
     on. Bodies are read only for the link scan; catalog columns come from
     frontmatter alone. Record keys: path, type, tags, status, description,
-    resource, last_verified, links, catalog.
+    resource, phase, last_verified, links, catalog.
     """
     root = Path(root).resolve()
     docs = root / "docs"
@@ -97,6 +97,7 @@ def build_index(root):
             "status": (fm or {}).get("status"),
             "description": (fm or {}).get("description"),
             "resource": (fm or {}).get("resource"),
+            "phase": (fm or {}).get("phase"),
             "last_verified": (fm or {}).get("last_verified"),
             "links": _resolve_links(p, root, hl.links_in(text)),
             "catalog": fm is not None and p.name not in RESERVED,

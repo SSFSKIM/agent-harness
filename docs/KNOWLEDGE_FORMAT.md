@@ -1,14 +1,14 @@
 ---
 status: stable
-last_verified: 2026-06-18
+last_verified: 2026-06-19
 owner: harness
 type: methodology
 tags: [knowledge-format, frontmatter, lint]
-description: The Knowledge Format v1.0 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint_docs.py D-gate.
+description: The Knowledge Format v1.1 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint_docs.py D-gate.
 ---
 # KNOWLEDGE_FORMAT.md — the harness knowledge format
 
-**Knowledge Format (KF) v1.0.** The contract every knowledge page in this repo
+**Knowledge Format (KF) v1.1.** The contract every knowledge page in this repo
 follows: a markdown body under a YAML-ish frontmatter block, governed by the
 `lint_docs.py` D-rules. This document makes the format *explicit* — until now it
 lived implicitly in the lint. Author a conformant page from this doc alone; you
@@ -62,6 +62,7 @@ them (KF keeps OKF's permissive stance for optional keys).
 | `type` | scalar | The page's *concept-kind*, made explicit and queryable independent of directory. See the vocabulary in §2.3. Intrinsic kind; the directory is location — they usually agree, but `type` is authoritative for machine routing. |
 | `tags` | **list** | Cross-cutting facets — short lowercase strings. Canonical authored form is YAML flow inline: `tags: [a, b, c]`. (The parser also tolerates the block form `- a` on read for OKF-bundle interop; author the flow form.) |
 | `resource` | scalar | A repo-relative path (preferred) or URL identifying the single primary asset the page documents (e.g. `plugin/scripts/harness_lib.py`). Absent for abstract pages. The precondition for future drift detection (compare the asset's state against `last_verified`). |
+| `phase` | scalar | The initiative + phase this page belongs to, convention `<initiative>/<NN>-<slug>` (e.g. `symphony/04-worker-authority`; a bare `<initiative>` is the initiative umbrella). The **group-by axis for the derived roadmap** (`nav.py roadmap`): `NN` orders phases within an initiative, bare-initiative sorts first, a non-numeric `NN` sorts last. Absent → the page is unphased. A plan with no `phase` inherits it from the spec it `implements`. |
 
 **Display** — labels for navigation, zero machine cost:
 
@@ -91,6 +92,7 @@ directory-implicit taxonomy into the field:
 | `exec-plan` | `exec-plans/**` |
 | `reference` | `references/*` — external-API digests |
 | `methodology` | top-level machine docs (PLANS, DESIGN, …) |
+| `charter` | `CHARTER.md` — top-level intent: mission, design philosophy (기획의도), locked assumptions |
 
 ### 2.4 Frontmatter value forms
 
@@ -146,7 +148,7 @@ authoring procedure.
 
 ## 5. Conformance — the spec and the gate are two views of one contract
 
-A page is KF-v1.0 conformant when it satisfies the D-rules that apply to it.
+A page is KF conformant when it satisfies the D-rules that apply to it.
 Each is enforced by `plugin/scripts/lint_docs.py` and surfaced by the
 `harness-lint` skill:
 
@@ -167,9 +169,13 @@ made only once the key has proven its worth in daily use.
 
 KF is versioned `<major>.<minor>` (OKF's scheme): a **minor** bump adds
 backward-compatible options (a new optional key, a new conventional section); a
-**major** bump may rename a required key or change a reserved filename. This is
-**v1.0** — the required-key core is production-proven; `type`, `tags`, `resource`,
-`title`, and `description` are the optional keys this version introduces.
+**major** bump may rename a required key or change a reserved filename.
+
+- **v1.0** — the required-key core, plus the optional keys `type`, `tags`,
+  `resource`, `title`, and `description`.
+- **v1.1** (current) — adds the optional `phase` key (the derived-roadmap
+  group-by) and the `charter` value to the `type` vocabulary. Additive: every
+  v1.0 page stays conformant.
 
 ## 7. Relationship to OKF
 

@@ -22,6 +22,7 @@ DIRS = (
 SEEDS = (  # (template, destination relative to host root)
     ("agents-md.md", "AGENTS.md"),
     ("claude-md.md", "CLAUDE.md"),
+    ("charter.md", "docs/CHARTER.md"),  # top-level intent — authored FILL seed (not a MACHINE_DOC)
     ("agent-harness.md", "docs/design-docs/agent-harness.md"),
     ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
     ("design-docs-index.md", "docs/design-docs/index.md"),

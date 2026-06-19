@@ -8,11 +8,13 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** The automatic context feeder may be disabled. Read
-   `docs/memory/MEMORY.md` when you need continuity and follow its loading
-   protocol. When you need to explore the docs corpus — its structure,
-   relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
-   querying, not bulk-reading.
+1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
+   philosophy, and locked assumptions — to anchor on intent before a long session
+   drifts; the `docs-nav` skill's `nav.py roadmap` shows where we are against it.
+   The automatic context feeder may be disabled: read `docs/memory/MEMORY.md`
+   when you need continuity and follow its loading protocol. When you need to
+   explore the docs corpus — its structure, relationships, and per-page gist —
+   use the `docs-nav` skill (`nav.py`) by querying, not bulk-reading.
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
@@ -36,6 +38,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | Path | What it is |
 |---|---|
 <!-- FILL: rows for this repo's real source layout (src/, build, test cmds). -->
+| `docs/CHARTER.md` | Top-level intent: mission, design philosophy, locked assumptions — the Orient anchor |
 | `docs/design-docs/core-beliefs.md` | Golden rules (agent-first operating principles) |
 | `docs/design-docs/agent-harness.md` | The installed harness: components, memory loop, gate |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |

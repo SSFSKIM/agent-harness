@@ -23,6 +23,7 @@ class TestScaffold(unittest.TestCase):
 
     def test_tree_created(self):
         for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md",
+                    "docs/CHARTER.md",
                     "docs/memory/MEMORY.md",
                     "docs/memory/progress/current.md",
                     "docs/memory/openq/index.md",

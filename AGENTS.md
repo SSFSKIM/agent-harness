@@ -6,7 +6,10 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** The automatic context feeder is disabled. Read
+1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
+   philosophy (기획의도), and locked assumptions — to anchor on intent before a
+   long session drifts; `python3 plugin/scripts/nav.py roadmap` shows where we
+   are against it. The automatic context feeder is disabled: read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
    protocol. When you need to explore the docs corpus — its structure,
    relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
@@ -34,6 +37,7 @@ Deep truth lives in `docs/` — follow the pointers.
 
 | Path | What it is |
 |---|---|
+| `docs/CHARTER.md` | Top-level intent: mission, design philosophy (기획의도), locked assumptions — the Orient anchor |
 | `ARCHITECTURE.md` | Codemap, layer law, invariants, data flows |
 | `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v1.0): frontmatter schema, optional keys (`type`/`tags`/`resource`/`title`/`description`), conformance↔D-rule map |
 | `docs/design-docs/core-beliefs.md` | Golden rules + agent-first operating principles |
