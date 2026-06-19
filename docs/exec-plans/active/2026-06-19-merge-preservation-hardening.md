@@ -221,6 +221,15 @@ The spec fixed the design; these are the build choices:
   `ReportOutcomeTest` (5, test_director_tools) + taxonomy evidence/resolve-threads test +
   2 orchestrator payload tests. Targeted suites 103 OK; full gate GREEN. Backward-compat
   confirmed (mock `done` → `"evidence": null`).
+- [x] (2026-06-19) M2 done — R1 preservation tripwire helper. New `director/merge_preserve.py`:
+  `parse_numstat` (handles binary `-` + malformed lines), `preservation_delta(intended,
+  actual)` → `{ok, dropped_paths, shrunk_paths}` (dropped = path absent from the merge;
+  shrunk = added fell to ≤0.5× AND ≥3 lines — conservative, low false-positive per D3), and
+  `numstat_from_cmd(argv, …)` shelling with argv (never a shell string — PR ref/branch are
+  untrusted) and fail-closed (None on non-zero/exception). 13 unit tests; full gate GREEN
+  (571). Ref-acquisition decision: INTENDED = `gh pr diff --numstat` captured at
+  `process_request` START (pre-rebase), ACTUAL = post-rebase `git diff --numstat
+  base..branch` — both merger-local (gh/git there), wired in M4.
 
 ## Surprises & discoveries
 
