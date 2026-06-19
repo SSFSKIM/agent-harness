@@ -31,14 +31,16 @@ every key; `resource` is on 1/99 pages by design, `phase` on 30/99).
 
 ## Requirements
 
-- **R1 — `type` required (blanket).** Every governed page must declare `type`.
+- **R1 — `type` required (blanket).** Every governed *content* page must declare
+  `type` (reserved spines `index.md`/`MEMORY.md` are exempt — they are listings,
+  not navigable concept-pages, consistent with nav's `RESERVED`).
   Value stays **free/extensible** (no vocabulary restriction — a new `type` adds no
   lint change; OKF's "tolerate unknown *values*" is kept, only *presence* is
   enforced). Corpus cost: 0 (99/99 already present). Verifiable: a governed page
   with no `type` FAILs the gate.
-- **R2 — `description` required (blanket).** Every governed page must declare a
-  non-empty `description`. Corpus cost: 2 pages to backfill. Verifiable: a page
-  with no `description` FAILs.
+- **R2 — `description` required (blanket).** Every governed *content* page (same
+  spine exemption as R1) must declare a non-empty `description`. Corpus cost: 3
+  plans to backfill. Verifiable: a page with no `description` FAILs.
 - **R3 — `phase` required on `product-spec`.** A `product-spec` must declare
   `phase` (it is an initiative anchor; the roadmap is then complete by
   construction, and `exec-plan`s inherit phase via the `implements` edge — so
@@ -61,9 +63,12 @@ every key; `resource` is on 1/99 pages by design, `phase` on 30/99).
   validate-if-present. §7 (OKF relationship) explains *why we diverge*: OKF
   optimizes permissive exchange, KF optimizes an enforced single-actor memory.
 - **R6 — Migration keeps the gate GREEN.** The rule additions and the backfill
-  land together: backfill the 2 missing `description`s; everything else already
-  conforms (type 99/99, spec-phase 29/29, the 1 `resource` resolves). Verifiable:
-  `python3 plugin/scripts/check.py` GREEN on the full corpus after the change.
+  land together. Self-host corpus: backfill 3 plan `description`s (type 99/99,
+  spec-phase 29/29, the 1 `resource` resolves — already conform). Ported hosts:
+  seed `type`+`description` into the doc templates that lacked them (else a fresh
+  scaffold FAILs D11), plus the ExecPlan template's `description:`. Verifiable:
+  `python3 plugin/scripts/check.py` GREEN on the full corpus, and `test_scaffold`
+  (a fresh host lints GREEN) passes.
 - **R7 — Portability (belief 13).** The rules live in `plugin/scripts/lint_docs.py`
   (travel to every host); `KNOWLEDGE_FORMAT.md` host template carries the same
   v2.0 contract; the `harness-init` doc templates already emit `type`/`description`
