@@ -776,24 +776,21 @@ class GateIntegrationTest(unittest.TestCase):
         self.assertNotIn("from director import board", src)
 
 
-def _ci_sh(ci, *, files=None, threads_resolved=True, merge_rc=0):
-    """Fake gh whose CI rollup flips with the mutable `ci['green']` flag (pending→green
-    between polls), so a deferred PR can be retried green on a later drain. `files` is the
-    per-file diff every `gh pr view --json files` call reports (pre==post → tripwire passes)."""
-    files = files if files is not None else {"a.py": (5, 0)}
-
+def _ci_sh(ci):
+    """Fake gh whose CI rollup flips with the mutable `ci['green']` flag (pending→green between
+    polls), so a deferred PR can be retried green on a later drain. The diff is clean + stable
+    (pre==post → tripwire passes), threads resolved, merge OK — only the CI state varies."""
     def sh(argv, **kw):
         if "graphql" in argv:
-            nodes = [] if threads_resolved else [{"isResolved": False}]
             return _Proc(0, _json.dumps({"data": {"repository": {"pullRequest": {
-                "reviewThreads": {"nodes": nodes}}}}}))
+                "reviewThreads": {"nodes": []}}}}}))
         if "merge" in argv:
-            return _Proc(merge_rc)
+            return _Proc(0)
         if "statusCheckRollup" in argv:
             st = [{"state": "SUCCESS"}] if ci["green"] else [{"status": "IN_PROGRESS"}]
             return _Proc(0, _json.dumps({"statusCheckRollup": st}))
         if "files" in argv:
-            return _Proc(0, _files_json(files))
+            return _Proc(0, _files_json({"a.py": (5, 0)}))
         return _Proc(1)
     return sh
 
