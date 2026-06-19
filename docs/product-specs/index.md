@@ -194,3 +194,13 @@ owner: harness
   (`append_run`/`read_history`, written at run completion) + `GET /api/v1/history` + a panel.
   **Deferred:** multi-run aggregate view (no producer fan-out scenario yet). Additive;
   `/api/v1/state` stays a superset.
+- [Merge-gated DAG eligibility](2026-06-19-merge-gated-eligibility.md)
+  — a child's `blocked_by` edge clears only when the parent's PR has actually LANDED on main,
+  not merely when the worker reported `done` (today `reconcile` sets the board `done` while the
+  PR is still queued in the serialized merger → a child can clone a stale `main`). Direction A:
+  a PR-bearing `done` parks the board in an optional `merging` state; the ORCHESTRATOR finalizes
+  `merging`→`done` once it observes the merge landed (`fetch_issues_by_states` + the
+  `merge|<tid>|aN` answer) — so the existing `done_types` eligibility gate, orphan-recovery, and
+  active-run reconciliation stay pure board reads. No-PR tickets reach `done` immediately;
+  abandon keeps the parent `merging` (children stay blocked, human owns the escape). Opt-in via
+  configuring `merging`; merger stays board-free; R19 act-before-consume preserved.
