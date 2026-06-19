@@ -37,7 +37,7 @@ tests stay green (R7 — batch + the stage-2 daemon contract unchanged).** Gate 
 
 ## Context
 
-- **Spec (owns the design):** `docs/product-specs/2026-06-17-daemon-exponential-backoff.md`
+- **Spec (owns the design):** [`docs/product-specs/2026-06-17-daemon-exponential-backoff.md`](docs/product-specs/2026-06-17-daemon-exponential-backoff.md)
   — R1–R9, D-74..D-81. Build from it; do not re-derive.
 - **Predecessors (this layers on their seams):**
   `docs/product-specs/2026-06-17-continuous-daemon-loop.md` (stage 2 — `run_forever`,

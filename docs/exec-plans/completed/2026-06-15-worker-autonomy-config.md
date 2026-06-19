@@ -55,7 +55,7 @@ headless Director. SECURITY.md gains T11 (the autonomous worker posture).
   `approvals_reviewer` and `sandbox_workspace_write.network_access` have no
   thread/start param → delivered as `-c` overrides on the `codex app-server`
   launch command.
-- Parent spec: `docs/product-specs/2026-06-14-symphony-director-orchestration.md`
+- Parent spec: [`docs/product-specs/2026-06-14-symphony-director-orchestration.md`](docs/product-specs/2026-06-14-symphony-director-orchestration.md)
   (Phase 4 "loop/scheduled oversee"). Guardrail: `...worker-authority-guardrail.md`
   (T10, the deterministic complement to auto_review for the host-key Linear writes).
 - **Risk basis (honest):** with `network_access=true`, in-sandbox network is **not**

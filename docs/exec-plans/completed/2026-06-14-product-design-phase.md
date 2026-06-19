@@ -18,7 +18,7 @@ review_level: targeted
 등록되고 + AGENTS.md/PLANS.md 가 세 갈래 entry decision 을 soft heuristic 으로 담는다.
 
 ## Context
-- spec(무엇·왜): `docs/product-specs/2026-06-14-product-design-phase.md` — 요구사항
+- spec(무엇·왜): [`docs/product-specs/2026-06-14-product-design-phase.md`](docs/product-specs/2026-06-14-product-design-phase.md) — 요구사항
   R1-R6, 비목표, 수용 기준. 이 ExecPlan 은 그 spec 의 "어떻게"만 소유한다.
 - 배경: superpowers 와의 비교(이 repo 의 ExecPlan = implementation-plan 척추 + 얇은
   spec 층). 분리 가치 = 수명 · one-to-many · 검증 계약 · 사람-터치 표면.

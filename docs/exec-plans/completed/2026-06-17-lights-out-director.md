@@ -32,7 +32,7 @@ track. Observable definition of done:
 ## Context
 
 - **Spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-17-lights-out-director.md` (R1–R7 + Design + the
+  [`docs/product-specs/2026-06-17-lights-out-director.md`](docs/product-specs/2026-06-17-lights-out-director.md) (R1–R7 + Design + the
   `PRINCIPLES.md` seed). This plan builds it.
 - **Decision:** `docs/memory/adr/0003-lights-out-director.md` (the two-axis mode
   model + the taste-vs-mechanical procedure + daemon-as-separate-track), child of

@@ -28,7 +28,7 @@ ticket is externally moved).
 
 ## Context
 - **Spec (owns the design — do not re-derive):**
-  `docs/product-specs/2026-06-16-active-run-reconciliation.md` — R1–R7, D-59..D-62.
+  [`docs/product-specs/2026-06-16-active-run-reconciliation.md`](docs/product-specs/2026-06-16-active-run-reconciliation.md) — R1–R7, D-59..D-62.
 - **Why / where it sits:** `docs/design-docs/symphony-parity-gap.md` gap #1; the first
   of the daemon stages (stage 2 = continuous tick, stage 3 = backoff — both fenced
   OUT here, but the running-map this builds must let them layer on).

@@ -33,7 +33,7 @@ mock board unless noted:
 
 ## Context
 - **Design owner (read first):**
-  `docs/product-specs/2026-06-15-multi-turn-ticket-execution.md` (R1–R8, D-39..D-45).
+  [`docs/product-specs/2026-06-15-multi-turn-ticket-execution.md`](docs/product-specs/2026-06-15-multi-turn-ticket-execution.md) (R1–R8, D-39..D-45).
   This plan owns the *build*; the spec owns the *what/why*. Do not re-derive it.
 - **Reconcile model being redesigned:**
   `docs/product-specs/2026-06-14-orchestrator-dispatch-loop.md` — its

@@ -26,7 +26,7 @@ plugin/scripts/check.py` is GREEN.
 
 ## Context
 - **Product-spec (owns the design — do not re-derive):**
-  `docs/product-specs/2026-06-16-director-observability-dashboard.md`. R1-R6,
+  [`docs/product-specs/2026-06-16-director-observability-dashboard.md`](docs/product-specs/2026-06-16-director-observability-dashboard.md). R1-R6,
   D-1..D-6, and the **상태/재배치 note's "구체 계약 (이 빌드)" paragraph** are the
   authoritative contract. That paragraph supersedes the body's older
   `/api/snapshot` notation with the Symphony-§13.7 alignment: `GET

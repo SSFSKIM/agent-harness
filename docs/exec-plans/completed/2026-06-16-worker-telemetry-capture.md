@@ -25,7 +25,7 @@ still green.
 
 ## Context
 - Product-spec (owns the design — build from it, don't re-derive):
-  `docs/product-specs/2026-06-16-worker-telemetry-capture.md` (R1–R8, D-1–D-7).
+  [`docs/product-specs/2026-06-16-worker-telemetry-capture.md`](docs/product-specs/2026-06-16-worker-telemetry-capture.md) (R1–R8, D-1–D-7).
 - This plan is the **prerequisite** for the deferred renderer
   `docs/product-specs/2026-06-16-director-observability-dashboard.md` — that
   dashboard becomes the consumer of the data this plan produces.

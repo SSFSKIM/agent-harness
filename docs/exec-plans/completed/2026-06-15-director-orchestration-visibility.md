@@ -24,7 +24,7 @@ guideline 을 적용하는지 규정한다. `python3 plugin/scripts/check.py` GR
 
 ## Context
 - Spec(설계 소유, 재유도 금지):
-  `docs/product-specs/2026-06-15-director-orchestration-visibility.md`
+  [`docs/product-specs/2026-06-15-director-orchestration-visibility.md`](docs/product-specs/2026-06-15-director-orchestration-visibility.md)
   — Problem, R1–R9, Design(status.py 스키마·orchestrator 결선·스킬), Non-goals, Acceptance,
   D-30..D-37. 이 plan 은 그 spec 의 **build** 만 소유한다.
 - 부모: `docs/product-specs/2026-06-14-symphony-director-orchestration.md`(Phase 4, D-5).

@@ -27,7 +27,7 @@ ownership, and `merger.py` byte-unchanged.
 ## Context
 
 - **Spec (owns the design):**
-  `docs/product-specs/2026-06-17-worker-operating-protocol.md` — R1–R9 + the
+  [`docs/product-specs/2026-06-17-worker-operating-protocol.md`](docs/product-specs/2026-06-17-worker-operating-protocol.md) — R1–R9 + the
   line-by-line `WORKFLOW.md` keep/adapt/reject triage. This plan builds it; it
   does not re-derive it.
 - **Decision:** `docs/memory/adr/0002-graduated-autonomy.md` (ADR 0002) — this is

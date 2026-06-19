@@ -23,7 +23,7 @@ plugin/scripts/check.py` GREEN.
 ## Context
 
 - product-spec(이 plan 이 build 하는 design 소유자, 재유도 금지):
-  `docs/product-specs/2026-06-14-dag-aware-orchestration.md` — R1–R7, wave 모델,
+  [`docs/product-specs/2026-06-14-dag-aware-orchestration.md`](docs/product-specs/2026-06-14-dag-aware-orchestration.md) — R1–R7, wave 모델,
   board-as-truth, eligibility, 에러/경계, D-13..D-17.
 - 선행 build(이 위에 얹음):
   `docs/exec-plans/completed/2026-06-14-orchestrator-dispatch-loop.md` +

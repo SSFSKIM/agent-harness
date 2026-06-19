@@ -28,7 +28,7 @@ human. Observable:
 
 ## Context
 - **Spec (design owner, build from it — don't re-derive):**
-  `docs/product-specs/2026-06-16-director-board-reporting.md` (R1–R6, D-1..D-5). Purpose =
+  [`docs/product-specs/2026-06-16-director-board-reporting.md`](docs/product-specs/2026-06-16-director-board-reporting.md) (R1–R6, D-1..D-5). Purpose =
   attention/pull (not durable record); trigger = run-level inflection, terminal-only emit;
   mechanism = extend `director.watch` to tail the status snapshot; watched-mode only.
 - **Reuse:** `director/status.py::read_status` (tolerant snapshot reader; schema

@@ -39,7 +39,7 @@ still passes unchanged** (R10 — the batch paths are preserved).
 
 ## Context
 
-- **Spec (owns the design):** `docs/product-specs/2026-06-17-continuous-daemon-loop.md`
+- **Spec (owns the design):** [`docs/product-specs/2026-06-17-continuous-daemon-loop.md`](docs/product-specs/2026-06-17-continuous-daemon-loop.md)
   — R1–R11, D-63..D-72. This plan builds from it; it does not re-derive it.
 - **Predecessor (lift its pieces unchanged):**
   `docs/product-specs/2026-06-16-active-run-reconciliation.md` +

@@ -26,7 +26,7 @@ Linear 에서 read 한 티켓으로도 통과(자격증명 있을 때).
 
 ## Context
 
-- 설계 출처(재유도 금지, build 만): `docs/product-specs/2026-06-14-symphony-director-orchestration.md`.
+- 설계 출처(재유도 금지, build 만): [`docs/product-specs/2026-06-14-symphony-director-orchestration.md`](docs/product-specs/2026-06-14-symphony-director-orchestration.md).
   거기 Requirements R1–R7, Design(파일/contract/behavior), Decision Log(D-1..D-6),
   Acceptance 가 이 plan 의 *무엇/왜*. 이 plan 은 *어떻게* 만 소유한다.
 - novel core(왜 어려운가): codex app-server 는 mid-turn 에 server→client JSON-RPC

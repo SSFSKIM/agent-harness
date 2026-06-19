@@ -20,7 +20,7 @@ POST 한다. SECURITY.md 가 T10 을 갖고, 실제 Linear throwaway 티켓에 g
 `commentCreate` 가 성공한다. `python3 plugin/scripts/check.py` GREEN.
 
 ## Context
-- Spec(설계 소유, 재유도 금지): `docs/product-specs/2026-06-14-worker-authority-guardrail.md`
+- Spec(설계 소유, 재유도 금지): [`docs/product-specs/2026-06-14-worker-authority-guardrail.md`](docs/product-specs/2026-06-14-worker-authority-guardrail.md)
   — Problem, R1–R8, Design(구성요소·계약·에러), Non-goals, Acceptance, D-23..D-29.
 - 부모: `docs/product-specs/2026-06-14-symphony-director-orchestration.md`(Phase 4).
 - 선행조건 출처: `docs/exec-plans/tech-debt-tracker.md` line 49(un-watched 전 worker authority

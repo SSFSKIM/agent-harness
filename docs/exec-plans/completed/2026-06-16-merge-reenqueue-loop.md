@@ -28,7 +28,7 @@ per-ticket, so a consumed merge can never be re-queued under the same id. Observ
 ## Context
 - **Builds on** `docs/exec-plans/completed/2026-06-16-activate-serialized-merge-pipeline.md`
   (M1 handoff + M2 merger + M3 chain; live-verified local + full gh roundtrip) and its parent
-  spec `docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md` (R6 escalate-to-Director,
+  spec [`docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md`](docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md) (R6 escalate-to-Director,
   D-48 single human surface). The re-enqueue loop is the parent's tracked Open Q.
 - **Reuse:** `director/queue.append_merge_request`/`append_merge_review` (the id is the
   discriminant point), `director/merger.py` (`_surface_escalation` carries the attempt; `land_prompt`

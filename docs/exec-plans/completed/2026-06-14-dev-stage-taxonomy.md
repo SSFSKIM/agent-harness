@@ -22,7 +22,7 @@ untyped 티켓은 원본 prompt 그대로. `python3 plugin/scripts/check.py` GRE
 ## Context
 
 - product-spec(이 plan 이 build 하는 design 소유자, 재유도 금지):
-  `docs/product-specs/2026-06-14-dev-stage-taxonomy.md` — R1–R6, taxonomy 표(5 type),
+  [`docs/product-specs/2026-06-14-dev-stage-taxonomy.md`](docs/product-specs/2026-06-14-dev-stage-taxonomy.md) — R1–R6, taxonomy 표(5 type),
   registry/routing/분해 설계, D-18..D-22, non-goals(실-codex 실행·provisioning 연기).
 - 선행 build: `docs/exec-plans/completed/2026-06-14-dag-aware-orchestration.md` +
   `director/orchestrator.py`(`run_until_drained`/`_dispatch_wave`/`dispatch`/`eligible_tickets`/

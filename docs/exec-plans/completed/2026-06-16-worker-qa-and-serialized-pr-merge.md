@@ -23,7 +23,7 @@ PR 이 **직렬화된 merge queue → 단일 PR-merger** 로 하나씩 main 에 
 
 ## Context
 - **Design owner (먼저 읽기):**
-  `docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md` (R1–R9, D-46..D-53).
+  [`docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md`](docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md) (R1–R9, D-46..D-53).
   이 plan 은 *build* 만; design 재유도 금지.
 - **재사용:** `director/run.py::drive`(multi-turn 루프 — merger 가 호출만, 수정 안 함),
   `director/decider.py`(Director decider / 코드 decider), `director/queue`(요청/답 채널, atomic),

@@ -20,7 +20,7 @@ turn 이 이어짐(단위테스트); 그리고 실 `codex app-server` 에서 워
 
 ## Context
 
-- 설계 출처(재유도 금지): `docs/product-specs/2026-06-14-symphony-director-orchestration.md`
+- 설계 출처(재유도 금지): [`docs/product-specs/2026-06-14-symphony-director-orchestration.md`](docs/product-specs/2026-06-14-symphony-director-orchestration.md)
   의 **D-7**(worker→Linear write 메커니즘) + Phase 1 산출물(`director/` 패키지, seam).
 - Phase 1 이 만든 server-initiated request 채널(method+id → 응답)을 재사용한다. tool-call 은
   approval 과 **같은 채널, 다른 method**다(novel 기계 아님).

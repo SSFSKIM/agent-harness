@@ -28,7 +28,7 @@ process** (`python3 -m director.merger`) drains the queue, landing PRs one at a 
 
 ## Context
 - **Parent slice (done):** `docs/exec-plans/completed/2026-06-16-worker-qa-and-serialized-pr-merge.md`
-  and its spec `docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md` (R4/R8 + the
+  and its spec [`docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md`](docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md) (R4/R8 + the
   "merger 상시/이벤트" Open Q). It built the merge MECHANISM: `mergeRequest`/`mergeReview` queue
   kinds + helpers (`director/queue/__init__.py`), the single-consumer `merger.drain`
   (`director/merger.py`, with a `flock` single-consumer guard), and the Director `mergeReview`

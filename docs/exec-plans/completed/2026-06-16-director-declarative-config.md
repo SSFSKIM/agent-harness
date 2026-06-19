@@ -25,7 +25,7 @@ values resolve from the environment. `python3 plugin/scripts/check.py` is GREEN.
 
 ## Context
 - **Spec (owns the design — do not re-derive):**
-  `docs/product-specs/2026-06-16-director-declarative-config.md` — R1–R7,
+  [`docs/product-specs/2026-06-16-director-declarative-config.md`](docs/product-specs/2026-06-16-director-declarative-config.md) — R1–R7,
   D-54..D-58. This plan owns the *build*.
 - **Why now:** the gap-analysis artifact
   `docs/design-docs/symphony-parity-gap.md` (the "WORKFLOW.md / §5–6 declarative
