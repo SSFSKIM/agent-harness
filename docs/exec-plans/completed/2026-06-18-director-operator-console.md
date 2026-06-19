@@ -31,7 +31,7 @@ without attaching to the session. Concretely, observable:
 
 ## Context
 - **Product-spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-18-director-operator-console.md` (R1–R8, D-1..D-7).
+  [`docs/product-specs/2026-06-18-director-operator-console.md`](docs/product-specs/2026-06-18-director-operator-console.md) (R1–R8, D-1..D-7).
   This plan owns execution order + build choices only.
 - **Lineage:** the read-only dashboard
   `docs/exec-plans/completed/2026-06-16-director-observability-dashboard.md`

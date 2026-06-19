@@ -23,7 +23,7 @@ as `P` reports done). `python3 plugin/scripts/check.py` GREEN throughout.
 ## Context
 
 - **Spec (owns the design):**
-  `docs/product-specs/2026-06-19-merge-gated-eligibility.md` — build from it; do not
+  [`docs/product-specs/2026-06-19-merge-gated-eligibility.md`](docs/product-specs/2026-06-19-merge-gated-eligibility.md) — build from it; do not
   re-derive. Direction A (human pick): make board-`done` *mean* merged-to-main by parking a
   PR-bearing done in an optional `merging` state and finalizing `merging`→`done` when the
   merge lands.

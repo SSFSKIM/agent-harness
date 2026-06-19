@@ -26,7 +26,7 @@ definition of done:
 Full gate GREEN; parity slices 1–3 and the decider/queue unchanged.
 
 ## Context
-- **Spec (owns the design):** `docs/product-specs/2026-06-19-workspace-lifecycle-hooks.md`.
+- **Spec (owns the design):** [`docs/product-specs/2026-06-19-workspace-lifecycle-hooks.md`](docs/product-specs/2026-06-19-workspace-lifecycle-hooks.md).
 - **Parent track:** `docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md`
   (R4 was its deferred non-goal) + `docs/design-docs/symphony-parity-gap.md`.
 - **Symphony ref:** `docs/symphony-original/SPEC.md` §9.3 (population), §9.4 (hooks),

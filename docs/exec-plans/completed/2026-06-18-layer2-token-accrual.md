@@ -27,7 +27,7 @@ rate-limit, R4–R6) is a separate linked plan; Phase B (cross-run history) a th
 
 ## Context
 - **Product-spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-18-observability-polish.md` (R1–R3 + Design §A +
+  [`docs/product-specs/2026-06-18-observability-polish.md`](docs/product-specs/2026-06-18-observability-polish.md) (R1–R3 + Design §A +
   D-2/D-3/D-4). This plan owns build order + milestones only.
 - **Grounding rules:**
   - **RELIABILITY R13** — the `StatusWriter` is a main-thread lock-free

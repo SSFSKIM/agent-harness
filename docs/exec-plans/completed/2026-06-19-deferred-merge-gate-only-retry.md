@@ -23,7 +23,7 @@ the first rebase (so the tripwire is not blinded). With no cross-poll state (def
 `--once` / fresh process), behavior is byte-identical to today. Gate GREEN at every commit.
 
 ## Context
-- Parent spec: `docs/product-specs/2026-06-19-merge-preservation-hardening.md` (R1 preservation
+- Parent spec: [`docs/product-specs/2026-06-19-merge-preservation-hardening.md`](docs/product-specs/2026-06-19-merge-preservation-hardening.md) (R1 preservation
   tripwire, R3 hygiene gate, D1 code-owns-the-merge). This plan does NOT re-derive that design;
   it closes a known limitation in its implementation.
 - Tracked limitation: `docs/exec-plans/tech-debt-tracker.md` row 94 (merge-preservation-hardening

@@ -31,7 +31,7 @@ This is the v1 **dashboard** slice (spec R4–R6). The v1 **producer** slice
 
 ## Context
 - **Product-spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-18-observability-polish.md` (R4–R6 + Design §B/§C +
+  [`docs/product-specs/2026-06-18-observability-polish.md`](docs/product-specs/2026-06-18-observability-polish.md) (R4–R6 + Design §B/§C +
   D-1). This plan owns build order + milestones only.
 - **Lineage:** the read-only dashboard
   `docs/exec-plans/completed/2026-06-16-director-observability-dashboard.md` (D-3

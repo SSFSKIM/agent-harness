@@ -35,7 +35,7 @@ holding no board import.
 ## Context
 
 - **Spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-19-merge-preservation-hardening.md` — R1–R6 + Design +
+  [`docs/product-specs/2026-06-19-merge-preservation-hardening.md`](docs/product-specs/2026-06-19-merge-preservation-hardening.md) — R1–R6 + Design +
   D1–D5. This plan builds it. The spine (D1): code owns the irreversible merge.
 - **Track / decisions:** Symphony-parity gap #5 (worker-protocol depth);
   `docs/memory/adr/0002-graduated-autonomy.md` + `0003-lights-out-director.md`. The

@@ -24,7 +24,7 @@ R4–R6) is DONE (two completed plans). Multi-run aggregate view stays deferred.
 
 ## Context
 - **Product-spec (owns the design — do NOT re-derive):**
-  `docs/product-specs/2026-06-18-observability-polish.md` (R7–R8 + Design §D + D-5/D-6).
+  [`docs/product-specs/2026-06-18-observability-polish.md`](docs/product-specs/2026-06-18-observability-polish.md) (R7–R8 + Design §D + D-5/D-6).
   This plan owns build order + milestones only.
 - **Grounding rules:** **RELIABILITY R12** (instrumentation extractors/readers are
   total — `read_history` never raises); the history write is **best-effort**, the

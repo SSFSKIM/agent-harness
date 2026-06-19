@@ -31,7 +31,7 @@ tick loop, backoff, decider, queue append, or merger internals changes.
 ## Context
 Built from the spec — the spec owns the design, this plan owns the build (does not
 re-derive it):
-- **Spec:** `docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md`
+- **Spec:** [`docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md`](docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md)
   (R1 pagination + `fetch_issues_by_states`; R2 workspace safety; R3 daemon startup
   recovery; R4 hooks DEFERRED).
 - **Gap origin:** `docs/design-docs/symphony-parity-gap.md` (lines 130–135 + the
