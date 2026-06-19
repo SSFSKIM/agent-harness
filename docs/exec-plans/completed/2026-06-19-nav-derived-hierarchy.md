@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: fea93c187123d3c2acf324830f3e6255d1a9d925
@@ -136,5 +136,36 @@ Inference-only (NG-1 in the spec): no new frontmatter key, no change to
   (records carry resolved links); dedupe `(src,dst)` in `_adjacency` only.
 
 ## Feedback (from completion gate)
+All four reviewers SATISFIED (spec-compliance + code-quality after a fix round; arch
++ reliability on the first pass).
+- **spec-compliance (codex) — P1, fixed.** R7 wants every inferred edge type tested;
+  the `references` (`*->knowledge`) edge was uncovered. Added a product-spec→knowledge
+  fixture edge + assertion (plus an INVERSE-completeness test). Re-review → SATISFIED.
+- **code-quality (codex) — P2, fixed.** The `_adjacency` `(src,dst)` dedup path had no
+  regression test. Added `TestNavTreeDedup` (relations()=2 faithful edges vs tree()=1
+  collapsed child). Re-review → SATISFIED.
+- **reliability — P2, fixed.** `_emit_tree` could `IndexError` on an empty non-forest
+  result (unreachable today, latent R12 totality gap). Guarded `trees[0] if trees else
+  None`.
+- **arch — P2, fixed.** `INVERSE` is a hand-maintained second vocabulary that could
+  drift from `_infer_rel`; added a test asserting INVERSE covers every emittable rel.
+- **Proposed rules → tech-debt-tracker** (promote-if-repeated): (a) flat edge views
+  mirror the link list 1:1 while tree/adjacency views collapse to one edge per node
+  pair; (b) inference/relation tables are harness taste → code, not config; (c)
+  read-only nav projection emitters must be total over empty inputs (R12 spirit).
 
 ## Outcomes & retrospective
+Shipped the inference-only typed graph + derived-hierarchy renderer in `nav.py` with
+**no format change**: `relations()` types the link graph from `(type, type)` + status
+(unmatched → untyped `links`), and `tree` renders a directory-independent hierarchy
+(`forward`/`--reverse`/`--rel`/`--json`, cycle-safe, `--type` forest). Gate GREEN
+(454 tests); the R5 behavioral proof holds — one tree rooted in `exec-plans/` reaches
+`product-specs/` (`implements`/`refines`) and `design-docs/` (`grounded-in`), three
+directories in one derived tree.
+- **What went well:** Approach B (projection over existing records) kept `build_index`
+  untouched and made every inferred edge unit-testable; the gate + reviews caught a
+  real coverage gap (`references`) and two latent totality/drift seams.
+- **Surprises:** see the Surprises section (unused `root` param; duplicate children).
+- **Follow-ups:** declared/authored typed edges (KF v1.1) remain the next frontier —
+  only if a query needs a relationship inference cannot supply. Acting on the
+  projection (file reorg, NG-5) is the later step. Proposed rules logged to the tracker.
