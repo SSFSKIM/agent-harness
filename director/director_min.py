@@ -66,6 +66,7 @@ def answer_merge_review(request_id: str, disposition: dict, *, base=None,
 
 
 def requeue_merge(review: dict, *, note: str, base=None, max_attempts: int = 3,
+                  preservation_override: bool = False,
                   answered_by: str = "director") -> dict:
     """Re-enqueue an escalated PR WITH the Director's guidance — the re-enqueue loop (D-48).
 
@@ -91,7 +92,7 @@ def requeue_merge(review: dict, *, note: str, base=None, max_attempts: int = 3,
     queued = dq.append_merge_request(
         review.get("ticket_id"), pr=payload.get("pr"), branch=payload.get("branch"),
         workspace_path=review.get("workspace_path"), guidance=note,
-        attempt=next_attempt, base=base)
+        attempt=next_attempt, preservation_override=preservation_override, base=base)
     if not queued:
         return {"requeued": False, "reason": "already_queued", "attempt": next_attempt}
     answer_merge_review(review["request_id"], {"action": "requeue", "note": note},

@@ -7,21 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.merge_preserve as mp  # noqa: E402
 
 
-class ParseNumstatTest(unittest.TestCase):
-    def test_parses_added_deleted_and_path(self):
-        got = mp.parse_numstat("3\t1\tfoo.py\n10\t0\tbar/baz.py\n")
-        self.assertEqual(got, {"foo.py": (3, 1), "bar/baz.py": (10, 0)})
-
-    def test_binary_counts_become_zero_but_path_kept(self):
-        # a binary file shows `-` for counts; we still key it so presence is tracked
-        got = mp.parse_numstat("-\t-\timg.png\n")
-        self.assertEqual(got, {"img.png": (0, 0)})
-
-    def test_blank_and_malformed_lines_skipped(self):
-        got = mp.parse_numstat("\n2\tonly-two-cols\n5\t2\tok.py\n")
-        self.assertEqual(got, {"ok.py": (5, 2)})
-
-
 class PreservationDeltaTest(unittest.TestCase):
     def test_identical_is_ok(self):
         d = {"a.py": (5, 0), "b.py": (2, 1)}
@@ -70,29 +55,31 @@ class _FakeProc:
         self.stdout = stdout
 
 
-class NumstatFromCmdTest(unittest.TestCase):
-    def test_success_parses_stdout_and_uses_argv(self):
+class FilesFromPrTest(unittest.TestCase):
+    def test_parses_gh_files_json_and_uses_argv(self):
         seen = {}
 
         def run(argv, **kw):
             seen["argv"] = argv
-            seen["kw"] = kw
-            return _FakeProc(0, "4\t0\tx.py\n")
+            return _FakeProc(0, json.dumps({"files": [
+                {"path": "foo.py", "additions": 3, "deletions": 1},
+                {"path": "bar.py", "additions": 10, "deletions": 0}]}))
 
-        got = mp.numstat_from_cmd(["git", "diff", "--numstat", "a..b"], cwd="/ws", run=run)
-        self.assertEqual(got, {"x.py": (4, 0)})
-        # argv is a list (no shell) and cwd is threaded through
-        self.assertEqual(seen["argv"], ["git", "diff", "--numstat", "a..b"])
-        self.assertEqual(seen["kw"]["cwd"], "/ws")
+        got = mp.files_from_pr("https://github.com/o/r/pull/5", run=run)
+        self.assertEqual(got, {"foo.py": (3, 1), "bar.py": (10, 0)})
+        # argv is a list (no shell), querying the files field
+        self.assertEqual(seen["argv"],
+                         ["gh", "pr", "view", "https://github.com/o/r/pull/5",
+                          "--json", "files"])
 
-    def test_nonzero_exit_fails_closed(self):
-        self.assertIsNone(mp.numstat_from_cmd(["gh", "pr", "diff"],
-                                              run=lambda *a, **k: _FakeProc(1, "")))
+    def test_gh_error_fails_closed(self):
+        self.assertIsNone(mp.files_from_pr("pr", run=lambda *a, **k: _FakeProc(1, "")))
 
-    def test_exception_fails_closed(self):
-        def boom(*a, **k):
-            raise FileNotFoundError("gh not found")
-        self.assertIsNone(mp.numstat_from_cmd(["gh"], run=boom))
+    def test_unparseable_json_fails_closed(self):
+        self.assertIsNone(mp.files_from_pr("pr", run=lambda *a, **k: _FakeProc(0, "not json")))
+
+    def test_missing_files_field_fails_closed(self):
+        self.assertIsNone(mp.files_from_pr("pr", run=lambda *a, **k: _FakeProc(0, "{}")))
 
 
 class ClassifyChecksTest(unittest.TestCase):

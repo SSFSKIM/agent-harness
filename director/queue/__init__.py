@@ -112,12 +112,18 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
                          self_description: str | None = None,
                          guidance: str | None = None, attempt: int = 1,
                          evidence: dict | None = None,
+                         preservation_override: bool = False,
                          created_at: str | None = None,
                          base: Path | str | None = None) -> bool:
     """Enqueue a PR-merge worklist item for the serialized merger to drain.
 
     A worker that finished a ticket and opened a PR posts this (attempt 1); the merger
     pops it, runs the `land` lane, and writes an answer to mark it consumed. The
+    `preservation_override` (merge-preservation R1/D3) is the Director's explicit approval,
+    on an approve-and-requeue, that a tripwire-flagged drop is acceptable — the merger's
+    finalize stage then SKIPS the preservation tripwire for this attempt (it still runs the
+    hygiene gate). False on a worker's first enqueue.
+
     request_id is `merge|<ticket_id>|a<attempt>` — the `attempt` discriminant lets the
     Director RE-ENQUEUE a failed merge (attempt 2+) under a fresh id without the
     one-open-per-ticket dedupe swallowing it (the re-enqueue loop), while a re-delivery
@@ -133,7 +139,8 @@ def append_merge_request(ticket_id: str, *, pr=None, branch=None,
         "session_id": f"{ticket_id}-merge-a{attempt}",
         "kind": "mergeRequest",
         "payload": {"pr": pr, "branch": branch, "self_description": self_description,
-                    "guidance": guidance, "attempt": attempt, "evidence": evidence},
+                    "guidance": guidance, "attempt": attempt, "evidence": evidence,
+                    "preservation_override": preservation_override},
         "workspace_path": workspace_path,
         "created_at": created_at or _now_iso(),
     }, base=base)

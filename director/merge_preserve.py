@@ -3,7 +3,7 @@
 Two code-owned, deterministic checks the merger runs *before* it squash-merges, so the
 irreversible land is gated by code rather than the land worker's prose judgment:
 
-  - **Preservation tripwire (R1)** — `parse_numstat` / `preservation_delta`: did the PR's
+  - **Preservation tripwire (R1)** — `files_from_pr` / `preservation_delta`: did the PR's
     intended change survive the rebase/conflict-resolution? (the bulk of this module)
   - **Hygiene gate (R3)** — `pr_hygiene` / `classify_checks`: are the PR's CI checks green
     and (configurably) its review threads resolved?
@@ -11,18 +11,16 @@ irreversible land is gated by code rather than the land worker's prose judgment:
 Both surface a `failing`/drop result the merger turns into a `mergeReview` (judgment),
 never a silent merge; both fail **closed** (an unreadable diff / `gh` error → withhold).
 
-The preservation tripwire is a deterministic, code-owned check that a PR's intended
-change actually survives the
-merger's rebase/conflict-resolution before it lands on `main`. It compares two
-`--numstat` diffs:
+The preservation tripwire compares the PR's per-file change (from `gh pr view <pr> --json
+files` → `{path: (additions, deletions)}`) at two moments:
 
-  - INTENDED — the PR's own change, captured *before* the merger rebases it
-    (`gh pr diff --numstat <pr>`).
-  - ACTUAL   — what the squash would add to `main`, *after* the rebase
-    (`git -C <ws> diff --numstat <base>..<branch>`).
+  - INTENDED — captured *before* the merger drives the land lane that rebases the PR.
+  - ACTUAL   — captured *after* the land lane has rebased + force-pushed the branch.
 
-A path the PR changed that is **absent** from the actual merge → `dropped`; one whose
-added-line count fell by a clear margin → `shrunk`. Either makes the result not-`ok`.
+A path the PR changed that is **absent** from the actual set → `dropped`; one whose added
+lines fell by a clear margin → `shrunk`. Either makes the result not-`ok`. (`gh pr diff`
+has no `--numstat`; `gh pr view --json files` is the clean per-file source and needs no
+base-ref — GitHub computes the PR diff against its base for us.)
 
 It is a HEURISTIC, not a proof: a legitimate conflict resolution can correctly drop a
 hunk (the PR's change was already on `main`). So a trip routes to the Director as a
@@ -30,10 +28,10 @@ hunk (the PR's change was already on `main`). So a trip routes to the Director a
 (spec D3). The conservative thresholds favor low false-positives — a Director look costs
 less than a silent overwrite, but a noisy tripwire that cries wolf is ignored.
 
-Pure logic (`parse_numstat`, `preservation_delta`) is unit-tested directly; the only I/O
-is `numstat_from_cmd`, which shells a command with **argv** (never a shell string — the
-PR ref / branch are worker-supplied) and fails closed (returns None) so the caller
-withholds the merge when a diff cannot be read.
+Pure logic (`preservation_delta`, `classify_checks`) is unit-tested directly; the I/O
+helpers (`files_from_pr`, `pr_hygiene`, `unresolved_thread_count`) shell `gh` with
+**argv** (never a shell string — the PR ref is worker-supplied) and fail closed (None /
+"failing") so the caller withholds the merge when a fact cannot be read.
 """
 from __future__ import annotations
 
@@ -64,27 +62,6 @@ _SHRINK_RATIO = 0.5
 _MIN_SHRINK = 3
 
 
-def parse_numstat(text: str) -> dict[str, tuple[int, int]]:
-    """Parse `git diff --numstat` / `gh pr diff --numstat` output → {path: (added, deleted)}.
-
-    Each line is `<added>\\t<deleted>\\t<path>`; a binary file shows `-` for the counts →
-    recorded as (0, 0) but still keyed, so its presence/absence is tracked. Renames
-    (`old => new` / brace forms) keep the raw path token — a coarse key is fine for a
-    presence/added-count heuristic. Blank/malformed lines are skipped."""
-    out: dict[str, tuple[int, int]] = {}
-    for line in (text or "").splitlines():
-        parts = line.split("\t")
-        if len(parts) < 3:
-            continue
-        a_raw, d_raw, path = parts[0], parts[1], "\t".join(parts[2:]).strip()
-        if not path:
-            continue
-        added = 0 if a_raw == "-" else int(a_raw) if a_raw.isdigit() else 0
-        deleted = 0 if d_raw == "-" else int(d_raw) if d_raw.isdigit() else 0
-        out[path] = (added, deleted)
-    return out
-
-
 def preservation_delta(intended: dict[str, tuple[int, int]],
                        actual: dict[str, tuple[int, int]]) -> dict:
     """Compare INTENDED (pre-rebase PR diff) vs ACTUAL (post-rebase merge diff).
@@ -110,19 +87,20 @@ def preservation_delta(intended: dict[str, tuple[int, int]],
             "dropped_paths": sorted(dropped), "shrunk_paths": sorted(shrunk)}
 
 
-def numstat_from_cmd(argv: list[str], *, cwd: str | None = None,
-                     run=subprocess.run) -> dict[str, tuple[int, int]] | None:
-    """Run `argv` (a list — never a shell string; the PR ref/branch are untrusted input)
-    and parse its stdout as numstat. Returns the parsed map, or **None** on any failure
-    (non-zero exit, missing tool, exception) — fail-closed, so the caller withholds the
-    merge rather than landing on an unreadable diff."""
-    try:
-        proc = run(argv, cwd=cwd, capture_output=True, text=True)
-    except Exception:
+def files_from_pr(pr: str, *, run=subprocess.run) -> dict[str, tuple[int, int]] | None:
+    """The PR's per-file change via `gh pr view <pr> --json files` → {path: (additions,
+    deletions)}. Returns None on any failure (`gh` error, unparseable, missing field) —
+    fail-closed, so the caller withholds the merge when the diff cannot be read. `gh` is
+    invoked with argv (never a shell string; the PR ref is worker-supplied)."""
+    data = _gh_json(["gh", "pr", "view", pr, "--json", "files"], run=run)
+    if not isinstance(data, dict) or not isinstance(data.get("files"), list):
         return None
-    if proc.returncode != 0:
-        return None
-    return parse_numstat(proc.stdout)
+    out: dict[str, tuple[int, int]] = {}
+    for f in data["files"]:
+        path = (f or {}).get("path")
+        if path:
+            out[path] = (int(f.get("additions") or 0), int(f.get("deletions") or 0))
+    return out
 
 
 # ── Hygiene gate (R3) ──────────────────────────────────────────────────────────────

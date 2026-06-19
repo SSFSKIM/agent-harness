@@ -239,8 +239,32 @@ The spec fixed the design; these are the build choices:
   `unresolved_thread_count` (url→owner/repo/number→graphql). Config: `merger.require_resolved_threads`
   (default True) in DEFAULTS + `Merger` + `_build` via `_bool`. 16 helper tests + 2 config
   tests. Full gate GREEN (588).
+- [x] (2026-06-19) M4 done — the spine: code owns the merge. `merger.process_request`
+  captures the PR's intended files pre-rebase, drives the land lane, and on a prepared
+  `done` runs `_finalize_merge` (preservation tripwire → hygiene gate → code-issued
+  `gh pr merge --squash`); drop/failing → `escalated` (mergeReview names the dropped
+  path / failed check, via `_surface_escalation` now preferring `gate_reason`), pending →
+  `deferred` (drain skips it this pass via a per-pass set — no consume, no surface, no
+  head-of-line block, no spin), both-clean → `merged`. `_log_misfire` emits a structured
+  `protocol_misfire` when worker-claimed-clean contradicts a withheld gate (R4).
+  `preservation_override` flows `requeue_merge`→`append_merge_request`→payload→finalize
+  (Director approve-and-requeue skips the tripwire; D3). `require_resolved_threads` threaded
+  config→main→run_loop→drain→finalize. Replaced M2's numstat helpers with `files_from_pr`
+  (see Surprises). land/SKILL.md: R2 preservation-faithfulness check + escalate-on-doubt,
+  and the final step no longer self-merges (reports ready). +13 tests (FinalizeGateTest,
+  GateIntegrationTest incl. no-head-of-line + misfire, LandSkillPreparesTest); existing
+  drain-mechanics tests stub the injectable `finalize`. Full gate GREEN (601).
 
 ## Surprises & discoveries
+- (2026-06-19, M4) **`gh pr diff` has no `--numstat`.** M2 built `parse_numstat`/
+  `numstat_from_cmd` for `git diff --numstat`, but the clean per-file source for a PR's
+  change is `gh pr view <pr> --json files` (`[{path, additions, deletions}]`) — single
+  call, no base-ref gymnastics (GitHub computes the PR diff vs its base). M4 replaced the
+  numstat helpers with `files_from_pr` (the shape-agnostic `preservation_delta` core was
+  kept unchanged). Lesson: M2 was PoC-first without confirming the gh interface; verifying
+  it in M3 (also `reviewThreads` absent → graphql) caught both before wiring.
+- (2026-06-19, M4) `gh pr view --json` exposes neither `reviewThreads` (→ `gh api graphql`)
+  nor a `--numstat` on `pr diff` — both confirmed against the installed gh 2.87.3.
 
 ## Decision log
 - 2026-06-19: Finalize stage folded into `process_request` (Approach B) — keeps
@@ -254,6 +278,13 @@ The spec fixed the design; these are the build choices:
   sleep, no FIFO reorder.
 - 2026-06-19: `shrunk` threshold defaults conservative (flag only a clear shrink) to
   keep false-positives low; tuning knob, not a product fork.
+- 2026-06-19 (M4): the code gate is an injectable `finalize` seam on
+  `process_request`/`drain` — drain-mechanics tests stub it to "merged" (keeping their
+  FIFO/serialization intent), while the gate's behavior is tested directly
+  (`_finalize_merge` + a fake `sh`). Avoids re-mocking gh in every mechanics test.
+- 2026-06-19 (M4): preservation source = `gh pr view --json files` (not git numstat),
+  captured pre-rebase (intended) in `process_request` and post-rebase (actual) in
+  `finalize` — both via the injectable `sh`, both fail-closed.
 
 ## Feedback (from completion gate)
 

@@ -21,6 +21,13 @@ MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py
 _DONE = {"kind": "terminal", "outcome": {"status": "done", "reason": "merged"}}
 
 
+# merge-preservation M4: a land-lane `done` now means PREPARED, and the code gate (finalize)
+# decides merged/escalated/deferred. Drain-MECHANICS tests stub the gate to "merged" so they
+# keep exercising FIFO/serialization/consume; the gate's own behavior is tested separately.
+def _merged_finalize(req, **kw):
+    return {"result": "merged"}
+
+
 class MergeQueueTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -93,7 +100,7 @@ class DrainSerializationTest(unittest.TestCase):
             state["inflight"] -= 1
             return _DONE
 
-        results = merger.drain(base=self.base, driver=driver)
+        results = merger.drain(base=self.base, driver=driver, finalize=_merged_finalize)
         self.assertEqual([r["result"] for r in results], ["merged", "merged", "merged"])
         self.assertEqual(order, ["merge-T1", "merge-T2", "merge-T3"])  # FIFO
         self.assertEqual(state["max"], 1)                              # never >1 in flight
@@ -162,11 +169,13 @@ class DrainSerializationTest(unittest.TestCase):
         fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)  # simulate another live merger
         try:
             with self.assertRaises(RuntimeError):
-                merger.drain(base=self.base, driver=lambda *a, **k: _DONE)
+                merger.drain(base=self.base, driver=lambda *a, **k: _DONE,
+                             finalize=_merged_finalize)
         finally:
             os.close(held)  # release
         # lock free again → drain proceeds normally
-        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE)
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE,
+                               finalize=_merged_finalize)
         self.assertEqual(results[0]["result"], "merged")
 
     def test_max_merges_bounds_one_pass(self):
@@ -196,6 +205,7 @@ class DrainWithRealDriveTest(unittest.TestCase):
                                 workspace_path=str(self.tmp / "ws"), base=self.base)
         results = merger.drain(
             base=self.base, driver=run.drive, decide=autonomous_decide,
+            finalize=_merged_finalize,
             command=[sys.executable, MOCK, "report"],
             queue_base=str(self.tmp / "landq"), workspace_root=self.tmp / "wsr")
         self.assertEqual(results[0]["result"], "merged")
@@ -257,7 +267,9 @@ class MergeEscalationToDirectorTest(unittest.TestCase):
         def driver(ticket, *, decide, **kw):
             return _DONE
 
-        results = merger.drain(base=self.base, driver=driver)
+        # stub the gate to merged — this asserts a MERGED result does not surface (the gate's
+        # own escalate/defer behavior is covered by FinalizeGateTest/GateIntegrationTest).
+        results = merger.drain(base=self.base, driver=driver, finalize=_merged_finalize)
         self.assertFalse(results[0]["escalated_to_director"])
         self.assertEqual(dmin.merge_reviews(base=self.base), [])  # nothing to surface
 
@@ -431,11 +443,13 @@ class ReenqueueLoopTest(unittest.TestCase):
                         "turns": 1}
             return {"kind": "escalate", "reason": "conflict", "turns": 1}
 
-        r1 = merger.drain(base=self.base, driver=driver)          # round 1 → escalate
+        # round 1 escalates on the land-lane disposition (no gate reached); round 2's done
+        # reaches the gate, stubbed to merged — the loop converges via the guidance.
+        r1 = merger.drain(base=self.base, driver=driver, finalize=_merged_finalize)  # → escalate
         self.assertEqual(r1[0]["result"], "escalated")
         review = dmin.merge_reviews(base=self.base)[0]
         dmin.requeue_merge(review, note="rebase onto origin/main, then merge", base=self.base)
-        r2 = merger.drain(base=self.base, driver=driver)          # round 2 → merged
+        r2 = merger.drain(base=self.base, driver=driver, finalize=_merged_finalize)  # → merged
         self.assertEqual(r2[0]["result"], "merged")
         self.assertEqual(merger.pending_merges(base=self.base), [])   # converged, queue empty
         self.assertEqual(dmin.merge_reviews(base=self.base), [])      # no open escalation
@@ -463,11 +477,14 @@ class EndToEndPipelineTest(unittest.TestCase):
                              disp, 1, states, 1, queue_base=self.base)
         self.assertTrue(out["summary"]["merge_enqueued"])
         self.assertEqual(len(merger.pending_merges(base=self.base)), 1)
-        # 2) the standalone merger drains it (mock land worker → terminal done → merged).
+        # 2) the standalone merger drains it (mock land worker → prepared done → code gate).
+        #    With no live gh the gate withholds (escalates), but the request is CONSUMED
+        #    either way — this proves the reconcile→enqueue→merger-drain flow end-to-end;
+        #    the gate's merged/escalated verdict is covered by GateIntegrationTest.
         rc = merger.main(["--once", "--mock", "--mock-scenario", "report",
                           "--queue-dir", str(self.base)])
         self.assertEqual(rc, 0)
-        # 3) end-to-end: the PR landed → queue empty.
+        # 3) end-to-end: the merge request was drained/consumed → no mergeRequest left queued.
         self.assertEqual(merger.pending_merges(base=self.base), [])
 
 
@@ -516,6 +533,213 @@ class MergeOutcomeTest(unittest.TestCase):
         self._answer("T1", 1, "escalated")
         dq.append_merge_request("T1", pr="p", attempt=2, base=self.base)
         self.assertEqual(merger.merge_outcome("T1", base=self.base), "pending")
+
+
+# ── merge-preservation-hardening M4: code owns the merge ─────────────────────────────
+
+import json as _json  # noqa: E402
+
+
+class _Proc:
+    def __init__(self, rc, out=""):
+        self.returncode = rc
+        self.stdout = out
+
+
+def _files_json(d):
+    return _json.dumps({"files": [{"path": p, "additions": a, "deletions": dl}
+                                  for p, (a, dl) in (d or {}).items()]})
+
+
+def _gate_sh(*, intended_files=None, actual_files=None, rollup=None,
+             threads_resolved=True, merge_rc=0):
+    """Fake subprocess.run for the merger's gh gate calls, dispatched by argv. The two
+    `gh pr view --json files` calls return intended_files then actual_files (the
+    pre-rebase vs post-rebase diff the preservation tripwire compares)."""
+    if rollup is None:
+        rollup = [{"state": "SUCCESS"}]
+    files_seq = [intended_files if intended_files is not None else {},
+                 actual_files if actual_files is not None else intended_files or {}]
+    state = {"files": 0}
+
+    def run(argv, **kw):
+        if "graphql" in argv:
+            node = {"isResolved": threads_resolved}
+            return _Proc(0, _json.dumps({"data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": [node]}}}}}))
+        if "merge" in argv:
+            return _Proc(merge_rc)
+        if "statusCheckRollup" in argv:
+            return _Proc(0, _json.dumps({"statusCheckRollup": rollup}))
+        if "files" in argv:
+            d = files_seq[min(state["files"], len(files_seq) - 1)]
+            state["files"] += 1
+            return _Proc(0, _files_json(d))
+        return _Proc(1)
+    return run
+
+
+def _merge_req(pr="https://github.com/o/r/pull/5", **payload):
+    return {"request_id": "merge|T1|a1", "ticket_id": "T1",
+            "workspace_path": "/ws", "payload": {"pr": pr, **payload}}
+
+
+class FinalizeGateTest(unittest.TestCase):
+    """The code gate (_finalize_merge): preservation tripwire → hygiene → code merge."""
+
+    def _fin(self, *, intended, actual_files=None, **sh_kw):
+        # _finalize_merge captures only the ACTUAL diff (intended is passed in), so the
+        # single `gh pr view --json files` call must return actual_files — feed it as the
+        # fake's first files response.
+        return merger._finalize_merge(_merge_req(**sh_kw.pop("payload", {})),
+                                      intended=intended, require_resolved_threads=True,
+                                      run=_gate_sh(intended_files=actual_files, **sh_kw))
+
+    def test_clean_pr_merges(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)})
+        self.assertEqual(fin["result"], "merged")
+
+    def test_dropped_path_escalates_and_names_it(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={})   # a.py vanished
+        self.assertEqual(fin["result"], "escalated")
+        self.assertIn("preservation tripwire", fin["gate_reason"])
+        self.assertIn("a.py", fin["gate_reason"])
+
+    def test_red_check_escalates(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)},
+                        rollup=[{"state": "FAILURE"}])
+        self.assertEqual(fin["result"], "escalated")
+        self.assertIn("hygiene", fin["gate_reason"])
+
+    def test_pending_ci_defers(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)},
+                        rollup=[{"status": "IN_PROGRESS"}])
+        self.assertEqual(fin["result"], "deferred")
+
+    def test_unresolved_thread_escalates(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)},
+                        threads_resolved=False)
+        self.assertEqual(fin["result"], "escalated")
+
+    def test_override_skips_preservation(self):
+        # actual drops a.py, but the Director approved (override) → tripwire skipped; the
+        # hygiene gate still runs, and clean → merged.
+        fin = merger._finalize_merge(
+            _merge_req(preservation_override=True), intended={"a.py": (5, 0)},
+            require_resolved_threads=True,
+            run=_gate_sh(intended_files={"a.py": (5, 0)}, actual_files={}))
+        self.assertEqual(fin["result"], "merged")
+
+    def test_fail_closed_when_intended_unreadable(self):
+        fin = merger._finalize_merge(_merge_req(), intended=None,
+                                     require_resolved_threads=True, run=_gate_sh())
+        self.assertEqual(fin["result"], "escalated")
+
+    def test_fail_closed_when_merge_command_fails(self):
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)}, merge_rc=1)
+        self.assertEqual(fin["result"], "escalated")
+        self.assertIn("gh pr merge failed", fin["gate_reason"])
+
+
+class GateIntegrationTest(unittest.TestCase):
+    """process_request/drain end-to-end with the real gate (fake gh) — the spine wiring."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def _reviews(self):
+        return [r for r in dq.read_pending(base=self.base) if r["kind"] == "mergeReview"]
+
+    def test_clean_pr_lands_via_code_merge(self):
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)})
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertEqual(results[0]["result"], "merged")
+        self.assertEqual(merger.pending_merges(base=self.base), [])
+
+    def test_dropped_hunk_does_not_land_and_surfaces_review(self):
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={})  # rebase dropped a.py
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertEqual(results[0]["result"], "escalated")
+        self.assertIn("a.py", results[0]["gate_reason"])
+        self.assertEqual(len(self._reviews()), 1)            # surfaced to the Director
+        self.assertEqual(merger.pending_merges(base=self.base), [])  # consumed (not retried)
+
+    def test_pending_ci_defers_unsurfaced_and_stays_pending(self):
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)},
+                      rollup=[{"status": "IN_PROGRESS"}])
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertEqual(results[0]["result"], "deferred")
+        self.assertEqual(len(merger.pending_merges(base=self.base)), 1)  # left for retry
+        self.assertEqual(self._reviews(), [])                            # NOT surfaced
+
+    def test_deferred_pr_does_not_block_others_no_head_of_line(self):
+        # T1's CI is pending (defer), T2's is green (land) — T2 must still drain this pass.
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/1",
+                                workspace_path="/ws", base=self.base)
+        dq.append_merge_request("T2", pr="https://github.com/o/r/pull/2",
+                                workspace_path="/ws", base=self.base)
+
+        def sh(argv, **kw):
+            pr1 = any("pull/1" in str(x) for x in argv)
+            if "graphql" in argv:
+                return _Proc(0, _json.dumps({"data": {"repository": {"pullRequest": {
+                    "reviewThreads": {"nodes": []}}}}}))
+            if "merge" in argv:
+                return _Proc(0)
+            if "statusCheckRollup" in argv:
+                st = [{"status": "IN_PROGRESS"}] if pr1 else [{"state": "SUCCESS"}]
+                return _Proc(0, _json.dumps({"statusCheckRollup": st}))
+            if "files" in argv:
+                return _Proc(0, _files_json({"a.py": (5, 0)}))
+            return _Proc(1)
+
+        results = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        by = {r["ticket_id"]: r["result"] for r in results}
+        self.assertEqual(by["T2"], "merged")        # not blocked behind the deferred T1
+        self.assertEqual(by["T1"], "deferred")
+        # only T1 remains pending (T2 consumed)
+        pend = merger.pending_merges(base=self.base)
+        self.assertEqual([p["ticket_id"] for p in pend], ["T1"])
+
+    def test_protocol_misfire_logged_when_claim_contradicts_gate(self):
+        import contextlib
+        import io
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws",
+                                evidence={"checks_state": "green", "unresolved_threads": 0},
+                                base=self.base)
+        sh = _gate_sh(intended_files={"a.py": (5, 0)}, actual_files={})  # gate withholds
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh)
+        self.assertIn("protocol_misfire", buf.getvalue())
+
+    def test_merger_module_has_no_board_import(self):
+        # R6: the merger stays board-free — the queue is its only hand-off.
+        src = Path(merger.__file__).read_text()
+        self.assertNotIn("import director.board", src)
+        self.assertNotIn("from director.board", src)
+        self.assertNotIn("from director import board", src)
+
+
+class LandSkillPreparesTest(unittest.TestCase):
+    """R2: the land skill prepares (does not merge) and carries the preservation check."""
+
+    def test_land_skill_no_longer_self_merges_and_checks_preservation(self):
+        src = (Path(merger.__file__).resolve().parent / "workspace_skills" / "land"
+               / "SKILL.md").read_text()
+        low = src.lower()
+        self.assertNotIn("gh pr merge --squash --subject", src)  # the self-merge command is gone
+        self.assertIn("do not", low)                             # do NOT merge yourself
+        self.assertIn("preservation", low)                       # R2 faithfulness check
+        self.assertIn("the merger", low)                         # merger finalizes
 
 
 if __name__ == "__main__":

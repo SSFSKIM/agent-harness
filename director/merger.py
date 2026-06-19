@@ -2,18 +2,26 @@
 
 A worker finishes a ticket, self-QAs, and opens a PR (it does NOT merge). The PR
 lands here: a SINGLE consumer drains the `mergeRequest` queue one PR at a time —
-rebase onto the latest main, run the integration gate, squash-merge when GREEN.
-Serialization is the whole point (R3): "clean against a stale main" is not safe, so
-PRs must land sequentially, each re-based + re-gated against the main the previous
-merge produced. A single consumer draining one-at-a-time gives that for free — no
-lock, no concurrency counter in the hot path.
+rebase onto the latest main, run the integration gate, resolve threads. Serialization
+is the whole point (R3): "clean against a stale main" is not safe, so PRs must land
+sequentially, each re-based + re-gated against the main the previous merge produced. A
+single consumer draining one-at-a-time gives that for free — no lock, no concurrency
+counter in the hot path.
 
 The merger does NOT invent a turn machine: each PR runs through `director.run.drive`
 with the vendored `land` skill, and the per-turn disposition is owned by the injected
-`decide` (D-50) — exactly the seam the worker driver uses. A clean landing returns a
-`terminal(done)` disposition; a conflict it cannot resolve, a red integration gate, or
-a taste call surfaces as `escalate`/`stuck`/`failed`, which the merger routes to the
-human VIA the Director (single surface, R4/R7) — it never silently merges.
+`decide` (D-50) — exactly the seam the worker driver uses. The land lane *prepares* the
+PR (rebase, fix CI, resolve threads, push) and reports `terminal(done)` = ready; a
+conflict it cannot resolve, a red integration gate, or a taste call surfaces as
+`escalate`/`stuck`/`failed`, routed to the human VIA the Director (single surface, R4/R7).
+
+**Code owns the irreversible merge (merge-preservation-hardening D1).** The land worker
+does NOT run `gh pr merge`; on a prepared `done` the merger runs a code gate —
+a preservation tripwire (`merge_preserve`, R1: did the PR's change survive the rebase?)
+then a hygiene gate (R3: CI green + threads resolved) — and only then issues the
+squash-merge itself. Any gate failure withholds + escalates (a `mergeReview`); CI still
+running defers (retry later). It never silently merges, and the irreversible act is
+gated by code, not the land worker's prose judgment.
 
 This module owns the drain + classification. The Director-escalation wiring and the
 worker→enqueue call site are M3; the live serializer wire-pin is M4.
@@ -23,11 +31,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import json
 import os
+import subprocess
 import sys
 import time
 from typing import Callable
 
+import director.merge_preserve as mp
 import director.queue as dq
 from director import config, run
 from director.decider import autonomous_decide, make_queue_decider
@@ -199,7 +210,10 @@ def _surface_escalation(req: dict, result: dict, *, base=None) -> bool:
         return False
     disp = result.get("disposition") or {}
     payload = req.get("payload") or {}
-    reason = disp.get("reason") or result.get("error") or disp.get("kind") or "merge failed"
+    # Prefer the code gate's reason (a prepared `done` whose preservation/hygiene gate
+    # withheld it — the land-lane disposition would otherwise read as a bare "done").
+    reason = (result.get("gate_reason") or disp.get("reason") or result.get("error")
+              or disp.get("kind") or "merge failed")
     # Carry the attempt (default 1) into the mergeReview: the review id discriminates per
     # attempt (a 2nd failed retry surfaces distinctly) and the Director's requeue reads it
     # to bump attempt+1. Return the ACTUAL append result — a dedup means nothing NEW
@@ -211,41 +225,148 @@ def _surface_escalation(req: dict, result: dict, *, base=None) -> bool:
         base=base)
 
 
+def _is_prepared(disp: dict) -> bool:
+    """A land-lane `terminal(done)` now means the PR is PREPARED (rebased, gate-green,
+    threads replied, pushed) — ready for the merger's code gate, NOT yet merged (D1)."""
+    return (disp or {}).get("kind") == "terminal" \
+        and ((disp or {}).get("outcome") or {}).get("status") == "done"
+
+
+def _squash_merge(pr: str | None, *, cwd: str | None = None, run=subprocess.run) -> bool:
+    """The code-issued squash-merge (merge-preservation D1) — the irreversible act the land
+    worker no longer performs. argv (never a shell string; `pr` is worker-supplied). Returns
+    True iff `gh pr merge` succeeded; False (fail-closed) on missing pr / non-zero / error."""
+    if not pr:
+        return False
+    try:
+        proc = run(["gh", "pr", "merge", pr, "--squash"], cwd=cwd,
+                   capture_output=True, text=True)
+    except Exception:
+        return False
+    return proc.returncode == 0
+
+
+def _finalize_merge(req: dict, *, intended, require_resolved_threads: bool,
+                    run=subprocess.run) -> dict:
+    """Code gate (R1 preservation tripwire → R3 hygiene gate) then the code-issued
+    squash-merge — run after the land lane reports the PR PREPARED. Returns a dict with
+    `result` ∈ {merged, escalated, deferred} (+ `gate`/`gate_reason` context):
+      - preservation trip / hygiene failing / unreadable fact → `escalated` (withhold);
+      - CI still running → `deferred` (retry later, never a merge-while-pending);
+      - both gates clean → code issues `gh pr merge` → `merged` (or `escalated` if it fails).
+    Fail-closed throughout: a fact we cannot read withholds the merge."""
+    payload = req.get("payload") or {}
+    pr = payload.get("pr")
+    ws = req.get("workspace_path")
+    gate: dict = {}
+    # R1 preservation tripwire — skipped only on a Director-approved override (still hygiene-
+    # gated). `intended` was captured BEFORE the land lane rebased; `actual` is post-rebase.
+    if not payload.get("preservation_override"):
+        if intended is None:
+            return {"result": "escalated",
+                    "gate_reason": "could not read the PR's intended diff pre-rebase (fail-closed)"}
+        actual = mp.files_from_pr(pr, run=run)
+        if actual is None:
+            return {"result": "escalated",
+                    "gate_reason": "could not read the merged diff post-rebase (fail-closed)"}
+        delta = mp.preservation_delta(intended, actual)
+        gate["preservation"] = delta
+        if not delta["ok"]:
+            return {"result": "escalated", "gate": gate,
+                    "gate_reason": "preservation tripwire — dropped=%s shrunk=%s"
+                    % (delta["dropped_paths"], delta["shrunk_paths"])}
+    # R3 hygiene gate
+    hy = mp.pr_hygiene(pr, require_threads=require_resolved_threads, run=run)
+    gate["hygiene"] = hy
+    if hy == "pending":
+        return {"result": "deferred", "gate": gate, "gate_reason": "CI checks still pending"}
+    if hy == "failing":
+        return {"result": "escalated", "gate": gate,
+                "gate_reason": "hygiene gate — CI not green or unresolved review threads"}
+    # both gates clean → CODE performs the irreversible merge
+    if _squash_merge(pr, cwd=ws, run=run):
+        return {"result": "merged", "gate": gate}
+    return {"result": "escalated", "gate": gate,
+            "gate_reason": "gh pr merge failed (fail-closed)"}
+
+
+def _log_misfire(req: dict, fin: dict) -> None:
+    """R4 audit: if the worker's self-reported sweep evidence claimed the PR was clean but
+    the code gate WITHHELD it, emit a structured protocol-misfire line (the worker's sweep
+    missed something the merger caught) for the human/Director to learn from. Best-effort —
+    no evidence (R5 degraded) means nothing to compare; never raises."""
+    ev = (req.get("payload") or {}).get("evidence") or {}
+    if not ev:
+        return
+    claimed_clean = ev.get("checks_state") in (None, "green") and not ev.get("unresolved_threads")
+    if claimed_clean and fin.get("result") == "escalated":
+        print(json.dumps({"merger": "protocol_misfire", "ticket": req.get("ticket_id"),
+                          "claimed": ev, "gate_reason": fin.get("gate_reason")}),
+              file=sys.stderr)
+
+
 def process_request(req: dict, *, driver: Callable = run.drive,
-                    decide: Callable = autonomous_decide, **drive_kwargs) -> dict:
-    """Run ONE merge request through the land lane and classify the outcome. A driver
-    crash becomes a `failed` result (one bad PR never sinks the drain) — mirrors the
-    orchestrator's dispatch-wraps-drive discipline."""
+                    decide: Callable = autonomous_decide, require_resolved_threads: bool = True,
+                    sh=subprocess.run, finalize: Callable = _finalize_merge,
+                    **drive_kwargs) -> dict:
+    """Run ONE merge request: capture the PR's intended diff, drive the land lane to PREPARE
+    the PR, then (on a prepared `done`) run the code gate + code-issued merge (D1). A driver
+    crash becomes a `failed` result (one bad PR never sinks the drain). Non-`done` land-lane
+    outcomes classify/escalate exactly as before; a prepared `done` becomes
+    merged/escalated/deferred per `finalize` (the gate; injectable for tests)."""
+    base = {"request_id": req["request_id"], "ticket_id": req.get("ticket_id")}
+    payload = req.get("payload") or {}
+    pr = payload.get("pr")
+    # Capture INTENDED (the PR's per-file change) BEFORE the land lane rebases (R1). Skipped
+    # when there is no PR or the Director already approved the drop (override). `sh` is the
+    # injectable subprocess runner (tests fake it; merger is module `run`, hence the name).
+    intended = mp.files_from_pr(pr, run=sh) if (pr and not payload.get("preservation_override")) else None
     ticket = land_ticket_from_request(req)
     try:
         disp = driver(ticket, decide=decide, **drive_kwargs)
     except Exception as exc:
-        return {"request_id": req["request_id"], "ticket_id": req.get("ticket_id"),
-                "result": "failed", "error": str(exc)}
-    return {"request_id": req["request_id"], "ticket_id": req.get("ticket_id"),
-            "result": classify(disp), "disposition": disp}
+        return {**base, "result": "failed", "error": str(exc)}
+    if not _is_prepared(disp):
+        return {**base, "result": classify(disp), "disposition": disp}
+    fin = finalize(req, intended=intended,
+                   require_resolved_threads=require_resolved_threads, run=sh)
+    _log_misfire(req, fin)
+    return {**base, "disposition": disp, **fin}
 
 
 def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonomous_decide,
-          max_merges: int = DEFAULT_MAX_MERGES, **drive_kwargs) -> list[dict]:
-    """Drain the merge queue SERIALLY: pop the oldest pending PR, land it, mark it
-    consumed, repeat — strictly one PR in flight at a time (R3). Returns a per-PR result
-    list ({request_id, ticket_id, result: merged|escalated|failed, ...}).
+          max_merges: int = DEFAULT_MAX_MERGES, require_resolved_threads: bool = True,
+          sh=subprocess.run, finalize: Callable = _finalize_merge, **drive_kwargs) -> list[dict]:
+    """Drain the merge queue SERIALLY: pop the oldest pending PR, run it through the land
+    lane + code gate, mark it consumed (or DEFER it), repeat — one PR in flight at a time
+    (R3). Returns a per-PR result list ({request_id, ticket_id, result: merged|escalated|
+    failed|deferred, ...}).
 
-    Single-consumer ⇒ serialization is structural (this loop processes one request fully
-    before reading the next), so there is no concurrency to guard. The loop terminates
-    because each iteration consumes one request (it leaves `pending`); `max_merges` is a
-    belt-and-suspenders bound. `drive_kwargs` (command, queue_base, workspace_root,
-    install_skills, posture, …) pass straight through to the land lane."""
+    Single-consumer ⇒ serialization is structural. A `deferred` result (CI still running)
+    is left PENDING — not consumed, not surfaced — and skipped for the rest of THIS pass
+    (a per-pass `deferred` set), so other queued PRs still drain (no head-of-line block)
+    and the merger's poll loop retries it later (no busy-spin). The loop terminates because
+    every non-deferred request is consumed and deferred ones are skipped; `max_merges`
+    bounds it. `drive_kwargs` pass straight through to the land lane."""
     results: list[dict] = []
     processed = 0
+    deferred: set[str] = set()
     with _single_consumer_lock(base):  # enforce single PR-merger (R4) before any drive
         while processed < max_merges:
-            pend = pending_merges(base=base)
+            pend = [r for r in pending_merges(base=base)
+                    if r["request_id"] not in deferred]
             if not pend:
                 break
             req = pend[0]  # FIFO — oldest queued PR first
-            result = process_request(req, driver=driver, decide=decide, **drive_kwargs)
+            result = process_request(req, driver=driver, decide=decide,
+                                     require_resolved_threads=require_resolved_threads,
+                                     sh=sh, finalize=finalize, **drive_kwargs)
+            if result["result"] == "deferred":
+                # CI still running: leave PENDING (do not consume/surface), skip this pass.
+                deferred.add(req["request_id"])
+                results.append(result)
+                processed += 1
+                continue
             # Surface BEFORE consume (review fix): if surfacing a non-merged PR fails or the
             # process dies between the two, the request stays PENDING and is re-surfaced
             # next drain (mergeReview dedupes on mergereview|<ticket>) — a failed merge is
@@ -259,17 +380,17 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
 
 def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
              decide: Callable = autonomous_decide, max_merges: int = DEFAULT_MAX_MERGES,
-             **drive_kwargs) -> int:
+             require_resolved_threads: bool = True, **drive_kwargs) -> int:
     """The standalone merger's body: drain the merge queue, then either exit (`once`) or
     keep watching for new PRs (the drain-runner; spec Open Q resolved to a standalone,
     event-woken process — D-47/R7). `once` runs a single drain pass and returns (cron /
     tests). Otherwise it polls the queue and drains whenever a `mergeRequest` is pending,
-    sleeping `poll` between checks — woken by work, never a busy-spin. `max_merges` bounds
-    one drain pass (config `director.merger.max_merges`). Returns 0."""
+    sleeping `poll` between checks — woken by work, never a busy-spin (a `deferred`
+    CI-pending PR is retried on the next poll). `max_merges` bounds one drain pass. Returns 0."""
     while True:
         if pending_merges(base=base):  # only take the flock + drive when there is work
             drain(base=base, command=command, decide=decide, max_merges=max_merges,
-                  **drive_kwargs)
+                  require_resolved_threads=require_resolved_threads, **drive_kwargs)
         if once:
             return 0
         time.sleep(poll)
@@ -349,6 +470,7 @@ def main(argv=None) -> int:
                     poll=poll, once=args.once, decide=decide, queue_base=queue_dir,
                     approval_policy=posture.approval_policy, sandbox=posture.sandbox,
                     read_timeout_s=read_timeout, max_merges=cfg.merger.max_merges,
+                    require_resolved_threads=cfg.merger.require_resolved_threads,
                     hooks=hooks, hook_timeout_s=cfg.workspace.hook_timeout_s)
 
 

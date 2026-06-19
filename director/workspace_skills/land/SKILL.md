@@ -12,11 +12,11 @@ description:
 
 - Ensure the PR is conflict-free with main.
 - Keep CI green and fix failures when they occur.
-- Squash-merge the PR once checks pass.
-- Do not yield to the user until the PR is merged; keep the watcher loop running
-  unless blocked.
-- No need to delete remote branches after merge; the repo auto-deletes head
-  branches.
+- **PREPARE** the PR for the serialized merger to land — do **NOT** squash-merge it
+  yourself. The merger performs the irreversible merge after a code-owned
+  preservation + hygiene gate (merge-preservation-hardening D1).
+- Do not yield until the PR is rebased, gate-green, and review feedback is
+  replied/resolved; then report it ready.
 
 ## Preconditions
 
@@ -32,13 +32,21 @@ description:
 4. Check mergeability and conflicts against main.
 5. If conflicts exist, use the `pull` skill to fetch/merge `origin/main` and
    resolve conflicts, then use the `push` skill to publish the updated branch.
+   **Preservation check (R2):** after resolving, verify that BOTH sides' work
+   survives — your PR's intended change AND main's prior behavior — and that no
+   hunk was silently dropped. If you are not confident the resolution preserved
+   both intents, STOP and escalate (`report_outcome(status="needs_human")` or end
+   your turn explaining) rather than push a lossy merge. The merger also re-checks
+   this in code, but catching it here is cheaper.
 6. Ensure Codex review comments (if present) are acknowledged and any required
    fixes are handled before merging.
 7. Watch checks until complete.
 8. If checks fail, pull logs, fix the issue, commit with the `commit` skill,
    push with the `push` skill, and re-run checks.
-9. When all checks are green and review feedback is addressed, squash-merge and
-   delete the branch using the PR title/body for the merge subject/body.
+9. When all checks are green and review feedback is replied/resolved, the PR is
+   READY. Do **NOT** squash-merge it — report ready (end your turn / a clean
+   terminal); the serialized merger runs its preservation + hygiene gate and
+   performs the squash-merge itself. A worker-side merge would bypass that gate.
 10. **Context guard:** Before implementing review feedback, confirm it does not
     conflict with the user’s stated intent or task context. If it conflicts,
     respond inline with a justification and ask the user before changing code.
@@ -94,8 +102,9 @@ if ! gh pr checks --watch; then
   exit 1
 fi
 
-# Squash-merge (remote branches auto-delete on merge in this repo)
-gh pr merge --squash --subject "$pr_title" --body "$pr_body"
+# Do NOT merge here. The serialized merger performs the squash-merge in code after
+# its preservation + hygiene gate (merge-preservation-hardening D1). Report the PR
+# ready once it is rebased, gate-green, and review feedback is replied/resolved.
 ```
 
 ## Async Watch Helper
