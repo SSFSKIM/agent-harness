@@ -278,7 +278,7 @@ def relations(records):
     for r in records:
         # declared `supersedes` edges (KF v1.2) — the one authored relationship;
         # they win over the inferred edge for the same (src,dst) pair.
-        declared = r.get("supersedes", [])
+        declared = list(dict.fromkeys(r.get("supersedes", [])))  # dedup authored targets
         dset = set(declared)
         for dst in declared:
             out.append({"src": r["path"], "dst": dst, "rel": "supersedes",
@@ -521,7 +521,10 @@ def followups(records, root, node=None):
     groups = {}
     if tracker:
         tpath = root / tracker["path"]
-        text = tpath.read_text(encoding="utf-8", errors="replace")
+        try:  # the tracker may vanish between index and read — fail soft (R2)
+            text = tpath.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
         for source_cell, summary, severity, status in _tracker_rows(text):
             srcs = _resolve_links(tpath, root, hl.links_in(source_cell))
             key = srcs[0] if srcs else "(unsourced)"
@@ -544,7 +547,7 @@ def _emit_followups(groups, as_json):
         total += len(rows)
         print(f"# {src if src == '(unsourced)' else _slug(src)}  ({len(rows)})")
         for r in rows:
-            print(f"    [{r['status']}] {r['summary']}")
+            print(f"    [{(r['status'] or '')[:24]}] {r['summary']}")
     print(f"# {total} follow-up(s) — advisory")
 
 

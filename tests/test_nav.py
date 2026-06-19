@@ -661,6 +661,12 @@ class TestNavFollowups(unittest.TestCase):
                    "type: knowledge", "description: x."])
             self.assertEqual(nav.followups(nav.build_index(root), root), {})
 
+    def test_tracker_removed_after_index_is_fail_soft(self):
+        # the tracker may vanish between build_index and the followups re-read —
+        # must degrade to empty, never raise (spec R2/AC2)
+        (self.root / "docs/exec-plans/tech-debt-tracker.md").unlink()
+        self.assertEqual(nav.followups(self.records, self.root), {})
+
     def test_map_badge_counts_followups(self):
         # the map annotates a node with its follow-up count (rows NOT inlined)
         counts = {k: len(v) for k, v in nav.followups(self.records, self.root).items()
