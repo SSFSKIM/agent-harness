@@ -17,6 +17,8 @@ The tiers below document intent, not enforced contracts. `stable` exports follow
 | `tagSession` | stable |
 | `deleteSession` | stable |
 | `resolveOptions` | stable |
+| `resolveAutoModel` | advanced-seam |
+| `isAutoSupportedModel` | advanced-seam |
 | `validateHarnessConfig` | stable |
 | `HarnessConfigError` | stable |
 | `TaskStore` | stable |

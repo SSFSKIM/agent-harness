@@ -5,6 +5,7 @@ import { resolveSandbox } from "./sandbox.js";
 import { resolveProviderEnv } from "./provider.js";
 import { resolveTools } from "./tools.js";
 import { resolveAgents } from "./agents.js";
+import { resolveAutoModel } from "./autoModel.js";
 import { createPermissionGate } from "../permissions/gate.js";
 
 // Produces a plain object that is structurally the SDK `Options`.
@@ -43,6 +44,10 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   if (config.includePartialMessages) options.includePartialMessages = config.includePartialMessages;
   if (config.forwardSubagentText) options.forwardSubagentText = config.forwardSubagentText;
   if (config.permissionMode) options.permissionMode = config.permissionMode;
+  // `auto` is MODEL-GATED (Opus 4.6+/Sonnet 4.6); on an unsupported model it silently degrades to `default`
+  // (probe 24-P2a). Centralize the gate here — like bypassPermissions below — so every lib/createHarness caller
+  // is born auto-safe: force a supported model (a supported explicit one is preserved; undefined → DEFAULT).
+  if (config.permissionMode === "auto") options.model = resolveAutoModel(config.model);
   // SDK contract (sdk.d.ts:1719): bypassPermissions REQUIRES allowDangerouslySkipPermissions.
   // Centralize it here so no path (CLI/lib/tests) can set the mode without satisfying it.
   if (config.permissionMode === "bypassPermissions") options.allowDangerouslySkipPermissions = true;

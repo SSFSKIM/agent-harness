@@ -94,4 +94,12 @@ describe("resolveOptions", () => {
   it("emits maxBudgetUsd:0 (guards on !== undefined, not truthiness)", () => {
     expect((resolveOptions({ maxBudgetUsd: 0 }) as any).maxBudgetUsd).toBe(0);
   });
+  it("forces a supported model when permissionMode is auto (model-gated)", () => {
+    expect((resolveOptions({ permissionMode: "auto", model: "claude-haiku-4-5" }) as any).model).toBe("claude-sonnet-4-6");
+    expect((resolveOptions({ permissionMode: "auto", model: "claude-opus-4-8" }) as any).model).toBe("claude-opus-4-8");
+    expect((resolveOptions({ permissionMode: "auto" }) as any).model).toBe("claude-sonnet-4-6");
+  });
+  it("does not touch the model for non-auto modes", () => {
+    expect((resolveOptions({ permissionMode: "default", model: "claude-haiku-4-5" }) as any).model).toBe("claude-haiku-4-5");
+  });
 });
