@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-20
 owner: harness
 type: exec-plan
@@ -111,9 +111,11 @@ corpus is GREEN; rules ship in `plugin/scripts/lint_docs.py` (portable).
 
 ## Feedback (from completion gate)
 
-Reviews — all SATISFIED: review-spec-compliance, review-arch, review-reliability
-(the dedicated personas; used over Codex per the CLAUDE.md fallback after Codex
-stalled earlier this session). review-code-quality below.
+Reviews — **all four SATISFIED**: review-spec-compliance, review-arch,
+review-reliability, review-code-quality (the dedicated personas; used over Codex
+per the CLAUDE.md fallback after Codex stalled earlier this session).
+- (code-quality P2, fixed) the §2.3 `type` vocabulary omitted `tracker` though the
+  harness ships `type: tracker` → added to both KF docs.
 
 P2s fixed inline:
 - (arch) `docs/design-docs/agent-harness.md` had a same-doc version contradiction
@@ -132,3 +134,32 @@ Recorded in `tech-debt-tracker.md` (non-blocking): one shared path-resolver help
 under-enforcement vs D11 (benign/fail-soft — review-reliability observation).
 
 ## Outcomes & retrospective
+
+Flipped KF's permissive-on-optional stance into an **enforced governance layer**
+(KF v2.0), grounded in the user's framing: OKF is a general *exchange* format
+(rightly permissive), but we are a single actor's *enforced working memory*, so a
+navigation key whose absence silently costs navigability is a defect. The
+escalation is **graded by what the corpus sustains** (the data forbade blanket —
+`resource` is on 1/99 pages, `phase` on 30/99): `type`+`description` blanket-required
+(D11), `phase` required on `product-spec` only (plans inherit — avoided a 44-page
+redundant backfill), and `resource`/`supersedes`/`phase` validate-if-present (D12).
+`type` value stays free (presence-only) — OKF's tolerate-unknown kept for values.
+
+Behavioral check: ran (the lint gate is the surface) — D11/D12 FAIL on crafted bad
+pages, pass on valid/absent; the live corpus is GREEN; a fresh scaffold is GREEN.
+
+The two real lessons, both surfaced by *running* the rule, not designing it:
+1. **The lint governs more than the catalog does.** My "migration = 2" estimate
+   used `nav catalog` (excludes `index.md` spines); the lint governs spines. So
+   reserved spines had to be exempted from the nav-key rules — and the spec's
+   "every governed page" became "every governed *content* page."
+2. **A new required key doesn't propagate until every emitting template carries
+   it.** A fresh scaffold would have FAILed D11 — 10 seeded doc templates lacked
+   type/description. The contract is only as portable as its templates (belief 13).
+   Same class as the earlier ExecPlan-template `type` gap; the fix is mechanical
+   but mandatory, and the `test_scaffold` green-host check is what guarantees it.
+
+Migration stayed small because the corpus was already conformant (the prior
+master backfill): 2 plan descriptions + the template seeding. Promoted RELIABILITY
+R22 (gate-lint totality). Follow-ups (tracker, non-blocking): shared path-resolver
+helper; D12 list-form symmetry with D11.

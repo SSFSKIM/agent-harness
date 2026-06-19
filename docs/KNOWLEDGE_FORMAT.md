@@ -111,6 +111,7 @@ directory-implicit taxonomy into the field:
 | `reference` | `references/*` — external-API digests |
 | `methodology` | top-level machine docs (PLANS, DESIGN, …) |
 | `charter` | `CHARTER.md` — top-level intent: mission, design philosophy (기획의도), locked assumptions |
+| `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log |
 
 ### 2.4 Frontmatter value forms
 
