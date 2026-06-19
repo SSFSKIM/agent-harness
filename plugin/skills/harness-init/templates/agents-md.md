@@ -10,7 +10,9 @@ Deep truth lives in `docs/` — follow the pointers.
 
 1. **Orient.** The automatic context feeder may be disabled. Read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
-   protocol.
+   protocol. When you need to explore the docs corpus — its structure,
+   relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
+   querying, not bulk-reading.
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
