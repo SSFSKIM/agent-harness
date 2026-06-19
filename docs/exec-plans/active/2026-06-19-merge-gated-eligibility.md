@@ -142,9 +142,19 @@ this is the execution shape.
   `test_merging_state_optional`; orchestrator `test_merging_state_resolved_when_present`/
   `_none_when_unconfigured`/`_configured_merging_state_missing_raises`; updated the
   exact-equality `test_resolves_defaults_to_ids` to include `merging: None`. Gate GREEN (532).
-- [ ] M2 — reconcile done branch parks PR-done in `merging` (next).
+- [x] (2026-06-19) M2 — `reconcile` done branch: enqueue first (R19), then PR-done +
+  `merging` configured → `set_state(merging)` + `summarize(final_state="merging")`; else →
+  `done` (no-PR ticket AND merging-unconfigured fallback). Tests
+  `test_done_with_pr_parks_in_merging_when_configured` + `test_no_pr_done_goes_to_done_even_
+  when_merging_configured`; the existing unconfigured tests are the R7 byte-identical proof.
+  Gate GREEN (534).
+- [ ] M3 — orchestrator merge-completion sweep (next).
 
 ## Surprises & discoveries
+- 2026-06-19: `DaemonLoopTest::test_bounded_claim_and_top_up_as_slot_frees` is **flaky** under
+  the full concurrent run (timing-based bounded-claim test) — failed once in a full-gate run,
+  passed 3/3 in isolation and on gate re-run. Unrelated to this work (it uses default states,
+  `merging` unconfigured → unchanged path). Noted for the tech-debt tracker if it recurs.
 
 ## Decision log
 - 2026-06-19: `merge_outcome` helper lives in `director/merger.py` (not the orchestrator) —

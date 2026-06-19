@@ -181,10 +181,22 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             # (so startup cleanup's pending-merge exclusion protects the branch).
             enqueued = _maybe_enqueue_merge(tid, ticket, outcome, queue_base,
                                             workspace_root, errs)
-            set_state(states["done"])
             reason = f": {outcome.get('reason')}" if outcome.get("reason") else ""
-            comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
-            summary = summarize("completed", "done", merge_enqueued=enqueued)
+            # Merge-gated eligibility (R2): a PR-bearing done PARKS in `merging` (not `done`)
+            # when that optional state is configured, so a child blocked_by this ticket stays
+            # ineligible until the serialized merger actually LANDS the PR and the merge sweep
+            # (_reconcile_merges) finalizes merging→done. board-`done` then MEANS merged-to-main.
+            # No PR enqueued (planning/research/spec tickets) OR `merging` unconfigured →
+            # straight to `done`, exactly as before (additive, opt-in).
+            if enqueued and states.get("merging"):
+                set_state(states["merging"])
+                comment(f"🔀 worker done after {turns} turn(s) (turn {disp.get('turn_id')})"
+                        f"{reason} — PR queued; awaiting merge to main")
+                summary = summarize("completed", "merging", merge_enqueued=True)
+            else:
+                set_state(states["done"])
+                comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
+                summary = summarize("completed", "done", merge_enqueued=enqueued)
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
             final = "started"

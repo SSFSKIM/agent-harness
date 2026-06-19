@@ -884,6 +884,36 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
                        queue_base=self.qbase)
         self.assertEqual(self._merge_reqs()[0]["workspace_path"], "/custom/ws")
 
+    # -- merge-gated eligibility (R2): PR-done PARKS in `merging` when configured --
+    def _merging_states(self):
+        # self.states resolved against a board WITHOUT a Merging state has merging=None;
+        # graft a configured merging id to exercise the gated path (config R1 already tested).
+        return {**self.states, "merging": "st_merge"}
+
+    def test_done_with_pr_parks_in_merging_when_configured(self):
+        states = self._merging_states()
+        out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
+                             self._done(pr_url="http://pr/7", pr_branch="feat/x"), 1,
+                             states, 1, queue_base=self.qbase, workspace_root=self.tmp / "wsr")
+        # board parked in merging (NOT done) — a child blocked_by u1 stays ineligible
+        self.assertIn("st_merge", self.board.transitions["u1"])
+        self.assertNotIn(states["done"], self.board.transitions.get("u1", []))
+        self.assertEqual(out["summary"]["final_state"], "merging")
+        self.assertEqual(out["summary"]["status"], "completed")  # worker outcome unchanged
+        self.assertTrue(out["summary"]["merge_enqueued"])
+        self.assertEqual(len(self._merge_reqs()), 1)  # merge still enqueued (R19 order kept)
+
+    def test_no_pr_done_goes_to_done_even_when_merging_configured(self):
+        # planning/research/spec tickets (no PR) must still reach `done` immediately so
+        # their children unblock — merging only gates PR-bearing work.
+        states = self._merging_states()
+        out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"}, self._done(), 1,
+                             states, 1, queue_base=self.qbase, workspace_root=self.tmp / "wsr")
+        self.assertIn(states["done"], self.board.transitions["u1"])
+        self.assertNotIn("st_merge", self.board.transitions.get("u1", []))
+        self.assertEqual(out["summary"]["final_state"], "done")
+        self.assertFalse(out["summary"]["merge_enqueued"])
+
 
 class _CancelBoard(orch.MockBoard):
     """A board whose `fetch_issue_states_by_ids` reports every in-flight ticket as
