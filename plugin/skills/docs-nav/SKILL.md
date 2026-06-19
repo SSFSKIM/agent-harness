@@ -1,6 +1,6 @@
 ---
 name: docs-nav
-description: Use when finding or orienting in existing docs — query the knowledge corpus by type/tag/status, follow backlinks before editing, or sweep for stale/orphan/drifted pages, instead of bulk-reading bodies.
+description: Use when finding or orienting in existing docs — grasp the whole project as a charter-rooted map or progress roadmap, trace relationships (links/backlinks, the inferred typed graph, derived hierarchy), drill into a node's follow-ups, query the corpus by type/tag/status, or sweep for stale/orphan/drifted pages — instead of bulk-reading bodies.
 ---
 # Docs navigation (query, don't bulk-read)
 
@@ -15,10 +15,19 @@ the plugin's `scripts/` dir (the same location as the gate command recorded in
 
 ## When to reach for it
 
+- **Grasping the whole project** (the first thing at Orient) → `map` — the
+  charter-rooted overview (Big Picture → initiatives → phases → status, with pivot
+  and follow-up signals). `roadmap` is the same progress view without the charter
+  root; `map` is the place to start.
 - **Orienting** in an unfamiliar area → `catalog --type adr` / `--tag gate` to
   see kinds and one-line descriptions without reading bodies.
+- **Tracing relationships** → `tree <path>` for what a page is built on
+  (`--reverse` for what builds on it), `relations` for the typed edge list,
+  `links` / `backlinks` for the raw graph.
 - **Before editing a page** → `backlinks <path>` to learn what depends on it
   (the single most useful pre-edit safety check).
+- **Following derived work** → `followups <path>` for the tech-debt rows that came
+  off a given plan/spec (the drill-down behind the map's count badge).
 - **Gardening / GC pass** (doc-gardener) → `stale`, `orphans`, `drift` to find
   pages to re-verify, wire up, or reconcile against moved code.
 

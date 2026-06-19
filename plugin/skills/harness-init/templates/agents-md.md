@@ -10,7 +10,7 @@ Deep truth lives in `docs/` — follow the pointers.
 
 1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
    philosophy, and locked assumptions — to anchor on intent before a long session
-   drifts; the `docs-nav` skill's `nav.py roadmap` shows where we are against it.
+   drifts; the `docs-nav` skill's `nav.py map` renders the whole picture against it.
    The automatic context feeder may be disabled: read `docs/memory/MEMORY.md`
    when you need continuity and follow its loading protocol. When you need to
    explore the docs corpus — its structure, relationships, and per-page gist —
@@ -22,7 +22,7 @@ Deep truth lives in `docs/` — follow the pointers.
    `docs/exec-plans/active/` (execplan skill). No ceremony when risk is low.
 3. **Implement.** Match existing style. New knowledge pages: placement table
    in [the harness page](docs/design-docs/agent-harness.md). Find existing docs
-   by querying — the `docs-nav` skill (`nav.py`: catalog/backlinks/stale/drift)
+   by querying — the `docs-nav` skill (`nav.py`: map/tree/catalog/backlinks/…)
    — not by bulk-reading.
 4. **Validate.** The harness lint gate must be GREEN before every commit —
    exact command in [the harness page](docs/design-docs/agent-harness.md).

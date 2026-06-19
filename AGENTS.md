@@ -8,8 +8,8 @@ Deep truth lives in `docs/` — follow the pointers.
 
 1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
    philosophy (기획의도), and locked assumptions — to anchor on intent before a
-   long session drifts; `python3 plugin/scripts/nav.py roadmap` shows where we
-   are against it. The automatic context feeder is disabled: read
+   long session drifts; `python3 plugin/scripts/nav.py map` renders the whole
+   picture against it (charter → initiatives → phases → status). The automatic context feeder is disabled: read
    `docs/memory/MEMORY.md` when you need continuity and follow its loading
    protocol. When you need to explore the docs corpus — its structure,
    relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
@@ -21,8 +21,9 @@ Deep truth lives in `docs/` — follow the pointers.
    `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
    style. New knowledge pages: the `docs-tree` skill decides where they live; the
-   `docs-nav` skill (`nav.py`) queries existing docs by type/tag, backlinks, and
-   stale/orphan/drift — query, don't bulk-read.
+   `docs-nav` skill (`nav.py`) queries existing docs — `map`/`tree` for the
+   picture and relationships, `catalog`/`backlinks` to find and pre-check — query,
+   don't bulk-read.
 4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
    commit (`harness-lint` skill interprets failures).
 5. **Review.** Always self-review. A conditional **behavioral check** (run the plan's
