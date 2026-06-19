@@ -161,3 +161,14 @@ owner: harness
   tree`(forward=의존, `--reverse`=의존받음, cycle-safe). 한 트리에 ≥2 디렉토리 페이지가
   관계로 묶여 "구조 = 메타데이터의 projection(디렉토리 아님)" 을 눈으로 증명. read-only·
   live·게이트 비차단. 선언적 typed 키(KF v1.1)·viz.html·파일 재배치는 NON-GOAL. draft.
+- [Charter & derived progress map — 의도 레이어](2026-06-19-charter-and-progress-map.md)
+  — 긴 세션에서 묻히는 초기 빅픽처/기획 의도를 잡는 메타-docs 레이어. **author 하는 건
+  하나** — 최상위 `docs/CHARTER.md`(`type: charter`: mission + "done" + **Locked
+  assumptions**(surface 된 human↔AI 가정, anti-drift 계약) + Initiatives), Orient
+  스텝 1에 편입. **나머지는 전부 derive**: 메서드론이 약속만 하고 미구현이던 derived
+  roadmap 을 실제로 — 구조화된 optional `phase` 키(KF v1.1) + `nav.py roadmap` 가
+  initiative→phase→status 를 typed 그래프에서 projection(디렉토리 무관, 영속 0, plan 은
+  `implements` 로 phase 상속), pivot 은 supersedes/refines 엣지로 인라인 표시(손으로 쓰는
+  logs.md 아님). 포팅: 키/타입은 KNOWLEDGE_FORMAT 으로 byte-전파, charter 는 FILL
+  템플릿 seed. 선언적 typed 키·viz.html·파일 재배치·enforcement 는 NON-GOAL.
+  `2026-06-19-nav-derived-hierarchy.md` 의 후속(그 typed 그래프 위에 projection). draft.
