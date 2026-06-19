@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-20
 owner: harness
 type: product-spec
