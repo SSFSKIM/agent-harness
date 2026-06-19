@@ -2,6 +2,8 @@
 status: stable
 last_verified: {{TODAY}}
 owner: harness
+type: methodology
+description: The ExecPlan methodology: entry decision, template, and review budget.
 ---
 # PLANS.md — ExecPlan methodology
 
@@ -57,6 +59,7 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
     last_verified: <today>
     owner: <who drives>
     type: exec-plan
+    description: <one line — what this plan builds, observably>
     base_commit: <git rev-parse HEAD at plan creation>
     review_level: targeted
     ---

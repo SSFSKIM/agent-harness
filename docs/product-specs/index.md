@@ -259,3 +259,10 @@ owner: harness
   inline(희소·load-bearing). **② follow-up**: `nav.py followups`가 tech-debt-tracker 행을
   source 노드별로 묶는 drill-down + map에는 `[N follow-ups]` **카운트 배지**만(다량·맥락적이라
   inline 안 함 — volatility 원칙, pivot-flood 회피). charter-and-progress-map 후속. draft.
+- [Format governance — enforced navigation keys (KF v2.0)](2026-06-20-format-governance-enforced-keys.md)
+  — OKF의 permissive-on-optional 철학을 우리 거버넌스 레이어로 **flip**. load-bearing 키를
+  optional→checked rule로 graded escalation: `type`+`description` blanket-required,
+  `phase`는 product-spec에 required(plan은 implements로 상속 → exec-plan 강제 안 함, 44개
+  중복 백필 회피), `resource`/`supersedes`/`phase`는 validate-if-present(해소/문법). type
+  *값*은 free 유지(presence만). KF v2.0(breaking — 새 required 키). 마이그레이션 = description
+  2개. 근거: OKF는 범용 교환 포맷이라 permissive, 우리는 단일 actor의 강제된 working memory. draft.

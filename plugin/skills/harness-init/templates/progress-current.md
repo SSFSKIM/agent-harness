@@ -2,6 +2,8 @@
 status: active
 last_verified: {{TODAY}}
 owner: harness
+type: progress
+description: The current working state — where this project is right now.
 ---
 # Current state
 

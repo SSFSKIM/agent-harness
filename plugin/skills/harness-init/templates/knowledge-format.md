@@ -4,21 +4,26 @@ last_verified: {{TODAY}}
 owner: harness
 type: methodology
 tags: [knowledge-format, frontmatter, lint]
-description: The Knowledge Format v1.2 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint D-gate.
+description: The Knowledge Format v2.0 contract that every knowledge page in this repo follows, making explicit the rules governed by the lint D-gate.
 ---
 # KNOWLEDGE_FORMAT.md — the harness knowledge format
 
-**Knowledge Format (KF) v1.2.** The contract every knowledge page in this repo
+**Knowledge Format (KF) v2.0.** The contract every knowledge page in this repo
 follows: a markdown body under a YAML-ish frontmatter block, governed by the
 lint **D-rules**. This document makes the format *explicit* — until now it
 lived implicitly in the lint. Author a conformant page from this doc alone; you
 do not need to read the lint source.
 
 Informed by Google's **Open Knowledge Format (OKF)**: KF shares OKF's
-markdown+frontmatter substrate and adopts its recommended keys, but keeps an
-**enforced** gate (OKF tells consumers never to reject; we reject rot at commit).
-The asymmetry is the whole design: **permissive on the optional keys, strict on
-the required ones.**
+markdown+frontmatter substrate and adopts its recommended keys. But where OKF
+tells consumers *never to reject* (it is a general **exchange** format), KF runs
+an **enforced** gate — and **v2.0 flips the old "permissive on optional" stance**:
+the load-bearing **navigation** keys (`type`, `description`, and `phase` on the
+work-tier anchor) are now *checked rules*. We are a single actor's **enforced,
+fresh working memory**, so a key whose absence silently costs navigability is a
+defect, not a free choice. What stays optional is a thin tail (`tags`, `title`)
+plus the *validate-if-present* keys (`resource`, `supersedes`, `phase` elsewhere).
+Why we diverge from OKF here: §7.
 
 ## 1. A page
 
@@ -36,40 +41,46 @@ frontmatter fails the gate (D3) unless it is in an exempt tree (`generated/`,
 
 ## 2. Frontmatter schema
 
-### 2.1 Required (the gate enforces these — D3)
+### 2.1 Required (the gate enforces these)
 
-Exactly these three keys must be present on every governed page:
+**Governance core (D3)** — present on every governed page:
 
 | Key | Meaning |
 |---|---|
 | `status` | `stable` / `active` / `draft` / `archived` / `completed`. Drives the staleness exemption: `archived` and `completed` pages are stale-exempt (D4). |
-| `last_verified` | ISO `YYYY-MM-DD` of the last time the page's **content was checked against reality**. Over `STALE_DAYS` (30) old and not archived/completed → **D4 fails**. Bump it on a **content** edit (you verified the page). A purely **mechanical metadata-only change** — e.g. a bulk add of optional navigation keys — is *not* a re-verification and must **not** bump it: resetting the clock at scale would erode the staleness signal the gate depends on. |
+| `last_verified` | ISO `YYYY-MM-DD` of the last time the page's **content was checked against reality**. Over `STALE_DAYS` (30) old and not archived/completed → **D4 fails**. Bump it on a **content** edit (you verified the page). A purely **mechanical metadata-only change** — e.g. a bulk add of navigation keys — is *not* a re-verification and must **not** bump it: resetting the clock at scale would erode the staleness signal the gate depends on. |
 | `owner` | Who maintains the page (e.g. `harness`, `doc-gardener`, `imprint-job`). |
 
-These are governance fields with no OKF equivalent; they are what makes the
-corpus a *maintained working memory* rather than a static catalog.
+These are governance fields with no OKF equivalent; they make the corpus a
+*maintained working memory* rather than a static catalog.
 
-### 2.2 Recommended (optional — the gate never requires or rejects these)
+**Navigation core (D11, KF v2.0)** — present on every governed *content* page
+(reserved spines `index.md`/`MEMORY.md` are exempt — they are listings, not
+navigable concept-pages):
 
-Two tiers. All are optional; a page may carry any, all, or none. No D-rule names
-them (KF keeps OKF's permissive stance for optional keys).
+| Key | Requirement |
+|---|---|
+| `type` | A non-empty `type` — the page's *concept-kind*, queryable independent of directory (vocabulary in §2.3). **Presence** is enforced; the *value* stays free/extensible (OKF's tolerate-unknown is kept for values). |
+| `description` | A non-empty one-line self-contained summary — the navigation snippet a catalog/tool surfaces per page, and the basis for generated indexes. |
+| `phase` | **Required on `product-spec`** (it anchors the derived roadmap). Other types may omit it — an `exec-plan` inherits its spec's phase via the `implements` edge. Must be well-formed when present (§2.2). |
 
-**Routing / binding** — machine axes a navigator filters and traverses on:
+### 2.2 Optional and validate-if-present
+
+**Optional (never checked)** — a page may carry these or not:
 
 | Key | Form | Meaning |
 |---|---|---|
-| `type` | scalar | The page's *concept-kind*, made explicit and queryable independent of directory. See the vocabulary in §2.3. Intrinsic kind; the directory is location — they usually agree, but `type` is authoritative for machine routing. |
 | `tags` | **list** | Cross-cutting facets — short lowercase strings. Canonical authored form is YAML flow inline: `tags: [a, b, c]`. (The parser also tolerates the block form `- a` on read for OKF-bundle interop; author the flow form.) |
-| `resource` | scalar | A repo-relative path (preferred) or URL identifying the single primary asset the page documents (e.g. `src/auth/session.py`). Absent for abstract pages. The precondition for future drift detection (compare the asset's state against `last_verified`). |
-| `phase` | scalar | The initiative + phase this page belongs to, convention `<initiative>/<NN>-<slug>` (e.g. `payments/04-refunds`; a bare `<initiative>` is the initiative umbrella). The **group-by axis for the derived roadmap** (`nav.py roadmap`): `NN` orders phases within an initiative, bare-initiative sorts first, a non-numeric `NN` sorts last. Absent → the page is unphased. A plan with no `phase` inherits it from the spec it `implements`. |
-| `supersedes` | scalar **or list** | Repo-relative `.md` path(s) this page **replaces** — a *declared* pivot edge, the one genuine "design changed" signal. `nav.py` emits a `supersedes` relation to each target (additive to the inferred archived-supersession), surfaced inline in `roadmap`/`map` as `[superseded-by …]`. This is KF's **first declared edge**; all other relationship kinds stay inferred from the link graph (KF v1.2). |
-
-**Display** — labels for navigation, zero machine cost:
-
-| Key | Form | Meaning |
-|---|---|---|
-| `description` | scalar | One self-contained sentence summarizing the page — readable without the body. The navigation snippet a catalog or tool surfaces per page, and the basis for generated indexes. Especially recommended for long pages. |
 | `title` | scalar | Display-name override. Authored **only** when the H1 is a poor label; otherwise the H1 (or filename) is the title. |
+
+**Validate-if-present (D12)** — *not* required, but checked for correctness when
+authored (an authored-but-broken value is a defect; an absent one is fine):
+
+| Key | Form | Meaning + check |
+|---|---|---|
+| `resource` | scalar | A repo-relative path (preferred) or URL identifying the single primary asset the page documents (e.g. `src/auth/session.py`). Absent for abstract pages. **D12: if a repo path (not a URL), it must exist.** The precondition for drift detection. |
+| `supersedes` | scalar **or list** | Repo-relative `.md` path(s) this page **replaces** — a *declared* pivot edge, the one genuine "design changed" signal. `nav.py` emits a `supersedes` relation to each target, surfaced inline in `roadmap`/`map` as `[superseded-by …]` — KF's first declared edge. **D12: each target must resolve.** |
+| `phase` | scalar | The initiative + phase, convention `<initiative>/<NN>-<slug>` (e.g. `payments/04-refunds`; a bare `<initiative>` is the umbrella). The **group-by axis for the derived roadmap**: `NN` orders phases within an initiative. **D12: well-formed when present** (`<initiative>` or `<initiative>/<NN>-<slug>`, NN numeric). (Required on `product-spec` — §2.1.) |
 
 Together `(path, type, tags, description)` is a queryable table-of-contents an
 agent can filter by code execution over frontmatter, without loading any body.
@@ -97,6 +108,7 @@ directory-implicit taxonomy into the field:
 | `reference` | `references/*` — external-API digests |
 | `methodology` | top-level machine docs (PLANS, DESIGN, …) |
 | `charter` | `CHARTER.md` — top-level intent: mission, design philosophy, locked assumptions |
+| `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log |
 
 ### 2.4 Frontmatter value forms
 
@@ -165,11 +177,13 @@ commit:
 | **D5** | Every markdown link to a `.md` target resolves. |
 | **D6** | Filename is `kebab-case.md` (or `UPPER_CASE.md` for top-level machine docs). |
 | **D8** | Indexed categories have an `index.md`, and every page is registered in it. |
+| **D11** | Navigation core (KF v2.0): non-empty `type` + `description` on every governed content page; `phase` on every `product-spec`. (Reserved spines `index.md`/`MEMORY.md` exempt.) |
+| **D12** | Validate-if-present: a repo-path `resource` exists, each `supersedes` target resolves, and `phase` is well-formed. |
 
-The optional keys (§2.2) are intentionally **outside** conformance: a page is no
-less conformant for omitting them, and no more conformant for malformed ones.
-Promoting any optional key to a checked rule is a future governance decision,
-made only once the key has proven its worth in daily use.
+The remaining keys (`tags`, `title`) stay **outside** conformance — a page is no
+less conformant for omitting them. The v2.0 shift: the load-bearing navigation
+keys were promoted from optional to checked once they proved load-bearing in daily
+use. Promoting a further key remains a governance decision made on that evidence.
 
 ## 6. Versioning
 
@@ -181,9 +195,12 @@ backward-compatible options (a new optional key, a new conventional section); a
   `resource`, `title`, and `description`.
 - **v1.1** — adds the optional `phase` key (the derived-roadmap group-by) and the
   `charter` value to the `type` vocabulary.
-- **v1.2** (current) — adds the optional `supersedes` key, KF's first **declared**
-  edge (all other relationships stay inferred from the link graph). Additive:
-  every earlier page stays conformant.
+- **v1.2** — adds the optional `supersedes` key, KF's first **declared** edge
+  (all other relationships stay inferred from the link graph). Additive.
+- **v2.0** (current) — **conformance-breaking governance flip**: `type` +
+  `description` become required (D11), `phase` becomes required on `product-spec`
+  (D11), and `resource`/`supersedes`/`phase` are validated when present (D12). The
+  major bump reflects that pages valid under v1.x may now fail. Rationale: §7.
 
 ## 7. Relationship to OKF
 
@@ -194,4 +211,7 @@ frontmatter surface — `type`, `title`, `description`, `resource`, `tags` — a
 omits only OKF's `timestamp` (our required `last_verified` subsumes it and drives
 the staleness gate). The divergence is objective-function, not quality: OKF
 optimizes permissive exchange across an untrusted boundary; KF optimizes a single
-actor's enforced, fresh working memory.
+actor's enforced, fresh working memory. **v2.0 sharpens exactly this divergence**:
+OKF keeps its recommended keys advisory because a producer it cannot control might
+omit them; we *do* control our producers (one actor, one gate), so we enforce the
+navigation surface OKF leaves permissive.

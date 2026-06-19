@@ -5,9 +5,16 @@ from pathlib import Path
 TODAY = datetime.date.today().isoformat()
 
 
-def fm(status="draft", owner="harness", last_verified=None):
-    return (f"---\nstatus: {status}\nlast_verified: {last_verified or TODAY}\n"
-            f"owner: {owner}\n---\n")
+def fm(status="draft", owner="harness", last_verified=None,
+       type="design-doc", description="A fixture page.", phase=None):
+    # KF v2.0: governed content pages need type + description (D11); fixtures emit
+    # them by default so a valid page stays green. phase only when a caller needs
+    # it (e.g. a product-spec, which D11 requires phased).
+    lines = [f"status: {status}", f"last_verified: {last_verified or TODAY}",
+             f"owner: {owner}", f"type: {type}", f"description: {description}"]
+    if phase:
+        lines.append(f"phase: {phase}")
+    return "---\n" + "\n".join(lines) + "\n---\n"
 
 
 def make_repo(tmp: Path) -> Path:

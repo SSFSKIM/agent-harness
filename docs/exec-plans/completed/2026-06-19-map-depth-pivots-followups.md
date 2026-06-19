@@ -6,6 +6,7 @@ type: exec-plan
 base_commit: 4f34d15d3f2a1d36297533695ba1bd31392f0c54
 review_level: standard
 phase: knowledge-format/05-map-depth
+description: ExecPlan that built declared supersedes pivots (KF v1.2) + the follow-up drill-down (nav.py followups + map badge) on the charter-rooted map.
 ---
 # Map depth — declared pivots + follow-up drill-down — build
 

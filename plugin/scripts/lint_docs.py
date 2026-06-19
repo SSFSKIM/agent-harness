@@ -40,6 +40,13 @@ PROTECTED_PATHS = frozenset(
     ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
+# Canonical `phase` grammar (D12): `<initiative>` or `<initiative>/<NN>-<slug>`,
+# NN numeric. nav tolerates looser values (sorts them last); the gate is canonical.
+PHASE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*(/[0-9]+-[a-z0-9-]+)?$")
+# Navigation keys promoted to checked rules at KF v2.0 (the governance flip):
+# presence-required (blanket) + phase-required on this type.
+NAV_REQUIRED = ("type", "description")
+PHASE_REQUIRED_TYPES = ("product-spec",)
 # LINK / staleness now live in harness_lib (the one definition shared with
 # nav.py) — see hl.links_in / hl.is_stale.
 
@@ -143,6 +150,45 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
                 # never crash the gate. str() keeps the message safe for non-str lv.
                 _fail(errors, "D4", _rel(p, root), f"bad last_verified `{str(lv)[:40]}`.",
                       "Use a scalar ISO date YYYY-MM-DD (not a list).")
+        # Navigation keys (D11/D12) govern CONTENT pages, not reserved spines: an
+        # index.md is itself a listing (not a navigable concept-page) — it still
+        # gets D3/D4/D8, but not the nav-key contract. Mirrors nav.py RESERVED and
+        # the existing MEMORY.md skip; matches the catalog-scoped 99/99 the spec
+        # measured.
+        if p.name == "index.md":
+            continue
+        # D11 — required navigation keys (KF v2.0 governance flip): type +
+        # description blanket; phase required on the work-tier anchor (product-spec
+        # — plans inherit phase via the `implements` edge, so it is not required
+        # on exec-plans).
+        for k in NAV_REQUIRED:
+            v = fm.get(k)
+            if not (isinstance(v, str) and v.strip()):
+                _fail(errors, "D11", _rel(p, root),
+                      f"frontmatter lacks a non-empty `{k}` (required navigation key).",
+                      f"Add `{k}:` — every governed page declares its kind and a one-line summary (KF v2.0).")
+        if fm.get("type") in PHASE_REQUIRED_TYPES and not (
+                isinstance(fm.get("phase"), str) and fm["phase"].strip()):
+            _fail(errors, "D11", _rel(p, root), f"`{fm.get('type')}` lacks `phase`.",
+                  "Add `phase: <initiative>/<NN>-<slug>` — it anchors the roadmap (plans inherit; KF v2.0).")
+        # D12 — validate-if-present (never presence-required): resource path exists,
+        # supersedes targets resolve (D5-style), phase is well-formed.
+        res = fm.get("resource")
+        if isinstance(res, str) and res and not res.startswith(("http://", "https://")):
+            if not ((p.parent / res).exists() or (root / res).exists()):
+                _fail(errors, "D12", _rel(p, root), f"`resource` path `{res}` does not exist.",
+                      "Point `resource` at a real repo-relative path (or a URL), or remove it.")
+        sup = fm.get("supersedes")
+        for t in (sup if isinstance(sup, list) else [sup]):
+            if not (isinstance(t, str) and t) or t.startswith(("http://", "https://")):
+                continue
+            if not ((p.parent / t).exists() or (root / t).exists()):
+                _fail(errors, "D12", _rel(p, root), f"`supersedes` target `{t}` does not resolve.",
+                      "Point `supersedes` at a real .md page, or remove it.")
+        ph = fm.get("phase")
+        if isinstance(ph, str) and ph.strip() and not PHASE_RE.match(ph.strip()):
+            _fail(errors, "D12", _rel(p, root), f"malformed `phase` `{ph}`.",
+                  "Use `<initiative>` or `<initiative>/<NN>-<slug>` (NN numeric).")
 
 
 def check_links(root, errors, host=(), cfg=None):

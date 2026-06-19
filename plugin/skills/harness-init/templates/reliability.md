@@ -2,6 +2,8 @@
 status: draft
 last_verified: {{TODAY}}
 owner: review-reliability
+type: methodology
+description: The numbered reliability rules that ground the review-reliability persona.
 ---
 # RELIABILITY.md
 
