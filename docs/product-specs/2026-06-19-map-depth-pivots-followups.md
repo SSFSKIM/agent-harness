@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-19
 owner: harness
 phase: knowledge-format/05-map-depth

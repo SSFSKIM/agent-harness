@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-17
 owner: harness
 phase: symphony/06-daemon-loop

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 last_verified: 2026-06-17
 owner: harness
 phase: symphony/04-worker-protocol

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-16
 owner: harness
 phase: symphony/05-dashboard
