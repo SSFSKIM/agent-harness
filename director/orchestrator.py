@@ -982,6 +982,7 @@ class MockBoard:
 
     STATES = {"Todo": {"id": "st_todo", "type": "unstarted"},
               "In Progress": {"id": "st_prog", "type": "started"},
+              "In Review": {"id": "st_review", "type": "started"},  # merge-park (self-host maps merging→"In Review")
               "Done": {"id": "st_done", "type": "completed"}}
 
     def __init__(self, issues, states=None, *, fail_state_for=None):

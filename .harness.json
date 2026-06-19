@@ -8,6 +8,9 @@
     "worker": {
       "tools": "linear",
       "install_skills": true
+    },
+    "states": {
+      "merging": "In Review"
     }
   }
 }
