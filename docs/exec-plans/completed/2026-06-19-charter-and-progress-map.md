@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: a11091efa56051dee2e174c834c3601e2a833ee9
@@ -138,10 +138,19 @@ gate (`python3 plugin/scripts/check.py`) GREEN.
 
 ## Feedback (from completion gate)
 
-Reviews: review-arch SATISFIED, review-reliability SATISFIED (P2s only);
-review-spec-compliance (Codex gpt-5.5) and review-code-quality (Codex) — see below.
+Reviews — all SATISFIED: review-arch + review-reliability (Claude personas,
+parallel); review-spec-compliance + review-code-quality. The Codex spec-compliance
+run (gpt-5.5/high per CLAUDE.md) stalled mid-investigation (output froze, no
+verdict), so per the CLAUDE.md fallback both QA reviews ran as Claude
+general-purpose agents carrying the persona rubric (the dedicated Claude
+spec-compliance/code-quality subagents are not registered this session).
 
 P2s fixed inline (cheap, self-introduced correctness):
+- (code-quality) the multi-spec earliest-phase tie-break (`phase_of`'s `min`
+  branch) was the one untested new branch → added
+  `test_multispec_plan_inherits_earliest_phase_deterministically` (a plan linking
+  beta before alpha lands under alpha). `roadmap()` docstring corrected to
+  superseded-by only.
 - (arch) `AGENTS.md` Map row said "KF v1.0" and omitted `phase` after the v1.1
   bump → updated to v1.1 + `phase`.
 - (arch) `CHARTER.md`/spec/`docs-nav` cited `KNOWLEDGE_FORMAT §2.2` for the
@@ -159,3 +168,32 @@ P2s deferred to `tech-debt-tracker.md` (proposed rules/conventions, non-blocking
 - decide open-vs-curated roadmap initiative set.
 
 ## Outcomes & retrospective
+
+Shipped the intent layer in two halves, as specced. **Authored seed:**
+`docs/CHARTER.md` (`type: charter`, 5 sections) is now the Orient anchor — named
+first in both the self-host `AGENTS.md` step 1 and the host `agents-md.md`
+template, and propagated to ported hosts as a FILL template (`charter.md` +
+scaffold seed + test). **Derived everything-else:** KF bumped to **v1.1**
+(optional `phase` key + `charter` type, in both the canonical and host KF docs,
+lint still permissive), and `nav.py roadmap` projects the work tier into
+initiative→phase→`status:` live from frontmatter + the typed graph — delivering
+the methodology's long-unkept "roadmap is a derived view" promise. Dogfooded by
+backfilling `phase:` onto 22 product-specs: `nav.py roadmap` renders the real
+Symphony / knowledge-format / methodology initiatives with phase-ordered children
+and live status, nothing hand-maintained.
+
+Behavioral check: ran (CLI surface) — `nav.py roadmap` (+ `--json`), fresh-host
+scaffold lints GREEN with a seeded CHARTER, `catalog --json` carries `phase`.
+
+What dogfooding bought us (the highest-value moment): the first `roadmap` render
+exposed that inferred `refines` is pure noise as a pivot signal (a parent spec
+flooded with 15 duplicated `[refined-by]` edges). That forced a sharper, correct
+definition — **a pivot is a supersession only** (a newer page → an `archived`
+page of its kind) — and generalized `supersedes` beyond ADRs. The map is now
+clean and a pivot annotation means something. Lesson re-confirmed: build the
+consumer and run it on real data before declaring a projection done.
+
+Follow-ups (recorded, not started): 3 proposed-rule P2s in the tracker (R12-for-nav
+totality; `phase` `NN`-uniqueness convention; open-vs-curated initiative set);
+historical exec-plans sit in `(unphased)` because their Context doesn't
+markdown-link their spec — backfilling plan→spec links (or a lint) is future work.

@@ -360,9 +360,11 @@ def roadmap(records):
     A pure projection over build_index — the unkept "roadmap is a derived view"
     promise (PLANS.md; product-design skill). The phase comes from the `phase`
     frontmatter key; a row with none inherits the phase of the spec it
-    `implements` (the inferred edge), else falls into the advisory '(unphased)'
-    bucket. Each row carries any pivot (superseded-by/refined-by) inferred from the
-    graph, so a design pivot shows inline. Row universe = product-spec + exec-plan
+    `implements` (the inferred edge, earliest phase if it implements several), else
+    falls into the advisory '(unphased)' bucket. Each row carries any pivot
+    (superseded-by — supersession is the only genuine pivot, not a structural
+    refines) inferred from the graph, so it shows inline. Row universe =
+    product-spec + exec-plan
     (the work tier); design-docs/ADRs surface only as pivot annotations, never
     rows. Nothing persisted; live per call.
 

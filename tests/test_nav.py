@@ -421,6 +421,14 @@ def _roadmap_fixture(root):
     _page(root / "docs/product-specs/su1.md",
           ["status: active", "last_verified: 2026-06-19", "owner: h",
            "type: product-spec", "description: unphased."])
+    # a plan implementing TWO specs in different initiatives: it links beta FIRST,
+    # then alpha — so a link-order rule would pick beta, but the deterministic
+    # earliest-by-(initiative,NN) rule must put it under alpha/01-foo
+    _page(root / "docs/exec-plans/active/pmix.md",
+          ["status: active", "last_verified: 2026-06-19", "owner: h",
+           "type: exec-plan", "description: spans two initiatives."],
+          body="implements [sb1](../../product-specs/sb1.md) and then "
+               "[sa1](../../product-specs/sa1.md)\n")
 
 
 class TestNavRoadmap(unittest.TestCase):
@@ -464,6 +472,15 @@ class TestNavRoadmap(unittest.TestCase):
     def test_unphased_bucket(self):
         self.assertEqual([i["path"] for i in self.rm["unphased"]],
                          ["docs/product-specs/su1.md"])
+
+    def test_multispec_plan_inherits_earliest_phase_deterministically(self):
+        # pmix links sb1 (beta) before sa1 (alpha/01-foo); earliest-by-(init,NN)
+        # must win over link order -> it lands under alpha/01-foo, never beta
+        foo_paths = [i["path"] for i in self._init("alpha")["phases"][0]["items"]]
+        self.assertIn("docs/exec-plans/active/pmix.md", foo_paths)
+        beta_paths = [i["path"] for p in self._init("beta")["phases"]
+                      for i in p["items"]]
+        self.assertNotIn("docs/exec-plans/active/pmix.md", beta_paths)
 
     def test_pivot_annotation_inline_and_deduped(self):
         # a supersession (newer page -> archived predecessor of its kind) shows
