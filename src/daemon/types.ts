@@ -38,6 +38,7 @@ export interface DaemonOptions {
   sharedTasks?: boolean | { dir?: string; listId?: string };       // wire a shared cc-tasks store into every session (D3)
   contextTool?: boolean;   // daemon-wide: expose the cc-context GetContextUsage tool to every session's agent (D6)
   compactTool?: boolean;   // daemon-wide: expose the cc-compact RequestCompaction tool to every session's agent (Spec B)
+  permissionTimeoutMs?: number; // parked permission-request lifetime before auto-deny (default 30_000)
   rehydrate?: boolean;     // adopt orphaned sessions on boot (resume on first access) instead of reaping them; default false
   isAlive?: (pid: number) => boolean; // override the daemonPid-liveness check (testing seam; default process.kill(pid,0))
 }

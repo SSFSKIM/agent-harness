@@ -2,6 +2,11 @@ import { SessionRegistry } from "./registry.js";
 import { DaemonSession } from "./session.js";
 import { DaemonError } from "./types.js";
 import type { DaemonOptions, RestartPolicy, SessionRecord } from "./types.js";
+import { PendingPermissions } from "./permissions.js";
+import type { PendingEntry } from "./permissions.js";
+import { createPermissionGate } from "../permissions/gate.js";
+import type { PermissionDecision } from "../permissions/types.js";
+import { resolveAutoModel } from "../config/autoModel.js";
 import { validateDaemonOptions } from "../config/validate.js";
 import type { QueryFn } from "../swarm/types.js";
 import { TaskStore } from "../tasks/store.js";
@@ -28,7 +33,7 @@ export interface DaemonDeps {
   deleteSession?: (id: string, opts?: { cwd?: string }) => Promise<void>;
 }
 
-interface SpawnConfig { model?: string; restart: RestartPolicy; }
+interface SpawnConfig { model?: string; restart: RestartPolicy; permissionMode?: string; }
 
 /** Owns the in-process session pool + the registry + an idle reaper + crash-recovery restarts. */
 export class DaemonSupervisor {
@@ -55,6 +60,7 @@ export class DaemonSupervisor {
   private sessionOptions?: (sessionId: string) => Record<string, unknown>; // per-session options factory (D3)
   private contextTool: boolean;
   private compactTool: boolean;
+  private pending: PendingPermissions;
 
   constructor(private deps: DaemonDeps, opts: DaemonOptions = {}) {
     validateDaemonOptions(opts);
@@ -69,6 +75,7 @@ export class DaemonSupervisor {
     this.scheduleRestart = opts.scheduleRestart ?? ((fn, ms) => { const t = setTimeout(fn, ms); (t as any).unref?.(); return () => clearTimeout(t); });
     this.contextTool = opts.contextTool ?? false;
     this.compactTool = opts.compactTool ?? false;
+    this.pending = new PendingPermissions({ timeoutMs: opts.permissionTimeoutMs, now: this.now });
     if (opts.rehydrate) {                              // adopt the prior process's sessions (lazy: no subprocess here)
       for (const rec of this.registry.rehydrate(process.pid)) {
         this.configs.set(rec.id, { model: rec.model, restart: rec.restart ?? this.restartPolicy });
@@ -97,14 +104,15 @@ export class DaemonSupervisor {
     }
   }
 
-  spawn(opts: { model?: string; restart?: RestartPolicy; resume?: string } = {}): string {
+  spawn(opts: { model?: string; restart?: RestartPolicy; resume?: string; permissionMode?: string } = {}): string {
     if (this.pool.size >= this.maxSessions) throw new DaemonError(`max sessions (${this.maxSessions}) reached`);
     const id = `sess-${++this.seq}`;
-    const cfg: SpawnConfig = { model: opts.model, restart: opts.restart ?? this.restartPolicy };
+    const model = opts.permissionMode === "auto" ? resolveAutoModel(opts.model) : opts.model; // force a supported model for auto
+    const cfg: SpawnConfig = { model, restart: opts.restart ?? this.restartPolicy, permissionMode: opts.permissionMode };
     this.configs.set(id, cfg);
     this.pool.set(id, this.makeSession(id, cfg, opts.resume));
     const t = this.now();
-    this.registry.register({ id, daemonPid: process.pid, status: "idle", model: opts.model, restart: cfg.restart, createdAt: t, lastActiveAt: t });
+    this.registry.register({ id, daemonPid: process.pid, status: "idle", model, restart: cfg.restart, createdAt: t, lastActiveAt: t });
     return id;
   }
 
@@ -191,7 +199,7 @@ export class DaemonSupervisor {
     const sourceSdkId = session.sessionId;   // Spec 1 capture; a live session has it after its first turn
     if (!sourceSdkId) throw new DaemonError(`session ${id} has no session_id yet (take a turn first)`);
     const { sessionId } = await (this.deps.forkSession ?? forkSession)(sourceSdkId);
-    const handle = this.spawn({ model: this.configs.get(id)?.model, resume: sessionId }); // new daemon session on the branch
+    const handle = this.spawn({ model: this.configs.get(id)?.model, resume: sessionId, permissionMode: this.configs.get(id)?.permissionMode }); // new daemon session on the branch
     return { id: handle, sessionId };
   }
 
@@ -223,6 +231,11 @@ export class DaemonSupervisor {
 
   proactiveStatus(id: string): ProactiveStatus | undefined { return this.proactive.get(id)?.status(); }
 
+  /** Currently-parked permission requests across all sessions (for the poll). */
+  pendingPermissions(): PendingEntry[] { return this.pending.list(); }
+  /** Answer a parked permission request; false if none matches (already answered/timed out). */
+  respondPermission(toolUseID: string, decision: PermissionDecision): boolean { return this.pending.respond(toolUseID, decision); }
+
   private runProactiveTurn(id: string, prompt: string): Promise<{ result: unknown }> {
     const session = this.pool.get(id);
     if (!session || session.isEnded()) {
@@ -240,6 +253,7 @@ export class DaemonSupervisor {
     if (loop) { await loop.stop("session stopped"); this.proactive.delete(id); }
     this.stopping.add(id);                       // flag BEFORE dispose so the end hook won't restart
     this.cancelRestart(id);
+    this.pending.denyAllForSession(id);                      // settle any parked permission so dispose() can drain
     if (session) await session.dispose();
     this.pool.delete(id);
     this.configs.delete(id);
@@ -254,6 +268,7 @@ export class DaemonSupervisor {
     this.restartCancels.clear();
     await Promise.all([...this.proactive.values()].map((l) => l.stop("shutdown")));
     this.proactive.clear();
+    this.pending.denyAll();                                  // settle every parked permission across all sessions
     await Promise.all([...this.pool].map(async ([id, s]) => { await s.dispose(); this.registry.remove(id); }));
     for (const id of this.rehydratable) this.registry.remove(id);   // claimed-not-revived records: forget on graceful shutdown
     this.rehydratable.clear();
@@ -292,9 +307,11 @@ export class DaemonSupervisor {
 
   private makeSession(id: string, cfg: SpawnConfig, resume?: string): DaemonSession {
     const base: Record<string, unknown> = cfg.model ? { model: cfg.model } : {};
-    if (resume) base.resume = resume;                        // spawn hint or captured sdk session id (restart resumes the captured id)
+    if (resume) base.resume = resume;                        // spawn hint or captured sdk session id
+    if (cfg.permissionMode) base.permissionMode = cfg.permissionMode;
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
     const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
+    options.canUseTool = createPermissionGate(this.pending.brokerFor(id)); // daemon-attached permission broker
     const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool, compactTool: this.compactTool });
     session.done.then(() => this.handleSessionEnd(id)).catch(() => {}); // end hook
     return session;
