@@ -94,6 +94,12 @@ class LoadConfigTest(unittest.TestCase):
         self.assertTrue(cfg.posture.auto_review)           # default kept
         self.assertEqual(cfg.merger.max_merges, 5)
         self.assertEqual(cfg.merger.poll_s, 1.0)           # default kept
+        self.assertTrue(cfg.merger.require_resolved_threads)  # merge-preservation R3 default on
+
+    def test_merger_require_resolved_threads_override(self):
+        _write(self.root, {"director": {"merger": {"require_resolved_threads": False}}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertFalse(cfg.merger.require_resolved_threads)
 
     # -- worker capability knobs (tools / install_skills) -------------------
     def test_worker_tools_default_off(self):

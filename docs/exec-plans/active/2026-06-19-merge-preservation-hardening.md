@@ -230,6 +230,15 @@ The spec fixed the design; these are the build choices:
   (571). Ref-acquisition decision: INTENDED = `gh pr diff --numstat` captured at
   `process_request` START (pre-rebase), ACTUAL = post-rebase `git diff --numstat
   base..branch` — both merger-local (gh/git there), wired in M4.
+- [x] (2026-06-19) M3 done — R3 hygiene gate helper + config knob. Added to
+  `merge_preserve.py` (broadened to "merge-gate code checks"): `classify_checks(rollup)` →
+  green/failing/pending (fail>pending>green precedence; empty→green per R5), `pr_hygiene(pr,
+  *, require_threads)` (checks via `gh pr view --json statusCheckRollup`; threads via
+  `gh api graphql` reviewThreads — verified `gh pr view --json` does NOT expose reviewThreads,
+  hence graphql + url parse; fail-closed → "failing"; pending short-circuits the thread query),
+  `unresolved_thread_count` (url→owner/repo/number→graphql). Config: `merger.require_resolved_threads`
+  (default True) in DEFAULTS + `Merger` + `_build` via `_bool`. 16 helper tests + 2 config
+  tests. Full gate GREEN (588).
 
 ## Surprises & discoveries
 

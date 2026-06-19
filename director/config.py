@@ -80,7 +80,12 @@ DEFAULTS: dict = {
     # paths are OPTIONAL overrides: None = "use the module's built-in default"
     # (run.DEFAULT_WORKSPACE_ROOT for workspaces; queue/status `_root(base=None)`).
     "paths": {"workspace_root": None, "queue_dir": None, "status_dir": None},
-    "merger": {"poll_s": 1.0, "read_timeout_s": 180.0, "max_merges": 200},
+    "merger": {"poll_s": 1.0, "read_timeout_s": 180.0, "max_merges": 200,
+               # Merge-preservation R3/D4: gate landing on zero unresolved GitHub review
+               # threads. Default on; a host whose review convention does not use native
+               # resolvable threads (a gh reply alone does not resolve one) can turn it off
+               # — the CI-checks-green half of the hygiene gate is always enforced.
+               "require_resolved_threads": True},
     # workspace lifecycle hooks (Symphony §9.4) — host-declared shell commands run at
     # workspace create/run/teardown. The repo-population bridge: `after_create` typically
     # clones the repo into the fresh workspace. Absent = no hooks (bare workspace, today's
@@ -119,6 +124,7 @@ class Merger:
     poll_s: float
     read_timeout_s: float
     max_merges: int
+    require_resolved_threads: bool
 
 
 @dataclass(frozen=True)
@@ -246,7 +252,8 @@ def _build(raw: dict) -> DirectorConfig:
     m = {**DEFAULTS["merger"], **m_raw}
     merger = Merger(_pos_num(m["poll_s"], "merger.poll_s"),
                     _pos_num(m["read_timeout_s"], "merger.read_timeout_s"),
-                    _pos_int(m["max_merges"], "merger.max_merges"))
+                    _pos_int(m["max_merges"], "merger.max_merges"),
+                    _bool(m["require_resolved_threads"], "merger.require_resolved_threads"))
 
     ws_raw = raw.get("workspace") or {}
     if not isinstance(ws_raw, dict):

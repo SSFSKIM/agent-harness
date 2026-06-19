@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -92,6 +93,103 @@ class NumstatFromCmdTest(unittest.TestCase):
         def boom(*a, **k):
             raise FileNotFoundError("gh not found")
         self.assertIsNone(mp.numstat_from_cmd(["gh"], run=boom))
+
+
+class ClassifyChecksTest(unittest.TestCase):
+    def test_empty_rollup_is_green(self):
+        self.assertEqual(mp.classify_checks([]), "green")
+        self.assertEqual(mp.classify_checks(None), "green")
+
+    def test_all_success_is_green(self):
+        roll = [{"status": "COMPLETED", "conclusion": "SUCCESS"},
+                {"state": "SUCCESS"}]
+        self.assertEqual(mp.classify_checks(roll), "green")
+
+    def test_a_failure_is_failing(self):
+        roll = [{"status": "COMPLETED", "conclusion": "SUCCESS"},
+                {"status": "COMPLETED", "conclusion": "FAILURE"}]
+        self.assertEqual(mp.classify_checks(roll), "failing")
+
+    def test_in_progress_is_pending(self):
+        roll = [{"status": "IN_PROGRESS"}, {"status": "COMPLETED", "conclusion": "SUCCESS"}]
+        self.assertEqual(mp.classify_checks(roll), "pending")
+
+    def test_failure_beats_pending(self):
+        roll = [{"status": "IN_PROGRESS"}, {"status": "COMPLETED", "conclusion": "FAILURE"}]
+        self.assertEqual(mp.classify_checks(roll), "failing")
+
+    def test_status_context_state_failure(self):
+        self.assertEqual(mp.classify_checks([{"state": "FAILURE"}]), "failing")
+
+
+def _hygiene_run(*, rollup=None, threads=None, rollup_rc=0, graphql_rc=0, seen=None):
+    """A fake subprocess.run that answers the two gh calls pr_hygiene makes: the graphql
+    thread query vs the statusCheckRollup view (dispatched by argv)."""
+    def run(argv, **kw):
+        if seen is not None:
+            seen.append(argv)
+        if "graphql" in argv:
+            return _FakeProc(graphql_rc, json.dumps(threads) if threads is not None else "")
+        return _FakeProc(rollup_rc, json.dumps(rollup) if rollup is not None else "")
+    return run
+
+
+def _threads(*resolved_flags):
+    nodes = [{"isResolved": r} for r in resolved_flags]
+    return {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": nodes}}}}}
+
+
+_PR = "https://github.com/o/r/pull/5"
+
+
+class PrHygieneTest(unittest.TestCase):
+    def test_green_when_checks_pass_and_threads_resolved(self):
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"state": "SUCCESS"}]},
+                           threads=_threads(True, True))
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "green")
+
+    def test_failing_checks(self):
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"state": "FAILURE"}]})
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "failing")
+
+    def test_pending_short_circuits_threads(self):
+        seen = []
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"status": "IN_PROGRESS"}]}, seen=seen)
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "pending")
+        self.assertFalse(any("graphql" in a for a in seen))   # no thread query on pending
+
+    def test_unresolved_thread_fails_when_knob_on(self):
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"state": "SUCCESS"}]},
+                           threads=_threads(True, False))
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "failing")
+
+    def test_unresolved_thread_ignored_when_knob_off(self):
+        seen = []
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"state": "SUCCESS"}]},
+                           threads=_threads(False), seen=seen)
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=False, run=run), "green")
+        self.assertFalse(any("graphql" in a for a in seen))   # knob off → no thread query
+
+    def test_fail_closed_when_checks_unreadable(self):
+        run = _hygiene_run(rollup_rc=1)
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "failing")
+
+    def test_fail_closed_when_threads_unreadable(self):
+        run = _hygiene_run(rollup={"statusCheckRollup": [{"state": "SUCCESS"}]}, graphql_rc=1)
+        self.assertEqual(mp.pr_hygiene(_PR, require_threads=True, run=run), "failing")
+
+
+class UnresolvedThreadCountTest(unittest.TestCase):
+    def test_counts_unresolved(self):
+        run = _hygiene_run(threads=_threads(True, False, False))
+        self.assertEqual(mp.unresolved_thread_count(_PR, run=run), 2)
+
+    def test_bad_url_is_none(self):
+        self.assertIsNone(mp.unresolved_thread_count("not-a-pr-url",
+                                                     run=_hygiene_run(threads=_threads())))
+
+    def test_gh_error_is_none(self):
+        self.assertIsNone(mp.unresolved_thread_count(_PR, run=_hygiene_run(graphql_rc=1)))
 
 
 if __name__ == "__main__":
