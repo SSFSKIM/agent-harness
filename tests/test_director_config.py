@@ -75,6 +75,15 @@ class LoadConfigTest(unittest.TestCase):
         self.assertNotIn("bogus", cfg.states)
         self.assertEqual(cfg.states["ready"], "Todo")
 
+    def test_merging_state_optional(self):
+        # merge-gated-eligibility R1: `merging` is an optional state, None by default,
+        # validated string-or-None like failed/blocked.
+        cfg = config.load_director_config(root=self.root)  # no .harness.json → default
+        self.assertIsNone(cfg.states["merging"])
+        _write(self.root, {"director": {"states": {"merging": "Merging"}}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.states["merging"], "Merging")
+
     def test_posture_and_merger_override(self):
         _write(self.root, {"director": {
             "worker": {"network": False, "approval_policy": "untrusted"},

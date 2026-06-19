@@ -44,10 +44,13 @@ _TERMINAL_TYPES = frozenset({"completed", "canceled"})
 
 
 def resolve_states(board, team: str, names: dict | None = None) -> dict:
-    """Resolve the four logical states (ready/started/done/failed) to board state ids,
-    reading the team's workflow states once. A configured-but-missing name is a
-    startup error — we fail before launching any worker, never mid-flight. `failed`
-    may be None (no failed state → leave failures in `started` + comment, D-12)."""
+    """Resolve the logical states (ready/started/done required; failed/blocked/merging
+    optional) to board state ids, reading the team's workflow states once. A
+    configured-but-missing name is a startup error — we fail before launching any worker,
+    never mid-flight. An optional state may be None: `failed`/`blocked` None → leave
+    failures in `started`/`done` + comment (D-12); `merging` None → merge-gating is inert
+    (a PR-bearing `done` goes straight to `done`, today's behavior — merge-gated-eligibility
+    spec R1)."""
     names = {**DEFAULT_STATE_NAMES, **(names or {})}
     states = board.workflow_states(team)
     out: dict = {}
@@ -58,7 +61,7 @@ def resolve_states(board, team: str, names: dict | None = None) -> dict:
                 f"workflow state {name!r} (for {logical!r}) not found in team "
                 f"{team!r}; have: {sorted(states)}")
         out[logical] = states[name]["id"]
-    for opt in ("failed", "blocked"):  # optional terminal states
+    for opt in ("failed", "blocked", "merging"):  # optional states (failed/blocked terminal; merging pre-done)
         oname = names.get(opt)
         if oname:
             if oname not in states:

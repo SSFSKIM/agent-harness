@@ -136,7 +136,13 @@ this is the execution shape.
   GREEN, and the E2E test demonstrates child-blocked-until-parent-landed end to end.
 
 ## Progress log
-- [ ] (2026-06-19) plan created; base_commit 7263318. Next: M1.
+- [x] (2026-06-19) plan created; base_commit 7263318.
+- [x] (2026-06-19) M1 — `merging` added to `config.DEFAULTS["states"]` (None) + `_STATE_KEYS`;
+  `resolve_states` resolves it in the optional group (+docstring). Tests: config
+  `test_merging_state_optional`; orchestrator `test_merging_state_resolved_when_present`/
+  `_none_when_unconfigured`/`_configured_merging_state_missing_raises`; updated the
+  exact-equality `test_resolves_defaults_to_ids` to include `merging: None`. Gate GREEN (532).
+- [ ] M2 — reconcile done branch parks PR-done in `merging` (next).
 
 ## Surprises & discoveries
 

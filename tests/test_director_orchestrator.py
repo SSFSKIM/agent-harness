@@ -31,7 +31,8 @@ class ResolveStatesTest(unittest.TestCase):
     def test_resolves_defaults_to_ids(self):
         states = orch.resolve_states(orch.MockBoard.demo(), "T")
         self.assertEqual(states, {"ready": "st_todo", "started": "st_prog",
-                                  "done": "st_done", "failed": None, "blocked": None})
+                                  "done": "st_done", "failed": None, "blocked": None,
+                                  "merging": None})
 
     def test_missing_state_name_raises_before_dispatch(self):
         with self.assertRaises(RuntimeError):
@@ -49,6 +50,25 @@ class ResolveStatesTest(unittest.TestCase):
     def test_configured_failed_state_missing_raises(self):
         with self.assertRaises(RuntimeError):
             orch.resolve_states(orch.MockBoard.demo(), "T", {"failed": "Blocked"})
+
+    def test_merging_state_resolved_when_present(self):
+        # merge-gated-eligibility R1: `merging` is an OPTIONAL resolved state (pre-done).
+        board = orch.MockBoard([], states={
+            "Todo": {"id": "st_todo", "type": "unstarted"},
+            "In Progress": {"id": "st_prog", "type": "started"},
+            "Done": {"id": "st_done", "type": "completed"},
+            "Merging": {"id": "st_merge", "type": "started"}})
+        states = orch.resolve_states(board, "T", {"merging": "Merging"})
+        self.assertEqual(states["merging"], "st_merge")
+
+    def test_merging_state_none_when_unconfigured(self):
+        # absent merging → None → merge-gating inert (today's behavior)
+        states = orch.resolve_states(orch.MockBoard.demo(), "T")
+        self.assertIsNone(states["merging"])
+
+    def test_configured_merging_state_missing_raises(self):
+        with self.assertRaises(RuntimeError):
+            orch.resolve_states(orch.MockBoard.demo(), "T", {"merging": "Merging"})
 
 
 class EligibilityTest(unittest.TestCase):

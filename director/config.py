@@ -45,7 +45,7 @@ from director.worker import policy
 DEFAULTS: dict = {
     "team": None,
     "states": {"ready": "Todo", "started": "In Progress", "done": "Done",
-               "failed": None, "blocked": None},
+               "failed": None, "blocked": None, "merging": None},
     "concurrency": 3,
     "max_turns": 8,
     "max_passes": 50,
@@ -91,7 +91,7 @@ DEFAULTS: dict = {
                   "hook_timeout_s": 60.0},
 }
 
-_STATE_KEYS = ("ready", "started", "done", "failed", "blocked")
+_STATE_KEYS = ("ready", "started", "done", "failed", "blocked", "merging")
 _HOOK_KEYS = ("after_create", "before_run", "after_run", "before_remove")
 _APPROVAL_VALUES = frozenset({"untrusted", "on-request", "on-failure", "never"})
 _SANDBOX_VALUES = frozenset({"read-only", "workspace-write", "danger-full-access"})
