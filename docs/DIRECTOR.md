@@ -117,8 +117,8 @@ Read it (and the `--request` join), then answer **free-form** with a disposition
   opened a **PR** does not go straight to `Done`. When a `merging` state is configured
   (merge-gated-eligibility), the orchestrator parks the ticket in **`merging`** (work done,
   integration pending) and finalizes it to `Done` ONLY when the serialized merger actually
-  **lands** the PR — its `merging`→`Done` sweep runs each tick (still orchestrator-owned
-  board writes; the merger stays board-free). So a child `blocked_by` this ticket waits for
+  **lands** the PR — its `merging`→`Done` sweep runs each daemon tick (and each batch pass),
+  still orchestrator-owned board writes; the merger stays board-free. So a child `blocked_by` this ticket waits for
   the parent's PR to be **on `main`**, never just "done", and never builds on a stale base.
   A `done` with **no** PR (planning/research/spec) reaches `Done` immediately. With no
   `merging` state configured, `done` → `Done` directly (today's behavior).

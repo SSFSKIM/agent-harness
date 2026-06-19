@@ -1,9 +1,16 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-19
 owner: harness
 ---
 # Merge-gated DAG eligibility — a child waits for the parent's PR to LAND, not just to be "done"
+
+> **Built (2026-06-19).** Shipped on `master` via
+> [merge-gated-eligibility](../exec-plans/completed/2026-06-19-merge-gated-eligibility.md)
+> (gate GREEN, five reviews SATISFIED). Note for implementers: R1 also required threading
+> `merging` through the **runtime** settings path (`orchestrator.resolve_settings`), not only
+> `config.DEFAULTS` + `resolve_states` — a configured state is inert until it reaches
+> `resolve_states` on the real CLI/daemon path.
 
 A child ticket's `blocked_by` edge must clear only when the parent's PR has actually
 **landed on `main`**, not merely when the worker reported `done`. Today the two events are

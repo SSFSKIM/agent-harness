@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: 7263318989e1f35703fbdf3af24ce6ac1643b857
@@ -198,4 +198,60 @@ this is the execution shape.
 
 ## Feedback (from completion gate)
 
+Five reviews, all **SATISFIED** after one fix round:
+- **spec-compliance (codex gpt-5.5):** round 1 NOT SATISFIED — 2 P1s (resolve_settings dropped
+  `merging`; `run_forever` sweep gated by `if free > 0`). Both fixed (commit efb2b0b). Round 2
+  SATISFIED.
+- **review-arch:** round 1 NOT SATISFIED (the `if free > 0` placement). Round 2 SATISFIED.
+- **review-reliability:** SATISFIED (round 1) — R19, fail-soft, idempotency, merge_outcome
+  correctness, abandon-without-livelock all verified.
+- **review-code-quality (Claude fallback — codex detached to background):** SATISFIED.
+
+P2s (fix-forward — recorded in `docs/exec-plans/tech-debt-tracker.md`):
+- **`_MERGE_ATTEMPT_SCAN = 20` is an unanchored literal** vs the requeue cap
+  `max_attempts=3` (`director_min.py`). Flagged by arch + reliability + code-quality (3×).
+  Fail-closed today (20 ≫ 3; `max_attempts` has no config path). If `max_attempts` ever
+  becomes host-configurable above the scan bound, a high-attempt land would read `unresolved`
+  (safe direction, but a dropped finalize). Harden by deriving the scan bound from the cap, or
+  a written invariant that a bounded scan over a retryable queue dimension must be ≥ its config
+  cap and fail closed. Recorded; not fixed at the gate (scope).
+- **DIRECTOR.md §4 "each tick"** was imprecise for the batch loop (once per *pass*) — FIXED
+  inline (it was prose I introduced this plan).
+- **comment-after-state-write** (`orchestrator.py` `_reconcile_merges`): if `update_issue_state`
+  succeeds but `comment_issue` then raises, the "PR landed" comment is lost (the ticket is
+  already `done`, not re-fetched). Idempotent + fail-soft + cosmetic — consistent with the
+  board-is-truth/comment-is-best-effort philosophy. No action (reviewer agreed it is not a defect).
+
 ## Outcomes & retrospective
+
+**Shipped (Direction A).** A child ticket's `blocked_by` edge now clears only when the parent's
+PR has actually LANDED on `main`, not merely when the worker reported `done`. Mechanism: an
+optional `merging` board state; `reconcile` parks a PR-bearing `done` there (no-PR tickets still
+reach `done` immediately); the orchestrator's `_reconcile_merges` sweep finalizes `merging`→`done`
+once it observes the land via `merger.merge_outcome` (a pure queue read). The existing
+`done_types` eligibility gate, orphan-recovery, and active-run reconciliation stayed **pure board
+reads, unchanged** — the whole correctness win rode on representing "merged-but-not-done" as a
+board state rather than a queue-consulting predicate. Merger stays board-free; board writes stayed
+in the orchestrator (stated principle preserved); R19 act-before-consume preserved. Opt-in via
+configuring `merging`; unconfigured = byte-identical to before.
+
+**Verification.** Gate GREEN throughout (550 tests, +17 new). Behavioral E2E
+(`test_child_blocked_until_parent_pr_lands`) drives the real `run_until_drained` loop and proves a
+child does not dispatch until the parent's PR lands. Five completion-gate reviews all SATISFIED
+(spec-compliance + code-quality always-on; arch + reliability risk personas) after one fix round.
+
+**What the reviews caught (the value of the gate).** Two genuine P1s the implementation missed:
+(1) the RUNTIME settings path (`resolve_settings`) enumerated only the 5 pre-existing state keys,
+so a configured `merging` was silently dropped before `resolve_states` — the feature would have
+been **inert in production** despite green unit tests (the spec named only `config` + `resolve_states`
+for R1, which is exactly why it was missed — a reminder that "add a config field" means tracing it
+all the way to the runtime, not just to the dataclass). (2) the daemon sweep was nested in
+`if free > 0:`, coupling merge finalization to free dispatch slots. Both fixed + regression-guarded
+(`test_merging_state_flows_from_config_to_runtime`, `test_run_forever_sweep_runs_under_saturation`,
+the latter using `concurrency=0` to make the gated-version failure deterministic).
+
+**Retrospective.** The decompose-into-board-state design (D2) paid off precisely at the reviews:
+because eligibility/orphan-recovery were untouched, the reviewers had a small, well-bounded surface
+to verify, and the only real defects were at the new seams (config→runtime threading, sweep
+placement) — not in the core gating logic. One follow-up parked as tech-debt: anchor
+`_MERGE_ATTEMPT_SCAN` to the requeue cap (flagged 3×; fail-closed today).
