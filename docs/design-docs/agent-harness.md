@@ -88,7 +88,7 @@ Procedure for a new harness-managed page: kebab-case filename → frontmatter
 product-specs; optional `tags / title`; validate-if-present `resource / supersedes`
 per `docs/KNOWLEDGE_FORMAT.md` KF v2.0) → write → register in that
 directory's `index.md` → cross-link → run the gate (the `docs-tree` skill owns
-this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md` (KF v1.0).
+this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md` (KF v2.0).
 Host-owned project roots may use the structure that best fits the repo unless
 they are opted into managed governance.
 

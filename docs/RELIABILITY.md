@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-19
+last_verified: 2026-06-20
 owner: review-reliability
 type: methodology
 tags: [reliability, idempotency, review-reliability]
@@ -161,3 +161,15 @@ cite them in findings.
   on the corpus it only observes. (Promoted from three tech-debt rows on the third
   recurrence: per-page/per-edge isolation, empty-set emit totality, and this I/O
   re-read gap.)
+- **R22 — The commit-gate lint (`lint_docs.py`) is total over a hostile corpus.**
+  R21's sibling for the *write* gate — and strictly higher-stakes: `lint_docs.py`
+  runs on every commit, so a traceback here BLOCKS the commit (not just a dropped
+  read). Every per-page check (D3/D4/D11/D12 in `check_frontmatter`, and the rest)
+  must degrade to a clean FAIL or a skip and never raise: a frontmatter value
+  authored as a list where a scalar is expected (`type`/`description`/`phase`/
+  `resource` → guard with `isinstance(v, str)` so it FAILs cleanly, never throws),
+  a non-str element in a list-valued key, a missing/odd path (resolve via the
+  total `Path.exists()` pattern), and pathological regex input (no catastrophic
+  backtracking) all produce a deterministic FAIL/skip. Third instance of the
+  pattern (D4 list-degradation → D11 `isinstance` guards → D12 path/grammar
+  totality); generalizes R12/R8 to the gate surface.

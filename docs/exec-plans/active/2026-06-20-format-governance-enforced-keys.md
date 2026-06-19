@@ -79,7 +79,8 @@ corpus is GREEN; rules ship in `plugin/scripts/lint_docs.py` (portable).
 - [x] (2026-06-20) M2 — KF v2.0 in both KNOWLEDGE_FORMAT docs (§2.1 required gains
   type/description, §2.2 split into optional + validate-if-present, §5 +D11/D12,
   §6 v2.0, §7 OKF-divergence reframe); stale "optional type" guidance fixed.
-- [x] (2026-06-20) M3 — migration: 3 plan `description`s + 10 seeded-template
+- [x] (2026-06-20) M3 — migration: 2 plan `description`s (+ the ExecPlan-template
+  `description:` placeholder) + 10 seeded-template
   type/description backfills + ExecPlan/product-design authoring guidance; fresh
   scaffold lints GREEN; full gate GREEN.
 
@@ -109,5 +110,25 @@ corpus is GREEN; rules ship in `plugin/scripts/lint_docs.py` (portable).
   for values; enforce only presence (spec NG1).
 
 ## Feedback (from completion gate)
+
+Reviews — all SATISFIED: review-spec-compliance, review-arch, review-reliability
+(the dedicated personas; used over Codex per the CLAUDE.md fallback after Codex
+stalled earlier this session). review-code-quality below.
+
+P2s fixed inline:
+- (arch) `docs/design-docs/agent-harness.md` had a same-doc version contradiction
+  my diff introduced (one line v2.0, another still "(KF v1.0)") → both v2.0.
+- (spec-compliance) spec acceptance #1 + plan progress wording said "governed
+  page" / "3 plan descriptions" → "governed *content* page" / "2 plan descriptions
+  (+ the ExecPlan-template placeholder)".
+
+Promoted: **RELIABILITY R22** — the commit-gate lint (`lint_docs.py`) is total
+over a hostile corpus (R21's higher-stakes sibling: a lint crash blocks commits).
+Third instance of the pattern (D4 list-degradation → D11 `isinstance` guards →
+D12 path/grammar totality), so promoted rather than tracked.
+
+Recorded in `tech-debt-tracker.md` (non-blocking): one shared path-resolver helper
+(D5/D11/D12 re-inline the pattern — review-arch); D12 list-valued `resource`/`phase`
+under-enforcement vs D11 (benign/fail-soft — review-reliability observation).
 
 ## Outcomes & retrospective

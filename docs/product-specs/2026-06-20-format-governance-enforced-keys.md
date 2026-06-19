@@ -110,8 +110,9 @@ every key; `resource` is on 1/99 pages by design, `phase` on 30/99).
 
 ## Acceptance criteria
 
-1. A governed page missing `type` or `description` FAILs the gate; a `product-spec`
-   missing `phase` FAILs; an `exec-plan` missing `phase` does **not**.
+1. A governed *content* page (reserved spines `index.md`/`MEMORY.md` exempt)
+   missing `type` or `description` FAILs the gate; a `product-spec` missing `phase`
+   FAILs; an `exec-plan` missing `phase` does **not**.
 2. A page with a missing-file `resource`, an unresolvable `supersedes`, or a
    malformed `phase` FAILs; valid or absent ones pass.
 3. `KNOWLEDGE_FORMAT.md` + host template read **KF v2.0** with the reframed
