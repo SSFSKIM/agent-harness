@@ -2,6 +2,7 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
 base_commit: a11091efa56051dee2e174c834c3601e2a833ee9
 review_level: standard
 ---

@@ -52,6 +52,7 @@ independent verifiability and the plan stops fitting in one context.
     status: active
     last_verified: <today>
     owner: <who drives>
+    type: exec-plan
     base_commit: <git rev-parse HEAD at plan creation>
     review_level: targeted
     ---

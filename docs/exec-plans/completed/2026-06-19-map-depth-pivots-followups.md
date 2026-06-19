@@ -2,6 +2,7 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
 base_commit: 4f34d15d3f2a1d36297533695ba1bd31392f0c54
 review_level: standard
 phase: knowledge-format/05-map-depth
