@@ -182,8 +182,13 @@ difference is **who answers turn ends**:
 
 A worker's `done` finishes the *work*; landing that work on `main` is a **downstream**
 step a **separate** component owns — the serialized PR-merger (`director/merger.py`),
-not you (R7/R8). The merger lands ready PRs one at a time (rebase → integration gate →
-squash-merge). It is a distinct role on purpose: it owns the *integration boundary*,
+not you (R7/R8). The land worker *prepares* the PR (rebase → integration gate → resolve
+threads) but does **not** merge; the merger then runs a **code-owned gate** — a
+**preservation tripwire** (did the PR's change survive the rebase, or did a conflict
+resolution silently drop a hunk?) and a **hygiene gate** (CI green + review threads
+resolved) — and issues the squash-merge **itself**, one PR at a time
+(merge-preservation-hardening D1: code owns the irreversible merge, not the land worker's
+prose judgment). It is a distinct role on purpose: it owns the *integration boundary*,
 you own *execution oversight*. But it has **no line to the human** — when a PR cannot
 cleanly land, it escalates **to you**, the single human surface (R6).
 
@@ -200,17 +205,23 @@ Two things can reach you from a merge:
   풀까요?"). It arrives exactly like a worker turn-end and you answer it the same way
   (§4): a content-bearing `reply` ("origin/main 쪽으로 맞춰라"), or `escalate` if it is a
   taste/risk fork. Most conflict-resolution questions are yours to answer.
-- **Terminal merge escalation (`mergeReview`)** — the land lane *gave up*: an unresolvable
-  conflict, an integration gate that stays red, or a taste/risk call. `director_min.merge_reviews()`
-  lists these; each payload carries `{pr, branch, result, reason, disposition}`. Read it
-  (and the `--request` join), then resolve with `answer_merge_review(request_id, disposition)`:
+- **Terminal merge escalation (`mergeReview`)** — the land lane *gave up* OR the merger's
+  **code gate withheld** the merge: an unresolvable conflict, an integration gate that stays
+  red, a taste/risk call, the **preservation tripwire** flagging a dropped/shrunk change
+  (`reason` names the path), or the **hygiene gate** finding a red check / unresolved review
+  thread. `director_min.merge_reviews()` lists these; each payload carries
+  `{pr, branch, result, reason, disposition}`. Read it (and the `--request` join), then
+  resolve with `answer_merge_review(request_id, disposition)`:
   - **Give a directive + re-enqueue** — `requeue_merge(review, note="<how to land it>")`.
     Use when the fix is mechanical/settled (you know how to land it). It marks the review
     handled AND re-enqueues the PR at `attempt+1` with your `note` as guidance the merger
     renders into the land prompt — so the next land attempt follows your directive. Capped
     at `max_attempts` (default 3): beyond it `requeue_merge` REFUSES (`{"requeued": False,
     "reason": "max_attempts"}`) and leaves the review open, so you **abandon** or **human**
-    rather than loop forever.
+    rather than loop forever. If the tripwire flagged a drop you have **judged acceptable**
+    (a legitimate resolution — the PR's change was already on `main`), re-enqueue with
+    `preservation_override=True` so the retry's gate skips the tripwire (the hygiene gate
+    still runs); use this only after confirming the "dropped" change is genuinely redundant.
   - **Escalate the taste to the human** — `{"action": "human", "note": "..."}` + a
     `PushNotification`. Use for a genuine product/risk/irreversible call (the merge would
     ship a direction you must not pick yourself). The PR stays unmerged; the ticket stays

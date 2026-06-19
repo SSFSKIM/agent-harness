@@ -254,6 +254,20 @@ The spec fixed the design; these are the build choices:
   and the final step no longer self-merges (reports ready). +13 tests (FinalizeGateTest,
   GateIntegrationTest incl. no-head-of-line + misfire, LandSkillPreparesTest); existing
   drain-mechanics tests stub the injectable `finalize`. Full gate GREEN (601).
+- [x] (2026-06-19) M5 done — docs + behavioral + scope-fence. `docs/DIRECTOR.md` §7 now
+  describes the land-worker-prepares / merger-code-verifies-then-merges split, the
+  preservation-tripwire + hygiene-gate withhold as `mergeReview` causes (reason names the
+  path), and the `preservation_override=True` approve-and-requeue. **Behavioral acceptance**
+  (mocked gh — no live GitHub PR in the gate env, recorded N/A-for-live): `GateIntegrationTest`
+  (6) GREEN — a dropped-hunk PR does NOT land and surfaces a `mergeReview` naming the path; a
+  clean PR lands via the code merge; pending CI defers unsurfaced + stays pending; a deferred
+  PR does not block a sibling (no head-of-line); the protocol-misfire logs on claim-vs-gate
+  contradiction; merger has no board import. **Scope-fence** (`git diff a401be7..HEAD`):
+  `decider.py` byte-empty; `eligible_tickets` untouched; merger board-free. Files changed are
+  the merge-path subsystem — the spec's enumerated surface PLUS `queue/__init__.py` (the
+  `evidence` + `preservation_override` payload keys) and `director_min.py` (`requeue_merge`
+  threads the override): both anticipated by R4 ("flowing through … merge payload") and D3
+  (Director approve-and-requeue), within-subsystem, not a fence breach. Full gate GREEN (601).
 
 ## Surprises & discoveries
 - (2026-06-19, M4) **`gh pr diff` has no `--numstat`.** M2 built `parse_numstat`/
