@@ -348,6 +348,19 @@ contradiction before cutoff — both processed:
   ready" (the worker resolves threads first; the merger lands).
 - **P2 (reliability) — deferred-PR cross-poll re-drive** — same finding as arch's; already tracked.
 
+**Round 3 (2026-06-19).** review-spec-compliance (Claude fallback — codex truncated twice;
+the dedicated persona isn't in this session's registry) → **NOT-SATISFIED** on two remaining
+P1s, now fixed:
+- **P1×2 — two more stale self-merge phrasings in the land skill** that round 2 missed: step 6
+  ("handled before merging") and Review Handling ("before requesting a new review or merging").
+  **Fixed** → "before you report the PR ready". Added a **regression assertion** to
+  `LandSkillPreparesTest` (`before merging` / `review or merging` absent) so the gate catches
+  this class, not just a reviewer.
+- **P2 — spec acceptance still said "red required check"** (the R3 body was clarified in round 1
+  but the acceptance shorthand wasn't). **Fixed** → "red CI check (any in the rollup)".
+- P2 (deferred re-drive) + P2 (queue/director_min outside R6's enumeration) — already tracked /
+  documented as defensible; no change.
+
 Re-review (clean spec-compliance verdict + code-quality) follows this gate re-run.
 
 ## Outcomes & retrospective

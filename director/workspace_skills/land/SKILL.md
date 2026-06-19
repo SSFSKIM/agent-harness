@@ -39,7 +39,7 @@ description:
    your turn explaining) rather than push a lossy merge. The merger also re-checks
    this in code, but catching it here is cheaper.
 6. Ensure Codex review comments (if present) are acknowledged and any required
-   fixes are handled before merging.
+   fixes are handled before you report the PR ready.
 7. Watch checks until complete.
 8. If checks fail, pull logs, fix the issue, commit with the `commit` skill,
    push with the `push` skill, and re-run checks.
@@ -154,7 +154,7 @@ Exit codes:
   methodology + guardrails used. Treat these as feedback that must be
   acknowledged and resolved before you report the PR ready.
 - Human review comments are blocking and must be addressed (responded to and
-  resolved) before requesting a new review or merging.
+  resolved) before requesting a new review or reporting the PR ready.
 - If multiple reviewers comment in the same thread, respond to each comment
   (batching is fine) before closing the thread.
 - Fetch review comments via `gh api` and reply with a prefixed comment.

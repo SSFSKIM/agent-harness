@@ -776,6 +776,11 @@ class LandSkillPreparesTest(unittest.TestCase):
         self.assertIn("do not", low)                             # do NOT merge yourself
         self.assertIn("preservation", low)                       # R2 faithfulness check
         self.assertIn("the merger", low)                         # merger finalizes
+        # regression: no worker-implies-self-merge framing anywhere (the worker prepares;
+        # it resolves threads and reports ready — the merger lands). git-merging origin/main
+        # during conflict resolution is the worker's job and uses different phrasing.
+        self.assertNotIn("before merging", low)
+        self.assertNotIn("review or merging", low)
 
 
 if __name__ == "__main__":

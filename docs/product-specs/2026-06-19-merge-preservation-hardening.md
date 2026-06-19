@@ -103,8 +103,8 @@ Each R is independently verifiable (a human can check the stated condition).
   (`director.merger`), defaulting **on**, because of a self-host nuance: a `gh`
   reply to a review comment does *not* auto-resolve the thread, so requiring
   zero-unresolved also requires the sweep to *explicitly resolve* threads it
-  addresses (recorded in Decisions). Verifiable: a PR with a red required check, or
-  with an unresolved review thread (when the knob is on), does not land; setting the
+  addresses (recorded in Decisions). Verifiable: a PR with a red CI check (any in the
+  rollup), or with an unresolved review thread (when the knob is on), does not land; setting the
   knob off drops only check (b).
 - **R4 — Structured sweep evidence + audit (wiring).** `report_outcome` gains
   **optional** `done`-only fields capturing the sweep's result (e.g.
@@ -252,7 +252,7 @@ already consumes is unchanged in shape.
   dropped path; a Director approve-and-requeue lets it proceed.
 - **R2:** `land/SKILL.md` directs an explicit both-sides-preserved check +
   escalate-on-doubt, and its final step no longer merges (reports ready instead).
-- **R3:** a PR with a red required check is withheld+escalated; one with CI still
+- **R3:** a PR with a red CI check (any in the rollup) is withheld+escalated; one with CI still
   running is deferred (not consumed, not spun, other PRs still drain); with the
   threads knob on, an unresolved review thread withholds, and turning the knob off
   drops only that half.
