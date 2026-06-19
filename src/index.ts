@@ -35,3 +35,4 @@ export type {
 } from "./hooks/index.js";
 export { createPermissionGate } from "./permissions/gate.js";
 export type { PermissionBroker, PermissionDecision, PermissionRequest } from "./permissions/types.js";
+export type { PendingEntry } from "./daemon/permissions.js";

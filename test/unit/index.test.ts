@@ -38,6 +38,10 @@ describe("public API", () => {
   it("exports the permission seam (advanced-seam, increment 3)", () => {
     expect(typeof api.createPermissionGate).toBe("function");
   });
+  it("exports the PendingEntry wire type (advanced-seam, increment 4)", () => {
+    const _pe: api.PendingEntry = { sessionId: "s", toolUseID: "t", toolName: "Edit", input: {}, createdAt: 0 };
+    expect(_pe.toolUseID).toBe("t");
+  });
   it("does NOT export internal plumbing from the package root (boundary curation)", () => {
     for (const name of ["SessionRegistry", "MessageBus", "parseCompactOutcome"]) // value exports (type-only QueryHolder/CompactHolder are erased)
       expect(api).not.toHaveProperty(name);
