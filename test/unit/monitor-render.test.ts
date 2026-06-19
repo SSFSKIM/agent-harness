@@ -3,7 +3,7 @@ import { render } from "../../src/monitor/render.js";
 import type { DashboardSnapshot } from "../../src/monitor/snapshot.js";
 
 const base = (over: Partial<DashboardSnapshot>): DashboardSnapshot =>
-  ({ daemonUp: true, sessions: [], proactive: undefined, at: 600_000, socketPath: "/tmp/sock", ...over });
+  ({ daemonUp: true, sessions: [], proactive: undefined, at: 600_000, socketPath: "/tmp/sock", pending: [], ...over });
 const view = { intervalMs: 1000, paused: false };
 
 describe("render", () => {

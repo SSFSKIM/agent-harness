@@ -35,12 +35,22 @@ describe("collect", () => {
   it("returns daemonUp=false when list() throws", async () => {
     const client: MonitorClient = { list: async () => { throw new Error("ECONNREFUSED"); }, contextUsage: async () => ({}) };
     const snap = await collect(client, { now: () => 5, socketPath: "/sock" });
-    expect(snap).toEqual({ daemonUp: false, sessions: [], proactive: undefined, at: 5, socketPath: "/sock" });
+    expect(snap).toEqual({ daemonUp: false, sessions: [], proactive: undefined, at: 5, socketPath: "/sock", pending: [] });
   });
 
   it("renders ctx undefined when maxTokens is missing or zero", async () => {
     const snap = await collect(clientFrom([rec({ id: "z" })], { z: { totalTokens: 100 } }), { now: () => 0 });
     expect(snap.sessions[0].ctxPercent).toBeUndefined();
     expect(snap.sessions[0].tokens).toBe(100);
+  });
+
+  it("surfaces parked permissions in snapshot.pending; empty when the client lacks the method", async () => {
+    const withPending: MonitorClient = {
+      list: async () => [rec({ id: "a", status: "idle" })], contextUsage: async () => ({}),
+      pendingPermissions: async () => [{ sessionId: "a", toolUseID: "t", toolName: "Edit", input: {}, createdAt: 0 }],
+    };
+    expect((await collect(withPending, { now: () => 0 })).pending).toEqual([{ sessionId: "a", toolUseID: "t", toolName: "Edit", input: {}, createdAt: 0 }]);
+    const noPending: MonitorClient = { list: async () => [rec({ id: "a", status: "idle" })], contextUsage: async () => ({}) };
+    expect((await collect(noPending, { now: () => 0 })).pending).toEqual([]);
   });
 });

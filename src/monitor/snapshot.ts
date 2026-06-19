@@ -1,9 +1,11 @@
 import type { ListEntry } from "../daemon/types.js";
 import type { ProactiveState } from "../proactive/types.js";
 import type { MonitorClient } from "../daemon/connect.js";
+import type { PendingEntry } from "../daemon/permissions.js";
 
 /** Re-exported so existing importers (app.ts, client.ts, tests) keep their `./snapshot.js` import. */
 export type { MonitorClient } from "../daemon/connect.js";
+export type { PendingEntry } from "../daemon/permissions.js";
 
 export interface SessionRow {
   id: string;
@@ -21,6 +23,7 @@ export interface DashboardSnapshot {
   proactive?: ProactiveState;  // highest-priority proactive state across sessions
   at: number;                  // collection timestamp (drives age rendering)
   socketPath?: string;
+  pending: PendingEntry[];     // parked permission requests awaiting a human decision (increment 4)
 }
 
 export interface CollectOpts { now: () => number; socketPath?: string; }
@@ -37,7 +40,7 @@ function aggregateProactive(states: (ProactiveState | undefined)[]): ProactiveSt
 export async function collect(client: MonitorClient, opts: CollectOpts): Promise<DashboardSnapshot> {
   let entries: ListEntry[];
   try { entries = await client.list(); }
-  catch { return { daemonUp: false, sessions: [], proactive: undefined, at: opts.now(), socketPath: opts.socketPath }; }
+  catch { return { daemonUp: false, sessions: [], proactive: undefined, at: opts.now(), socketPath: opts.socketPath, pending: [] }; }
   const sessions: SessionRow[] = [];
   for (const e of entries) {
     let ctxPercent: number | undefined, tokens: number | undefined;
@@ -51,5 +54,8 @@ export async function collect(client: MonitorClient, opts: CollectOpts): Promise
     }
     sessions.push({ id: e.id, status: e.status, model: e.model, ctxPercent, tokens, createdAt: e.createdAt, proactive: e.proactive?.state });
   }
-  return { daemonUp: true, sessions, proactive: aggregateProactive(sessions.map((r) => r.proactive)), at: opts.now(), socketPath: opts.socketPath };
+  let pending: PendingEntry[] = [];
+  try { pending = client.pendingPermissions ? await client.pendingPermissions() : []; }
+  catch { /* a pending-fetch failure must not break the snapshot */ }
+  return { daemonUp: true, sessions, proactive: aggregateProactive(sessions.map((r) => r.proactive)), at: opts.now(), socketPath: opts.socketPath, pending };
 }
