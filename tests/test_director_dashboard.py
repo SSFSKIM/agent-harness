@@ -109,6 +109,15 @@ class BuildViewTest(unittest.TestCase):
         self.assertIn("fmtRateLimits(run.rate_limits)", dash.PAGE)
         self.assertNotIn("JSON.stringify(run.rate_limits)", dash.PAGE)  # raw dump removed
 
+    def test_page_poll_fallback_reengages_after_post_delivery_failure(self):
+        # P2 (R4): a stream that delivers and THEN fails permanently must still degrade to
+        # polling — not strand the surface on "reconnecting…" forever. onerror arms a
+        # bounded timer that calls fallbackPoll, fallbackPoll is idempotent (no double
+        # poll loop), and "delivered" is set only after a successful render so a
+        # malformed-only stream cannot suppress the fallback.
+        self.assertIn("setTimeout", dash.PAGE)             # bounded post-delivery outage → poll
+        self.assertIn("fallbackPoll.armed", dash.PAGE)     # idempotent guard against double-start
+
     def test_page_wires_history_panel(self):
         # Phase B (R8): the page has a history section it loads from /api/v1/history.
         self.assertIn('id="history"', dash.PAGE)
@@ -403,6 +412,31 @@ class SSEStreamLoopTest(unittest.TestCase):
         dash._stream_loop(write, lambda: {"a": 1}, sleep=lambda _: None, now=lambda: 0.0,
                           should_run=should_run, heartbeat_s=15.0, poll_s=0.0)  # must NOT raise
         self.assertEqual(calls["n"], 1)              # returned on the first failed write (R14)
+
+    def test_change_detect_ignores_volatile_generated_at(self):
+        # Regression: build_view() stamps a FRESH generated_at every call, so a naive
+        # whole-payload diff is always "changed" → a data frame every tick and the
+        # heartbeat branch is unreachable. Change-detection must compare a projection
+        # that excludes generated_at: stable content → one frame then heartbeats, but the
+        # SENT frame still carries the timestamp.
+        frames = []
+        clock = {"t": 0.0}
+        n = {"i": 0}
+        def should_run():
+            clock["t"] += 20.0                       # advance past heartbeat each tick
+            keep = n["i"] < 3
+            n["i"] += 1
+            return keep
+        def view_fn():                               # content stable, generated_at volatile
+            return {"run": {"x": 1}, "generated_at": "T" + str(clock["t"])}
+        dash._stream_loop(frames.append, view_fn, sleep=lambda _: None,
+                          now=lambda: clock["t"], should_run=should_run,
+                          heartbeat_s=15.0, poll_s=0.0)
+        datas = [f for f in frames if f.startswith(b"data:")]
+        pings = [f for f in frames if f == b": ping\n\n"]
+        self.assertEqual(len(datas), 1)              # generated_at churn must NOT force frames
+        self.assertEqual(len(pings), 2)              # heartbeats fire while content is unchanged
+        self.assertIn(b'"generated_at"', datas[0])   # …but the pushed frame still carries it
 
 
 class ValidatorUnitTest(unittest.TestCase):

@@ -68,6 +68,16 @@ class StoreTest(unittest.TestCase):
         # history is instrumentation, never a gate — an un-writable path is swallowed.
         dh.append_run({"x": 1}, base="/proc/nonexistent/cannot/write")  # must NOT raise
 
+    def test_read_skips_torn_multibyte_tail_without_raising(self):
+        # R12: append_run writes ensure_ascii=False, so a crash mid-append can leave a
+        # partial multibyte sequence. The whole-file decode must NOT raise UnicodeDecodeError
+        # (which is a ValueError, not OSError) and discard every prior run — the valid lines
+        # survive and the torn tail is skipped like any malformed line.
+        dh.append_run({"ok": 1}, base=self.base)
+        with open(self.base / "runs.jsonl", "ab") as f:
+            f.write(b'{"partial": "\xe2\x82')  # torn UTF-8: first 2 bytes of a 3-byte char
+        self.assertEqual(dh.read_history(base=self.base), [{"ok": 1}])  # valid run kept, no raise
+
 
 if __name__ == "__main__":
     unittest.main()

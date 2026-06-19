@@ -194,8 +194,10 @@ def build_view(status_dir=None, queue_dir=None, *, now=_utcnow) -> dict:
 def _stream_loop(write, view_fn, *, sleep, now, should_run, heartbeat_s, poll_s) -> None:
     """Push the view as Server-Sent Events until the peer disconnects.
 
-    Emits a `data: <json>\\n\\n` frame ONLY when the serialized view changes (so a
-    pushed event always carries new state — less client churn than the fixed poll),
+    Emits a `data: <json>\\n\\n` frame ONLY when the view's CONTENT changes — the
+    always-fresh `generated_at` timestamp is excluded from the change key, so an idle
+    run doesn't stream a frame every tick (the pushed event still carries new state —
+    less client churn than the fixed poll),
     else a `: ping\\n\\n` comment heartbeat after `heartbeat_s` of no change (keeps the
     connection alive and surfaces a dead peer). A `write` raising the client-disconnect
     errno family ends the loop quietly (R14 — never a crash, never stderr).
@@ -206,11 +208,18 @@ def _stream_loop(write, view_fn, *, sleep, now, should_run, heartbeat_s, poll_s)
     last = None
     last_beat = now()
     while should_run():
-        payload = json.dumps(view_fn())
+        view = view_fn()
+        payload = json.dumps(view)
+        # Change-detect on a STABLE projection: build_view() stamps a fresh `generated_at`
+        # every call, so diffing the whole payload would mark every tick "changed" — a data
+        # frame each poll and the heartbeat branch never reached. Exclude that one volatile
+        # field from the key (the SENT frame still carries it).
+        key = json.dumps({k: v for k, v in view.items() if k != "generated_at"}) \
+            if isinstance(view, dict) else payload
         try:
-            if payload != last:
+            if key != last:
                 write(("data: " + payload + "\n\n").encode("utf-8"))
-                last = payload
+                last = key
                 last_beat = now()
             elif now() - last_beat >= heartbeat_s:
                 write(b": ping\n\n")
@@ -384,21 +393,31 @@ async function loadHistory() {  // history changes only at run end → a slow, i
   try { const r = await fetch("/api/v1/history"); renderHistory(await r.json()); }
   catch (e) {}
 }
-function fallbackPoll() { setInterval(poll, 1000); poll(); }  // the ~1s degradation path
+function fallbackPoll() {                  // the ~1s degradation path — idempotent (never double-loops)
+  if (fallbackPoll.armed) return;
+  fallbackPoll.armed = true;
+  setInterval(poll, 1000); poll();
+}
 function startStream() {
-  // Prefer server-push (SSE): render each pushed view. Fall back to polling ONLY if the
-  // stream can't deliver (no EventSource, or it errors before the first event) — so the
-  // surface never regresses to blank. A stream that delivers then drops auto-reconnects.
+  // Prefer server-push (SSE): render each pushed view. Fall back to polling when the
+  // stream can't deliver — BEFORE the first event, or after a sustained post-delivery
+  // outage — so the surface never regresses to blank nor freezes on stale data (R4).
   if (!window.EventSource) { fallbackPoll(); return; }
-  let delivered = false;
+  let delivered = false, outage = null;
   const es = new EventSource("/api/v1/stream");
-  es.onmessage = (e) => { delivered = true; try { render(JSON.parse(e.data)); } catch (x) {} };  // malformed frame → keep last view
+  es.onmessage = (e) => {
+    // mark delivered only AFTER a successful render — a malformed-only stream must not
+    // suppress the fallback by looking healthy.
+    try { render(JSON.parse(e.data)); delivered = true; if (outage) { clearTimeout(outage); outage = null; } }
+    catch (x) {}                           // malformed frame → keep last view
+  };
   es.onerror = () => {
-    // never delivered → the stream can't hold: fall back to polling (no blank surface).
-    // delivered before → a drop; EventSource auto-reconnects, so just flag staleness
-    // (onmessage clears it on reconnect) rather than double-fetching with a poll.
-    if (!delivered) { es.close(); fallbackPoll(); }
-    else { $("updated").textContent = "· stream reconnecting…"; }
+    // never delivered → the stream can't hold: poll now (no blank surface).
+    if (!delivered) { es.close(); fallbackPoll(); return; }
+    // a drop after delivery: EventSource auto-reconnects, so flag staleness — but if it
+    // can't recover within ~2 heartbeat windows, stop trusting it and poll (the safety net).
+    $("updated").textContent = "· stream reconnecting…";
+    if (!outage) outage = setTimeout(() => { es.close(); fallbackPoll(); }, 30000);
   };
 }
 startStream();

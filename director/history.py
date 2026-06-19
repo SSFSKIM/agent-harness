@@ -100,7 +100,11 @@ def read_history(base: Path | str | None = None, limit: int = RECENT_RUNS_MAX) -
         return []
     out: list[dict] = []
     try:
-        lines = p.read_text(encoding="utf-8").splitlines()
+        # Decode with errors="ignore" (NOT read_text): append_run writes ensure_ascii=False,
+        # so a crash mid-append can leave a partial multibyte sequence. read_text would raise
+        # UnicodeDecodeError (a ValueError, not OSError) and lose every prior run; instead we
+        # drop the undecodable bytes — the torn JSON tail then fails json.loads and is skipped.
+        lines = p.read_bytes().decode("utf-8", "ignore").splitlines()
     except OSError:
         return []
     for line in lines:
