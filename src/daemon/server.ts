@@ -68,7 +68,7 @@ export class DaemonServer {
     if (this.shuttingDown) { send({ ok: false, error: "daemon shutting down" }); sock.end(); return; }
     try {
       switch (op.op) {
-        case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart, resume: op.resume }) }); sock.end(); break;
+        case "spawn": send({ ok: true, id: this.supervisor.spawn({ model: op.model, restart: op.restart, resume: op.resume, permissionMode: op.permissionMode }) }); sock.end(); break;
         case "list": send({ ok: true, sessions: this.supervisor.list().map((r) => ({ ...r, proactive: this.supervisor.proactiveStatus(r.id) })) }); sock.end(); break;
         case "sessions": send({ ok: true, sessions: await this.supervisor.listPersistedSessions({ cwd: op.cwd, limit: op.limit, offset: op.offset }) }); sock.end(); break;
         case "messages": send({ ok: true, messages: await this.supervisor.getPersistedMessages(op.id, { cwd: op.cwd, limit: op.limit, offset: op.offset }) }); sock.end(); break;
@@ -84,6 +84,8 @@ export class DaemonServer {
         case "start_proactive": send({ ok: true, status: this.supervisor.startProactive(op.id, op.config) }); sock.end(); break;
         case "stop_proactive": send(await this.supervisor.stopProactive(op.id)); sock.end(); break;
         case "stop": await this.supervisor.stop(op.id); send({ ok: true }); sock.end(); break;
+        case "pending_permissions": send({ ok: true, pending: this.supervisor.pendingPermissions() }); sock.end(); break;
+        case "permission_response": { const ok = this.supervisor.respondPermission(op.toolUseID, op.decision); send(ok ? { ok: true } : { ok: false, error: "no pending request" }); sock.end(); break; }
         case "submit": {
           const r = await this.supervisor.submit(op.id, op.prompt, (m) => send({ type: "chunk", message: m }));
           send({ type: "done", result: r.result }); sock.end(); break;

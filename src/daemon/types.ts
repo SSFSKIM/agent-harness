@@ -44,7 +44,7 @@ export interface DaemonOptions {
 }
 
 // NDJSON op protocol (one request per client connection).
-const spawnOp = z.object({ op: z.literal("spawn"), model: z.string().optional(), restart: z.enum(["no", "on-failure"]).optional(), resume: z.string().optional() });
+const spawnOp = z.object({ op: z.literal("spawn"), model: z.string().optional(), restart: z.enum(["no", "on-failure"]).optional(), resume: z.string().optional(), permissionMode: z.string().optional() });
 const submitOp = z.object({ op: z.literal("submit"), id: z.string(), prompt: z.string() });
 const listOp = z.object({ op: z.literal("list") });
 const stopOp = z.object({ op: z.literal("stop"), id: z.string() });
@@ -62,6 +62,13 @@ const applyFlagSettingsOp = z.object({ op: z.literal("apply_flag_settings"), id:
 const renameSessionOp = z.object({ op: z.literal("rename"), id: z.string(), title: z.string(), cwd: z.string().optional() });
 const tagSessionOp = z.object({ op: z.literal("tag"), id: z.string(), tag: z.string().nullable(), cwd: z.string().optional() });
 const deleteSessionOp = z.object({ op: z.literal("delete"), id: z.string(), cwd: z.string().optional() });
+const permissionDecision = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("allow_once") }),
+  z.object({ kind: z.literal("allow_always") }),
+  z.object({ kind: z.literal("deny") }),
+]);
+const pendingPermissionsOp = z.object({ op: z.literal("pending_permissions") });
+const permissionResponseOp = z.object({ op: z.literal("permission_response"), toolUseID: z.string(), decision: permissionDecision });
 
-export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp, forkOp, usageOp, initOp, applyFlagSettingsOp, renameSessionOp, tagSessionOp, deleteSessionOp]);
+export const daemonOp = z.discriminatedUnion("op", [spawnOp, submitOp, listOp, stopOp, shutdownOp, controlOp, startProactiveOp, stopProactiveOp, sessionsOp, messagesOp, compactOp, forkOp, usageOp, initOp, applyFlagSettingsOp, renameSessionOp, tagSessionOp, deleteSessionOp, pendingPermissionsOp, permissionResponseOp]);
 export type DaemonOp = z.infer<typeof daemonOp>;
