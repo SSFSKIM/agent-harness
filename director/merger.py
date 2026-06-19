@@ -336,18 +336,41 @@ def process_request(req: dict, *, driver: Callable = run.drive,
                     decide: Callable = autonomous_decide,
                     require_resolved_threads: bool = DEFAULT_REQUIRE_RESOLVED_THREADS,
                     sh=subprocess.run, finalize: Callable = _finalize_merge,
+                    prepared: dict | None = None,
                     **drive_kwargs) -> dict:
     """Run ONE merge request: capture the PR's intended diff, drive the land lane to PREPARE
     the PR, then (on a prepared `done`) run the code gate + code-issued merge (D1). A driver
     crash becomes a `failed` result (one bad PR never sinks the drain). Non-`done` land-lane
     outcomes classify/escalate exactly as before; a prepared `done` becomes
-    merged/escalated/deferred per `finalize` (the gate; injectable for tests)."""
+    merged/escalated/deferred per `finalize` (the gate; injectable for tests).
+
+    `prepared` is the merger's cross-poll prepared-cache (owned by `run_loop`; None for a
+    single-pass / `--once` drain = no cross-poll memory). It maps a previously-prepared-but-
+    CI-pending request_id to the ORIGINAL pre-rebase `intended` captured on its first pass.
+    When this request is cached, the land lane is NOT re-driven (the expensive part) — only the
+    code gate re-runs, against that stored original (re-capturing `intended` now would read the
+    already-rebased branch and blind the tripwire). The entry is dropped on a terminal (non-
+    deferred) result and planted on a fresh prepared+deferred result so the next poll is
+    gate-only."""
     base = {"request_id": req["request_id"], "ticket_id": req.get("ticket_id")}
+    rid = req["request_id"]
     payload = req.get("payload") or {}
     pr = payload.get("pr")
-    # Capture INTENDED (the PR's per-file change) BEFORE the land lane rebases (R1). Skipped
-    # when there is no PR or the Director already approved the drop (override). `sh` is the
-    # injectable subprocess runner (tests fake it; merger is module `run`, hence the name).
+    # Gate-only retry: a prior poll already PREPARED this PR (rebased / gate-green / pushed) but
+    # the hygiene gate deferred on CI-pending. Skip the land-lane re-drive (the cost row 94 flags)
+    # and re-run the code gate against the ORIGINAL pre-rebase `intended` — re-capturing it now
+    # would read the rebased branch (== actual) and blind the preservation tripwire. A terminal
+    # (non-deferred) result forgets the cache entry; a still-deferred one keeps it for next poll.
+    if prepared is not None and rid in prepared:
+        fin = finalize(req, intended=prepared[rid],
+                       require_resolved_threads=require_resolved_threads, run=sh)
+        if fin["result"] != "deferred":
+            prepared.pop(rid, None)
+        _log_evidence_audit(req, fin)
+        return {**base, "disposition": {"kind": "prepared", "gate_only": True}, **fin}
+    # First encounter. Capture INTENDED (the PR's per-file change) BEFORE the land lane rebases
+    # (R1). Skipped when there is no PR or the Director already approved the drop (override). `sh`
+    # is the injectable subprocess runner (tests fake it; merger is module `run`, hence the name).
     intended = mp.files_from_pr(pr, run=sh) if (pr and not payload.get("preservation_override")) else None
     ticket = land_ticket_from_request(req)
     try:
@@ -358,6 +381,10 @@ def process_request(req: dict, *, driver: Callable = run.drive,
         return {**base, "result": classify(disp), "disposition": disp}
     fin = finalize(req, intended=intended,
                    require_resolved_threads=require_resolved_threads, run=sh)
+    # Plant the prepared-cache entry so a CI-pending defer's NEXT poll runs the code gate only,
+    # not a full land-lane re-drive. Stores the original pre-rebase `intended` (None on override).
+    if prepared is not None and fin["result"] == "deferred":
+        prepared[rid] = intended
     _log_evidence_audit(req, fin)
     return {**base, "disposition": disp, **fin}
 
@@ -365,7 +392,8 @@ def process_request(req: dict, *, driver: Callable = run.drive,
 def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonomous_decide,
           max_merges: int = DEFAULT_MAX_MERGES,
           require_resolved_threads: bool = DEFAULT_REQUIRE_RESOLVED_THREADS,
-          sh=subprocess.run, finalize: Callable = _finalize_merge, **drive_kwargs) -> list[dict]:
+          sh=subprocess.run, finalize: Callable = _finalize_merge,
+          prepared: dict | None = None, **drive_kwargs) -> list[dict]:
     """Drain the merge queue SERIALLY: pop the oldest pending PR, run it through the land
     lane + code gate, mark it consumed (or DEFER it), repeat — one PR in flight at a time
     (R3). Returns a per-PR result list ({request_id, ticket_id, result: merged|escalated|
@@ -376,11 +404,22 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
     (a per-pass `deferred` set), so other queued PRs still drain (no head-of-line block)
     and the merger's poll loop retries it later (no busy-spin). The loop terminates because
     every non-deferred request is consumed and deferred ones are skipped; `max_merges`
-    bounds it. `drive_kwargs` pass straight through to the land lane."""
+    bounds it. `drive_kwargs` pass straight through to the land lane.
+
+    `prepared` is `run_loop`'s cross-poll prepared-cache (None = single-pass, no cross-poll
+    memory == pre-fix behavior). It lets a previously-prepared, CI-pending PR re-run the code
+    gate ONLY on a later poll instead of re-driving the full land lane (`process_request`). At
+    entry, stale cache entries (a cached request_id no longer pending — Director abandoned or
+    answered it out-of-band) are GC'd, so the cache stays bounded by the count of concurrently-
+    deferred PRs (no unbounded growth)."""
     results: list[dict] = []
     processed = 0
     deferred: set[str] = set()
     with _single_consumer_lock(base):  # enforce single PR-merger (R4) before any drive
+        if prepared is not None:  # GC orphans: a cached PR no longer pending was resolved elsewhere
+            live = {r["request_id"] for r in pending_merges(base=base)}
+            for rid in [k for k in prepared if k not in live]:
+                prepared.pop(rid, None)
         while processed < max_merges:
             pend = [r for r in pending_merges(base=base)
                     if r["request_id"] not in deferred]
@@ -389,7 +428,7 @@ def drain(*, base=None, driver: Callable = run.drive, decide: Callable = autonom
             req = pend[0]  # FIFO — oldest queued PR first
             result = process_request(req, driver=driver, decide=decide,
                                      require_resolved_threads=require_resolved_threads,
-                                     sh=sh, finalize=finalize, **drive_kwargs)
+                                     sh=sh, finalize=finalize, prepared=prepared, **drive_kwargs)
             if result["result"] == "deferred":
                 # CI still running: leave PENDING (do not consume/surface), skip this pass.
                 deferred.add(req["request_id"])
@@ -416,11 +455,19 @@ def run_loop(*, base=None, command, poll: float = 1.0, once: bool = False,
     event-woken process — D-47/R7). `once` runs a single drain pass and returns (cron /
     tests). Otherwise it polls the queue and drains whenever a `mergeRequest` is pending,
     sleeping `poll` between checks — woken by work, never a busy-spin (a `deferred`
-    CI-pending PR is retried on the next poll). `max_merges` bounds one drain pass. Returns 0."""
+    CI-pending PR is retried on the next poll). `max_merges` bounds one drain pass.
+
+    A cross-poll prepared-cache (`prepared`) lives for the process lifetime: a PR the land lane
+    already prepared but whose CI is still pending is re-checked by the code gate ALONE on the
+    next poll — no full land-lane re-drive (row 94). A restart cold-starts the cache (the PR
+    re-prepares once, the pre-fix behavior), so it is a strict optimization with no regression;
+    `--once` owns no cross-poll memory by definition (a fresh process per drain). Returns 0."""
+    prepared: dict = {}
     while True:
         if pending_merges(base=base):  # only take the flock + drive when there is work
             drain(base=base, command=command, decide=decide, max_merges=max_merges,
-                  require_resolved_threads=require_resolved_threads, **drive_kwargs)
+                  require_resolved_threads=require_resolved_threads, prepared=prepared,
+                  **drive_kwargs)
         if once:
             return 0
         time.sleep(poll)

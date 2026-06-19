@@ -776,6 +776,141 @@ class GateIntegrationTest(unittest.TestCase):
         self.assertNotIn("from director import board", src)
 
 
+def _ci_sh(ci, *, files=None, threads_resolved=True, merge_rc=0):
+    """Fake gh whose CI rollup flips with the mutable `ci['green']` flag (pending→green
+    between polls), so a deferred PR can be retried green on a later drain. `files` is the
+    per-file diff every `gh pr view --json files` call reports (pre==post → tripwire passes)."""
+    files = files if files is not None else {"a.py": (5, 0)}
+
+    def sh(argv, **kw):
+        if "graphql" in argv:
+            nodes = [] if threads_resolved else [{"isResolved": False}]
+            return _Proc(0, _json.dumps({"data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": nodes}}}}}))
+        if "merge" in argv:
+            return _Proc(merge_rc)
+        if "statusCheckRollup" in argv:
+            st = [{"state": "SUCCESS"}] if ci["green"] else [{"status": "IN_PROGRESS"}]
+            return _Proc(0, _json.dumps({"statusCheckRollup": st}))
+        if "files" in argv:
+            return _Proc(0, _files_json(files))
+        return _Proc(1)
+    return sh
+
+
+class GateOnlyRetryTest(unittest.TestCase):
+    """Cross-poll prepared-cache: a deferred (CI-pending) PR re-runs the code gate ONLY on a
+    later poll — no full land-lane re-drive (tech-debt row 94)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def _reviews(self):
+        return [r for r in dq.read_pending(base=self.base) if r["kind"] == "mergeReview"]
+
+    def test_deferred_then_green_runs_gate_only_without_redrive(self):
+        # The headline behavior: prepare once (drive), defer on CI-pending, then land via the
+        # gate alone on the next poll. The land lane must NOT be re-driven.
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        ci = {"green": False}
+        drives = {"n": 0}
+
+        def driver(*a, **k):
+            drives["n"] += 1
+            return _DONE
+
+        prepared: dict = {}
+        r1 = merger.drain(base=self.base, driver=driver, sh=_ci_sh(ci), prepared=prepared)
+        self.assertEqual(r1[0]["result"], "deferred")
+        self.assertEqual(drives["n"], 1)                       # driven once (the preparation)
+        self.assertIn("merge|T1|a1", prepared)                 # prepared-state cached
+        self.assertEqual(len(merger.pending_merges(base=self.base)), 1)  # left pending
+
+        ci["green"] = True                                     # CI finished between polls
+        r2 = merger.drain(base=self.base, driver=driver, sh=_ci_sh(ci), prepared=prepared)
+        self.assertEqual(r2[0]["result"], "merged")
+        self.assertEqual(drives["n"], 1)                       # NOT re-driven — the whole point
+        self.assertEqual(r2[0]["disposition"], {"kind": "prepared", "gate_only": True})
+        self.assertNotIn("merge|T1|a1", prepared)              # cache cleared on terminal
+        self.assertEqual(merger.pending_merges(base=self.base), [])  # consumed
+        self.assertEqual(self._reviews(), [])                  # clean land, nothing surfaced
+
+    def test_gate_only_retry_reuses_original_pre_rebase_intended(self):
+        # The tripwire compares the ORIGINAL pre-rebase intended vs the current actual.
+        # Re-capturing intended on the retry would read the already-rebased branch (== actual)
+        # and blind the tripwire. Prove the retry reuses the stored original and does NOT
+        # re-capture (a finalize spy records each intended; an sh counter proves one capture).
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        files_calls = {"n": 0}
+
+        def sh(argv, **kw):
+            if "files" in argv:
+                files_calls["n"] += 1
+                return _Proc(0, _files_json({"a.py": (5, 0)}))  # the pre-rebase capture
+            return _Proc(1)
+
+        seen = []
+
+        def fin(req, *, intended, require_resolved_threads, run):
+            seen.append(intended)
+            return {"result": "deferred" if len(seen) == 1 else "merged", "gate": {}}
+
+        prepared: dict = {}
+        merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh,
+                     finalize=fin, prepared=prepared)
+        merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh,
+                     finalize=fin, prepared=prepared)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(seen[0], {"a.py": (5, 0)})            # captured pre-rebase
+        self.assertEqual(seen[1], seen[0])                     # retry reused the ORIGINAL
+        self.assertEqual(files_calls["n"], 1)                  # captured ONCE — no re-capture
+
+    def test_override_deferred_caches_none_and_retry_merges(self):
+        # A preservation_override PR skips the tripwire → caches None as its "intended"; the
+        # gate-only retry passes None to finalize (override branch ignores it) and lands.
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5", workspace_path="/ws",
+                                preservation_override=True, base=self.base)
+        ci = {"green": False}
+        prepared: dict = {}
+        r1 = merger.drain(base=self.base, driver=lambda *a, **k: _DONE,
+                          sh=_ci_sh(ci), prepared=prepared)
+        self.assertEqual(r1[0]["result"], "deferred")
+        self.assertIn("merge|T1|a1", prepared)
+        self.assertIsNone(prepared["merge|T1|a1"])             # override → no intended cached
+
+        ci["green"] = True
+        r2 = merger.drain(base=self.base, driver=lambda *a, **k: _DONE,
+                          sh=_ci_sh(ci), prepared=prepared)
+        self.assertEqual(r2[0]["result"], "merged")            # gate-only retry, None intended
+
+    def test_stale_cache_entry_is_gced(self):
+        # A cached PR the Director resolved out-of-band (no longer pending) is pruned at drain
+        # entry, so the cache cannot grow unbounded across the daemon's lifetime.
+        prepared = {"merge|GONE|a1": {"a.py": (5, 0)}}
+        merger.drain(base=self.base, driver=lambda *a, **k: _DONE,
+                     sh=_gate_sh(), prepared=prepared)
+        self.assertNotIn("merge|GONE|a1", prepared)
+
+    def test_without_cache_deferred_pr_redrives_each_pass(self):
+        # Backward-compat: with no cross-poll cache (prepared=None — the default / --once),
+        # a deferred PR re-drives the full land lane every pass (the pre-fix behavior).
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        ci = {"green": False}
+        drives = {"n": 0}
+
+        def driver(*a, **k):
+            drives["n"] += 1
+            return _DONE
+
+        merger.drain(base=self.base, driver=driver, sh=_ci_sh(ci))   # prepared defaults None
+        merger.drain(base=self.base, driver=driver, sh=_ci_sh(ci))
+        self.assertEqual(drives["n"], 2)                       # re-driven each pass (no cache)
+
+
 class LandSkillPreparesTest(unittest.TestCase):
     """R2: the land skill prepares (does not merge) and carries the preservation check."""
 
