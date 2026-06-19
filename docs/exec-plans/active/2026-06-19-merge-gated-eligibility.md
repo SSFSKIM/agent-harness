@@ -155,7 +155,12 @@ this is the execution shape.
   `run_until_drained` (top of loop) and `run_forever` (inside `if free > 0`). Tests:
   `MergeOutcomeTest` (6) + `MergeReconcileTest` (7: landed/pending/abandoned/idempotent/
   unconfigured-noop/fetch-fail-soft/per-ticket-fail-soft). Gate GREEN (547).
-- [ ] M4 — docs + behavioral E2E + completion gate (next).
+- [x] (2026-06-19) M4 — `docs/DIRECTOR.md` §4 (terminal: PR-done parks in `merging`, sweep
+  finalizes →Done) + §7 (happy-path merging→Done note) updated. Behavioral E2E
+  `MergeGatedEligibilityE2ETest::test_child_blocked_until_parent_pr_lands` drives the real
+  `run_until_drained` loop: run 1 → P opens a PR → parks `merging` → C does NOT dispatch
+  (stopped_reason "stuck"); simulate the merger land (merged answer) → run 2 → sweep finalizes
+  P→Done → C dispatches. Gate GREEN (548). Entering completion gate (self-review + reviews).
 
 ## Surprises & discoveries
 - 2026-06-19: `DaemonLoopTest::test_bounded_claim_and_top_up_as_slot_frees` is **flaky** under

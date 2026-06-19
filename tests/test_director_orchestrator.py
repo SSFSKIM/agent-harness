@@ -1654,5 +1654,55 @@ class MergeReconcileTest(unittest.TestCase):
         self.assertEqual(self.board._issues["u2"]["state_id"], "st_done")  # u2 unaffected
 
 
+class MergeGatedEligibilityE2ETest(unittest.TestCase):
+    """Behavioral E2E (merge-gated-eligibility acceptance 6): a child does NOT dispatch
+    until the parent's PR has LANDED on main — only the merge sweep finalizing the parent
+    to Done unblocks it. Drives the real run_until_drained loop (poll → sweep → reconcile →
+    eligibility); the merger is simulated by writing its merged answer to the queue."""
+
+    STATES = {"Todo": {"id": "st_todo", "type": "unstarted"},
+              "In Progress": {"id": "st_prog", "type": "started"},
+              "Done": {"id": "st_done", "type": "completed"},
+              "Merging": {"id": "st_merge", "type": "started"}}
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+
+    def _pr_done_dispatch(self, order, pr_ids):
+        def fake(ticket, **kw):
+            order.append(ticket["id"])
+            if ticket["id"] in pr_ids:  # opens a PR → parks in merging
+                return {"kind": "terminal", "turns": 1, "turn_id": "t",
+                        "outcome": {"status": "done", "reason": "ok",
+                                    "pr_url": f"http://pr/{ticket['id']}",
+                                    "pr_branch": f"feat/{ticket['id']}"}}
+            return _done()
+        return fake
+
+    def test_child_blocked_until_parent_pr_lands(self):
+        board = orch.MockBoard([_issue("p"), _issue("c", ["p"])], states=self.STATES)
+        states = orch.resolve_states(board, "T", {"merging": "Merging"})
+        order = []
+        # Run 1: P dispatches + opens a PR → parks in `merging`; C stays blocked → stuck.
+        with mock.patch("director.orchestrator.dispatch", self._pr_done_dispatch(order, {"p"})):
+            out1 = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                          queue_base=self.qbase, workspace_root=self.tmp / "ws")
+        self.assertEqual(order, ["p"])                      # C did NOT dispatch
+        self.assertEqual(board.state_name("p"), "Merging")  # parent parked, NOT Done
+        self.assertEqual(out1["stopped_reason"], "stuck")   # C blocked by a merging parent
+
+        # Simulate the serialized merger landing P's PR (consume the request + merged answer).
+        dq.write_answer({"request_id": "merge|p|a1", "merge_result": "merged"}, base=self.qbase)
+
+        # Run 2: the sweep finalizes P→Done at the top of the pass → C becomes eligible NOW.
+        with mock.patch("director.orchestrator.dispatch", self._pr_done_dispatch(order, {"p"})):
+            out2 = orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                          queue_base=self.qbase, workspace_root=self.tmp / "ws")
+        self.assertIn("c", order)                           # C dispatched only after the land
+        self.assertEqual(board.state_name("p"), "Done")     # parent finalized by the sweep
+        self.assertEqual(out2["stopped_reason"], "drained")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -113,7 +113,15 @@ Read it (and the `--request` join), then answer **free-form** with a disposition
 - **Terminal — `{"kind": "terminal", "outcome": {"status": "done"|"blocked", "reason":
   "...", "spawned_ticket_ids": [...]}}`.** Only when work is genuinely finished/blocked
   (usually the worker already sent `report_outcome`; confirm it). The orchestrator
-  executes the board transition here and ONLY here.
+  executes the board transition here — **with one merge-gated wrinkle:** a `done` that
+  opened a **PR** does not go straight to `Done`. When a `merging` state is configured
+  (merge-gated-eligibility), the orchestrator parks the ticket in **`merging`** (work done,
+  integration pending) and finalizes it to `Done` ONLY when the serialized merger actually
+  **lands** the PR — its `merging`→`Done` sweep runs each tick (still orchestrator-owned
+  board writes; the merger stays board-free). So a child `blocked_by` this ticket waits for
+  the parent's PR to be **on `main`**, never just "done", and never builds on a stale base.
+  A `done` with **no** PR (planning/research/spec) reaches `Done` immediately. With no
+  `merging` state configured, `done` → `Done` directly (today's behavior).
 - **Escalate — `{"kind": "escalate", "reason": "..."}`.** A real product/taste fork —
   you must not choose the direction yourself. Surfaces to the human; ticket stays visible.
 
@@ -178,6 +186,13 @@ not you (R7/R8). The merger lands ready PRs one at a time (rebase → integratio
 squash-merge). It is a distinct role on purpose: it owns the *integration boundary*,
 you own *execution oversight*. But it has **no line to the human** — when a PR cannot
 cleanly land, it escalates **to you**, the single human surface (R6).
+
+On the **happy path** (merge-gated-eligibility), a PR-bearing `done` ticket sits in the
+`merging` state until the merger lands it; the orchestrator's merge sweep then moves it to
+`Done` — which is what unblocks any child that depends on it. The merger never writes the
+board; the queue carries the land signal (`merger.merge_outcome`) and the orchestrator does
+the `merging`→`Done` write. So "nothing happened on the board" while a PR is `merging` is
+expected — the work is done, the integration is pending.
 
 Two things can reach you from a merge:
 
