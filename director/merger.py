@@ -119,6 +119,38 @@ def pending_merges(base=None) -> list[dict]:
     return [r for r in dq.read_pending(base=base) if r.get("kind") == MERGE_REQUEST_KIND]
 
 
+# A ticket's merge runs through at most `max_attempts` (config default 3) attempts before
+# the Director abandons; 20 is an ample belt-and-suspenders scan bound (merge-gated-eligibility).
+_MERGE_ATTEMPT_SCAN = 20
+
+
+def merge_outcome(ticket_id, *, base=None) -> str:
+    """Where a ticket's PR-merge stands, read from the queue (merge-gated-eligibility R3) —
+    the signal the orchestrator's merge sweep uses to finalize `merging`→`done` WITHOUT the
+    merger ever writing the board (it stays board-free; the queue is the hand-off).
+
+      - "landed"     — no `merge|<tid>|*` is still pending AND the latest answered attempt
+                       was `merge_result == "merged"` (the PR is on main).
+      - "pending"    — a `merge|<tid>|aN` is still queued (in flight / awaiting the merger).
+      - "unresolved" — escalated / abandoned / failed with no successful land and nothing
+                       pending; also the (shouldn't-happen) no-record case.
+
+    Reads `dq.read_pending` (in-flight) + `dq.read_answer("merge|<tid>|aN")` across attempts
+    (a requeue bumps the attempt — `_consume` writes `merge_result` on each). The
+    highest-numbered answered attempt is authoritative."""
+    for r in dq.read_pending(base=base):
+        if r.get("kind") == MERGE_REQUEST_KIND and r.get("ticket_id") == ticket_id:
+            return "pending"
+    latest = None
+    for n in range(1, _MERGE_ATTEMPT_SCAN + 1):
+        ans = dq.read_answer(f"merge|{ticket_id}|a{n}", base=base)
+        if ans is not None:
+            latest = ans  # keep the highest-attempt answer
+    if latest is None:
+        return "unresolved"
+    return "landed" if latest.get("merge_result") == "merged" else "unresolved"
+
+
 @contextlib.contextmanager
 def _single_consumer_lock(base):
     """Enforce R4's *single* PR-merger across processes (completion-gate review fix).

@@ -619,6 +619,11 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
             break
         passes += 1
         status.wave(passes)
+        # Merge-gated eligibility (R3): finalize any merging→done BEFORE the poll, so a
+        # parent whose PR landed since the last pass clears its children's blocker on THIS
+        # eligibility computation (no-op when `merging` is unconfigured).
+        _reconcile_merges(board, team=team, states=states,
+                          queue_base=wave_kwargs.get("queue_base"))
         try:
             ready = board.list_ready_issues(team, states["ready"])
         except Exception as exc:  # a transient poll failure ends the run cleanly, not a crash
@@ -747,6 +752,48 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
               file=sys.stderr)
 
 
+def _reconcile_merges(board, *, team: str, states: dict, queue_base) -> None:
+    """Finalize `merging`→`done` once a parked PR has actually LANDED
+    (merge-gated-eligibility R3). `reconcile` (R2) parks a PR-bearing `done` ticket in the
+    optional `merging` state; this sweep — run once per tick (`run_forever`) and once per
+    pass (`run_until_drained`), BEFORE the board poll — reads the `merging` tickets and moves
+    each whose merge landed to `done`, clearing the `blocked_by` edge its children wait on
+    (so eligibility, orphan-recovery, active-run reconciliation all stay pure board reads,
+    unchanged). A still-pending or escalated/abandoned merge leaves the ticket in `merging`
+    (R5) — a parent whose PR never lands keeps its children blocked, never building on a
+    stale `main`.
+
+    Board writes stay HERE (the orchestrator), preserving the "orchestrator owns board
+    writes" principle — the merger never writes the board; it only records the merge outcome
+    in the queue (`merger.merge_outcome` reads it). No-op when `merging` is unconfigured.
+
+    Fail-soft (Symphony §8.6): a `fetch_issues_by_states`/queue error skips the whole sweep
+    (logged), and a per-ticket error skips that ticket — never crashes the tick loop (mirrors
+    `_startup_recovery`'s `*_skipped` discipline)."""
+    merging_id = states.get("merging")
+    if not merging_id:
+        return
+    try:
+        merging = board.fetch_issues_by_states(team, [merging_id])
+    except Exception as exc:
+        print(json.dumps({"daemon": "merge_reconcile_skipped", "error": str(exc)}),
+              file=sys.stderr)
+        return
+    for ticket in merging:
+        tid = ticket["id"]
+        try:
+            if merger.merge_outcome(tid, base=queue_base) != "landed":
+                continue  # pending / escalated / abandoned → stays merging (R5)
+            if not board.update_issue_state(tid, states["done"]):
+                print(json.dumps({"daemon": "merge_finalize_failed", "ticket": tid}),
+                      file=sys.stderr)
+                continue
+            board.comment_issue(tid, "🔀 PR landed — merged to main (eligibility unblocked)")
+        except Exception as exc:
+            print(json.dumps({"daemon": "merge_finalize_skipped", "ticket": tid,
+                              "error": str(exc)}), file=sys.stderr)
+
+
 def run_forever(board, command: list[str], *, team: str, states: dict,
                 done_types=("completed",), concurrency: int = 3, queue_base=None,
                 workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
@@ -845,6 +892,11 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 free = concurrency - len(state.futures) - len(pending_retry)
                 blocked: list = []
                 if free > 0:
+                    # Merge-gated eligibility (R3): finalize merging→done BEFORE this tick's
+                    # poll, so a parent whose PR just landed clears its children's blocker on
+                    # the eligibility computation below (no-op when `merging` unconfigured).
+                    _reconcile_merges(board, team=team, states=states,
+                                      queue_base=state.queue_base)
                     # CLAIM RE-ADMISSION (D, D-79): a claim that failed is excluded only
                     # until its backoff elapses — re-admit due ones (transient board hiccup
                     # recovers; a permanent failure just retries at most every `cap`).

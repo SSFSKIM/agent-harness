@@ -1571,5 +1571,88 @@ class DaemonBackoffTest(unittest.TestCase):
             th.join(timeout=2.0)
 
 
+class MergeReconcileTest(unittest.TestCase):
+    """merge-gated-eligibility R3/R5: _reconcile_merges finalizes merging→done when a
+    parked PR has landed, leaving pending/escalated merges in merging. board writes stay
+    in the orchestrator; the merger stays board-free (we drive it via the queue)."""
+
+    STATES = {"Todo": {"id": "st_todo", "type": "unstarted"},
+              "In Progress": {"id": "st_prog", "type": "started"},
+              "Done": {"id": "st_done", "type": "completed"},
+              "Merging": {"id": "st_merge", "type": "started"}}
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+        # one ticket already parked in `merging` (its worker reported done with a PR)
+        self.board = orch.MockBoard([{"id": "u1", "identifier": "D-1", "title": "t",
+                                      "description": "d", "prompt": "p", "state_id": "st_merge"}],
+                                    states=self.STATES)
+        self.states = orch.resolve_states(self.board, "T", {"merging": "Merging"})
+
+    def _sweep(self):
+        orch._reconcile_merges(self.board, team="T", states=self.states, queue_base=self.qbase)
+
+    def _answer(self, tid, attempt, result):
+        dq.write_answer({"request_id": f"merge|{tid}|a{attempt}", "merge_result": result},
+                        base=self.qbase)
+
+    def test_landed_finalizes_to_done(self):
+        dq.append_merge_request("u1", pr="p", attempt=1, base=self.qbase)
+        self._answer("u1", 1, "merged")
+        self._sweep()
+        self.assertEqual(self.board._issues["u1"]["state_id"], "st_done")
+        self.assertIn("st_done", self.board.transitions["u1"])
+
+    def test_pending_merge_stays_merging(self):
+        dq.append_merge_request("u1", pr="p", attempt=1, base=self.qbase)  # no answer → pending
+        self._sweep()
+        self.assertEqual(self.board._issues["u1"]["state_id"], "st_merge")
+        self.assertNotIn("u1", self.board.transitions)  # no board write
+
+    def test_abandoned_merge_stays_merging(self):
+        dq.append_merge_request("u1", pr="p", attempt=1, base=self.qbase)
+        self._answer("u1", 1, "escalated")  # land lane gave up; Director abandoned
+        self._sweep()
+        self.assertEqual(self.board._issues["u1"]["state_id"], "st_merge")  # children stay blocked
+
+    def test_idempotent_double_sweep(self):
+        dq.append_merge_request("u1", pr="p", attempt=1, base=self.qbase)
+        self._answer("u1", 1, "merged")
+        self._sweep()
+        self._sweep()  # u1 is now `done`, no longer fetched as `merging` → no second write
+        self.assertEqual(self.board.transitions["u1"].count("st_done"), 1)
+
+    def test_unconfigured_merging_is_noop(self):
+        # no `merging` state → the sweep never reads the board (pure inert)
+        states = orch.resolve_states(orch.MockBoard.demo(), "T")  # merging=None
+        called = []
+        board = orch.MockBoard.demo()
+        board.fetch_issues_by_states = lambda *a, **k: called.append(1) or []
+        orch._reconcile_merges(board, team="T", states=states, queue_base=self.qbase)
+        self.assertEqual(called, [])  # short-circuited before any board read
+
+    def test_fetch_error_is_fail_soft(self):
+        def boom(*a, **k):
+            raise RuntimeError("board down")
+        self.board.fetch_issues_by_states = boom
+        self._sweep()  # must not raise — logged + skipped (§8.6)
+
+    def test_per_ticket_error_skips_only_that_ticket(self):
+        # u1 landed but its board write raises; u2 landed cleanly → u2 still finalizes.
+        self.board._issues["u2"] = {"id": "u2", "identifier": "D-2", "state_id": "st_merge"}
+        for t in ("u1", "u2"):
+            dq.append_merge_request(t, pr="p", attempt=1, base=self.qbase)
+            self._answer(t, 1, "merged")
+        orig = self.board.update_issue_state
+        def flaky(tid, sid):
+            if tid == "u1":
+                raise RuntimeError("write failed")
+            return orig(tid, sid)
+        self.board.update_issue_state = flaky
+        self._sweep()
+        self.assertEqual(self.board._issues["u2"]["state_id"], "st_done")  # u2 unaffected
+
+
 if __name__ == "__main__":
     unittest.main()

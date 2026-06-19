@@ -148,7 +148,14 @@ this is the execution shape.
   `test_done_with_pr_parks_in_merging_when_configured` + `test_no_pr_done_goes_to_done_even_
   when_merging_configured`; the existing unconfigured tests are the R7 byte-identical proof.
   Gate GREEN (534).
-- [ ] M3 — orchestrator merge-completion sweep (next).
+- [x] (2026-06-19) M3 — `merger.merge_outcome(tid)` (landed/pending/unresolved, reads
+  `read_pending` + `read_answer("merge|tid|aN")` across attempts, highest-attempt
+  authoritative) + `orchestrator._reconcile_merges` (fetch `merging` tickets → finalize
+  landed ones to `done`, fail-soft per ticket AND per sweep), wired before the poll in both
+  `run_until_drained` (top of loop) and `run_forever` (inside `if free > 0`). Tests:
+  `MergeOutcomeTest` (6) + `MergeReconcileTest` (7: landed/pending/abandoned/idempotent/
+  unconfigured-noop/fetch-fail-soft/per-ticket-fail-soft). Gate GREEN (547).
+- [ ] M4 — docs + behavioral E2E + completion gate (next).
 
 ## Surprises & discoveries
 - 2026-06-19: `DaemonLoopTest::test_bounded_claim_and_top_up_as_slot_frees` is **flaky** under
@@ -163,6 +170,12 @@ this is the execution shape.
   reusing one source of truth for "did this PR land".
 - 2026-06-19: the sweep writes `done` via the orchestrator's existing board handle (not the
   merger) — preserves the stated "orchestrator owns board writes" principle (spec D3).
+- 2026-06-19: DROPPED the speculative `status=None` param on `_reconcile_merges` the plan
+  sketched (the "+ status recent update" idea). There is no clean `StatusWriter` API to mutate
+  an existing `recent[]` row's `final_state`, and dashboard/merging surfacing is an explicit
+  spec non-goal — so the param would be dead weight (the same speculative-param trap a prior
+  code-quality review flagged on `run_hook`'s `env`). The board is the truth a `merging` ticket
+  reports; the sweep's job is the board write only.
 
 ## Feedback (from completion gate)
 

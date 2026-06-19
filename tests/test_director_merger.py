@@ -471,5 +471,52 @@ class EndToEndPipelineTest(unittest.TestCase):
         self.assertEqual(merger.pending_merges(base=self.base), [])
 
 
+class MergeOutcomeTest(unittest.TestCase):
+    """merge-gated-eligibility R3: merge_outcome reads a ticket's merge standing from the
+    queue (the signal the orchestrator's merge sweep uses to finalize merging→done — the
+    merger never writes the board)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.base = self.tmp / "q"
+
+    def _answer(self, ticket_id, attempt, result):
+        # mirror merger._consume: writing an answer for a request removes it from pending.
+        dq.write_answer({"request_id": f"merge|{ticket_id}|a{attempt}", "answered_by": "merger",
+                         "merge_result": result}, base=self.base)
+
+    def test_no_record_is_unresolved(self):
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "unresolved")
+
+    def test_pending_request_is_pending(self):
+        dq.append_merge_request("T1", pr="p", attempt=1, base=self.base)
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "pending")
+
+    def test_consumed_merged_is_landed(self):
+        dq.append_merge_request("T1", pr="p", attempt=1, base=self.base)
+        self._answer("T1", 1, "merged")               # merger landed + consumed
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "landed")
+
+    def test_consumed_escalated_is_unresolved(self):
+        dq.append_merge_request("T1", pr="p", attempt=1, base=self.base)
+        self._answer("T1", 1, "escalated")            # land lane gave up → abandon/human
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "unresolved")
+
+    def test_latest_attempt_wins_requeue_then_land(self):
+        # a1 escalated → Director requeued → a2 landed: the highest-attempt answer is authoritative.
+        dq.append_merge_request("T1", pr="p", attempt=1, base=self.base)
+        self._answer("T1", 1, "escalated")
+        dq.append_merge_request("T1", pr="p", attempt=2, guidance="rebase", base=self.base)
+        self._answer("T1", 2, "merged")
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "landed")
+
+    def test_pending_retry_outranks_a_prior_escalation(self):
+        # a1 escalated, a2 still in flight → pending (not yet landed, don't unblock children).
+        dq.append_merge_request("T1", pr="p", attempt=1, base=self.base)
+        self._answer("T1", 1, "escalated")
+        dq.append_merge_request("T1", pr="p", attempt=2, base=self.base)
+        self.assertEqual(merger.merge_outcome("T1", base=self.base), "pending")
+
+
 if __name__ == "__main__":
     unittest.main()
