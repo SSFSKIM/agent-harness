@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: 4f34d15d3f2a1d36297533695ba1bd31392f0c54
@@ -105,4 +105,49 @@ skeleton-readable; gate GREEN.
 
 ## Feedback (from completion gate)
 
+Reviews — all SATISFIED: spec-compliance + code-quality (Claude general-purpose
+carrying the rubric — went straight to Claude this round given last slice's Codex
+stall; CLAUDE.md fallback), review-arch + review-reliability (Claude personas).
+
+P2s fixed inline:
+- (reliability) `followups` tracker re-read wrapped in `try/except OSError` →
+  fail-soft, honoring the spec's own "no tracker → never raise" (R2/AC2);
+  regression test added. The one genuine spec-contract gap found.
+- (arch) dedup authored `supersedes` targets (`dict.fromkeys`); truncate the
+  Status cell in `followups`' text render (long "fixed (…)" notes).
+
+Promoted (core-belief 10, third recurrence): **RELIABILITY.md R15** — read-only
+corpus projections (`nav.py`) are total (per-page, per-edge, per-file-read,
+empty-set); consolidated + closed the three nav-totality tech-debt rows.
+
+P2s recorded in `tech-debt-tracker.md` (non-blocking): volatility-principle
+DESIGN rule (review-arch). Non-actionable/acknowledged: base_commit-vs-single-
+commit cosmetic (spec-compliance); `_tracker_rows` literal-`|` mis-split — standard
+markdown-table limitation, advisory parser, no live row triggers it (code-quality).
+
 ## Outcomes & retrospective
+
+Shipped ②+③ — the two depth layers on the charter-rooted map, by the volatility
+principle. **③ pivots:** KF v1.2 adds `supersedes`, KF's first *declared* edge
+(all other relationships stay inferred); `relations()` emits it (basis `declared`,
+winning over the inferred edge for that pair) and `roadmap`/`map` surface it inline.
+**② follow-ups:** `nav.py followups [<node>]` groups tech-debt rows by their source
+node, and `map` shows a sparse `[N follow-ups]` badge — rows stay behind the query,
+never flooding the overview.
+
+Behavioral check: ran (CLI surface) — declared `supersedes` → inline pivot;
+`followups` grouping + node filter; `map` badges; all fail-soft paths.
+
+Honest dogfood findings: (1) ③'s live pivot view is **empty** — the corpus has no
+genuine spec-level supersession (it refines, it doesn't replace); the mechanism is
+delivered + fixture-tested. (2) ② surfaced that 66/77 tracker rows predate the
+Source-link convention; only the 5 cleanly-identifiable knowledge-format-slice
+sources were backfilled. The unifying truth across this whole arc: **this project
+evolves by refinement, not replacement** — so the map's *progress* spine is rich and
+its *pivot* dimension is honestly sparse.
+
+Where the relationship-map vision now stands (the user's "하나의 큰 관계도"): ①
+charter-rooted spine ✅, ③ pivots inline (mechanism ✅, data sparse), ② follow-ups as
+a drill-down + badge ✅. Remaining: ④ a human-glance *visual* rendering — still a
+deliberate NON-GOAL (agent-facing text/JSON); revisit only if a human-facing picture
+is wanted. Bulk-backfilling historical tracker sources is doc-gardener work.
