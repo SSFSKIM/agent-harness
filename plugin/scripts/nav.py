@@ -392,8 +392,8 @@ def _emit_relations(edges, as_json):
 
 def _emit_tree(trees, as_json, forest):
     if as_json:
-        print(json.dumps(trees if forest else trees[0], indent=2,
-                         ensure_ascii=False))
+        out = trees if forest else (trees[0] if trees else None)
+        print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
         for i, tr in enumerate(trees):
             if i:

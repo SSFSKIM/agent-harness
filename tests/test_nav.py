@@ -201,7 +201,8 @@ def _typed_fixture(root):
           body="refines [s2](s2.md); governed by [plans](../PLANS.md)\n")
     _page(root / "docs/product-specs/s2.md",
           ["status: stable", "last_verified: 2026-06-19", "owner: h",
-           "type: product-spec", "description: spec two."])
+           "type: product-spec", "description: spec two."],
+          body="references [k1](../memory/knowledge/k1.md)\n")
     _page(root / "docs/design-docs/d1.md",
           ["status: stable", "last_verified: 2026-06-19", "owner: h",
            "type: design-doc", "description: a design doc."])
@@ -253,6 +254,16 @@ class TestNavRelations(unittest.TestCase):
                                  "memory/adr/a0.md"), "supersedes")
         self.assertEqual(self._r("memory/knowledge/k1.md",
                                  "design-docs/d1.md"), "grounded-in")
+        self.assertEqual(self._r("product-specs/s2.md",
+                                 "memory/knowledge/k1.md"), "references")
+
+    def test_inverse_covers_every_inferable_relation(self):
+        # guard: INVERSE must stay in lockstep with what _infer_rel can emit, so
+        # `tree --reverse` never silently falls back to a forward label
+        inferable = set(nav.EDGE_RULES.values()) | {
+            "supersedes", "governed-by", "references", "links"}
+        self.assertTrue(inferable <= set(nav.INVERSE),
+                        f"missing inverse for {inferable - set(nav.INVERSE)}")
 
     def test_missing_type_degrades_to_links(self):
         # source has no `type` and no dst-kind rule fires -> untyped
