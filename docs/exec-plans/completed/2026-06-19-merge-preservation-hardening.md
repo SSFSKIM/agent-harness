@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: harness
 base_commit: a401be7
@@ -361,6 +361,65 @@ P1s, now fixed:
 - P2 (deferred re-drive) + P2 (queue/director_min outside R6's enumeration) — already tracked /
   documented as defensible; no change.
 
-Re-review (clean spec-compliance verdict + code-quality) follows this gate re-run.
+**Round 4 (2026-06-19).** review-spec-compliance (Claude fallback) re-run → **SATISFIED**;
+review-code-quality (Claude fallback) → **SATISFIED** with 3 fix-forward P2s, all addressed
+now (trivial polish, no logic change → no re-review needed):
+- **P2 — override path lacked a "hygiene still enforced" test.** **Fixed:**
+  `test_override_still_runs_hygiene` (preservation_override=True + red check → escalated).
+- **P2 — `_log_evidence_audit` mislabeled an honest-failing worker as `sweep_evidence_verified`.**
+  **Fixed:** third label `sweep_evidence_consistent` for the not-claimed-clean case (the
+  load-bearing `misfire` bool was already correct).
+- **P2 — `_squash_merge(cwd=ws)` cwd unobvious for URL-addressed merge.** **Fixed:** comment
+  noting cwd is workspace-locality, not a correctness requirement (a stale ws fail-closes).
+
+**All verdicts SATISFIED** (spec-compliance, code-quality, review-arch, review-reliability).
+Remaining open P2s (tracked, fix-forward, none blocking): the deferred-PR cross-poll land-lane
+re-drive (tech-debt-tracker) and two arch proposed rules (cwd-independent merger gh addressing;
+misfire-scope rule) + reliability's proposed rule (irreversible-external-action idempotency
+guard — partially realized here via `pr_is_merged`).
 
 ## Outcomes & retrospective
+
+**Shipped.** The serialized merger now owns the irreversible squash-merge behind a code gate
+(D1): the land worker *prepares* a PR (rebase, fix CI, resolve threads — no self-merge), and
+`merger._finalize_merge` runs a **preservation tripwire** (R1: `gh pr view --json files`
+pre- vs post-rebase; a dropped/shrunk path → escalate, heuristic→judgment with a Director
+`preservation_override`) then a **hygiene gate** (R3: CI rollup green + zero unresolved review
+threads, tri-state green→land / failing→escalate / pending→defer; threads-resolved configurable)
+and only then issues `gh pr merge --squash` itself (idempotent — `pr_is_merged` guards a
+crash-retry). The PR-feedback-sweep result rides `report_outcome` evidence (R4) the merger audits
+(claim-vs-verified misfire log); backward-compatible (R5); merger stays board-free (R6). All
+R1–R6 + D1–D5 met; +~50 tests; full gate GREEN (609); `decider.py`/`eligible_tickets`/board-state
+ownership byte-unchanged; the local integration gate (`check.py`) unchanged as the independent
+second net.
+
+**What went to plan.** The five milestones landed in dependency order with the gate GREEN at
+each commit. The pure-core-plus-injectable-IO split (`preservation_delta`/`classify_checks` pure
++ `files_from_pr`/`pr_hygiene` gh-shelling) made the gate fully unit-testable; the injectable
+`finalize`/`sh` seams let drain-mechanics tests stay gh-free while the gate's behavior is proven
+directly. Fail-closed is uniform (every unreadable fact withholds).
+
+**What surprised us.** `gh pr diff` has no `--numstat`, so M2's numstat helpers were replaced in
+M4 by `gh pr view --json files` (cleaner, no base-ref); `gh pr view --json` also exposes no
+`reviewThreads` (→ `gh api graphql`). Lesson: confirm the external-tool interface during the PoC
+milestone, not after building helpers against an assumed one.
+
+**The completion gate did real work — four rounds.** codex spec-compliance caught the audit
+gap (R4/R5), the required-vs-all-checks spec imprecision, and the reviewThreads pagination hole;
+arch caught a DEFAULTS-aliasing drift and the deferred-re-drive; reliability caught the
+crash-before-consume stuck-ticket (→ the `pr_is_merged` idempotency guard); and the
+spec-compliance re-runs caught *four* stale "before merging" lines in the land skill across two
+sweeps (now guarded by a regression assertion). The gate's adversarial reads materially improved
+correctness — exactly its purpose.
+
+**Codex reliability note.** codex spec-compliance returned cleanly on the first round but
+truncated (no captured verdict) on two re-runs; per CLAUDE.md the spec-compliance + code-quality
+verdicts were taken from the Claude general-purpose fallback carrying the rubric. The dedicated
+`review-spec-compliance`/`review-code-quality` personas are not in this session's dispatchable
+registry (consistent with [[mid-session-agents-not-dispatchable]]).
+
+**Follow-ups (tracked, fix-forward).** The deferred-PR cross-poll land-lane re-drive (the one
+non-trivial open item — needs cross-poll prepared+intended state for a gate-only re-check) and
+three proposed doc-rules (cwd-independent merger gh addressing; misfire-scope; irreversible-
+external-action idempotency). None blocks; all in `docs/exec-plans/tech-debt-tracker.md` / the
+Feedback section above.

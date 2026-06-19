@@ -633,6 +633,17 @@ class FinalizeGateTest(unittest.TestCase):
             run=_gate_sh(intended_files={"a.py": (5, 0)}, actual_files={}))
         self.assertEqual(fin["result"], "merged")
 
+    def test_override_still_runs_hygiene(self):
+        # the override skips ONLY the preservation tripwire — the hygiene gate still applies,
+        # so a red check withholds even with preservation_override set.
+        fin = merger._finalize_merge(
+            _merge_req(preservation_override=True), intended={"a.py": (5, 0)},
+            require_resolved_threads=True,
+            run=_gate_sh(intended_files={"a.py": (5, 0)}, actual_files={},
+                         rollup=[{"state": "FAILURE"}]))
+        self.assertEqual(fin["result"], "escalated")
+        self.assertIn("hygiene", fin["gate_reason"])
+
     def test_fail_closed_when_intended_unreadable(self):
         fin = merger._finalize_merge(_merge_req(), intended=None,
                                      require_resolved_threads=True, run=_gate_sh())

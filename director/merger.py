@@ -241,6 +241,9 @@ def _squash_merge(pr: str | None, *, cwd: str | None = None, run=subprocess.run)
     if not pr:
         return False
     try:
+        # `gh pr merge <url>` addresses the PR by URL (cwd-independent); `cwd=ws` is
+        # workspace-locality, not a correctness requirement — and a stale/absent workspace
+        # raises here → caught → fail-closed (escalate), which is the safe direction.
         proc = run(["gh", "pr", "merge", pr, "--squash"], cwd=cwd,
                    capture_output=True, text=True)
     except Exception:
@@ -318,10 +321,15 @@ def _log_evidence_audit(req: dict, fin: dict) -> None:
         return
     claimed_clean = ev.get("checks_state") in (None, "green") and not ev.get("unresolved_threads")
     misfire = claimed_clean and result == "escalated"
-    print(json.dumps({"merger": "protocol_misfire" if misfire else "sweep_evidence_verified",
-                      "ticket": ticket, "claimed": ev, "verified_result": result,
-                      "gate_reason": fin.get("gate_reason"), "misfire": misfire}),
-          file=sys.stderr)
+    if misfire:
+        event = "protocol_misfire"            # worker claimed clean; the gate caught a problem
+    elif claimed_clean:
+        event = "sweep_evidence_verified"     # worker claimed clean; the gate agrees
+    else:
+        event = "sweep_evidence_consistent"   # worker honestly reported issues; gate recorded
+    print(json.dumps({"merger": event, "ticket": ticket, "claimed": ev,
+                      "verified_result": result, "gate_reason": fin.get("gate_reason"),
+                      "misfire": misfire}), file=sys.stderr)
 
 
 def process_request(req: dict, *, driver: Callable = run.drive,
