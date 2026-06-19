@@ -204,3 +204,14 @@ owner: harness
   active-run reconciliation stay pure board reads. No-PR tickets reach `done` immediately;
   abandon keeps the parent `merging` (children stay blocked, human owns the escape). Opt-in via
   configuring `merging`; merger stays board-free; R19 act-before-consume preserved.
+- [Merge-preservation hardening](2026-06-19-merge-preservation-hardening.md)
+  — the merger gains a preservation-first land precondition so a squash-merge cannot silently
+  drop/overwrite either side's work. gap #5 worker-protocol track ([ADR 0002](../memory/adr/0002-graduated-autonomy.md)/[0003](../memory/adr/0003-lights-out-director.md)):
+  the PR-feedback-sweep shipped as prose (slice-1 `_IMPL_TEMPLATE` R7) but nothing *verifies* it,
+  and the merger's only GREEN is the local integration gate. Spine (D1): code owns the irreversible
+  merge — the land worker *prepares* (rebase/fix-CI/resolve-threads), then merger CODE runs a
+  preservation tripwire (R1: merge-delta vs PR-delta; dropped hunk → escalate, heuristic→judgment)
+  + a hygiene gate (R3: CI green + unresolved-threads==0, tri-state green→land/failing→escalate/
+  pending→defer; threads-knob configurable) and only then squash-merges. Sweep result becomes
+  structured `report_outcome` evidence the merger audits (R4, claim-vs-verified misfire log).
+  Additive; merger stays board-free; `check.py`-on-rebased-main stays the independent second net.
