@@ -370,7 +370,10 @@ deferrals:
   (KF v1.1+): give links a relationship kind (`supersedes`, `refines`,
   `depends-on`) instead of untyped edges. Format-layer change, versioned per the
   `KNOWLEDGE_FORMAT.md` scheme; worth doing only if Phase-2 navigation shows the
-  untyped graph is too coarse.
+  untyped graph is too coarse. **Step 1 (inference-first, no format change) is now
+  specced**: [Derived hierarchy — inferred typed graph + `nav.py tree`](2026-06-19-nav-derived-hierarchy.md)
+  infers edge kinds from `(type, type, direction)` so declared keys are added later
+  only if a query needs a relationship inference cannot supply.
 - **Lint validation of the new keys** (from NG-7) — a future *governance*
   tightening: once the keys are proven in daily use, optionally promote some from
   permissive to checked (e.g. validate `type` against the vocabulary, verify a

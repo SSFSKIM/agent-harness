@@ -153,3 +153,11 @@ owner: harness
   (core-belief 5). 커밋 catalog/생성 index.md/graph view(viz.html) 모두 NON-GOAL — index.md 는
   curation 유지(NG-2 reframe), agent-소비 우선. 게이트 비차단(read-only, on-demand).
   포팅: 도구·스킬이 `plugin/` 에 있어 자동 동행 + AGENTS.md/템플릿 포인터(belief 13).
+- [Derived hierarchy — inferred typed graph + `nav.py tree`](2026-06-19-nav-derived-hierarchy.md)
+  — Phase 2 nav 의 후속(typed-link Step 1). 새 frontmatter 키 없이 `(src.type,
+  dst.type, 링크방향)` 에서 관계종류를 **추론**(`implements`/`refines`/`supersedes`/
+  `grounded-in`; 미매칭은 untyped `links` 로 graceful)하는 `relations()` + 디렉토리를
+  안 보고 frontmatter+링크만으로 **유도 계층(derived hierarchy)** 을 그리는 `nav.py
+  tree`(forward=의존, `--reverse`=의존받음, cycle-safe). 한 트리에 ≥2 디렉토리 페이지가
+  관계로 묶여 "구조 = 메타데이터의 projection(디렉토리 아님)" 을 눈으로 증명. read-only·
+  live·게이트 비차단. 선언적 typed 키(KF v1.1)·viz.html·파일 재배치는 NON-GOAL. draft.
