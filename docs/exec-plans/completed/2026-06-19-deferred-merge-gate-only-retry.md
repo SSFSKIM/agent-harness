@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-19
 owner: claude (inline, Opus)
 base_commit: 4c815d730de20883c0fb4da1b8c6185be77b5685
@@ -118,10 +118,42 @@ the first rebase (so the tripwire is not blinded). With no cross-poll state (def
   review_level standard. Creation-time self-review: no placeholders; Approach↔Goal↔Milestones
   agree (in-memory cache, gate-only retry, original-intended reuse); single-subsystem (merger);
   each requirement reads one way. Confirmed the queue is append-only (rules out C) by reading
-  `director/queue/__init__.py`.
+  `director/queue/__init__.py`. Gate GREEN at base (609). Commit 2ec194f.
+- [x] (2026-06-19) M1+M2 — gate-only retry path in `process_request` (cache check → finalize on
+  stored original → pop on terminal / plant on prepared+deferred), `drain` threads `prepared` +
+  GCs orphans at entry, `run_loop` owns one dict. 5 tests (GateOnlyRetryTest). Gate GREEN (614).
+  Commit be92601. (Folded M1+M2 into one commit — no commit lands new behavior untested.)
+- [x] (2026-06-19) M3 — merger module docstring + `drain`/`run_loop`/`process_request` docstrings
+  name the gate-only retry; tracker row 94 → fixed. DIRECTOR.md §7 unchanged (operator-invisible).
+  Gate GREEN (614). Commit 97a37a0.
+- [x] (2026-06-19) Completion gate — gate GREEN; behavioral check (below); self-review trimmed a
+  speculative `_ci_sh` helper param set (commit d81cbcf). Reviews: spec-compliance (codex)
+  SATISFIED, review-arch SATISFIED, review-reliability SATISFIED, code-quality (Claude fallback)
+  SATISFIED. Fixed two cheap/high-value code-quality P2s inline with one real-gate test (615
+  green). P2s + proposed doc-rules tracked.
+- Behavioral check: no live GitHub PR in the gate env (same constraint as the parent slice), so
+  behavior is proven by the mocked-gh/git unit tests — `test_deferred_then_green_runs_gate_only_
+  without_redrive` (defer → gate-only retry → merge, driver called once) and
+  `test_gate_only_retry_catches_a_drop_with_the_real_gate` (the real `_finalize_merge` tripwire
+  trips on a gate-only retry) are the behavioral acceptance. Live PR QA: N/A (no GitHub PR
+  fixture available in the gate environment).
 
 ## Surprises & discoveries
-- (pending build)
+- The fix is also a CORRECTNESS fix, not only efficiency (anticipated in the plan, confirmed by
+  review-reliability): pre-fix, each poll re-drove the land lane (re-rebase) AND re-captured
+  `intended` post-rebase, so `intended == actual` and the preservation tripwire could never trip
+  across a defer. Reusing the stored pre-rebase original restores a meaningful tripwire.
+- Subtlety surfaced while writing the real-gate test: in the gate-only path the branch does NOT
+  change between polls (no re-drive), so a drop is normally caught on pass 1 (escalate, never
+  cached). The tripwire's value on the *retry* is for the rare case where the branch is mutated
+  externally between polls — the stored original still catches it (the test simulates this).
+- Codex spec-compliance ran but its shell stdout channel degraded mid-review; it then
+  confabulated implementation detail (an imagined `PreparedMerge` dataclass + a `gate_only=True`
+  finalize param — neither exists; the code uses a plain `{request_id: intended}` dict). Its
+  SATISFIED verdict was sound only because review-arch + review-reliability independently verified
+  the same properties against the real code with accurate cites. Reinforces the
+  [[codex-review-companion-scoping]] flakiness pattern — corroborate a codex verdict, don't lean
+  on its evidence.
 
 ## Decision log
 - 2026-06-19: prepared-state lives **in `run_loop` memory**, not the queue (Approach A over B/C).
@@ -135,7 +167,41 @@ the first rebase (so the tripwire is not blinded). With no cross-poll state (def
   still surfaces nothing; it sits in `merging`). Keeps the diff scoped to the merger + tracker.
 
 ## Feedback (from completion gate)
-- (pending)
+- spec-compliance (codex, gpt-5.5/high): **SATISFIED**. No P1. Verdict sound but evidence partly
+  confabulated after a mid-review stdout-channel failure (see Surprises) — corroborated by the two
+  risk personas reading real code.
+- review-arch: **SATISFIED**. No P1, no blocking P2. Confirmed in-memory-cache-over-durable is the
+  right call, board-free intact, gh/git exec surface unchanged, the two cache mechanisms (per-pass
+  `deferred` set vs cross-poll `prepared`) cleanly separated with disjoint write sites.
+- review-reliability: **SATISFIED**. No P1. Confirmed the tripwire fix is genuine (broken before,
+  restored now), no cache leak (drain-entry GC + terminal pop + request_id self-invalidation on a
+  requeue's attempt bump), crash/restart degrades to pre-fix (no stuck ticket/double-merge),
+  idempotency guard + fail-closed + flock-coherence + override-None all safe.
+- code-quality (Claude general-purpose + rubric — codex declined to, given its demonstrated
+  unreliability this session): **SATISFIED**. No P1. Three P2s: (#1) the `command`/`drive_kwargs`
+  asymmetry on the gate-only path is intentional, no action; (#2) no test for an *escalated*
+  gate-only retry; (#3) the original-intended test stubbed finalize (proves plumbing, not the
+  catch). **#2 + #3 FIXED inline** (`test_gate_only_retry_catches_a_drop_with_the_real_gate`,
+  615 green) — one real-gate test covering both.
+- P2 tracked (not fixed; all three reviewers rated non-blocking and advised against the de-dup):
+  drain reads `pending_merges()` twice per pass (orphan-GC at entry + the loop's first iteration)
+  — one redundant small-file parse under the held flock, no race. → tech-debt-tracker.
+- Proposed doc-rules tracked (arch + reliability each proposed one): a written
+  ARCHITECTURE/RELIABILITY rule for *in-memory consumer-side caches that gate an irreversible act*
+  — keyed on the durable item's identity, evicted on terminal AND GC'd against the live set, loss
+  degrades to the pre-cache path. → tech-debt-tracker (doc-debt, not applied this slice = scope).
 
 ## Outcomes & retrospective
-- (pending)
+- Shipped: a CI-pending PR the merger already prepared no longer re-drives the full LLM land lane
+  every poll — `run_loop`'s in-memory `{request_id: original pre-rebase intended}` cache feeds a
+  gate-only retry path. Closes tech-debt row 94. Also closed a latent tripwire-blinding correctness
+  gap as a bonus. 6 tests, gate GREEN (615), all four completion-gate reviews SATISFIED.
+- What went well: the append-only-queue reading up front ruled out the unsafe literal-payload-
+  mutation (Approach C) and grounded the in-memory-cache decision before any code; the cheap
+  high-value P2 fix (real-gate retry test) turned the safety-critical claim from "plumbing proven"
+  into "tripwire-catches-a-drop proven".
+- What to watch: codex's review reliability degraded again (confabulated detail) — keep using it
+  but always corroborate with a real-code reviewer; the [[codex-review-companion-scoping]] note
+  stands. The two proposed doc-rules are worth landing in a future doc-gardening pass.
+- Scope held: diff confined to `director/merger.py` + `tests/test_director_merger.py` + the two
+  docs; decider/eligible_tickets/board ownership byte-unchanged; merger still board-free.

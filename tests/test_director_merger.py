@@ -907,6 +907,43 @@ class GateOnlyRetryTest(unittest.TestCase):
         merger.drain(base=self.base, driver=driver, sh=_ci_sh(ci))
         self.assertEqual(drives["n"], 2)                       # re-driven each pass (no cache)
 
+    def test_gate_only_retry_catches_a_drop_with_the_real_gate(self):
+        # Strongest proof — drives the REAL _finalize_merge, not a stub: a PR clean + CI-pending
+        # on pass 1 (deferred, cached with its ORIGINAL intended), then on the gate-only retry its
+        # actual diff has lost a.py (e.g. an external push to the branch). The preservation
+        # tripwire must trip against the STORED original and ESCALATE — proving the gate-only path
+        # neither blinds the tripwire nor blindly merges, and exercises the terminal pop + surface.
+        dq.append_merge_request("T1", pr="https://github.com/o/r/pull/5",
+                                workspace_path="/ws", base=self.base)
+        ci = {"green": False}
+        files = {"n": 0}
+
+        def sh(argv, **kw):
+            if "graphql" in argv:
+                return _Proc(0, _json.dumps({"data": {"repository": {"pullRequest": {
+                    "reviewThreads": {"nodes": []}}}}}))
+            if "merge" in argv:
+                return _Proc(0)
+            if "statusCheckRollup" in argv:
+                st = [{"state": "SUCCESS"}] if ci["green"] else [{"status": "IN_PROGRESS"}]
+                return _Proc(0, _json.dumps({"statusCheckRollup": st}))
+            if "files" in argv:
+                files["n"] += 1
+                # pass 1 intended-capture + actual are clean; pass 2 (retry) actual drops a.py
+                return _Proc(0, _files_json({"a.py": (5, 0)} if files["n"] <= 2 else {}))
+            return _Proc(1)
+
+        prepared: dict = {}
+        r1 = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh, prepared=prepared)
+        self.assertEqual(r1[0]["result"], "deferred")          # clean + CI pending → cached
+        ci["green"] = True
+        r2 = merger.drain(base=self.base, driver=lambda *a, **k: _DONE, sh=sh, prepared=prepared)
+        self.assertEqual(r2[0]["result"], "escalated")         # tripwire caught the drop
+        self.assertIn("a.py", r2[0]["gate_reason"])
+        self.assertEqual(len(self._reviews()), 1)              # surfaced to the Director
+        self.assertNotIn("merge|T1|a1", prepared)              # cache cleared on terminal
+        self.assertEqual(merger.pending_merges(base=self.base), [])  # consumed (not retried)
+
 
 class LandSkillPreparesTest(unittest.TestCase):
     """R2: the land skill prepares (does not merge) and carries the preservation check."""
