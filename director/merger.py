@@ -288,6 +288,12 @@ def _finalize_merge(req: dict, *, intended, require_resolved_threads: bool,
     # both gates clean → CODE performs the irreversible merge
     if _squash_merge(pr, cwd=ws, run=run):
         return {"result": "merged", "gate": gate}
+    # Idempotency guard (reliability review): a crash after a prior attempt's `gh pr merge`
+    # succeeded but before consume re-drives finalize, and re-merging a MERGED PR fails. If the
+    # PR is in fact already merged, this is an idempotent success — finalize as merged so the
+    # ticket isn't stranded in `merging` with its work already on main.
+    if mp.pr_is_merged(pr, run=run):
+        return {"result": "merged", "gate": gate}
     return {"result": "escalated", "gate": gate,
             "gate_reason": "gh pr merge failed (fail-closed)"}
 

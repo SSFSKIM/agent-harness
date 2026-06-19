@@ -552,10 +552,11 @@ def _files_json(d):
 
 
 def _gate_sh(*, intended_files=None, actual_files=None, rollup=None,
-             threads_resolved=True, merge_rc=0):
+             threads_resolved=True, merge_rc=0, pr_state="OPEN"):
     """Fake subprocess.run for the merger's gh gate calls, dispatched by argv. The two
     `gh pr view --json files` calls return intended_files then actual_files (the
-    pre-rebase vs post-rebase diff the preservation tripwire compares)."""
+    pre-rebase vs post-rebase diff the preservation tripwire compares); `pr_state` is the
+    `gh pr view --json state` answer the idempotency guard reads on a merge failure."""
     if rollup is None:
         rollup = [{"state": "SUCCESS"}]
     files_seq = [intended_files if intended_files is not None else {},
@@ -575,6 +576,8 @@ def _gate_sh(*, intended_files=None, actual_files=None, rollup=None,
             d = files_seq[min(state["files"], len(files_seq) - 1)]
             state["files"] += 1
             return _Proc(0, _files_json(d))
+        if "state" in argv:                       # gh pr view --json state (idempotency guard)
+            return _Proc(0, _json.dumps({"state": pr_state}))
         return _Proc(1)
     return run
 
@@ -639,6 +642,13 @@ class FinalizeGateTest(unittest.TestCase):
         fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)}, merge_rc=1)
         self.assertEqual(fin["result"], "escalated")
         self.assertIn("gh pr merge failed", fin["gate_reason"])
+
+    def test_idempotent_merged_when_pr_already_merged(self):
+        # crash-retry: gh pr merge fails ("already merged"), but the PR IS merged → idempotent
+        # success, so the ticket finalizes instead of being stranded in merging.
+        fin = self._fin(intended={"a.py": (5, 0)}, actual_files={"a.py": (5, 0)},
+                        merge_rc=1, pr_state="MERGED")
+        self.assertEqual(fin["result"], "merged")
 
 
 class GateIntegrationTest(unittest.TestCase):

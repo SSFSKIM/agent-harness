@@ -187,5 +187,19 @@ class UnresolvedThreadCountTest(unittest.TestCase):
         self.assertIsNone(mp.unresolved_thread_count(_PR, run=run))
 
 
+class PrIsMergedTest(unittest.TestCase):
+    def test_merged_state_is_true(self):
+        self.assertTrue(mp.pr_is_merged(
+            _PR, run=lambda *a, **k: _FakeProc(0, json.dumps({"state": "MERGED"}))))
+
+    def test_open_state_is_false(self):
+        self.assertFalse(mp.pr_is_merged(
+            _PR, run=lambda *a, **k: _FakeProc(0, json.dumps({"state": "OPEN"}))))
+
+    def test_gh_error_is_false(self):
+        # conservative: a read failure is False (caller escalates), never a false "merged"
+        self.assertFalse(mp.pr_is_merged(_PR, run=lambda *a, **k: _FakeProc(1, "")))
+
+
 if __name__ == "__main__":
     unittest.main()

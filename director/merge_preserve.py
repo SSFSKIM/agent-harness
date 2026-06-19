@@ -175,6 +175,17 @@ def unresolved_thread_count(pr: str, *, run=subprocess.run) -> int | None:
     return sum(1 for n in nodes if not n.get("isResolved", False))
 
 
+def pr_is_merged(pr: str, *, run=subprocess.run) -> bool:
+    """Is the PR already MERGED on GitHub? Makes the code-issued squash-merge idempotent: a
+    crash after `gh pr merge` succeeds but before the request is consumed re-drives finalize,
+    and re-merging a merged PR fails — so on merge failure the merger checks state and treats
+    MERGED as success, avoiding a ticket stuck in `merging` whose PR actually landed
+    (reliability review). Conservative: only an explicit MERGED state counts (a read failure
+    returns False → the caller escalates, never a false 'merged')."""
+    data = _gh_json(["gh", "pr", "view", pr, "--json", "state"], run=run)
+    return isinstance(data, dict) and (data.get("state") or "").upper() == "MERGED"
+
+
 def pr_hygiene(pr: str, *, require_threads: bool, run=subprocess.run) -> str:
     """Tri-state pre-land hygiene verdict for `pr` → "green" | "failing" | "pending".
 

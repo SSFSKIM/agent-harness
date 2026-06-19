@@ -136,7 +136,8 @@ Exit codes:
 - If all jobs fail with corrupted pnpm lockfile errors on the merge commit, the
   remediation is to fetch latest `origin/main`, merge, force-push, and rerun CI.
 - If mergeability is `UNKNOWN`, wait and re-check.
-- Do not merge while review comments (human or Codex review) are outstanding.
+- Do not report the PR ready while review comments (human or Codex review) are
+  outstanding — resolve them first; the merger refuses to land with unresolved threads.
 - Codex review jobs retry on failure and are non-blocking; use the presence of
   `## Codex Review — <persona>` issue comments (not job status) as the signal
   that review feedback is available.
@@ -151,7 +152,7 @@ Exit codes:
 - Codex reviews now arrive as issue comments posted by GitHub Actions. They
   start with `## Codex Review — <persona>` and include the reviewer’s
   methodology + guardrails used. Treat these as feedback that must be
-  acknowledged before merge.
+  acknowledged and resolved before you report the PR ready.
 - Human review comments are blocking and must be addressed (responded to and
   resolved) before requesting a new review or merging.
 - If multiple reviewers comment in the same thread, respond to each comment
@@ -208,7 +209,7 @@ Exit codes:
     ```
   - Only request a new review if there is at least one new commit since the
     previous request.
-  - Wait for the next Codex review comment before merging.
+  - Wait for the next Codex review comment before reporting the PR ready.
 
 ## Scope + PR Metadata
 

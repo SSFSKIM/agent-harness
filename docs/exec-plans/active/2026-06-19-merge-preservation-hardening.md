@@ -330,6 +330,24 @@ review-arch (Claude persona) → **SATISFIED**. Findings processed:
   address the PR by full URL (cwd-independent); (2) a rule clarifying misfire scope (worker-claim-
   false vs gate-caught-uncovered). Below P2; promote on recurrence.
 
-Re-review (spec-compliance re-run + reliability + code-quality) follows the gate re-run.
+**Round 2 (2026-06-19).** review-reliability (Claude persona) → **SATISFIED**; the codex
+spec-compliance re-run TRUNCATED (no captured verdict) but surfaced a real land-skill
+contradiction before cutoff — both processed:
+- **P2 (reliability) — crash-after-merge-before-consume strands the ticket.** A crash between
+  `gh pr merge` succeeding and `_consume` re-drives finalize; re-merging a MERGED PR fails →
+  escalated → `merge_outcome` reads `unresolved` → the ticket sits in `merging` forever though
+  its PR landed. **Fixed** (chose to fix, not defer — small + prevents a real stuck-ticket):
+  `merge_preserve.pr_is_merged` + an idempotency guard in `_finalize_merge` (on merge failure,
+  if the PR is already MERGED → result `merged`). +4 tests. Reliability's proposed rule
+  ("irreversible external side effects guarded by a has-it-already-happened check") is the
+  generalization — noted for promotion.
+- **P1-equivalent (codex, recovered from a truncated run) — stale "before merge" framing in the
+  land skill body** (`Failure/Review Handling`: "Do not merge while review comments
+  outstanding", "acknowledged before merge", "before merging") contradicted R2/D1's
+  prepare-not-merge model. **Fixed:** reworded to "report the PR ready" / "before you report
+  ready" (the worker resolves threads first; the merger lands).
+- **P2 (reliability) — deferred-PR cross-poll re-drive** — same finding as arch's; already tracked.
+
+Re-review (clean spec-compliance verdict + code-quality) follows this gate re-run.
 
 ## Outcomes & retrospective
