@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugin" / "scripts"))
 import lint_docs
-from fixtures import fm, make_repo, make_plugin
+from fixtures import fm, make_repo, make_plugin, TODAY
 
 
 def run_all(root, plugin=None):
@@ -306,6 +306,73 @@ class TestLintDocs(unittest.TestCase):
             sk.mkdir()
             (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
             self.assertTrue(any("D9" in e for e in run_all(self.root, plugin)))
+
+
+class TestLintNavKeys(unittest.TestCase):
+    """KF v2.0 governance flip — D11 (required nav keys) + D12 (validate-if-present)."""
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = make_repo(Path(self._tmp.name))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _dd(self, name, extra=""):
+        """Write a valid-v2.0 design-doc page (+ extra frontmatter lines)."""
+        p = self.root / "docs" / "design-docs" / name
+        p.write_text(f"---\nstatus: draft\nlast_verified: {TODAY}\nowner: h\n"
+                     f"type: design-doc\ndescription: d\n{extra}---\n# x\n")
+        return p
+
+    def test_d11_requires_type_and_description(self):
+        # the fixture page is valid v2.0 -> no D11
+        self.assertFalse(any("D11" in e for e in run_all(self.root)))
+        p = self.root / "docs" / "design-docs" / "core-beliefs.md"
+        p.write_text(fm(type="") + "# x\n")  # empty type
+        self.assertTrue(any("D11" in e and "`type`" in e for e in run_all(self.root)))
+        p.write_text(fm(description="") + "# x\n")  # empty description
+        self.assertTrue(any("D11" in e and "`description`" in e for e in run_all(self.root)))
+
+    def test_d11_index_spines_are_exempt(self):
+        # an index.md with no type/description must NOT trip D11 (it is a listing)
+        (self.root / "docs" / "design-docs" / "index.md").write_text(
+            f"---\nstatus: draft\nlast_verified: {TODAY}\nowner: h\n---\n# I\n- core-beliefs.md\n")
+        self.assertFalse(any("D11" in e for e in run_all(self.root)))
+
+    def test_d11_phase_required_on_product_spec_not_exec_plan(self):
+        ps = self.root / "docs" / "product-specs"; ps.mkdir()
+        (ps / "index.md").write_text(fm() + "# I\n- s.md\n")
+        spec = ps / "s.md"
+        spec.write_text(fm(type="product-spec") + "# s\n")  # product-spec, no phase
+        self.assertTrue(any("D11" in e and "phase" in e and "s.md" in e
+                            for e in run_all(self.root)))
+        spec.write_text(fm(type="product-spec", phase="x/01-y") + "# s\n")  # phased
+        self.assertFalse(any("D11" in e and "s.md" in e for e in run_all(self.root)))
+        ep = self.root / "docs" / "exec-plans" / "active"; ep.mkdir(parents=True)
+        (ep / "p.md").write_text(fm(type="exec-plan") + "# p\n")  # plan, no phase = OK
+        self.assertFalse(any("D11" in e and "p.md" in e for e in run_all(self.root)))
+
+    def test_d12_resource_must_exist_if_repo_path(self):
+        self._dd("r.md", extra="resource: nope/missing.py\n")
+        self.assertTrue(any("D12" in e and "resource" in e for e in run_all(self.root)))
+        self._dd("r.md", extra="resource: docs/design-docs/core-beliefs.md\n")  # exists
+        self.assertFalse(any("D12" in e and "resource" in e for e in run_all(self.root)))
+        self._dd("r.md", extra="resource: https://example.com/x\n")  # URL exempt
+        self.assertFalse(any("D12" in e and "resource" in e for e in run_all(self.root)))
+
+    def test_d12_supersedes_must_resolve(self):
+        self._dd("a.md", extra="supersedes: gone.md\n")
+        self.assertTrue(any("D12" in e and "supersedes" in e for e in run_all(self.root)))
+        self._dd("a.md", extra="supersedes: core-beliefs.md\n")  # sibling exists
+        self.assertFalse(any("D12" in e and "supersedes" in e for e in run_all(self.root)))
+
+    def test_d12_phase_must_be_well_formed(self):
+        self._dd("ph.md", extra="phase: //bad\n")
+        self.assertTrue(any("D12" in e and "phase" in e for e in run_all(self.root)))
+        self._dd("ph.md", extra="phase: alpha/01-good\n")
+        self.assertFalse(any("D12" in e and "phase" in e for e in run_all(self.root)))
+        self._dd("ph.md", extra="phase: alpha\n")  # bare initiative ok
+        self.assertFalse(any("D12" in e and "phase" in e for e in run_all(self.root)))
 
 
 if __name__ == "__main__":

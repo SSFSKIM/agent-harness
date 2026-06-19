@@ -84,8 +84,9 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
 
 Procedure for a new harness-managed page: kebab-case filename → frontmatter
-(required `status / last_verified / owner`; optional `type / tags / resource /
-title / description` per `docs/KNOWLEDGE_FORMAT.md`) → write → register in that
+(required `status / last_verified / owner / type / description`, plus `phase` on
+product-specs; optional `tags / title`; validate-if-present `resource / supersedes`
+per `docs/KNOWLEDGE_FORMAT.md` KF v2.0) → write → register in that
 directory's `index.md` → cross-link → run the gate (the `docs-tree` skill owns
 this). The format itself is specified in `docs/KNOWLEDGE_FORMAT.md` (KF v1.0).
 Host-owned project roots may use the structure that best fits the repo unless

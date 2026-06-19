@@ -2,6 +2,8 @@
 status: draft
 last_verified: {{TODAY}}
 owner: harness
+type: design-doc
+description: The agent-first golden rules that every session follows.
 ---
 # Core beliefs (golden rules)
 

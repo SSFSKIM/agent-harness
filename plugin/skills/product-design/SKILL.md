@@ -66,8 +66,11 @@ it outlive one plan and be referenced by several.
    not "this section is less detailed than that one". Catching a bad spec here
    is far cheaper than after an ExecPlan is built on it.
 6. Write to `docs/product-specs/YYYY-MM-DD-<slug>.md` with frontmatter
-   (`status / last_verified / owner`), register in `product-specs/index.md`, and
-   cross-link. The `docs-tree` skill owns the placement mechanics; run the gate.
+   (`status / last_verified / owner / type: product-spec / description / phase`
+   — a spec is gate-required to declare `type`, a one-line `description`, and a
+   `phase: <initiative>/<NN>-<slug>` anchoring it on the roadmap, KF v2.0 D11),
+   register in `product-specs/index.md`, and cross-link. The `docs-tree` skill owns
+   the placement mechanics; run the gate.
 
 ## Hand off to ExecPlan
 7. Enter the `execplan` skill. The ExecPlan links this spec in its Context and

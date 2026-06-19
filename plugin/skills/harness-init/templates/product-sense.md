@@ -2,6 +2,8 @@
 status: draft
 last_verified: {{TODAY}}
 owner: harness
+type: methodology
+description: What this project optimizes for — human time and attention as the scarce resource.
 ---
 # PRODUCT_SENSE.md — what this repo optimizes
 

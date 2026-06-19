@@ -66,6 +66,7 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
     last_verified: <today>
     owner: <who drives>
     type: exec-plan
+    description: <one line — what this plan builds, observably>
     base_commit: <git rev-parse HEAD at plan creation>
     review_level: targeted
     ---

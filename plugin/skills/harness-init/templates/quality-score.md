@@ -2,6 +2,8 @@
 status: active
 last_verified: {{TODAY}}
 owner: doc-gardener
+type: methodology
+description: Domain-by-layer quality grades, updated by the doc-gardener each pass.
 ---
 # QUALITY_SCORE.md — domain × layer grades
 

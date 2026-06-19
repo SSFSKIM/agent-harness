@@ -2,6 +2,8 @@
 status: active
 last_verified: {{TODAY}}
 owner: harness
+type: tracker
+description: The running fix-forward tracker where gate P2s and gardening findings land.
 ---
 # Tech-debt tracker
 

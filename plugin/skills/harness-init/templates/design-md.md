@@ -2,6 +2,8 @@
 status: draft
 last_verified: {{TODAY}}
 owner: review-arch
+type: methodology
+description: The design-taste rules for harness components, grounding the review-arch persona.
 ---
 # DESIGN.md — taste rules for this repo
 

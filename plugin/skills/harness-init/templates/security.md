@@ -2,6 +2,8 @@
 status: draft
 last_verified: {{TODAY}}
 owner: review-security
+type: methodology
+description: The numbered threat model that grounds the review-security persona.
 ---
 # SECURITY.md
 

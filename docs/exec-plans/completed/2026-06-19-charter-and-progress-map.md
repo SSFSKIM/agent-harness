@@ -5,6 +5,7 @@ owner: harness
 type: exec-plan
 base_commit: a11091efa56051dee2e174c834c3601e2a833ee9
 review_level: standard
+description: ExecPlan that built the charter + derived progress-map intent layer — authored CHARTER, KF v1.1 phase key, and nav.py roadmap/map.
 ---
 # Charter & derived progress map — build
 
