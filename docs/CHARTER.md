@@ -72,3 +72,5 @@ phase/status is the derived `nav.py roadmap`.
   multi-agent development. → [the parent spec](product-specs/2026-06-14-symphony-director-orchestration.md).
 - **Knowledge format** — the agent-legible docs substrate: frontmatter contract,
   live navigation, derived hierarchy and roadmap. → [the parent spec](product-specs/2026-06-18-knowledge-format-evolution.md).
+- **Methodology** — how the agent decides *what* to build before building it: a
+  Product Design stage ahead of ExecPlan plus the three-way entry decision. → [the parent spec](product-specs/2026-06-14-product-design-phase.md).

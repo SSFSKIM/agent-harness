@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [merger, pr-merge, worker, guardrail, reliability]
+description: Builds the code-owned merge gate — after the LLM land worker prepares a PR the merger itself runs a preservation tripwire (withhold+escalate if the merge would drop an introduced file/hunk) and a hygiene gate (CI/threads) then issues gh pr merge --squash, auditing the worker's PR-feedback-sweep as structured report_outcome evidence.
 base_commit: a401be7
 review_level: standard
 ---

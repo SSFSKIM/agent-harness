@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-19
 owner: harness
+phase: symphony/04-merge-gated-eligibility
+type: product-spec
+tags: [merger, dag, orchestrator, board, reconcile]
+description: A child ticket's blocked_by edge must clear only when the parent's PR has actually landed on main, not merely when the worker reported done — Direction A makes the board's done state mean merged-to-main by parking a PR-bearing done in an optional merging state.
 ---
 # Merge-gated DAG eligibility — a child waits for the parent's PR to LAND, not just to be "done"
 

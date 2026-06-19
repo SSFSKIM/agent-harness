@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [merger, dag, orchestrator, board, reconcile]
+description: Builds merge-gated DAG eligibility — a PR-bearing done parks in an optional merging board state so a child blocker clears only once the serialized merger lands the parent's PR and the orchestrator sweeps merging→done; with merging unconfigured, behavior is byte-identical to today.
 base_commit: 7263318989e1f35703fbdf3af24ce6ac1643b857
 review_level: standard
 ---

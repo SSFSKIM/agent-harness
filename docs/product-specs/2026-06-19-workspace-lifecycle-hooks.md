@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-19
 owner: harness
+phase: symphony/07-workspace-hooks
+type: product-spec
+tags: [hooks, parity, worker, daemon, config]
+description: The deferred R4 of the adapter/workspace parity track — host-configured Symphony §9.4 lifecycle hooks (after_create/before_run/after_run/before_remove) that populate and tear down each worker's per-ticket workspace, the repo-population bridge that gives a worker a real codebase to edit and open a PR against.
 ---
 # Workspace lifecycle hooks (R4 — the repo-population bridge)
 

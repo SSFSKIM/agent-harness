@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-18
 owner: harness
+type: exec-plan
+tags: [director, dashboard, observability, autonomy, security]
+description: Builds the operator console — turning the read-only dashboard into a CSRF/Origin-fenced actionable surface whose POST /api/v1/answer unblocks a parked worker via director_min, plus a fail-soft webhook notifier that pings an absent human once per new human-bound pending request.
 base_commit: 82449c23fee34e9795834881f7e482492f4bb16e
 review_level: standard
 ---

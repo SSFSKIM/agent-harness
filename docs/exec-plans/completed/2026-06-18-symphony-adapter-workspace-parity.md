@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-18
 owner: harness
+type: exec-plan
+tags: [parity, board, daemon, reconcile, security]
+description: Closes Symphony adapter/workspace parity slices 1–3 — paginated list_ready_issues plus a fetch_issues_by_states op, root-contained sanitized per-ticket workspace paths from one shared helper, and daemon startup recovery that cleans terminal-issue workspaces and re-attaches orphaned started tickets.
 base_commit: f2748b5e0137f417c05dcc29a7c41673cd7ecc87
 review_level: standard
 ---

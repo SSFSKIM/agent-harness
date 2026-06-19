@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-19
 owner: harness
+phase: symphony/05-observability-polish
+type: product-spec
+tags: [observability, telemetry, dashboard, reliability]
+description: A consumer-richness track over the existing dashboard and telemetry producer — live mid-turn token accrual, SSE push instead of polling, a legible rate-limit headroom view, and cross-run history; multi-run aggregate view is the one deliberate deferral.
 ---
 # Deferred observability polish — live token accrual · SSE · rate-limit view · cross-run history
 

@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-18
 owner: harness
+phase: symphony/07-adapter-parity
+type: product-spec
+tags: [parity, board, daemon, reconcile, security]
+description: Closes the leftover adapter/workspace Symphony-parity gaps so the daemon is correct at scale and survives restarts — Linear candidate-poll pagination plus a fetch_issues_by_states op (R1), root-contained workspace path safety (R2), and daemon startup recovery (R3); workspace lifecycle hooks (R4) are recorded as a deferred non-goal.
 ---
 # Symphony adapter & workspace parity
 

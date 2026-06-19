@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-19
 owner: harness
+phase: symphony/04-merge-preservation
+type: product-spec
+tags: [merger, pr-merge, worker, guardrail, reliability]
+description: A preservation-first land precondition for the serialized merger — before a PR lands on main, code verifies the merge actually carries the PR's intended change (nothing silently dropped) and that review hygiene is clean, and the worker's PR-feedback-sweep becomes structured auditable evidence rather than prose.
 ---
 # Merge-preservation hardening
 

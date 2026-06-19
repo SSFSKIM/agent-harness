@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [dashboard, observability, telemetry, director]
+description: The dashboard slice (R4–R6) of observability polish — GET /api/v1/stream pushes a data:-framed build_view over text/event-stream the instant the snapshot changes (the page consumes it via EventSource, falling back to the ~1s poll), and the rate-limit headroom renders as a glance-able summary instead of a raw JSON dump, never crashing on an odd shape.
 base_commit: 09c0fc8
 review_level: standard
 ---

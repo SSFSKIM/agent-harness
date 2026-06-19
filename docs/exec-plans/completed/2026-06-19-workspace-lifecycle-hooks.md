@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [hooks, parity, worker, daemon, config]
+description: Builds Symphony §9.4 workspace lifecycle hooks (R4) — .harness.json director.workspace.hooks (after_create/before_run/after_run/before_remove + timeout) run sh -lc Director-side with Symphony's fatal/ignored failure semantics, proven by a live demo where an after_create clone populates a workspace, a worker opens a real PR, and the merger squash-merges it.
 base_commit: d457aab787fd44b89e7be115c14a32ae721ceedc
 review_level: full
 ---

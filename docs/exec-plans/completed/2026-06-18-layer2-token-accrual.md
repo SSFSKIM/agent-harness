@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [telemetry, observability, dashboard, reliability]
+description: The producer slice (R1–R3) of observability polish — the run snapshot accrues token usage live mid-turn (marshalled to the main-thread StatusWriter, never from a pool-thread callback) so in-flight tickets and run-level codex_totals climb during a turn and stay continuous at terminal with no double-count.
 base_commit: 17b4b49
 review_level: standard
 ---

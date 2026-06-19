@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: harness
+type: exec-plan
+tags: [telemetry, observability, dashboard, store, reliability]
+description: The Phase B slice (R7–R8) of observability polish — an append-only run-summary store survives past a run's lifetime so a tolerant reader (never raises, torn/absent reads as empty), a loopback GET /api/v1/history route, and a dashboard history panel can show token/duration/outcome trends across recent runs.
 base_commit: 0fefede
 review_level: standard
 ---

@@ -2,6 +2,9 @@
 status: completed
 last_verified: 2026-06-19
 owner: claude (inline, Opus)
+type: exec-plan
+tags: [merger, pr-merge, retry, reliability]
+description: Closes a merge-preservation limitation — a CI-pending PR the merger already PREPARED retries the code gate ONLY (preservation tripwire + hygiene gate + code-issued merge) on later cross-poll passes instead of re-driving the full LLM land lane, reusing the original pre-rebase intended diff so the tripwire is not blinded.
 base_commit: 4c815d730de20883c0fb4da1b8c6185be77b5685
 review_level: standard
 ---

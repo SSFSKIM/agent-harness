@@ -2,6 +2,10 @@
 status: stable
 last_verified: 2026-06-18
 owner: harness
+phase: symphony/05-operator-console
+type: product-spec
+tags: [director, dashboard, observability, autonomy, security]
+description: The human-reachability complement to the lights-out Director — turns the read-only dashboard into an actionable, write-fenced surface for answering a parked worker's escalation from a browser, and adds a notification channel that reaches an absent-but-async-reachable human on park.
 ---
 # Director operator console — actionable dashboard + park notifications
 
