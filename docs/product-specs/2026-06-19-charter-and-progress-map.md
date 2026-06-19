@@ -178,13 +178,13 @@ links is fine (it is the root anchor, not a graph leaf).
 1. `docs/CHARTER.md` exists (`type: charter`) with Mission / Done / Locked
    assumptions / Initiatives; the self-host `AGENTS.md` and the host `agents-md.md`
    template Orient steps point to it; gate GREEN.
-2. `KNOWLEDGE_FORMAT.md` (and the byte-identical host template) document the
+2. `KNOWLEDGE_FORMAT.md` (and the host template variant) document the
    `charter` type and the `phase` key and read **KF v1.1**; D3 stays permissive;
    existing format/lint tests stay green.
 3. `python3 plugin/scripts/nav.py roadmap` prints ≥2 real initiatives (Symphony,
    knowledge-format), each with phase-ordered specs/plans and live `status:`;
    `--json` validates as the same structure.
-4. A superseded/refined node renders its pivot edge inline in the roadmap.
+4. A superseded node renders its `superseded-by` edge inline in the roadmap.
 5. `tests/test_scaffold.py` confirms the charter template propagates to ported
    hosts; the new `nav.py roadmap` tests pass; the full gate
    (`python3 plugin/scripts/check.py`) is GREEN.

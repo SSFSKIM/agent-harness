@@ -79,8 +79,8 @@ Default follows dependencies (what a page is built on); `--reverse` shows
 dependents; `--rel a,b` restricts edge kinds; `--json` for machine use. `tree`
 shows only **typed** relationships by default (the generic untyped `links` edges —
 incidental mentions — are dropped so the hierarchy stays meaningful); pass `--all`
-to include them. Inference only — authored/declared relationship keys are a future
-format version (KF v1.1).
+to include them. Inference only — authored/declared relationship keys remain a
+future KF minor (not v1.1, which adds only `phase` + the `charter` type).
 
 `roadmap` is the **derived progress map** — the methodology's long-promised
 "roadmap is a derived view, not hand-maintained" (PLANS.md), delivered. It groups
