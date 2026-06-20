@@ -84,9 +84,9 @@ one stage it should run (`impl` routes the full ExecPlan methodology). With
 `dispatch_requires_label: true` an unlabelled ticket is never claimed, so onboarding
 and stray issues are ignored rather than dispatched as workers.
 
-**Launch.** Invoke the **`director`** launcher skill once — it reads this manual,
-starts the watched orchestrator as a background task, and arms the queue Monitor so
-each worker turn-end event-wakes you (§5). By hand it is:
+**Launch.** Reading this manual is what makes you the Director (there is no
+launcher skill). Start the watched orchestrator as a background task and arm the
+queue Monitor so each worker turn-end event-wakes you (§5):
 
 ```
 python3 -m director.orchestrator --team $DIRECTOR_TEAM                 # watched, background
