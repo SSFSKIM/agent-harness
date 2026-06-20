@@ -22,6 +22,13 @@ describe("linear_graphql tool", () => {
     const r = await t.handler({ query: "query { x }" }, {});
     expect(r.content[0].text).toMatch(/error/i);
   });
+  it("allows a forward-only mutation (issueCreate) and POSTs it", async () => {
+    let called = false;
+    const t = tools(async () => { called = true; return { data: { issueCreate: { success: true } } }; });
+    const r = await t.handler({ query: "mutation { issueCreate(input: { title: \"x\" }) { success } }" }, {});
+    expect(called).toBe(true);
+    expect(r.content[0].text).toContain("success");
+  });
 });
 
 describe("withLinear", () => {
