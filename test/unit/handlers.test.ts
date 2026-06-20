@@ -1,0 +1,49 @@
+// test/unit/handlers.test.ts
+import { describe, it, expect } from "vitest";
+import { Peer } from "../../src/peer.js";
+import { AppServer } from "../../src/handlers.js";
+
+// A fake Session whose submit() streams one assistant message then resolves with a result string.
+function fakeSession() {
+  return {
+    submit: async (_p: string, onMessage: (m: any) => void) => {
+      onMessage({ type: "assistant", message: { content: [{ type: "text", text: "thinking" }] } });
+      return { result: "final text" };
+    },
+    usage: async () => ({ input_tokens: 60, output_tokens: 40 }),
+    dispose: async () => {},
+  } as any;
+}
+
+function wire() {
+  const out: any[] = [];
+  const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+  const server = new AppServer(peer, { open: () => fakeSession() });
+  return { out, peer };
+}
+
+describe("AppServer happy path", () => {
+  it("initialize advertises the outcome capability", () => {
+    const { out, peer } = wire();
+    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: { capabilities: {} } }) + "\n");
+    expect(out[0]).toMatchObject({ id: 1, result: { capabilities: { outcomeOnTurnCompleted: true } } });
+  });
+  it("thread/start returns {thread:{id}} and turn/start streams to a MANDATORY final_answer + turn/completed", async () => {
+    const { out, peer } = wire();
+    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: {} }) + "\n");
+    peer.feed(JSON.stringify({ method: "initialized", params: {} }) + "\n");
+    peer.feed(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    const tsResp = out.find((o) => o.id === 2);
+    const threadId = tsResp.result.thread.id;
+    expect(typeof threadId).toBe("string");
+    peer.feed(JSON.stringify({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }], cwd: "/w" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 10));               // let the async turn drain
+    const turnResp = out.find((o) => o.id === 3);
+    expect(turnResp.result.turn.id).toBeDefined();
+    const methods = out.filter((o) => o.method).map((o) => o.method);
+    expect(methods).toContain("turn/started");
+    const finalAnswer = out.find((o) => o.method === "item/completed" && o.params?.item?.phase === "final_answer");
+    expect(finalAnswer.params.item.text).toBe("final text");
+    expect(methods).toContain("turn/completed");
+  });
+});
