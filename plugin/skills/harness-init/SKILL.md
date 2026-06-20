@@ -10,7 +10,7 @@ contract plus a project-specific docs shape chosen from the repo itself.
 
 **Scope — this ports the *method*, not the Director.** The orchestration Director
 is *not* installed into a host: it is centralized and run from the agent-harness
-repo against your board + repo (see `docs/DIRECTOR.md` §0). `harness-init` makes a
+repo against your board + repo (see `.claude/DIRECTOR.md` §0). `harness-init` makes a
 repo ready to be *developed under* the harness; standing up the Director to drive
 that repo is a separate, one-time setup.
 

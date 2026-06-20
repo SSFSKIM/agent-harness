@@ -45,7 +45,7 @@ view). Each strand → the doc that elaborates it.
   graph, so they cannot rot. → [KNOWLEDGE_FORMAT §2.2](KNOWLEDGE_FORMAT.md), [the OKF comparison](design-docs/okf-comparison.md).
 - **Graduated autonomy under a watched Director.** The harness is shaped to run
   unattended and self-correct, escalating only what needs a human — so it can go
-  lights-out without losing a safety floor. → [ADR 0002](adr/0002-graduated-autonomy.md), [the Director manual](DIRECTOR.md).
+  lights-out without losing a safety floor. → [ADR 0002](adr/0002-graduated-autonomy.md); the Director manual (`.claude/DIRECTOR.md`, central-agent config).
 - **Map, not encyclopedia.** Entry points stay short and stable; depth lives
   behind pointers (progressive disclosure). → [core belief 3](design-docs/core-beliefs.md).
 

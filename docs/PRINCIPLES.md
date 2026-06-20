@@ -19,7 +19,7 @@ is silent or ambiguous on it, the Director **parks** the ticket "awaiting human.
 
 This is a **sibling**, not a duplicate, of the other operating docs:
 - `PRODUCT_SENSE.md` — what the *harness* optimizes (universal: human attention is scarce).
-- `DIRECTOR.md §2` — the *mechanics* of taste-vs-handle (when to escalate).
+- `.claude/DIRECTOR.md §2` — the *mechanics* of taste-vs-handle (when to escalate).
 - **`PRINCIPLES.md`** (this file) — the *content* that lets "escalate" first try "infer."
 
 **It is alive.** This is a Claude-authored seed inferred from the human's observed

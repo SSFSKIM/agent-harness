@@ -51,7 +51,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/product-specs/` | What this harness is, product-wise |
 | `docs/references/` | llms.txt digests of external APIs we depend on |
 | `docs/DESIGN.md` | Taste rules for skills / agents / hooks / scripts |
-| `docs/DIRECTOR.md` | Director operating manual: identity, taste-vs-handle, the watched event-loop (`director` launcher skill enters it) |
+| `.claude/DIRECTOR.md` | Director operating manual (central-agent config, not a docs/ page): identity, taste-vs-handle, the watched event-loop — reading it is how a session becomes the Director |
 | `docs/PLANS.md` | ExecPlan methodology |
 | `docs/PRODUCT_SENSE.md` | What we optimize: minimum human-in-loop |
 | `docs/PRINCIPLES.md` | The human's externalized decision-taste; the Director consults it to simulate the human's call before escalating (lights-out, ADR 0003) |
@@ -101,10 +101,10 @@ into your repo, the *Director* stays here and reaches out:
   app-code rules are the host's, not hardcoded here (ARCHITECTURE invariant 7).
 - **The Director → run from here.** The orchestration layer (`director/`) is
   **centralized**, not ported: you run it from *this* repo against your project's
-  Linear board + git repo (workers clone your repo into a scratch workspace; the
-  `director` launcher skill enters the watched loop). To stand it up against a
-  project from zero, see [docs/DIRECTOR.md](docs/DIRECTOR.md) §0 ("Standing up the
-  Director against a project").
+  Linear board + git repo (workers clone your repo into a scratch workspace).
+  To stand it up against a project from zero, see
+  [.claude/DIRECTOR.md](.claude/DIRECTOR.md) §0 ("Standing up the Director against
+  a project") — reading that file is how a session becomes the Director.
 
 ## Memory (read/write paths)
 

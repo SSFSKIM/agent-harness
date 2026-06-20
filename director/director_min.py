@@ -37,7 +37,7 @@ def answer_turn(request_id: str, disposition: dict, *, base=None,
                 answered_by: str = "director") -> None:
     """Answer a `turnReview` request with a drive disposition
     ({"kind": "terminal"|"reply"|"escalate", ...}). The main session calls this after
-    reading the turn-end (final_message + outcome) per docs/DIRECTOR.md §4 —
+    reading the turn-end (final_message + outcome) per .claude/DIRECTOR.md §4 —
     the FREE-FORM equivalent of `answer` for the multi-turn turn-end seam (D-45)."""
     dq.write_answer({"request_id": request_id, "answered_by": answered_by,
                      "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -48,7 +48,7 @@ def merge_reviews(base=None) -> list[dict]:
     """Pending merge-escalations the serialized PR-merger raised (R6) — the merge half
     of the Director's inbox (cf. `pending()` for approvals, `turnReview` for turn-ends).
     Each payload carries {pr, branch, result, reason, disposition, attempt}; the Director
-    reads these per docs/DIRECTOR.md §7 and resolves each (requeue+guidance / abandon /
+    reads these per .claude/DIRECTOR.md §7 and resolves each (requeue+guidance / abandon /
     human)."""
     return [r for r in dq.read_pending(base=base) if r.get("kind") == "mergeReview"]
 
@@ -59,7 +59,7 @@ def answer_merge_review(request_id: str, disposition: dict, *, base=None,
     how the Director resolved the failed merge for the audit trail, e.g.
     {"action": "requeue"|"abandon"|"human", "note": "…"}. For a guided retry use
     `requeue_merge` (it calls this AND re-enqueues); use this directly for
-    abandon / human (docs/DIRECTOR.md §7)."""
+    abandon / human (.claude/DIRECTOR.md §7)."""
     dq.write_answer({"request_id": request_id, "answered_by": answered_by,
                      "answered_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                      "merge_review_disposition": disposition}, base=base)

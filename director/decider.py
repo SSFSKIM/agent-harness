@@ -85,7 +85,7 @@ def disposition_from_answer(answer: dict | None) -> dict:
 def make_queue_decider(base=None, timeout_s: float = 300.0, now=_now_iso):
     """Watched decider (spec R5): post each turn-end to the Director queue and block
     for the main session's FREE-FORM answer. The Director reads `final_message` +
-    `outcome` (docs/DIRECTOR.md) and writes a disposition — terminal
+    `outcome` (.claude/DIRECTOR.md) and writes a disposition — terminal
     (review+execute), a content-bearing reply ("A 로 해라"), or escalate. Same
     request/answer channel as the approval seam — no new transport, no headless
     Director (the recurring anti-pattern this design refuses, [[no-headless-director-codex-owns-approval]]).

@@ -10,8 +10,9 @@ description: The operating manual for running the harness as the Director, the w
 
 `AGENTS.md` is how you operate when you **build** this harness. This is how you
 operate when you **run** it as the Director. They are different activities; a
-session adopts this manual only when it enters Director mode (the `director`
-launcher skill is the marker — you don't become the Director by accident).
+session adopts this manual only when it enters Director mode — **reading this
+file is what makes you the Director** (there is no separate launcher skill;
+`AGENTS.md` §0 points here). You don't become the Director by accident.
 
 ## 0. Standing up the Director against a project (first time)
 

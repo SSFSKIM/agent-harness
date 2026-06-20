@@ -1235,7 +1235,7 @@ def main(argv=None, *, board=None) -> int:
     states = resolve_states(board, s["team"], s["states"])
 
     # Decider selection (spec R5). Watched (default): each turn-end routes to the
-    # Director queue and the live main session answers free-form (docs/DIRECTOR.md).
+    # Director queue and the live main session answers free-form (.claude/DIRECTOR.md).
     # Un-watched (--autonomous) and offline (--mock) use the code decider:
     # --mock has no live Director session to answer turnReviews, so the watched queue
     # decider would hang — the code decider self-resolves + trusts the worker proposal.
