@@ -51,13 +51,13 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   it; a knob the host tunes → leave it host-owned.
 
 ## Skills
-- A skill owns one procedure (create/maintain/gate/dream/garden). Knowledge
+- A skill owns one procedure (create/maintain/gate/garden). Knowledge
   belongs in docs/, not in SKILL.md (skills point, docs explain).
 - Frontmatter description states WHEN to use it, in trigger language.
 - Commit steps must narrow `git add` to the changed subtree (e.g.
-  `git add docs/memory/` for dream, `git add docs/` for garden) — never
-  `git add -A`. The state dir `.claude/harness/` is gitignored, so the guard
-  works today, but explicit scoping makes the invariant written and lint-able.
+  `git add docs/` for garden) — never `git add -A`. The state dir
+  `.claude/harness/` is gitignored, so the guard works today, but explicit
+  scoping makes the invariant written and lint-able.
 - Agent/worker operating-protocol prose (the `WORKER_PROTOCOL` preamble + the dev-stage
   templates in `director/taxonomy.py`) is product text held to the same "map not
   encyclopedia" bar as a SKILL.md: stage-agnostic disciplines in the shared preamble,

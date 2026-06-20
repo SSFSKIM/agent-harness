@@ -163,8 +163,18 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
   `tidy_stop` sentinel MEMORY.md→`.harness.json`. Repointed all adr markdown links
   (`memory/adr/`→`adr/`). Updated 6 tests (4 harnessignore → adr, scaffold tree,
   tidy_stop sentinel; removed 2 dead memory_bootloader tests). Gate GREEN (692 tests).
-- [ ] M3 — narrative + fresh-scaffold verification (AGENTS.md/ARCHITECTURE.md/SECURITY.md/
-  KNOWLEDGE_FORMAT.md memory-prose sections still describe the retired loop).
+- [x] (2026-06-21) M3 — narrative + fresh-scaffold verification. Rewrote the
+  memory-model prose across AGENTS.md (Operating model + Map + laws + Memory
+  section), ARCHITECTURE.md (Data flows: dropped INJECT/IMPRINT/CONSOLIDATE,
+  renumbered REVIEW→#1/TIDY→#2), RELIABILITY.md (tidy_stop sentinel →
+  `.harness.json`), KNOWLEDGE_FORMAT.md (type vocab: dropped retired
+  openq/limitation/progress/session-digest, repointed `knowledge`, added `log`;
+  removed the MEMORY.md reserved-file row), SECURITY.md (status note: loop retired,
+  not redesigned), DESIGN.md (dropped the `dream` git-add example), and
+  design-docs/{agent-harness,okf-comparison}.md. **Behavioral check (the slice's
+  runnable surface = the scaffold CLI):** `scaffold.py --root /tmp/...` produces
+  `docs/adr/` + `docs/logs.md` + `.harness.json`, **no** `docs/memory/`; fresh-host
+  `check.py --root` GREEN. Self-host gate GREEN (692 tests).
 
 ## Surprises & discoveries
 - **`tidy_stop.py` is a gate-on-stop safety net, NOT memory machinery** — it runs

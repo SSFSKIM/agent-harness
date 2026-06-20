@@ -6,10 +6,10 @@ type: design-doc
 tags: [okf, knowledge-format, comparison, parity]
 description: A holistic comparison of Google's Open Knowledge Format against this harness's docs and memory knowledge system.
 ---
-# OKF parity — Google's Open Knowledge Format vs our docs/memory system
+# OKF parity — Google's Open Knowledge Format vs our docs-as-memory system
 
 A holistic comparison of Google's **Open Knowledge Format (OKF v0.1, Draft)**
-against this harness's knowledge system (`docs/`, `docs/memory/`, the docs-tree
+against this harness's knowledge system (`docs/`, the docs-tree
 skill, and the `lint_docs.py` D-gate). Written 2026-06-17 from a full read of
 both sides: the OKF spec end-to-end (`SPEC.md` §1–11 + appendix), the reference
 enrichment agent + visualizer READMEs, and three produced bundles

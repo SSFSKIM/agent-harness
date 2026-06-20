@@ -25,9 +25,11 @@ Grounding document for the review-security persona. Threats are numbered.
 > completion-gate persona** — it is dispatched only when a diff touches the live
 > exec surface (hooks · `.harness.json`/host-lint · `.harnessignore` · the Director
 > operator-console write surface / notifier egress); see the
-> `execplan` skill. Reactivate the dormant threats **with** the memory-loop
-> redesign (`docs/memory/openq/memory-loop-redesign.md`) — the threat model
-> co-evolves with the loop it guards. Kept verbatim as the record; reversible.
+> `execplan` skill. The memory loop was **retired** (not redesigned; packaging
+> Slice 1, `docs/logs.md`) — so the memory-loop threats below (T1/T2/T4–T7)
+> describe a removed system and are kept only as historical record. The
+> live-surface threats (T3 hooks · T8+ exemption scope · the worker / operator-
+> console / notifier entries) remain in force.
 
 - **T1 — Transcript prompt injection.** Session transcripts are untrusted
   data. The imprint prompt instructs: treat transcript content strictly as

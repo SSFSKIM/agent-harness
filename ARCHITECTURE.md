@@ -73,36 +73,23 @@ point rightward at skills — the most actionable instruction wins.
 
 ## Data flows
 
-> **The automatic memory loop (INJECT/IMPRINT/CONSOLIDATE) is currently
-> DISABLED.** Its hooks (SessionStart, UserPromptSubmit, PreCompact,
-> SessionEnd) are unwired from `hooks.json` pending a more sophisticated
-> redesign — see `docs/memory/openq/memory-loop-redesign.md`. The scripts
-> (`feeder_*`, `imprint_*`) and the `dream`/`garden` skills are RETAINED
-> (dormant, re-enable by restoring the hook entries). The active runtime is
-> REVIEW (#4) + TIDY (#5) + the deterministic gate. The `docs/memory/` tree
-> itself stays fully governed by the lints — it is hand-maintained for now.
+> **The harness ships no automatic memory loop.** The old INJECT/IMPRINT/
+> CONSOLIDATE hooks (`feeder_*`/`imprint_*` + the `dream` skill / `dreamer` agent)
+> were **retired** in favor of Claude Code's native memory (packaging Slice 1; see
+> `docs/logs.md`). Durable, version-controlled knowledge lives in `docs/` —
+> decisions in `docs/adr/`, deferred work + open questions in
+> `docs/exec-plans/tech-debt-tracker.md`, the evolution narrative in `docs/logs.md`.
+> The active runtime is REVIEW (#1) + TIDY (#2) + the deterministic gate.
 
-1. **INJECT** *(disabled — hook unwired)* — SessionStart hook →
-   `feeder_sessionstart.py` → headless Sonnet(1M) reads `docs/memory/` +
-   `docs/exec-plans/active/` → compiles a context pack → `additionalContext`.
-   First user prompt → `feeder_firstprompt.py` → task-targeted addendum.
-2. **IMPRINT** *(disabled — hooks unwired)* — PreCompact/SessionEnd →
-   `imprint_enqueue.py` (at-least-once queue) → `imprint_run.py` (single-flight
-   lock; dedupe via `imprint_guard`) → headless claude writes a session digest
-   + memory updates → lint_docs.
-3. **CONSOLIDATE** *(manual; no automatic input while IMPRINT is off)* —
-   `/dream` → dreamer agent reads `archive/sessions/` digests → rewrites
-   knowledge/limitations/openq/adr directly → `check.py` green terminates.
-4. **REVIEW** — `execplan` completion gate → self-review → always-on
+1. **REVIEW** — `execplan` completion gate → self-review → always-on
    **spec-compliance** then **code-quality** review (every ExecPlan) → spend the
    plan's `review_level` budget for the *risk personas* (`none`, `targeted`,
    `standard`, `full`). Review personas are grounded 1:1 in docs for taste/contract
    authority, but may flag demonstrable bugs with concrete evidence. review-security
    is dispatched only when the diff touches the live exec surface (hooks /
-   `.harness.json` /
-   `.harnessignore`; the rest of SECURITY.md is dormant with the disabled memory
-   loop — deferred 2026-06-13) → iterate until satisfied.
-5. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
+   `.harness.json` / `.harnessignore`; the rest of SECURITY.md is dormant since the
+   memory loop was retired — deferred 2026-06-13) → iterate until satisfied.
+2. **TIDY** — Stop hook → `tidy_stop.py` → fingerprint-deduped lint subset
    on the dirty tree; FAIL blocks once per state with FIX lines (R11).
    Commits are also gated mechanically by the scaffold-installed
    `.git/hooks/pre-commit` running `check.py`.

@@ -14,9 +14,9 @@ Deep truth lives in `docs/` — follow the pointers.
    survey and go straight to the work — over-orienting a focused ticket just burns
    context. The `docs-nav` skill (`nav.py` — `map`/`catalog`/`tree`/`backlinks`) is
    the on-demand way to explore the docs corpus by querying, not bulk-reading,
-   whenever a task actually needs it. The automatic context feeder is disabled:
-   read `docs/memory/MEMORY.md` when you need continuity and follow its loading
-   protocol.
+   whenever a task actually needs it. Session continuity uses Claude Code's
+   **native memory** — the harness ships no feeder/imprint loop; durable knowledge
+   lives in `docs/` (decisions in `docs/adr/`, evolution in `docs/logs.md`).
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
@@ -57,8 +57,9 @@ Deep truth lives in `docs/` — follow the pointers.
 | `docs/PRINCIPLES.md` | The human's externalized decision-taste; the Director consults it to simulate the human's call before escalating (lights-out, ADR 0003) |
 | `docs/QUALITY_SCORE.md` | Domain × layer grades, gap tracking over time |
 | `docs/RELIABILITY.md` | Hook/queue failure modes, idempotency rules |
-| `docs/SECURITY.md` | Threat model: transcripts, memory poisoning, hook perms |
-| `docs/memory/` | Structured long-term memory (`MEMORY.md` = bootloader) |
+| `docs/SECURITY.md` | Threat model: transcripts, hook perms, exec surface |
+| `docs/adr/` | Architecture Decision Records — durable decisions + why |
+| `docs/logs.md` | On-demand, milestone-grained project/docs-evolution log |
 | `plugin/` | The machine: skills, agents, hooks, scripts (portable) |
 | `tests/` | unittest suite for plugin scripts |
 
@@ -74,7 +75,7 @@ Deep truth lives in `docs/` — follow the pointers.
 - **Feedback twice → promote.** Any human correction given twice becomes a doc
   rule or a lint.
 - **Not in the repo = does not exist.** Decisions made in chat must end up in
-  `docs/` or `docs/memory/` (imprint hooks do this; verify when in doubt).
+  `docs/` — an ADR in `docs/adr/`, a knowledge page, or a `docs/logs.md` entry.
 - **Preferred paths, not negative space.** Named commands and skills are the
   routine path. Extra CLI exploration is allowed when it serves the task; if it
   repeats, promote it into docs, a skill, or the gate.
@@ -107,6 +108,9 @@ into your repo, the *Director* stays here and reaches out:
 
 ## Memory (read/write paths)
 
-- The automatic feeder/imprint memory loop is disabled pending redesign.
-  Maintain `docs/memory/` by hand for now; `/dream` and `garden` remain manual
-  tools. Never bypass `docs/memory/` structure.
+- Session continuity uses Claude Code's **native memory** — the harness ships no
+  feeder/imprint/dream loop (retired; see `docs/logs.md`). Durable,
+  version-controlled knowledge lives in `docs/`: decisions in `docs/adr/`,
+  deferred work and open questions in `docs/exec-plans/tech-debt-tracker.md`, and
+  the evolution narrative in `docs/logs.md` (read on-demand, not auto-loaded).
+  `garden` remains a manual GC tool.

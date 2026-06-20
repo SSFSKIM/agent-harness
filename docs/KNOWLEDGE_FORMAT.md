@@ -99,19 +99,16 @@ directory-implicit taxonomy into the field:
 
 | `type` | For pages like |
 |---|---|
-| `knowledge` | `memory/knowledge/*` — reusable how-it-works |
+| `knowledge` | `design-docs/*` — reusable how-it-works |
 | `adr` | `adr/*` — decision + why |
-| `limitation` | `memory/limitations/*` — known landmines |
-| `openq` | `memory/openq/*` — unresolved questions |
-| `progress` | `memory/progress/*` — where we are |
-| `session-digest` | `memory/archive/sessions/*` |
 | `design-doc` | `design-docs/*` |
 | `product-spec` | `product-specs/*` |
 | `exec-plan` | `exec-plans/**` |
 | `reference` | `references/*` — external-API digests |
 | `methodology` | top-level machine docs (PLANS, DESIGN, …) |
 | `charter` | `CHARTER.md` — top-level intent: mission, design philosophy (기획의도), locked assumptions |
-| `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log |
+| `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log (also absorbs open questions + limitations) |
+| `log` | `logs.md` — milestone-grained project/docs-evolution narrative |
 
 ### 2.4 Frontmatter value forms
 
@@ -131,7 +128,6 @@ gate ignores them.
 | File | Role |
 |---|---|
 | `index.md` | A category's listing — one entry per page (D8 requires it in indexed dirs and that every page is registered). |
-| `MEMORY.md` | The memory bootloader / loading protocol (`docs/memory/MEMORY.md`). |
 
 Top-level machine docs are `UPPER_CASE.md` (this file, `PLANS.md`, `DESIGN.md`,
 …); all other pages are `kebab-case.md` (D6).
@@ -148,8 +144,8 @@ an actor *acts on*, a dangling pointer is a defect.
 text — `[the completion gate](PLANS.md)`, never `[here](PLANS.md)`:
 
 - **Target** a repo `.md` path. Resolution mirrors the gate: relative to the
-  page's own directory first, then the repo root — an `adr/` page links a sibling
-  knowledge page as `../knowledge/foo.md`, a root doc as `memory/knowledge/foo.md`.
+  page's own directory first, then the repo root — an `adr/` page links a
+  design-doc as `../design-docs/foo.md`, a root doc as `KNOWLEDGE_FORMAT.md`.
 - **Anchor** a section by appending its heading slug: `[…](DESIGN.md#some-heading)`.
 - **Verify** before committing — D5 rejects a broken target, and `nav.py links
   <page>` prints the edges it actually resolved.
