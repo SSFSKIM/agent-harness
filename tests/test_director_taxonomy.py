@@ -50,6 +50,26 @@ class WorkerProtocolTest(unittest.TestCase):
         self.assertIn("report_outcome", low)
         self.assertIn("issueupdate", low)            # named as not-the-worker's
 
+    def test_preamble_names_proportional_context_discipline(self):
+        # F2 (use-all shakedown): orient only as much as the ticket needs (nav is a tool,
+        # not a forced step) AND keep context lean (don't re-carry large logs) — the
+        # turn-cost lever. A focused change must not survey the whole repo.
+        low = tax.WORKER_PROTOCOL.lower()
+        self.assertIn("proportional context", low)
+        self.assertIn("docs-nav", low)               # nav offered as an on-demand tool
+        self.assertIn("re-sent context", low)         # names the dominant cost
+
+    def test_impl_prompt_gates_once_not_repeatedly(self):
+        # F2 context hygiene: the impl worker runs the FULL gate once near completion and
+        # iterates with targeted checks — not the whole 685-test gate after every edit.
+        out = tax.compose_worker_prompt({"identifier": "X-8", "prompt": "build it",
+                                         "labels": ["impl"]})
+        low = out.lower()
+        self.assertIn("gate cadence", low)
+        self.assertIn("targeted", low)
+        self.assertIn("once near", low)
+        self.assertIn("check.py", out)               # the full gate is still named
+
     def test_frame_first_turn_carries_both_blocks_in_order(self):
         out = tax.frame_first_turn("do the thing")
         self.assertTrue(out.startswith("do the thing"))      # prompt comes first

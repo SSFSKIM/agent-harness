@@ -6,14 +6,17 @@ Deep truth lives in `docs/` — follow the pointers.
 
 ## Operating model — every session, in order
 
-1. **Orient.** Read [the charter](docs/CHARTER.md) first — mission, design
-   philosophy (기획의도), and locked assumptions — to anchor on intent before a
-   long session drifts; `python3 plugin/scripts/nav.py map` renders the whole
-   picture against it (charter → initiatives → phases → status). The automatic context feeder is disabled: read
-   `docs/memory/MEMORY.md` when you need continuity and follow its loading
-   protocol. When you need to explore the docs corpus — its structure,
-   relationships, and per-page gist — use the `docs-nav` skill (`nav.py`) by
-   querying, not bulk-reading.
+1. **Orient — proportionally.** Orientation is a tool, not a forced first step.
+   For a broad or unfamiliar change, anchor on intent before the session drifts:
+   read [the charter](docs/CHARTER.md) (mission, design philosophy (기획의도),
+   locked assumptions) and run `python3 plugin/scripts/nav.py map` (charter →
+   initiatives → phases → status). For a small, well-scoped change, skip the
+   survey and go straight to the work — over-orienting a focused ticket just burns
+   context. The `docs-nav` skill (`nav.py` — `map`/`catalog`/`tree`/`backlinks`) is
+   the on-demand way to explore the docs corpus by querying, not bulk-reading,
+   whenever a task actually needs it. The automatic context feeder is disabled:
+   read `docs/memory/MEMORY.md` when you need continuity and follow its loading
+   protocol.
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*

@@ -44,10 +44,13 @@ tickets (labeled impl, blocked_by {identifier}) for the build, using the linear 
 _IMPL_TEMPLATE = """\
 You are an IMPL worker for ticket {identifier}. Follow the execplan procedure in
 plugin/skills/execplan/SKILL.md (and docs/PLANS.md, docs/DESIGN.md): write a living
-ExecPlan under docs/exec-plans/active/, implement it, keep
-`python3 plugin/scripts/check.py` GREEN, and run the completion gate. Split off
-additional impl child tickets (labeled impl, blocked_by {identifier}) only if the work
-is too large for one plan.
+ExecPlan under docs/exec-plans/active/, implement it, and run the completion gate.
+Gate cadence (context hygiene): during iteration, validate with the TARGETED tests/lint
+for what you changed; run the FULL `python3 plugin/scripts/check.py` gate ONCE near
+completion (and again only after a real change) — re-running the whole gate after every
+edit just re-burns its output through context for no new signal. Split off additional
+impl child tickets (labeled impl, blocked_by {identifier}) only if the work is too large
+for one plan.
 
 If the ticket has a PR already attached when you start (rework/feedback loop), run the
 PR FEEDBACK SWEEP (below) FIRST and address it before any new feature work.
@@ -157,9 +160,10 @@ def with_terminal_contract(prompt: str) -> str:
 
 
 # The stage-agnostic WORKER OPERATING PROTOCOL injected into every worker's first-turn
-# prompt (graduated-autonomy slice 1, gap #5). These two disciplines hold for ALL five
-# stages; the four impl-specific disciplines (reproduction-first, acceptance mirroring,
-# temp-proof revert, PR feedback sweep) live in _IMPL_TEMPLATE, not here. Harvested from
+# prompt (graduated-autonomy slice 1, gap #5). These disciplines hold for ALL five
+# stages (incl. proportional context / orient-only-as-needed — the F2 cost lever from the
+# use-all shakedown); the four impl-specific disciplines (reproduction-first, acceptance
+# mirroring, temp-proof revert, PR feedback sweep) live in _IMPL_TEMPLATE, not here. Harvested from
 # docs/symphony-original/WORKFLOW.md's stage-agnostic craft (NOT its lifecycle/board
 # steps — our orchestrator/merger own those). See docs/memory/adr/0002-graduated-autonomy.md
 # + docs/product-specs/2026-06-17-worker-operating-protocol.md.
@@ -185,7 +189,15 @@ board.
 - No scope-creep. If you discover meaningful work outside this ticket's scope, do NOT \
 expand the ticket. File a separate typed child ticket (labeled with the right stage, \
 blocked_by/related to this one as appropriate) using the linear skill, note it, then \
-stay on the current scope."""
+stay on the current scope.
+- Proportional context — orient only as much as THIS ticket needs. Do NOT survey the whole \
+repo for a focused change. Orientation is a tool, not a mandatory step: for a broad or \
+unfamiliar change the `docs-nav` skill (`nav.py map`/`catalog`/`tree`/`backlinks`) surfaces \
+repo structure and status on demand; for a small, well-scoped change skip the survey and go \
+straight to the work. And keep your working context lean — do not re-read files or re-run \
+commands whose output you already have, and never pull a large command/test log back into \
+context (capture the pass/fail signal, not the whole log). Re-sent context is the dominant \
+cost of a turn, so reading less IS working cheaper."""
 
 
 def frame_first_turn(prompt: str) -> str:
