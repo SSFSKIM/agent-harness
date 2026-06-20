@@ -24,6 +24,7 @@ function controllableQuery(calls: any[]) {
     const gen = (async function* () { for await (const _t of prompt) yield { type: "result", result: "ok" }; })();
     return Object.assign(gen, {
       setModel: async (m?: string) => { calls.push(["setModel", m]); },
+      setPermissionMode: async (m: string) => { calls.push(["setPermissionMode", m]); },
       interrupt: async () => { calls.push(["interrupt"]); },
       supportedModels: async () => [{ value: "m1" }],
       supportedCommands: async () => [{ name: "help" }],
@@ -645,5 +646,40 @@ describe("DaemonSupervisor", () => {
     await sup.shutdown();
     expect(sink).toHaveLength(0);                              // never revived (no spawn)
     expect(sup.list()).toEqual([]);                           // graceful shutdown forgot the unrevived claim
+  });
+
+  // ---- Increment C: live-state write-back ----
+  it("set_model write-back: a successful control op updates the registry model", async () => {
+    const sup = new DaemonSupervisor({ query: controllableQuery([]) }, { dir: dir() });
+    const id = sup.spawn({ model: "m1" });
+    expect(sup.list()[0].model).toBe("m1");
+    expect(await sup.control(id, { type: "set_model", model: "haiku" })).toEqual({ ok: true });
+    expect(sup.list()[0].model).toBe("haiku");                 // live model reflected
+    await sup.shutdown();
+  });
+  it("set_permission_mode write-back: a successful control op updates the registry permissionMode", async () => {
+    const sup = new DaemonSupervisor({ query: controllableQuery([]) }, { dir: dir() });
+    const id = sup.spawn({ model: "m1" });
+    expect(await sup.control(id, { type: "set_permission_mode", mode: "acceptEdits" })).toEqual({ ok: true });
+    expect(sup.list()[0].permissionMode).toBe("acceptEdits");
+    await sup.shutdown();
+  });
+  it("a REJECTED control op leaves the record unchanged (write-back gated on res.ok)", async () => {
+    const rejecting = ({ prompt }: any) => {
+      const gen = (async function* () { for await (const _t of prompt) yield { type: "result", result: "ok" }; })();
+      return Object.assign(gen, { setModel: async () => { throw new Error("nope"); }, capabilities: undefined });
+    };
+    const sup = new DaemonSupervisor({ query: rejecting }, { dir: dir() });
+    const id = sup.spawn({ model: "m1" });
+    const res = await sup.control(id, { type: "set_model", model: "haiku" });
+    expect(res.ok).toBe(false);
+    expect(sup.list()[0].model).toBe("m1");                    // unchanged on failure
+    await sup.shutdown();
+  });
+  it("spawn seeds permissionMode onto the record immediately (before any cycle)", async () => {
+    const sup = new DaemonSupervisor({ query: controllableQuery([]) }, { dir: dir() });
+    const id = sup.spawn({ model: "m1", permissionMode: "plan" });
+    expect(sup.list().find((r) => r.id === id)?.permissionMode).toBe("plan");
+    await sup.shutdown();
   });
 });

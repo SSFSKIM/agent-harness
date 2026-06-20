@@ -13,6 +13,7 @@ export interface SessionRecord {
   daemonPid: number;
   status: SessionStatus;
   model?: string;
+  permissionMode?: string;        // live permission mode (Increment C); written back on set_permission_mode
   restart?: RestartPolicy;   // persisted spawn restart posture, for faithful boot-rehydration
   sessionId?: string;      // the SDK session_id (captured from Session.sessionId), for durable resume (Spec 2)
   createdAt: number;

@@ -115,7 +115,7 @@ export class DaemonSupervisor {
     this.configs.set(id, cfg);
     this.pool.set(id, this.makeSession(id, cfg, opts.resume));
     const t = this.now();
-    this.registry.register({ id, daemonPid: process.pid, status: "idle", model, restart: cfg.restart, createdAt: t, lastActiveAt: t });
+    this.registry.register({ id, daemonPid: process.pid, status: "idle", model, permissionMode: cfg.permissionMode, restart: cfg.restart, createdAt: t, lastActiveAt: t });
     return id;
   }
 
@@ -165,7 +165,17 @@ export class DaemonSupervisor {
       const rec = this.registry.get(id);
       throw new DaemonError(rec ? `session ${id} is ${rec.status}` : `unknown session ${id}`);
     }
-    return ControlBridge.apply(session, frame);
+    const res = await ControlBridge.apply(session, frame);
+    if (res.ok) {
+      if (frame.type === "set_model" && frame.model !== undefined) {
+        this.registry.update(id, { model: frame.model });
+        const cfg = this.configs.get(id); if (cfg) cfg.model = frame.model;
+      } else if (frame.type === "set_permission_mode") {
+        this.registry.update(id, { permissionMode: frame.mode });
+        const cfg = this.configs.get(id); if (cfg) cfg.permissionMode = frame.mode;
+      }
+    }
+    return res;
   }
 
   async compact(id: string): Promise<CompactOutcome> {
