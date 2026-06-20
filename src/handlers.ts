@@ -1,6 +1,7 @@
 import { openSession, type Session } from "cc-harness";
 import { Peer } from "./peer.js";
 import { Registry } from "./registry.js";
+import { AppServerBroker } from "./approvals.js";
 import { TurnTranslator } from "./translator.js";
 import { ERR, type ThreadStartParams, type TurnStartParams, type UsageTotals } from "./protocol.js";
 import { withReportOutcome, type OutcomeHolder } from "./tools.js";
@@ -48,11 +49,16 @@ export class AppServer {
   private threadStart(params: ThreadStartParams, id: number | string): void {
     const holder: OutcomeHolder = {};
     const posture = resolvePosture({ approvalPolicy: params.approvalPolicy, autoReview: this.autoReview });
-    let cfg = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode }, holder);
+    let cfg: any = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode }, holder);
     const linearKey = process.env.LINEAR_API_KEY;
     if (linearKey) cfg = withLinear(cfg, linearKey);
+    // Allocate a stable threadId so the broker closure can reference it before open() is called.
+    const threadId = this.reg.allocId();
+    if (posture.roundTripApprovals) {
+      cfg.permissionBroker = new AppServerBroker(this.peer, { threadId, turnId: () => this.reg.get(threadId)?.currentTurnId ?? "" });
+    }
     const session = this.open(cfg, holder);
-    const { id: threadId } = this.reg.newThread(session);
+    this.reg.register(threadId, session);
     this.reg.get(threadId)!.outcome = holder;
     this.peer.reply(id, { thread: { id: threadId } });
     this.peer.notify("thread/started", { thread: { id: threadId } });
@@ -62,6 +68,7 @@ export class AppServer {
     const entry = this.reg.get(params.threadId);
     if (!entry) return this.peer.replyError(id, ERR.INVALID_PARAMS, `unknown thread ${params.threadId}`);
     const turnId = this.reg.nextTurnId(params.threadId);
+    entry.currentTurnId = turnId;
     this.peer.reply(id, { turn: { id: turnId, status: "inProgress" } });
     this.peer.notify("turn/started", { turn: { id: turnId } });
     const text = (params.input ?? []).map((p) => p.text ?? "").join("");

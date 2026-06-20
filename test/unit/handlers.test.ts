@@ -113,6 +113,26 @@ describe("posture wiring in handlers", () => {
     peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
     expect(cfgs[0]?.permissionMode).toBe("default");
   });
+
+  it("on-request + no autoReview -> open cfg has permissionBroker set", async () => {
+    const cfgs: any[] = [];
+    const out: any[] = [];
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: false });
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
+    expect(cfgs[0]?.permissionBroker).toBeDefined();
+  });
+
+  it("autoReview:true -> open cfg does NOT have permissionBroker", async () => {
+    const cfgs: any[] = [];
+    const out: any[] = [];
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: true });
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
+    expect(cfgs[0]?.permissionBroker).toBeUndefined();
+  });
 });
 
 describe("AppServer happy path", () => {
