@@ -173,9 +173,31 @@ scarce"), while staying clearly adapt-or-delete so they aren't this-repo content
 - [x] (2026-06-21) Plan created; spec R2.1–R2.6 read; lint constants + template
   layer surveyed; Explore audit reconciled (2 of 3 "critical" findings were false
   positives — design-docs-index entries are correctly seeded, exec-plans needs no
-  index per D8). base_commit recorded de93b76.
+  index per D8). base_commit recorded de93b76. Plan committed e7f924d.
+- [x] (2026-06-21) M1: authored `principles.md` template (3 universal seed
+  principles, no `adr/` link), wired into SEEDS; tmp scaffold renders
+  `docs/PRINCIPLES.md` with only the intended FILL marker.
+- [x] (2026-06-21) M2: authored `references-index.md`, `product-specs-index.md`,
+  `exec-plan-active-index.md`, `exec-plan-completed-index.md`; wired all four into
+  SEEDS; trimmed `TOP_INDEXES` to `("adr",)`; fixed the stale "memory loop"
+  phrase in `design-docs-index.md`.
+- [x] (2026-06-21) M3: rewrote `architecture-md.md` from FILL skeleton to a
+  redirect to the `architecture-setup` skill (frontmatter-free, D10-satisfying).
+- [x] (2026-06-21) M4: fresh tmp scaffold gates GREEN (`check.py --root`); all 23
+  R2.1 docs present; no stray FILL/TBD/unrendered tokens; `nav.py roadmap` shows
+  0 plans (exec-plans index guides not mistaken for plans); updated the stale
+  `test_scaffold` architecture test to the redirect contract; self-host gate GREEN.
 
 ## Surprises & discoveries
+- `test_scaffold.test_architecture_template_guides_host_specific_codemap` asserted
+  the OLD skeleton phrasing ("Bird's Eye View", "Invariant -> FORM"). R2.4 retires
+  that skeleton, so the test encoded a now-dead contract — rewrote it as
+  `test_architecture_template_redirects_to_architecture_setup` (asserts the
+  redirect + a negative `<!-- FILL` assertion). A test failing because the spec
+  *changed the contract* is correct TDD, not a workaround.
+- The PRINCIPLES guide originally said "in the FILL block" in prose, tripping a
+  naive `grep FILL` twice; reworded to "in the marker below" so the only "FILL"
+  token is the actual `<!-- FILL -->` marker (keeps the M4 acceptance grep honest).
 
 ## Decision log
 - 2026-06-21: **Pointer guides over duplication** (Approach B) for the exec-plans

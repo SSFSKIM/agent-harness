@@ -77,16 +77,20 @@ class TestScaffold(unittest.TestCase):
         for name in names:
             self.assertIn(name, page)
 
-    def test_architecture_template_guides_host_specific_codemap(self):
+    def test_architecture_template_redirects_to_architecture_setup(self):
+        # R2.4: the ARCHITECTURE seed is a placeholder that redirects to the
+        # architecture-setup skill (which authors it from the host's real
+        # source) — NOT a hand-fillable generic skeleton (no-drift).
         arch = (self.root / "ARCHITECTURE.md").read_text(encoding="utf-8")
         for phrase in (
-            "Bird's Eye View",
-            "where is the thing that does X?",
-            "Boundaries and API Surfaces",
-            "Cross-Cutting Concerns",
-            "Invariant -> FORM",
+            "architecture-setup",      # directs to the skill
+            "placeholder",             # it is a placeholder, not the real doc
+            "Do not hand-fill",        # the no-duplication contract
+            "D10",                     # the existence contract it satisfies
         ):
             self.assertIn(phrase, arch)
+        # the redirect ships no FILL skeleton to hand-fill
+        self.assertNotIn("<!-- FILL", arch)
 
     def test_harness_init_separates_architecture_authoring_from_scaffold(self):
         skill = (PLUGIN / "skills" / "harness-init" / "SKILL.md").read_text(

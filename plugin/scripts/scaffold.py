@@ -26,6 +26,10 @@ SEEDS = (  # (template, destination relative to host root)
     ("agent-harness.md", "docs/design-docs/agent-harness.md"),
     ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
     ("design-docs-index.md", "docs/design-docs/index.md"),
+    ("product-specs-index.md", "docs/product-specs/index.md"),  # guided: phase/parent + derived roadmap
+    ("references-index.md", "docs/references/index.md"),  # guided: why references exist (llms.txt convention)
+    ("exec-plan-active-index.md", "docs/exec-plans/active/index.md"),  # lifecycle guide (not a listing)
+    ("exec-plan-completed-index.md", "docs/exec-plans/completed/index.md"),  # lifecycle guide (not a listing)
     ("reliability.md", "docs/RELIABILITY.md"),
     ("security.md", "docs/SECURITY.md"),
     ("logs.md", "docs/logs.md"),  # on-demand milestone log (replaces the retired memory bootloader/progress)
@@ -38,8 +42,10 @@ SEEDS = (  # (template, destination relative to host root)
     ("architecture-md.md", "ARCHITECTURE.md"),
     ("quality-score.md", "docs/QUALITY_SCORE.md"),
     ("product-sense.md", "docs/PRODUCT_SENSE.md"),
+    ("principles.md", "docs/PRINCIPLES.md"),  # the human's externalized decision-taste (central Director reads it at a fork)
 )
-TOP_INDEXES = ("adr", "product-specs", "references")  # docs/<cat>/index.md
+TOP_INDEXES = ("adr",)  # docs/<cat>/index.md via generic category-index.md;
+# product-specs + references now ship dedicated guided indexes (see SEEDS)
 GITIGNORE_LINES = (".claude/harness/",)
 # Forms by which a host may already blanket-ignore all of .claude/ — then
 # .claude/harness/ runtime state is covered, but instance skills under
