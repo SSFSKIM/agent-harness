@@ -20,7 +20,7 @@ npm run cli                             # tsx src/cli.ts
 ## `src/` module map
 
 - **`index.ts`** — the curated **public API** barrel. Add exports here deliberately; `test/unit/index.test.ts` pins the surface.
-- **`config/`** — `resolveOptions(config)` builds the SDK `Options`. **The single seam most features wire through** (`createHarness` + lib `Session` both call it). NB: the **daemon does NOT use it** — per-session options come from a caller-supplied `sessionOptions` factory (`daemon/supervisor.ts`).
+- **`config/`** — `resolveOptions(config)` builds the SDK `Options`. **The single seam most features wire through** (`createHarness` + lib `Session` both call it). NB: as of Increment A the **daemon also routes through it** (`daemon/supervisor.ts` `makeSession`), overlaying a per-session `sessionOptions` factory and the daemon permission broker (`canUseTool`).
 - **`harness.ts`** — `createHarness` / `resumeHarness`: one-shot `run`/`stream` (single `query()` turn).
 - **`session/`** — lib interactive multi-turn `Session` (`openSession`/`resumeSession`, `.sessionId` capture, compact/control/rewind). `sessions/` — read API (`listSessions`/`getSessionMessages`) + `forkSession`.
 - **`daemon/`** — long-lived multi-session service: `supervisor` (pool + restart) + UDS `server` + `registry` (`DaemonSession extends Session`).
