@@ -86,15 +86,24 @@ Deep truth lives in `docs/` — follow the pointers.
   propagation where you can (e.g. the machine-doc→seed guard). Full text: core
   belief 13.
 
-## Porting
+## Porting / adopting
 
-- The `harness-init` skill bootstraps this harness into another host repo:
+The harness has **two halves with two distribution models** — the *method* travels
+into your repo, the *Director* stays here and reaches out:
+
+- **The method → your repo.** The `harness-init` skill bootstraps this harness into another host repo:
   deterministic scaffold (`scaffold.py`) → write the map → migrate existing
   docs → adapt seeds → mechanize the host's invariants (the `architecture-setup`
   skill routes each by FORM — lints under `.claude/lints/` wired via
   `.harness.json`, guide-skills under `.claude/skills/`) → check GREEN. Templates
   live inside the skill. The harness enforces only its own structure; a host's
   app-code rules are the host's, not hardcoded here (ARCHITECTURE invariant 7).
+- **The Director → run from here.** The orchestration layer (`director/`) is
+  **centralized**, not ported: you run it from *this* repo against your project's
+  Linear board + git repo (workers clone your repo into a scratch workspace; the
+  `director` launcher skill enters the watched loop). To stand it up against a
+  project from zero, see [docs/DIRECTOR.md](docs/DIRECTOR.md) §0 ("Standing up the
+  Director against a project").
 
 ## Memory (read/write paths)
 

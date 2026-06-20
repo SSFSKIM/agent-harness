@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-18
+last_verified: 2026-06-20
 owner: harness
 type: methodology
 tags: [director, orchestration, operating-manual]
@@ -12,6 +12,92 @@ description: The operating manual for running the harness as the Director, the w
 operate when you **run** it as the Director. They are different activities; a
 session adopts this manual only when it enters Director mode (the `director`
 launcher skill is the marker — you don't become the Director by accident).
+
+## 0. Standing up the Director against a project (first time)
+
+> Already running? Skip to §1. This is the Day-0 path for aiming the Director at a
+> project for the first time — the rest of this manual assumes you are past it.
+
+**The consumption model — the Director is centralized, not ported.** You do not copy
+`director/` into your project. You run it **from this repo** (the agent-harness
+checkout *is* the orchestrator) and aim it at *your* project: its Linear board and
+its git repo. Workers clone your repo into a scratch workspace (the `workspace.hooks`
+below), do the work there, and open PRs against it. The *development method*
+(ExecPlans, lints, review personas) is the other half of the harness — that half
+**does** travel into your repo, separately, via the `harness-init` skill (AGENTS.md
+"Porting"). Two halves, two distribution models: the **method** travels to the host;
+the **Director** stays here and reaches out.
+
+**Prerequisites (one-time).**
+- The **`codex` CLI** (the worker runtime) on PATH — `codex app-server` is the spawn
+  (`director.codex_command`); each worker is a Codex app-server subprocess.
+- **`gh` authenticated** for the target repo with a token that can open *and merge*
+  PRs (the merger squash-merges). Export it as **`GH_TOKEN`** — the deny-by-default
+  worker env forwards only the keys in `worker_policy.worker_env` (just `GH_TOKEN` by
+  default), so nothing else leaks into the sandbox.
+- The **Linear MCP** connected in *this* Director session (it reads/writes the board),
+  plus **`LINEAR_API_KEY`** in your environment.
+- Secrets live in `.env` / `$VAR`, **never committed**; `.harness.json` references them
+  by `$NAME` indirection (§11).
+
+**Configure the run** — add a `director` block to this repo's `.harness.json` (§11 is
+the full knob reference; this is the minimum to aim at a project):
+
+```jsonc
+{
+  "director": {
+    "team": "$DIRECTOR_TEAM",          // the Linear team/board UUID to poll
+    "states": {                         // logical state -> YOUR board's column names
+      "ready":   "Todo",
+      "started": "In Progress",
+      "done":    "Done",
+      "merging": "In Review"            // present -> enables merge-gated landing (§7)
+    },
+    "concurrency": 2,
+    "dispatch_requires_label": true,    // only claim tickets tagged with a dev-stage label
+    "worker": { "tools": "linear", "install_skills": true },
+    "paths": { "workspace_root": ".harness/workspaces" },
+    "workspace": {
+      "hooks": {
+        "after_create": "git clone https://x-access-token:${GH_TOKEN}@github.com/<owner>/<repo>.git .",
+        "before_run":   "git fetch origin && git checkout main && git reset --hard origin/main && git clean -fd"
+      }
+    }
+  }
+}
+```
+
+> **The workspace hooks are what put your code in front of the worker.** Without an
+> `after_create` clone the workspace is an **empty directory** (that is why `--mock`
+> runs need no hooks). `after_create` runs once when the workspace is created;
+> `before_run` re-syncs it to `origin/main` before each ticket, so a child builds on
+> its parent's *landed* base, never a stale tree (§7 merge-gated). The land skill and
+> the merger target **`main`** — set your repo's default branch to `main`. The literal
+> `${GH_TOKEN}` survives config's `$VAR` resolver (only a value that is *entirely*
+> `$NAME` is substituted), so the token is injected at hook-exec time, not baked into
+> the resolved config.
+
+**Prepare the board (one-time).** Create the dev-stage labels on the team —
+`planning` / `spec` / `design` / `research` / `impl` — and tag each ticket with the
+one stage it should run (`impl` routes the full ExecPlan methodology). With
+`dispatch_requires_label: true` an unlabelled ticket is never claimed, so onboarding
+and stray issues are ignored rather than dispatched as workers.
+
+**Launch.** Invoke the **`director`** launcher skill once — it reads this manual,
+starts the watched orchestrator as a background task, and arms the queue Monitor so
+each worker turn-end event-wakes you (§5). By hand it is:
+
+```
+python3 -m director.orchestrator --team $DIRECTOR_TEAM                 # watched, background
+python3 -m director.watch --kinds turnReview,mergeReview,runReport     # Monitor
+```
+
+From here you **are** the Director — operate under §1 onward.
+
+**Validate safely first.** Real workers open real PRs and the merger really
+squash-merges, so never first-run against a repo whose `main` you care about. Dry-run
+against a **disposable copy repo** + a throwaway board, or bound it hard with
+`python3 -m director.run --linear <ID>` (drives ONE ticket, never polls the board).
 
 ## Identity
 

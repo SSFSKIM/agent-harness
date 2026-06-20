@@ -7,6 +7,13 @@ description: Use when setting up, installing, initializing, bootstrapping, or po
 Port the harness (docs-as-memory substrate + lints + personas) into a host
 repo. The plugin stays where it lives; the host gains the minimum machine
 contract plus a project-specific docs shape chosen from the repo itself.
+
+**Scope — this ports the *method*, not the Director.** The orchestration Director
+is *not* installed into a host: it is centralized and run from the agent-harness
+repo against your board + repo (see `docs/DIRECTOR.md` §0). `harness-init` makes a
+repo ready to be *developed under* the harness; standing up the Director to drive
+that repo is a separate, one-time setup.
+
 Resolve `PLUGIN` once: this SKILL.md sits at `<plugin>/skills/harness-init/`,
 so PLUGIN is two directories up.
 
