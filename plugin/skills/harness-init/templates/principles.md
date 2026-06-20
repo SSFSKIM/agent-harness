@@ -19,8 +19,10 @@ the principle); if this file is silent or ambiguous, it **parks** the item
 
 This is a **sibling**, not a duplicate, of the other operating docs:
 - `PRODUCT_SENSE.md` — what this project *optimizes* (the scarce resource).
-- The Director's operating manual (`DIRECTOR.md`) — the *mechanics* of
-  taste-vs-handle (when to escalate at all).
+- The centralized Director's operating manual — the *mechanics* of
+  taste-vs-handle (when to escalate at all). It lives with the Director (run from
+  the agent-harness repo), not in this host; this file is what that Director
+  reads here at a fork.
 - **`PRINCIPLES.md`** (this file) — the *content* that lets "escalate" first try
   "infer the human's call."
 
