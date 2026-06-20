@@ -119,7 +119,7 @@ machine-readable field that survives independent of path. Recommended vocabulary
 | `type` value | For pages like |
 |---|---|
 | `knowledge` | `docs/memory/knowledge/*` — reusable how-it-works |
-| `adr` | `docs/memory/adr/*` — decision + why |
+| `adr` | `docs/adr/*` — decision + why |
 | `limitation` | `docs/memory/limitations/*` — known landmines |
 | `openq` | `docs/memory/openq/*` — unresolved questions |
 | `progress` | `docs/memory/progress/*` — where we are |

@@ -29,7 +29,7 @@ import harness_lib as hl
 # read-only navigator.
 EXEMPT = hl.DOC_EXEMPT
 # Reserved spine files: indexed as link roots, never catalog rows or orphans.
-RESERVED = ("index.md", "MEMORY.md")
+RESERVED = ("index.md",)
 
 
 def _as_list(v):

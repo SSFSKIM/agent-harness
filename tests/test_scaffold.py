@@ -22,11 +22,10 @@ class TestScaffold(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_tree_created(self):
-        for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md",
+        for rel in ("AGENTS.md", "CLAUDE.md", "ARCHITECTURE.md", ".harness.json",
                     "docs/CHARTER.md",
-                    "docs/memory/MEMORY.md",
-                    "docs/memory/progress/current.md",
-                    "docs/memory/openq/index.md",
+                    "docs/logs.md",
+                    "docs/adr/index.md",
                     "docs/design-docs/agent-harness.md",
                     "docs/exec-plans/tech-debt-tracker.md",
                     "docs/generated/component-inventory.md",

@@ -100,7 +100,7 @@ directory-implicit taxonomy into the field:
 | `type` | For pages like |
 |---|---|
 | `knowledge` | `memory/knowledge/*` — reusable how-it-works |
-| `adr` | `memory/adr/*` — decision + why |
+| `adr` | `adr/*` — decision + why |
 | `limitation` | `memory/limitations/*` — known landmines |
 | `openq` | `memory/openq/*` — unresolved questions |
 | `progress` | `memory/progress/*` — where we are |

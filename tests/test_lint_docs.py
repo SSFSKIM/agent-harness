@@ -77,13 +77,6 @@ class TestLintDocs(unittest.TestCase):
         idx.write_text(fm() + "# Index\n- core-beliefs.md\n- Bad_Name.md\n")
         self.assertTrue(any("D6" in e for e in run_all(self.root)))
 
-    def test_memory_bootloader_has_no_line_cap(self):
-        mem = self.root / "docs" / "memory"
-        mem.mkdir(parents=True)
-        (mem / "MEMORY.md").write_text("x\n" * 1000)
-        errs = run_all(self.root)
-        self.assertFalse(any("D7" in e and "MEMORY.md" in e for e in errs), errs)
-
     def test_d8_unregistered_page(self):
         extra = self.root / "docs" / "design-docs" / "loose-page.md"
         extra.write_text(fm() + "# loose\n")
@@ -165,18 +158,18 @@ class TestLintDocs(unittest.TestCase):
         self.assertFalse(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_does_not_exempt_unlisted_managed_doc(self):
-        d = self.root / "docs" / "memory" / "knowledge"
+        d = self.root / "docs" / "adr"
         d.mkdir(parents=True)
         (d / "loose.md").write_text("# no frontmatter\n")
         self._legacy("business/")  # declares a DIFFERENT root
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_cannot_exempt_managed_tree(self):
-        # a host listing the memory tree must not un-govern it (security)
-        bad = self.root / "docs" / "memory" / "knowledge"
+        # a host listing a managed tree (adr) must not un-govern it (security)
+        bad = self.root / "docs" / "adr"
         bad.mkdir(parents=True)
         (bad / "loose.md").write_text("# no frontmatter\n")
-        self._legacy("memory/")
+        self._legacy("adr/")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_cannot_exempt_product_specs(self):
@@ -219,11 +212,11 @@ class TestLintDocs(unittest.TestCase):
         self.assertTrue(any("business" in e and "D6" in e for e in errs), errs)
 
     def test_harnessignore_partial_prefix_cannot_bypass_managed_guard(self):
-        # `mem` must not reach `memory/…` (security P1 — the poisoning vector).
-        bad = self.root / "docs" / "memory" / "knowledge"
+        # `ad` must not reach `adr/…` (security P1 — the poisoning vector).
+        bad = self.root / "docs" / "adr"
         bad.mkdir(parents=True)
         (bad / "poison.md").write_text("# no frontmatter\n")
-        self._legacy("mem")
+        self._legacy("ad")
         self.assertTrue(any("D3" in e for e in run_all(self.root)))
 
     def test_harnessignore_cannot_exempt_top_level_machine_doc(self):
@@ -234,9 +227,9 @@ class TestLintDocs(unittest.TestCase):
                             for e in run_all(self.root)))
 
     def test_harnessignore_drop_guard_normalizes_dotslash(self):
-        # `./memory` must be dropped by the guard itself (both layers agree),
+        # `./adr` must be dropped by the guard itself (both layers agree),
         # not merely rendered inert by _exempt.
-        self._legacy("./memory", "memory//knowledge", "business/")
+        self._legacy("./adr", "adr//sub", "business/")
         self.assertEqual(lint_docs.hl.exempt_roots(self.root), ("business",))
 
     def test_agents_md_line_count_is_not_governed_by_config(self):
@@ -285,14 +278,6 @@ class TestLintDocs(unittest.TestCase):
         errs = []
         lint_docs.check_frontmatter(self.root, errs, (), 9999)  # try to loosen
         self.assertTrue(any("D4" in e and "SECURITY.md" in e for e in errs), errs)
-
-    def test_memory_bootloader_config_size_limit_is_ignored(self):
-        mem = self.root / "docs" / "memory"
-        mem.mkdir(parents=True)
-        (mem / "MEMORY.md").write_text("x\n" * 200)
-        write_cfg(self.root, size_limits={"MEMORY.md": 1})
-        errs = run_all(self.root)
-        self.assertFalse(any("D7" in e for e in errs), errs)
 
     def test_d9_superpowers_mention_does_not_count(self):
         plugin = make_plugin(self.root)

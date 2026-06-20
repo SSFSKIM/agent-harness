@@ -10,7 +10,7 @@ description: The human-reachability complement to the lights-out Director — tu
 # Director operator console — actionable dashboard + park notifications
 
 The human-reachability complement to the lights-out Director
-([ADR 0003](../memory/adr/0003-lights-out-director.md)). Turns the existing
+([ADR 0003](../adr/0003-lights-out-director.md)). Turns the existing
 **read-only** dashboard ([director-observability-dashboard](2026-06-16-director-observability-dashboard.md))
 into an **actionable** surface and adds the missing "reach an absent human"
 channel. This is the deferred slice that doc's D-2 + Open Question named

@@ -1,7 +1,7 @@
 ---
 status: stable
-last_verified: 2026-06-18
-owner: imprint-job
+last_verified: 2026-06-21
+owner: harness
 type: knowledge
 tags: [hooks, recursion-guard, headless, subprocess]
 resource: plugin/scripts/harness_lib.py
@@ -26,5 +26,6 @@ Any harness-spawned claude child process **must** receive the env returned by `h
 Omitting it means the child runs hooks, causing recursion or doubled side-effects.
 
 ## Source
-`plugin/scripts/harness_lib.py` — `is_headless()` and `headless_env()`.
-Confirmed in session `archive/sessions/2026-06-12-e2e-test-session-end.md`.
+`plugin/scripts/harness_lib.py` — `is_headless()` and `headless_env()`. The
+surviving consumer is the `Stop`-hook `tidy_stop.py` (the feeder/imprint hooks
+that originally drove this guard were retired with the memory loop).

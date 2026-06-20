@@ -15,15 +15,12 @@ import harness_lib as hl
 
 STALE_DAYS = hl.STALE_DAYS  # the one default lives in harness_lib (shared with nav)
 FM_REQUIRED = ("status", "last_verified", "owner")
-INDEXED_DIRS = ("design-docs", "product-specs", "references",
-                "memory/adr", "memory/knowledge", "memory/openq",
-                "memory/limitations")
-HOST_INDEXED_DIRS = ("design-docs", "product-specs", "memory/adr",
-                     "memory/knowledge", "memory/openq", "memory/limitations")
+INDEXED_DIRS = ("adr", "design-docs", "product-specs", "references")
+HOST_INDEXED_DIRS = ("adr", "design-docs", "product-specs")
 # Relaxed-mode content-governed roots. `generated/` is intentionally absent:
 # generated pages are frontmatter-exempt and guarded from .harnessignore
 # un-governance separately — cf. hl.MANAGED_ROOTS, which DOES include it.
-HOST_MANAGED_ROOTS = ("design-docs", "exec-plans", "memory", "product-specs")
+HOST_MANAGED_ROOTS = ("adr", "design-docs", "exec-plans", "product-specs")
 FM_EXEMPT = hl.DOC_EXEMPT  # the shared exempt set (one definition in harness_lib)
 MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of them
     "ARCHITECTURE.md", "docs/PLANS.md", "docs/DESIGN.md",
@@ -33,11 +30,9 @@ MACHINE_DOCS = (  # docs the machine reads — D10; scaffold.py seeds all of the
 )
 # Harness docs whose D4 staleness a host override may only TIGHTEN, never
 # loosen (SECURITY T8/T9 — a host can't .harness.json its own critical docs into
-# rot). Keyed by repo-relative PATH, not bare name: the memory bootloader lives
-# at docs/memory/MEMORY.md (not docs/ top level), and keying by name would also
-# wrongly protect a host's unrelated docs/x/SECURITY.md.
-PROTECTED_PATHS = frozenset(
-    ["docs/" + n for n in hl.MANAGED_DOCS] + ["docs/memory/MEMORY.md"])
+# rot). Keyed by repo-relative PATH, not bare name, so it can't wrongly protect a
+# host's unrelated docs/x/SECURITY.md.
+PROTECTED_PATHS = frozenset("docs/" + n for n in hl.MANAGED_DOCS)
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9.-]*\.md$")
 UPPER = re.compile(r"^[A-Z_]+\.md$")
 # Canonical `phase` grammar (D12): `<initiative>` or `<initiative>/<NN>-<slug>`,
@@ -121,7 +116,7 @@ def check_entrypoints(root, errors):
 def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
     docs = root / "docs"
     for p in hl.iter_md(docs):
-        if _exempt(p, docs, FM_EXEMPT + host) or p.name == "MEMORY.md":
+        if _exempt(p, docs, FM_EXEMPT + host):
             continue
         if not _governed_doc(p, root, docs, cfg):
             continue
@@ -152,9 +147,7 @@ def check_frontmatter(root, errors, host=(), stale_days=STALE_DAYS, cfg=None):
                       "Use a scalar ISO date YYYY-MM-DD (not a list).")
         # Navigation keys (D11/D12) govern CONTENT pages, not reserved spines: an
         # index.md is itself a listing (not a navigable concept-page) — it still
-        # gets D3/D4/D8, but not the nav-key contract. Mirrors nav.py RESERVED and
-        # the existing MEMORY.md skip; matches the catalog-scoped 99/99 the spec
-        # measured.
+        # gets D3/D4/D8, but not the nav-key contract. Mirrors nav.py RESERVED.
         if p.name == "index.md":
             continue
         # D11 — required navigation keys (KF v2.0 governance flip): type +
@@ -237,7 +230,7 @@ def check_naming(root, errors, host=(), cfg=None):
             continue
         if not _governed_doc(p, root, docs, cfg):
             continue
-        ok = (KEBAB.match(p.name) or p.name == "MEMORY.md"
+        ok = (KEBAB.match(p.name)
               or (p.parent == docs and UPPER.match(p.name)))
         if not ok:
             _fail(errors, "D6", _rel(p, root), "filename is not kebab-case.",

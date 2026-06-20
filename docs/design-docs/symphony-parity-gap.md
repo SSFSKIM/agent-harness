@@ -20,7 +20,7 @@ chosen next move lives in its own spec (see "Derived work" below).
 
 > **Strategic update (2026-06-17).** This doc's "neither bet is ahead" stance and
 > its gap-#5-as-output-quality framing are **narrowed by
-> [ADR 0002 — graduated autonomy](../memory/adr/0002-graduated-autonomy.md)**: we
+> [ADR 0002 — graduated autonomy](../adr/0002-graduated-autonomy.md)**: we
 > now deliberately take Symphony's autonomy bet on the *middle* (Director →
 > exception-handler) and *worker-autonomy* axes, while **keeping** our board-ownership
 > + serialized merger (those are correctness wins, not human-in-loop artifacts). Gap
@@ -123,7 +123,7 @@ source-of-truth, reproduction-first, acceptance-criteria mirroring, the **PR
 feedback sweep**, and the explicit Human Review / Rework lifecycle. Our per-stage
 templates in `taxonomy.py` are a few sentences each. This is the lever for worker
 *output quality* — and, per
-[ADR 0002](../memory/adr/0002-graduated-autonomy.md), the **precondition for
+[ADR 0002](../adr/0002-graduated-autonomy.md), the **precondition for
 graduated autonomy**: the worker protocol must be rich enough to run unsupervised
 before the Director can step back from judging every turn-end. Harvest the
 stage-agnostic disciplines into a shared worker-protocol preamble; do **not** port

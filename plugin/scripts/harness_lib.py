@@ -147,10 +147,10 @@ def links_in(text):
 
 
 # Doc trees the harness always governs — never exemptable via .harnessignore,
-# so a host can't un-govern (and silently poison) the memory/design/product tree.
+# so a host can't un-govern (and silently poison) the adr/design/product tree.
 # MANAGED_ROOTS = subdirectories; MANAGED_DOCS = top-level docs/ machine docs
 # (the persona grounding + execplan docs that the review gate itself rides on).
-MANAGED_ROOTS = ("design-docs", "exec-plans", "generated", "memory",
+MANAGED_ROOTS = ("adr", "design-docs", "exec-plans", "generated",
                  "product-specs")
 # docs/ subtrees that carry no governed frontmatter — skipped by content lints
 # AND by nav's catalog scope. One definition both consume (core-belief 5);

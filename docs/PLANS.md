@@ -47,7 +47,7 @@ This applies **recursively and at the spec level**: a sub-project that is itself
 too big decomposes the same way, each piece getting its own spec → ExecPlan
 cycle; a parent (capability) spec just indexes its children and any roadmap is a
 derived view of them. No higher-order spec system is needed — run-time fan-out is
-the ticket DAG, not a doc subsystem (see `docs/memory/adr/0001-recursive-decomposition.md`).
+the ticket DAG, not a doc subsystem (see `docs/adr/0001-recursive-decomposition.md`).
 
 ## Review budget
 Two reviews are **always-on** — they run at every ExecPlan completion regardless of the

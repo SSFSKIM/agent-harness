@@ -9,16 +9,16 @@ description: Splits the mode bit into Director-presence and human-presence axes 
 ---
 # Lights-out Director — Core Principle layer, park contract, board comment, issueUpdate ceiling
 
-Slice 2 of [ADR 0002](../memory/adr/0002-graduated-autonomy.md), built on the
-reframe in [ADR 0003](../memory/adr/0003-lights-out-director.md). This spec owns the
+Slice 2 of [ADR 0002](../adr/0002-graduated-autonomy.md), built on the
+reframe in [ADR 0003](../adr/0003-lights-out-director.md). This spec owns the
 **design**; the ExecPlan that follows owns the **build**.
 
 ## Context
 
-- **Decisions (own the shape):** [ADR 0003](../memory/adr/0003-lights-out-director.md)
+- **Decisions (own the shape):** [ADR 0003](../adr/0003-lights-out-director.md)
   (the two-axis mode model, the `PRINCIPLES.md` layer, the taste-vs-mechanical
   decision procedure, the daemon-as-separate-track, the no-headless reconciliation)
-  and its parent [ADR 0002](../memory/adr/0002-graduated-autonomy.md) (human at the
+  and its parent [ADR 0002](../adr/0002-graduated-autonomy.md) (human at the
   edges, autonomous in the middle; the 2a/2b/2c bundle).
 - **Precondition (done):** slice 1,
   `2026-06-17-worker-operating-protocol.md` — the richer `WORKER_PROTOCOL`

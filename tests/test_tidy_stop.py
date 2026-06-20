@@ -68,7 +68,7 @@ class TestTidyStop(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_non_harness_repo_is_ignored(self):
-        (self.root / "docs" / "memory" / "MEMORY.md").unlink()
+        (self.root / ".harness.json").unlink()
         r = run_tidy(self.root)  # activation sentinel gone — must no-op
         self.assertEqual(r.returncode, 0)
 

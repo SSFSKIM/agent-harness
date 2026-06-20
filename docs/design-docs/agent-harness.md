@@ -76,7 +76,7 @@ dreaming). **Self-host**: the machine itself lives in this repo at `plugin/`.
 | Failure mode / idempotency rule | `docs/RELIABILITY.md` |
 | Threat / mitigation | `docs/SECURITY.md` |
 | Reusable how-it-works | `docs/memory/knowledge/` |
-| Decision + why | `docs/memory/adr/` |
+| Decision + why | `docs/adr/` |
 | Known landmine | `docs/memory/limitations/` |
 | Unresolved question | `docs/memory/openq/` |
 | Product behavior | `docs/product-specs/` (harness-managed by default) |

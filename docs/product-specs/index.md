@@ -52,7 +52,7 @@ owner: harness
   의 미뤄둔 "done-is-really-done" + visibility 의 "terminal sanity-check" 을 닫음. Playwright-in-
   sandbox 실행 가능성은 ExecPlan PoC.
 - [Lights-out Director — Core Principle 레이어 · park 계약 · board comment · issueUpdate ceiling](2026-06-17-lights-out-director.md)
-  — [ADR 0002](../memory/adr/0002-graduated-autonomy.md) slice 2, [ADR 0003](../memory/adr/0003-lights-out-director.md)
+  — [ADR 0002](../adr/0002-graduated-autonomy.md) slice 2, [ADR 0003](../adr/0003-lights-out-director.md)
   reframe 위에 빌드. mode bit 을 (Director 有無)×(human 有無) 두 축으로 분리 — "autonomous"
   가 *human 부재*(Director-only, daemon 이 큐 응답)로 재바인딩되고 pure-code `autonomous_decide`
   는 no-agent(`--mock`/CI) niche 로 후퇴(새 orchestrator flag 0 — 누가 응답하느냐로 실현).
@@ -127,7 +127,7 @@ owner: harness
   `backoff_cap_s`(300s). Symphony per-completion 재-check 은 NON-GOAL(active-run reconciliation 이
   충족). 이 슬라이스로 **daemon 트랙(gap #1/#2/#3) CLOSED**.
 - [Worker operating-protocol depth (graduated-autonomy slice 1)](2026-06-17-worker-operating-protocol.md)
-  — [ADR 0002](../memory/adr/0002-graduated-autonomy.md) 의 선행 슬라이스, Symphony 정합 gap #5.
+  — [ADR 0002](../adr/0002-graduated-autonomy.md) 의 선행 슬라이스, Symphony 정합 gap #5.
   원본 [`WORKFLOW.md`](../symphony-original/WORKFLOW.md) 의 stage-agnostic 운영 규율을 **수확**
   (파일 포팅 아님): 공유 `WORKER_PROTOCOL` preamble(단일 살아있는 source-of-truth + no-scope-creep→
   typed child)을 `TERMINAL_CONTRACT` 와 같은 first-turn seam(`drive`)에 주입 → 모든 dispatch 경로;
@@ -136,7 +136,7 @@ owner: harness
   직렬 merger·`report_outcome`·5 typed stage 에 대고). 워커-프롬프트 only — `decider.py`(slice 2)·
   보드 소유·merger 불변. graduated-autonomy 의 *worker-autonomy enabler*.
 - [Director operator console — actionable dashboard + park notifications](2026-06-18-director-operator-console.md)
-  — the human-reachability complement to lights-out ([ADR 0003](../memory/adr/0003-lights-out-director.md)).
+  — the human-reachability complement to lights-out ([ADR 0003](../adr/0003-lights-out-director.md)).
   Turns the read-only dashboard ([observability-dashboard](2026-06-16-director-observability-dashboard.md)
   D-2 deferred slice) into an **actionable** surface + adds the missing "reach an
   absent human" channel. `POST /api/v1/answer` resolves a pending queue request via
@@ -206,7 +206,7 @@ owner: harness
   configuring `merging`; merger stays board-free; R19 act-before-consume preserved.
 - [Merge-preservation hardening](2026-06-19-merge-preservation-hardening.md)
   — the merger gains a preservation-first land precondition so a squash-merge cannot silently
-  drop/overwrite either side's work. gap #5 worker-protocol track ([ADR 0002](../memory/adr/0002-graduated-autonomy.md)/[0003](../memory/adr/0003-lights-out-director.md)):
+  drop/overwrite either side's work. gap #5 worker-protocol track ([ADR 0002](../adr/0002-graduated-autonomy.md)/[0003](../adr/0003-lights-out-director.md)):
   the PR-feedback-sweep shipped as prose (slice-1 `_IMPL_TEMPLATE` R7) but nothing *verifies* it,
   and the merger's only GREEN is the local integration gate. Spine (D1): code owns the irreversible
   merge — the land worker *prepares* (rebase/fix-CI/resolve-threads), then merger CODE runs a

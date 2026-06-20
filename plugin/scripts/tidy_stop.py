@@ -73,8 +73,8 @@ def main():
             return 0
         sys.stdin.read()  # drain the hook payload (content unused)
         root = hl.repo_root()
-        if not (root / "docs" / "memory" / "MEMORY.md").exists():
-            return 0  # not a harness host — activation sentinel (same as feeder)
+        if not (root / ".harness.json").exists():
+            return 0  # not a harness host — activation sentinel (scaffold seeds it)
         fp = fingerprint(root)
         if fp is None:
             return 0

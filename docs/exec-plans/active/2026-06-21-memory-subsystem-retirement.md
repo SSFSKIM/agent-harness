@@ -153,9 +153,18 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
   the `test_gen_inventory` fixture off the deleted components; regenerated the
   inventory (−2 rows). Gate GREEN (694 tests, was 699). `tidy_stop` kept untouched
   (M2 owns its sentinel re-point).
-- [ ] M2 — docs reorg + machine rewire (atomic): incl. `tidy_stop` sentinel
-  MEMORY.md→`.harness.json` + scaffold emitting `.harness.json`.
-- [ ] M3 — narrative + fresh-scaffold verification
+- [x] (2026-06-21) M2 — docs reorg + machine rewire (atomic). Moved ADRs →
+  `docs/adr/` + recursion-guard → `docs/design-docs/`; folded openq+limitations into
+  the tracker (incl. 2 now-moot dreamer/imprint rows closed); created `docs/logs.md`;
+  deleted the rest of `docs/memory/`. Rewired `lint_docs` (adr top-level managed/indexed,
+  dropped memory roots + MEMORY.md special-cases), `harness_lib.MANAGED_ROOTS`,
+  `nav.RESERVED`, and `scaffold` (DIRS/SEEDS/TOP_INDEXES off memory; emits `.harness.json`
+  + `docs/logs.md`; deleted memory-bootloader/progress-current templates). Re-pointed
+  `tidy_stop` sentinel MEMORY.md→`.harness.json`. Repointed all adr markdown links
+  (`memory/adr/`→`adr/`). Updated 6 tests (4 harnessignore → adr, scaffold tree,
+  tidy_stop sentinel; removed 2 dead memory_bootloader tests). Gate GREEN (692 tests).
+- [ ] M3 — narrative + fresh-scaffold verification (AGENTS.md/ARCHITECTURE.md/SECURITY.md/
+  KNOWLEDGE_FORMAT.md memory-prose sections still describe the retired loop).
 
 ## Surprises & discoveries
 - **`tidy_stop.py` is a gate-on-stop safety net, NOT memory machinery** — it runs

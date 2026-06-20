@@ -11,7 +11,7 @@ description: The human's decision-making principles written down so the Director
 This is the human's decision-making principles, written down so the **Director**
 can consult them at a fork and *simulate the call the human would make* — instead
 of waking the human for every taste question. It is the lights-out half of
-[ADR 0003](memory/adr/0003-lights-out-director.md): when the Director cannot
+[ADR 0003](adr/0003-lights-out-director.md): when the Director cannot
 trivially auto-continue and the call is taste/opinion (not mechanical, not a hard
 blocker), it reads this file first. If a principle here determines the call with
 confidence, the Director **decides and logs** (citing the principle); if this file

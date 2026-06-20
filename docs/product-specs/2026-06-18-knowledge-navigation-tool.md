@@ -127,7 +127,7 @@ is a projection over its output. A `Record` is a dict (stdlib, no dataclass
 ceremony required, but a `typing`-light shape):
 
 ```
-path           repo-relative posix string (e.g. "docs/memory/adr/0003-...md")
+path           repo-relative posix string (e.g. "docs/adr/0003-...md")
 type           str | None        # frontmatter `type`, else None
 tags           list[str]         # frontmatter `tags` (already list-aware), else []
 status         str | None
