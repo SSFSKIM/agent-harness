@@ -199,14 +199,35 @@ def check_links(root, errors, host=(), cfg=None):
     for name in ("AGENTS.md", "ARCHITECTURE.md"):
         if (root / name).exists():
             targets.append(root / name)
+    docs_abs = docs.resolve()
     for p in targets:
         text = p.read_text(encoding="utf-8")
         for t in hl.links_in(text):
             if t.startswith(("http://", "https://")):
                 continue
-            if not ((p.parent / t).exists() or (root / t).exists()):
-                _fail(errors, "D5", _rel(p, root), f"broken link `{t}`.",
-                      "Fix the relative path or create the target page.")
+            if (p.parent / t).exists() or (root / t).exists():
+                continue
+            # A broken link whose target resolves UNDER a `.harnessignore`'d (exempt)
+            # docs tree is EXTERNAL to the gate, not a broken-corpus link: that tree is
+            # deliberately unmanaged (e.g. the vendored, .gitignored `symphony-original/`
+            # oracle), so it is absent in any fresh clone. Checking links into it would
+            # fail the gate on every clone/ported host (use-all shakedown F8). Total over
+            # an unresolvable path (resolve/relative_to wrapped) — R22.
+            if any(_under_exempt(cand, docs_abs, host)
+                   for cand in (p.parent / t, root / t)):
+                continue
+            _fail(errors, "D5", _rel(p, root), f"broken link `{t}`.",
+                  "Fix the relative path or create the target page.")
+
+
+def _under_exempt(cand, docs_abs, exempt) -> bool:
+    """True iff `cand` resolves to a path under the `docs/` tree that `is_exempt`
+    (a `.harnessignore`'d subtree). Total: any unresolvable/out-of-docs path → False."""
+    try:
+        rel = cand.resolve().relative_to(docs_abs).as_posix()
+    except (ValueError, OSError):
+        return False
+    return hl.is_exempt(rel, exempt)
 
 
 def check_naming(root, errors, host=(), cfg=None):

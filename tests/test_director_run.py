@@ -149,6 +149,44 @@ class _ReadTimeoutClient:
     def run_turn(self, *a, **kw): raise ReadTimeout("no app-server output within read timeout")
 
 
+class _RateLimitedClient:
+    """A fake client whose turn completes but carries an EXHAUSTED rate-limit payload
+    (no credits) and an empty final_message — the real rate-limited symptom (F7)."""
+    def __init__(self, rl): self._rl = rl
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def initialize(self): pass
+    def thread_start(self, **kw): return "thread_1"
+    def run_turn(self, *a, **kw):
+        return {"status": "completed", "turn_id": "t1", "final_message": None,
+                "usage": None, "rate_limits": self._rl}
+
+
+class RateLimitParkTest(unittest.TestCase):
+    def test_drive_parks_on_exhausted_credits(self):
+        # F7: has_credits=False → park (escalate) instead of looping on empty turns.
+        rl = {"limit_id": "premium", "credits": {"has_credits": False}}
+        with mock.patch("director.run._prepare", return_value=_RateLimitedClient(rl)):
+            disp = run.drive({"id": "RL-1", "prompt": "p"}, command=["x"],
+                             workspace_root=Path("/tmp/unused-rl"), max_turns=5)
+        self.assertEqual(disp["kind"], "escalate")
+        self.assertIn("rate-limited", disp["reason"])
+
+    def test_drive_parks_on_spent_primary_window(self):
+        # camelCase usedPercent>=100 is also exhaustion.
+        rl = {"primary": {"usedPercent": 100}}
+        with mock.patch("director.run._prepare", return_value=_RateLimitedClient(rl)):
+            disp = run.drive({"id": "RL-2", "prompt": "p"}, command=["x"],
+                             workspace_root=Path("/tmp/unused-rl"), max_turns=5)
+        self.assertEqual(disp["kind"], "escalate")
+
+    def test_rate_limited_total_over_odd_shapes(self):
+        # Total (R12): missing/odd payloads never falsely park.
+        for rl in (None, {}, {"credits": None}, {"credits": {"has_credits": True}},
+                   {"primary": {"usedPercent": 40}}, {"primary": "nope"}, "junk"):
+            self.assertFalse(run._rate_limited(rl), rl)
+
+
 class ReadTimeoutDispositionTest(unittest.TestCase):
     def test_drive_returns_failed_on_read_timeout(self):
         # F3: a ReadTimeout mid-turn must surface as a RECOVERABLE `failed` disposition

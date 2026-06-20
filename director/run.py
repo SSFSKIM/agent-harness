@@ -360,6 +360,12 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                             "telemetry": _telemetry()}
                     if status != "completed":  # turn/failed | turn/cancelled — not a disposition
                         return {"kind": "failed", "status": status, **base}
+                    if _rate_limited(rate_limits):  # F7: credits/window exhausted → the worker
+                        # returns empty turns (no progress). PARK now (a distinct escalate) rather
+                        # than loop on empty turn-ends (watched) or burn turns to `stuck` (un-watched);
+                        # retrying can't help until the window resets — a human/Director resumes it.
+                        return {"kind": "escalate", "reason":
+                                "rate-limited — Codex credits/window exhausted; awaiting reset", **base}
                     disp = decide({"ticket": ticket, "turn_index": i, "status": status,
                                    "final_message": final_message, "outcome": sink.get("outcome"),
                                    "attempt": attempt})
@@ -382,6 +388,27 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
         run_hook("after_run", (hooks or {}).get("after_run"),
                  cwd=_expected_ws(ticket, workspace_root), timeout_s=hook_timeout_s,
                  fatal=False)
+
+
+def _rate_limited(rate_limits) -> bool:
+    """True only when the worker's latest rate-limit payload CLEARLY shows exhaustion —
+    no credits, or a fully-spent primary window (use-all shakedown F7). Total over a
+    missing/odd shape (R12): anything unclear → False, so a healthy run is never falsely
+    parked. Case-tolerant — codex emits `has_credits` (snake) or `hasCredits`/`usedPercent`
+    (camel) across versions; `extract_rate_limits` stores the payload raw."""
+    if not isinstance(rate_limits, dict):
+        return False
+    credits = rate_limits.get("credits")
+    if isinstance(credits, dict):
+        hc = credits.get("has_credits", credits.get("hasCredits"))
+        if hc is False:
+            return True
+    primary = rate_limits.get("primary")
+    if isinstance(primary, dict):
+        up = primary.get("usedPercent", primary.get("used_percent"))
+        if isinstance(up, (int, float)) and not isinstance(up, bool) and up >= 100:
+            return True
+    return False
 
 
 def _command(args, codex_command, posture) -> list[str]:

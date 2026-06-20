@@ -95,6 +95,20 @@ class TestLintDocs(unittest.TestCase):
         (sp / "plan.md").write_text("[fake example](docs/nope.md)\n")
         self.assertFalse(any("D5" in e for e in run_all(self.root)))
 
+    def test_d5_broken_link_into_harnessignored_tree_is_external(self):
+        # F8: a link whose TARGET is under a .harnessignore'd tree is EXTERNAL, not broken,
+        # even when the target is absent (e.g. the vendored, .gitignored symphony-original
+        # oracle missing from a fresh clone). The gate must pass on any clone/ported host.
+        (self.root / "docs" / ".harnessignore").write_text("vendor/\n", encoding="utf-8")
+        (self.root / "AGENTS.md").write_text("see the [oracle](docs/vendor/SPEC.md)\n")
+        self.assertFalse(any("D5" in e for e in run_all(self.root)),
+                         "link into a .harnessignore'd absent tree must not be a broken link")
+
+    def test_d5_broken_link_into_unmanaged_path_still_fails(self):
+        # Control: a broken link into a NON-exempt path still fails D5 (the guard is narrow).
+        (self.root / "AGENTS.md").write_text("see [gone](docs/not-exempt/SPEC.md)\n")
+        self.assertTrue(any("D5" in e for e in run_all(self.root)))
+
     def test_d8_empty_category_needs_no_index(self):
         (self.root / "docs" / "product-specs").mkdir()
         self.assertFalse(any("D8" in e for e in run_all(self.root)))
