@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-14
+last_verified: 2026-06-21
 owner: harness
 ---
 # Product specs
@@ -266,3 +266,18 @@ owner: harness
   중복 백필 회피), `resource`/`supersedes`/`phase`는 validate-if-present(해소/문법). type
   *값*은 free 유지(presence만). KF v2.0(breaking — 새 required 키). 마이그레이션 = description
   2개. 근거: OKF는 범용 교환 포맷이라 permissive, 우리는 단일 actor의 강제된 working memory. draft.
+- [Harness packaging — portable strict-base template + two-agent profile model](2026-06-21-harness-packaging-portable-template.md)
+  — **parent** spec for shipping the whole repo system as a strict, self-describing,
+  implantable base ("strict base + add whatever each repo needs"). Six slices in
+  dependency order: ① retire the dead memory-loop subsystem (feeder/imprint/dream/
+  dreamer/tidy_stop + `docs/memory/`) → native CC memory + surfaced `docs/adr/` +
+  tech-debt-absorbs-openq/limitations + on-demand `logs.md`; ② mature the
+  `harness-init` seed templates into self-describing authoring guides (+ author the
+  missing PRINCIPLES template, `references/` seed, ARCHITECTURE→`architecture-setup`
+  redirect, exec-plans/index templates); ③ relocate `DIRECTOR.md` `docs/`→`.claude/`
+  + retire the launcher skill; ④ consolidate the two scattered agent profiles
+  (Director = `.claude/`+`.harness.json:director`; worker = `config.py DEFAULTS`
+  reconciled + override surface + workspace_skills, qa retired) into one settable
+  source each — no `agents/*` dirs; ⑤ clean + version-bump + re-describe the plugin
+  manifests; ⑥ capstone: a checked-in, legacy-stripped, drift-checked base artifact +
+  `SETUP.md`. Director stays centralized; no generator, no wizard, no README. draft.
