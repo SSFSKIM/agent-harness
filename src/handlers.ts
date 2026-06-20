@@ -32,6 +32,8 @@ export class AppServer {
   }
   // Note: the default open ignores the holder arg (production: the SDK MCP server captures it internally)
 
+  disposeAll(): Promise<void> { return this.reg.disposeAll(); }
+
   handleRequest(method: string, params: any, id: number | string): void {
     switch (method) {
       case "initialize": return this.peer.reply(id, { userAgent: "cc-codex-appserver", platformOs: process.platform, capabilities: { outcomeOnTurnCompleted: true } });
