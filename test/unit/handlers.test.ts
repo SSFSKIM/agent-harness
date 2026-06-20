@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { Peer } from "../../src/peer.js";
 import { AppServer, toUsageTotals } from "../../src/handlers.js";
 import type { OutcomeHolder } from "../../src/tools.js";
+import type { OpenFn } from "../../src/handlers.js";
 
 // A fake Session whose submit() streams one assistant message then resolves with a result string.
 function fakeSession() {
@@ -79,6 +80,38 @@ describe("outcome propagation", () => {
     await new Promise((r) => setTimeout(r, 10));
     const tc = out.find((o) => o.method === "turn/completed");
     expect(tc.params.outcome).toBeUndefined();
+  });
+});
+
+describe("posture wiring in handlers", () => {
+  function captureOpen(capturedCfgs: any[]): OpenFn {
+    return (cfg, _holder) => {
+      capturedCfgs.push(cfg);
+      return {
+        submit: async (_p: string, onMsg: (m: any) => void) => { onMsg({ type: "assistant", message: { content: [{ type: "text", text: "ok" }] } }); return { result: "ok" }; },
+        usage: async () => ({}), dispose: async () => {},
+      } as any;
+    };
+  }
+
+  it("autoReview:true -> open cfg permissionMode:'auto'", async () => {
+    const cfgs: any[] = [];
+    const out: any[] = [];
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: true });
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
+    expect(cfgs[0]?.permissionMode).toBe("auto");
+  });
+
+  it("on-request + no autoReview -> open cfg permissionMode:'default'", async () => {
+    const cfgs: any[] = [];
+    const out: any[] = [];
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: false });
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
+    expect(cfgs[0]?.permissionMode).toBe("default");
   });
 });
 

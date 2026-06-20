@@ -4,6 +4,7 @@ import { Registry } from "./registry.js";
 import { TurnTranslator } from "./translator.js";
 import { ERR, type ThreadStartParams, type TurnStartParams, type UsageTotals } from "./protocol.js";
 import { withReportOutcome, type OutcomeHolder } from "./tools.js";
+import { resolvePosture } from "./posture.js";
 
 export interface OpenFn { (cfg: any, holder: OutcomeHolder): Session }
 
@@ -24,7 +25,11 @@ export function toUsageTotals(u: any): UsageTotals {
 export class AppServer {
   private reg = new Registry();
   private open: OpenFn;
-  constructor(private peer: Peer, deps: { open?: OpenFn } = {}) { this.open = deps.open ?? ((cfg) => openSession(cfg)); }
+  private autoReview: boolean;
+  constructor(private peer: Peer, deps: { open?: OpenFn; autoReview?: boolean } = {}) {
+    this.open = deps.open ?? ((cfg) => openSession(cfg));
+    this.autoReview = deps.autoReview ?? false;
+  }
   // Note: the default open ignores the holder arg (production: the SDK MCP server captures it internally)
 
   handleRequest(method: string, params: any, id: number | string): void {
@@ -39,7 +44,8 @@ export class AppServer {
 
   private threadStart(params: ThreadStartParams, id: number | string): void {
     const holder: OutcomeHolder = {};
-    const cfg = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: "auto" }, holder);
+    const posture = resolvePosture({ approvalPolicy: params.approvalPolicy, autoReview: this.autoReview });
+    const cfg = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode }, holder);
     const session = this.open(cfg, holder);
     const { id: threadId } = this.reg.newThread(session);
     this.reg.get(threadId)!.outcome = holder;
