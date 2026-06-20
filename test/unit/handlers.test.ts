@@ -1,7 +1,7 @@
 // test/unit/handlers.test.ts
 import { describe, it, expect } from "vitest";
 import { Peer } from "../../src/peer.js";
-import { AppServer } from "../../src/handlers.js";
+import { AppServer, toUsageTotals } from "../../src/handlers.js";
 
 // A fake Session whose submit() streams one assistant message then resolves with a result string.
 function fakeSession() {
@@ -21,6 +21,20 @@ function wire() {
   const server = new AppServer(peer, { open: () => fakeSession() });
   return { out, peer };
 }
+
+describe("toUsageTotals", () => {
+  it("sums the probe-32 nested model_usage, folding cache into input", () => {
+    const u = { session: { model_usage: {
+      "claude-opus-4-8": { inputTokens: 100, outputTokens: 40, cacheReadInputTokens: 200, cacheCreationInputTokens: 50 },
+      "claude-haiku-4-5": { inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+    } } };
+    expect(toUsageTotals(u)).toEqual({ inputTokens: 360, outputTokens: 45, totalTokens: 405 });
+  });
+  it("returns zeros for an empty/unknown shape (lenient, no throw)", () => {
+    expect(toUsageTotals({})).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    expect(toUsageTotals(undefined)).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+  });
+});
 
 describe("AppServer happy path", () => {
   it("initialize advertises the outcome capability", () => {
