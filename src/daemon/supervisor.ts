@@ -6,7 +6,10 @@ import { PendingPermissions } from "./permissions.js";
 import type { PendingEntry } from "./permissions.js";
 import { createPermissionGate } from "../permissions/gate.js";
 import type { PermissionDecision } from "../permissions/types.js";
+import type { PermissionMode } from "@anthropic-ai/claude-agent-sdk";
 import { resolveAutoModel } from "../config/autoModel.js";
+import { resolveOptions } from "../config/resolveOptions.js";
+import { DEFAULTS } from "../config/types.js";
 import { validateDaemonOptions } from "../config/validate.js";
 import type { QueryFn } from "../swarm/types.js";
 import { TaskStore } from "../tasks/store.js";
@@ -107,7 +110,7 @@ export class DaemonSupervisor {
   spawn(opts: { model?: string; restart?: RestartPolicy; resume?: string; permissionMode?: string } = {}): string {
     if (this.pool.size >= this.maxSessions) throw new DaemonError(`max sessions (${this.maxSessions}) reached`);
     const id = `sess-${++this.seq}`;
-    const model = opts.permissionMode === "auto" ? resolveAutoModel(opts.model) : opts.model; // force a supported model for auto
+    const model = opts.permissionMode === "auto" ? resolveAutoModel(opts.model ?? DEFAULTS.model) : (opts.model ?? DEFAULTS.model); // explicit-auto gate; opus-4-8 default keeps the registry consistent with resolveOptions
     const cfg: SpawnConfig = { model, restart: opts.restart ?? this.restartPolicy, permissionMode: opts.permissionMode };
     this.configs.set(id, cfg);
     this.pool.set(id, this.makeSession(id, cfg, opts.resume));
@@ -306,12 +309,14 @@ export class DaemonSupervisor {
   }
 
   private makeSession(id: string, cfg: SpawnConfig, resume?: string): DaemonSession {
-    const base: Record<string, unknown> = cfg.model ? { model: cfg.model } : {};
-    if (resume) base.resume = resume;                        // spawn hint or captured sdk session id
-    if (cfg.permissionMode) base.permissionMode = cfg.permissionMode;
+    const base = resolveOptions({
+      model: cfg.model,                                      // already opus-4-8-defaulted by spawn(); resolveOptions is idempotent
+      permissionMode: cfg.permissionMode as PermissionMode | undefined,
+      ...(resume ? { resume } : {}),
+    });   // no cwd: the daemon runs from the project dir, so settingSources resolves against process.cwd()
     const extra = this.sessionOptions?.(id);                 // fresh servers + tool posture for THIS session
-    const options = extra ? { ...base, ...extra } : base;    // factory keys win; never sets model
-    options.canUseTool = createPermissionGate(this.pending.brokerFor(id)); // daemon-attached permission broker
+    const options = extra ? { ...base, ...extra } : base;    // factory keys win (unchanged contract)
+    options.canUseTool = createPermissionGate(this.pending.brokerFor(id)); // daemon broker wins — set LAST
     const session = new DaemonSession(id, { query: this.deps.query }, options, this.now, { contextTool: this.contextTool, compactTool: this.compactTool });
     session.done.then(() => this.handleSessionEnd(id)).catch(() => {}); // end hook
     return session;
