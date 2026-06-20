@@ -9,10 +9,25 @@ async function defaultPost(url: string, body: string, headers: Record<string, st
   return await res.json();
 }
 
-/** Reads pass; mutations pass only if forward-only and not obviously destructive. */
+/** Blank GraphQL string literals (so a word inside a string never trips the guardrail) then strip
+ *  #-to-EOL comments (so a comment cannot hide a mutation). Block strings first, then line strings,
+ *  then comments — order matters because `#` inside a string is literal, not a comment. */
+function sanitize(query: string): string {
+  return query
+    .replace(/"""[\s\S]*?"""/g, '""')        // block strings
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')       // line strings
+    .replace(/#[^\n\r]*/g, "");                // # comments
+}
+
+/** MINIMAL fail-closed guardrail: a document containing a `mutation` operation ANYWHERE (after sanitizing
+ *  strings + comments — closes the leading-comment and multi-operation bypasses) is refused if it mentions
+ *  a destructive verb (delete/archive/remove). Reads pass.
+ *  SECURITY NOTE: this is a denylist and CANNOT catch otherwise-named destructive mutations. The production
+ *  control MUST be a READ-ONLY Linear API key (and/or the official remote Linear MCP) — see the app-server
+ *  spec §6.3/§12. This guardrail is defense-in-depth, not the primary control. */
 export function authorize(query: string): { allowed: boolean; reason?: string } {
-  const q = query.trimStart();
-  if (!/^mutation\b/i.test(q)) return { allowed: true };
+  const q = sanitize(query);
+  if (!/\bmutation\b/i.test(q)) return { allowed: true };
   if (/(delete|archive|remove)/i.test(q)) return { allowed: false, reason: "destructive mutation refused by guardrail" };
   return { allowed: true };
 }

@@ -29,6 +29,26 @@ describe("linear_graphql tool", () => {
     expect(called).toBe(true);
     expect(r.content[0].text).toContain("success");
   });
+  it("guardrail closes the leading-comment bypass", async () => {
+    let called = false;
+    const t = tools(async () => { called = true; return { data: {} }; });
+    const r = await t.handler({ query: "# innocuous\nmutation { issueDelete(id: 1) { success } }" }, {});
+    expect(called).toBe(false);
+    expect(r.content[0].text).toMatch(/guardrail|refus/i);
+  });
+  it("guardrail closes the multi-operation bypass", async () => {
+    let called = false;
+    const t = tools(async () => { called = true; return { data: {} }; });
+    const r = await t.handler({ query: "query Read { viewer { id } }\nmutation Bad { issueDelete(id: 1) { success } }" }, {});
+    expect(called).toBe(false);
+    expect(r.content[0].text).toMatch(/guardrail|refus/i);
+  });
+  it("a read whose string literal mentions 'delete' is NOT a false positive", async () => {
+    let called = false;
+    const t = tools(async () => { called = true; return { data: { x: 1 } }; });
+    await t.handler({ query: "query { search(term: \"please delete this\") { id } }" }, {});
+    expect(called).toBe(true);  // a pure read still POSTs
+  });
 });
 
 describe("withLinear", () => {
