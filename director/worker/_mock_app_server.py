@@ -13,6 +13,9 @@ Scenario (argv[1]):
                  (absolute) thread totals that rise per turn (turn n → total n*100),
                  then completes — exercises extract_usage + drive's latest-absolute
                  accumulation (telemetry-capture plan M1/M2).
+  - "turn_completed" : advertises capabilities.outcomeOnTurnCompleted at initialize and
+                 rides the terminal outcome on turn/completed.params.outcome (no
+                 item/tool/call) — the cc-codex-appserver companion channel.
 """
 import json
 import sys
@@ -54,7 +57,12 @@ def main():
         mid = msg.get("id")
 
         if method == "initialize":
-            out({"id": mid, "result": {"userAgent": "mock", "platformOs": "test"}})
+            # cc-codex-appserver advertises capabilities.outcomeOnTurnCompleted; the
+            # "turn_completed" scenario mirrors it so capability auto-negotiation is
+            # exercised. Every other scenario leaves it absent (legacy sink channel).
+            caps = {"outcomeOnTurnCompleted": True} if scenario == "turn_completed" else {}
+            out({"id": mid, "result": {"userAgent": "mock", "platformOs": "test",
+                                       "capabilities": caps}})
         elif method == "initialized":
             pass
         elif method == "thread/start":
@@ -127,6 +135,21 @@ def main():
                                 "itemId": "item_r", "threadId": THREAD_ID,
                                 "turnId": TURN_ID}})
                 awaiting_tool = True
+            elif scenario == "turn_completed":
+                # cc-codex-appserver channel: the server owns report_outcome in-process
+                # (advertised via capabilities.outcomeOnTurnCompleted) and rides the
+                # terminal outcome on turn/completed.params.outcome — NO item/tool/call.
+                out({"method": "item/completed",
+                     "params": {"itemId": "msg_tc", "threadId": THREAD_ID,
+                                "turnId": TURN_ID,
+                                "item": {"type": "agentMessage", "text": "done",
+                                         "phase": "final_answer"}}})
+                out({"method": "turn/completed",
+                     "params": {"turn": {"id": TURN_ID, "status": "completed"},
+                                "outcome": {"status": "done", "reason": "mock done",
+                                            "spawned_ticket_ids": [],
+                                            "pr_url": "https://example.test/pr/1",
+                                            "pr_branch": "feat/mock"}}})
             else:
                 complete_turn()
         elif awaiting_approval and mid == APPROVAL_ID and ("result" in msg or "error" in msg):

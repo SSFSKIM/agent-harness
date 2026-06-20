@@ -141,6 +141,21 @@ class LoadConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config.load_director_config(root=self.root)
 
+    # -- outcome channel (cc-codex-appserver companion) ---------------------
+    def test_worker_outcome_channel_default_tool(self):
+        # default preserves the legacy item/tool/call report_outcome sink path
+        self.assertEqual(config.defaults().worker_outcome_channel, "tool")
+
+    def test_worker_outcome_channel_opt_in(self):
+        _write(self.root, {"director": {"worker": {"outcome_channel": "turn_completed"}}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.worker_outcome_channel, "turn_completed")
+
+    def test_bad_worker_outcome_channel_raises(self):
+        _write(self.root, {"director": {"worker": {"outcome_channel": "websocket"}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
     def test_bad_install_skills_raises(self):
         _write(self.root, {"director": {"worker": {"install_skills": "yes"}}})
         with self.assertRaises(ValueError):

@@ -78,6 +78,8 @@ DEFAULTS: dict = {
     # bounds all three. Only used by `--daemon`.
     "backoff_base_s": 10.0,
     "backoff_cap_s": 300.0,
+    # To use the Claude-backed drop-in: set codex_command to
+    # "node <abs-path>/CC-to-SDK/app-server/dist/bin.js" in .harness.json director block.
     "codex_command": "codex app-server",
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
@@ -87,7 +89,13 @@ DEFAULTS: dict = {
     # true`). The offline `--mock` niche ignores these regardless (orchestrator.main).
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
                "auto_review": True, "network": True,
-               "tools": "none", "install_skills": False},
+               "tools": "none", "install_skills": False,
+               # outcome_channel: "tool" (default) uses the item/tool/call report_outcome
+               # sink (existing codex path). "turn_completed" reads the outcome from
+               # turn/completed.params.outcome instead (cc-codex-appserver companion feature).
+               # Capability auto-negotiation in drive() also activates turn_completed mode
+               # when the server advertises capabilities.outcomeOnTurnCompleted.
+               "outcome_channel": "tool"},
     # paths are OPTIONAL overrides: None = "use the module's built-in default"
     # (run.DEFAULT_WORKSPACE_ROOT for workspaces; queue/status `_root(base=None)`).
     "paths": {"workspace_root": None, "queue_dir": None, "status_dir": None},
@@ -112,6 +120,7 @@ _HOOK_KEYS = ("after_create", "before_run", "after_run", "before_remove")
 _APPROVAL_VALUES = frozenset({"untrusted", "on-request", "on-failure", "never"})
 _SANDBOX_VALUES = frozenset({"read-only", "workspace-write", "danger-full-access"})
 _TOOLS_VALUES = frozenset({"none", "linear"})
+_OUTCOME_CHANNEL_VALUES = frozenset({"tool", "turn_completed"})
 _VAR_RE = re.compile(r"^\$(?:\{(\w+)\}|(\w+))$")
 
 
@@ -164,6 +173,7 @@ class DirectorConfig:
     posture: Posture
     worker_tools: str
     worker_install_skills: bool
+    worker_outcome_channel: str
     paths: Paths
     merger: Merger
     workspace: Workspace
@@ -249,6 +259,10 @@ def _build(raw: dict) -> DirectorConfig:
         raise ValueError(f"director.worker.tools must be one of "
                          f"{sorted(_TOOLS_VALUES)}, got {w['tools']!r}")
     worker_install_skills = _bool(w["install_skills"], "worker.install_skills")
+    worker_outcome_channel = w.get("outcome_channel", DEFAULTS["worker"]["outcome_channel"])
+    if worker_outcome_channel not in _OUTCOME_CHANNEL_VALUES:
+        raise ValueError(f"director.worker.outcome_channel must be one of "
+                         f"{sorted(_OUTCOME_CHANNEL_VALUES)}, got {worker_outcome_channel!r}")
 
     p_raw = raw.get("paths") or {}
     if not isinstance(p_raw, dict):
@@ -324,6 +338,7 @@ def _build(raw: dict) -> DirectorConfig:
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
         codex_command=codex_command, posture=posture,
         worker_tools=w["tools"], worker_install_skills=worker_install_skills,
+        worker_outcome_channel=worker_outcome_channel,
         paths=paths, merger=merger, workspace=workspace)
 
 

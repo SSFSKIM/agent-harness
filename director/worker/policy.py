@@ -42,6 +42,13 @@ _BASE_NAMES = frozenset({
     "LC_TELEPHONE", "LC_MEASUREMENT", "LC_IDENTIFICATION",
 })
 
+# T11 (cc-codex-appserver): the Claude-backed drop-in app-server and its bundled
+# `claude` CLI + Linear MCP require auth credentials the deny-by-default boundary
+# otherwise blocks.  A host using cc-codex-appserver must add these to
+# .harness.json "worker_policy": {"worker_env": ["CLAUDE_CODE_OAUTH_TOKEN",
+# "ANTHROPIC_API_KEY", "LINEAR_API_KEY"]} so build_worker_env passes them through.
+# They are NOT in _BASE_NAMES (credentials are host-declared, never harness-hardcoded).
+
 
 def _empty_policy() -> dict:
     return {"worker_env": [], "network_allowlist": [], "capabilities": []}

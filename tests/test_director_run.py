@@ -115,6 +115,19 @@ class RunEndToEndTest(unittest.TestCase):
             any(extract_usage(e.get("method"), e.get("params", {})) is not None for e in events),
             "drive must thread on_event to the client — the orchestrator's live-accrual seam")
 
+    def test_drive_negotiates_turn_completed_channel(self):
+        # cc-codex-appserver companion: the mock advertises
+        # capabilities.outcomeOnTurnCompleted and rides the terminal outcome on
+        # turn/completed.params.outcome (NO report_outcome tool call). drive() must
+        # auto-negotiate the new channel and read the outcome → terminal disposition.
+        # If the channel were misread the outcome would be None → reply → stuck, so
+        # kind=="terminal" proves the turn_completed read end-to-end over the real wire.
+        ticket = run.load_ticket(self._ticket_path())
+        disp = run.drive(ticket, command=[sys.executable, MOCK, "turn_completed"],
+                         queue_base=self.qbase, workspace_root=self.tmp / "wsr_tc")
+        self.assertEqual(disp["kind"], "terminal")
+        self.assertEqual(disp["outcome"]["status"], "done")
+
     def test_install_skills_does_not_follow_symlink_target(self):
         # P1: a pre-existing symlinked skill target must not be written through.
         ws = self.tmp / "wssym"
@@ -162,6 +175,20 @@ class _RateLimitedClient:
                 "usage": None, "rate_limits": self._rl}
 
 
+class _OutcomeOnTurnCompletedClient:
+    """A fake client that carries a terminal outcome on the turn RESULT
+    (result['outcome']) and advertises NO capability — so the explicit
+    director.worker.outcome_channel override is the only way drive() reads it."""
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def initialize(self): pass  # no outcome_on_turn_completed attr → getattr(...) is False
+    def thread_start(self, **kw): return "thread_1"
+    def run_turn(self, *a, **kw):
+        return {"status": "completed", "turn_id": "t1", "final_message": "done",
+                "usage": None, "rate_limits": None,
+                "outcome": {"status": "done", "reason": "cfg override"}}
+
+
 class RateLimitParkTest(unittest.TestCase):
     def test_drive_parks_on_exhausted_credits(self):
         # F7: has_credits=False → park (escalate) instead of looping on empty turns.
@@ -200,6 +227,29 @@ class ReadTimeoutDispositionTest(unittest.TestCase):
         self.assertEqual(disp["kind"], "failed")
         self.assertEqual(disp["status"], "read_timeout")
         self.assertIn("telemetry", disp)  # carries run facts like every other disposition
+
+
+class OutcomeChannelTest(unittest.TestCase):
+    def test_config_override_reads_turn_completed_outcome(self):
+        # No server capability, but director.worker.outcome_channel="turn_completed"
+        # forces drive() to read the outcome from the turn result (F4 manual override).
+        with mock.patch("director.run._prepare",
+                        return_value=_OutcomeOnTurnCompletedClient()):
+            disp = run.drive({"id": "OC-1", "prompt": "p"}, command=["x"],
+                             workspace_root=Path("/tmp/unused-oc"),
+                             worker_outcome_channel="turn_completed")
+        self.assertEqual(disp["kind"], "terminal")
+        self.assertEqual(disp["outcome"]["status"], "done")
+
+    def test_tool_channel_ignores_turn_result_outcome(self):
+        # Channel isolation: on the default "tool" channel (no capability), an outcome on
+        # the turn RESULT must be ignored — only the report_outcome sink counts. The sink
+        # stays empty here → no terminal signal → max_turns → stuck (NOT terminal).
+        with mock.patch("director.run._prepare",
+                        return_value=_OutcomeOnTurnCompletedClient()):
+            disp = run.drive({"id": "OC-2", "prompt": "p"}, command=["x"],
+                             workspace_root=Path("/tmp/unused-oc"), max_turns=1)
+        self.assertNotEqual(disp["kind"], "terminal")
 
 
 class WorkspaceSafetyTest(unittest.TestCase):

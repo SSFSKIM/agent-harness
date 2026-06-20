@@ -97,6 +97,37 @@ class AppServerClientTest(unittest.TestCase):
         self.assertEqual(res["status"], "completed")
         self.assertIsNone(res["usage"])
 
+    def test_initialize_captures_outcome_capability(self):
+        # cc-codex-appserver advertises capabilities.outcomeOnTurnCompleted; the client
+        # records it so the drive loop can auto-negotiate the turn_completed channel.
+        with _client("turn_completed") as c:
+            c.initialize()
+            self.assertTrue(c.outcome_on_turn_completed)
+
+    def test_initialize_no_capability_defaults_false(self):
+        # a stock codex app-server advertises no such capability → stay on the sink path.
+        with _client("plain") as c:
+            c.initialize()
+            self.assertFalse(c.outcome_on_turn_completed)
+
+    def test_run_turn_returns_outcome_from_turn_completed(self):
+        # the structured terminal outcome rides turn/completed.params.outcome.
+        with _client("turn_completed") as c:
+            c.initialize()
+            tid = c.thread_start()
+            res = c.run_turn(tid, "do work")
+        self.assertEqual(res["status"], "completed")
+        self.assertEqual(res["outcome"]["status"], "done")
+        self.assertEqual(res["outcome"]["pr_url"], "https://example.test/pr/1")
+
+    def test_run_turn_outcome_none_when_absent(self):
+        # no outcome on turn/completed (legacy path) → result carries outcome None.
+        with _client("plain") as c:
+            c.initialize()
+            tid = c.thread_start()
+            res = c.run_turn(tid, "x")
+        self.assertIsNone(res["outcome"])
+
 
 class ExtractUsageTest(unittest.TestCase):
     def test_absolute_wrapper_any_event(self):

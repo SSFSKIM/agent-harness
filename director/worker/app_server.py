@@ -339,10 +339,15 @@ class AppServerClient:
 
     # -- protocol ---------------------------------------------------------
     def initialize(self) -> None:
-        self._request("initialize", {
+        result = self._request("initialize", {
             "clientInfo": {"name": "director", "title": "Director", "version": "0.1.0"},
             "capabilities": {"experimentalApi": True},
         })
+        # Capability auto-negotiation: if the server advertises outcomeOnTurnCompleted,
+        # the drive loop can read report_outcome's payload from turn/completed.params.outcome
+        # instead of the item/tool/call sink (cc-codex-appserver companion feature).
+        self.outcome_on_turn_completed: bool = bool(
+            (result or {}).get("capabilities", {}).get("outcomeOnTurnCompleted"))
         self._send({"method": "initialized", "params": {}})
 
     def thread_start(self, model: str | None = None,
@@ -413,7 +418,8 @@ class AppServerClient:
                     turn_id = turn_id or mparams.get("turn", {}).get("id")
                     return {"status": method.split("/", 1)[1], "turn_id": turn_id,
                             "final_message": final_answer or last_message,
-                            "usage": usage, "rate_limits": rate_limits}
+                            "usage": usage, "rate_limits": rate_limits,
+                            "outcome": mparams.get("outcome")}
                 continue
             if msg.get("id") == rid:                       # response to turn/start
                 if "error" in msg:

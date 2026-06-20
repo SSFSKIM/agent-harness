@@ -260,7 +260,8 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
           approval_policy: str = "untrusted", sandbox: str = "workspace-write",
           max_turns: int = DEFAULT_MAX_TURNS, attempt: int = 1, cancel_event=None,
           hooks: dict | None = None, hook_timeout_s: float = 60.0,
-          on_event=None) -> dict:
+          on_event=None,
+          worker_outcome_channel: str = "tool") -> dict:
     """Drive one worker through one ticket across MULTIPLE turns on a SINGLE thread
     until the worker is terminal (or `max_turns` is hit). This is the multi-turn
     slice's core: a ticket is a thread, a turn end is an *event* not a completion,
@@ -275,12 +276,21 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
       {"kind": "stuck",     "reason": "max_turns", "turns", ...}            # R6 bound
       {"kind": "failed",    "status": "failed"|"cancelled", "turns", ...}   # a turn errored
 
-    `report_outcome` is wired in HERE (not by the caller): a per-turn sink captures the
-    worker's terminal proposal, composed over any `tool_executor` the caller passed
-    (e.g. linear_graphql), and `report_outcome` is appended to the advertised tools."""
+    `report_outcome` is wired in HERE (not by the caller) for the default "tool" channel:
+    a per-turn sink captures the worker's terminal proposal, composed over any
+    `tool_executor` the caller passed (e.g. linear_graphql), and `report_outcome` is
+    appended to the advertised tools.
+
+    When `worker_outcome_channel="turn_completed"` OR the server advertises
+    capabilities.outcomeOnTurnCompleted (capability auto-negotiation), the outcome is
+    read from turn/completed.params.outcome instead of the item/tool/call sink, and
+    report_outcome is NOT wired as a dynamic tool (the server owns it in-process)."""
     sink: dict = {}
     report_exec = worker_tools.make_report_outcome_executor(sink)
 
+    # Build the tool side of the "tool" channel unconditionally — we defer the
+    # final channel decision until after initialize() (capability auto-negotiation).
+    # If we end up on the "turn_completed" channel, combined/advertised are unused.
     def combined(name, arguments):
         if name == worker_tools.REPORT_OUTCOME_TOOL:
             return report_exec(name, arguments)
@@ -288,10 +298,13 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             return tool_executor(name, arguments)
         return {"success": False, "output": f"unsupported tool: {name!r}"}
 
-    advertised = list(tools or [])
-    if not any(t.get("name") == worker_tools.REPORT_OUTCOME_TOOL for t in advertised):
-        advertised.append(worker_tools.report_outcome_spec())
+    advertised_with_report = list(tools or [])
+    if not any(t.get("name") == worker_tools.REPORT_OUTCOME_TOOL for t in advertised_with_report):
+        advertised_with_report.append(worker_tools.report_outcome_spec())
+    advertised_without_report = list(tools or [])
 
+    # We create the client with the tool-channel executor; initialize() may flip us to
+    # the turn_completed channel, at which point we simply don't use the sink.
     client = _prepare(ticket, command=command, queue_base=queue_base,
                       workspace_root=workspace_root, timeout_s=timeout_s,
                       read_timeout_s=read_timeout_s, tool_executor=combined,
@@ -331,6 +344,17 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
             # and must release, not fail-and-retry (D-59).
             try:
                 c.initialize()
+                # Capability auto-negotiation: the server's initialize result may advertise
+                # outcomeOnTurnCompleted; an explicit config override also activates the new
+                # channel. Either way, the old codex path is byte-identical when both are off.
+                # getattr guards against mock/stub clients that skip AppServerClient.__init__.
+                use_turn_completed = (getattr(c, "outcome_on_turn_completed", False)
+                                      or worker_outcome_channel == "turn_completed")
+                if use_turn_completed:
+                    # Server owns report_outcome in-process; don't advertise it as a tool.
+                    advertised = advertised_without_report
+                else:
+                    advertised = advertised_with_report
                 thread_id = c.thread_start(model=ticket.get("model"), tools=advertised,
                                            approval_policy=approval_policy, sandbox=sandbox)
                 # First turn: frame the ticket with the stage-agnostic WORKER PROTOCOL
@@ -366,8 +390,12 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                         # retrying can't help until the window resets — a human/Director resumes it.
                         return {"kind": "escalate", "reason":
                                 "rate-limited — Codex credits/window exhausted; awaiting reset", **base}
+                    # Read the terminal outcome from the appropriate channel:
+                    # "turn_completed" channel: outcome rides turn/completed.params.outcome
+                    # "tool" channel (default): outcome was captured by the report_outcome sink
+                    outcome = result.get("outcome") if use_turn_completed else sink.get("outcome")
                     disp = decide({"ticket": ticket, "turn_index": i, "status": status,
-                                   "final_message": final_message, "outcome": sink.get("outcome"),
+                                   "final_message": final_message, "outcome": outcome,
                                    "attempt": attempt})
                     if disp.get("kind") in ("terminal", "escalate"):
                         return {**disp, **base}
@@ -482,7 +510,8 @@ def main(argv=None) -> int:
                  tool_executor=tool_executor, install_skills=args.install_skills,
                  approval_policy=posture.approval_policy, sandbox=posture.sandbox,
                  max_turns=max_turns, read_timeout_s=cfg.read_timeout_s, hooks=hooks,
-                 hook_timeout_s=cfg.workspace.hook_timeout_s)
+                 hook_timeout_s=cfg.workspace.hook_timeout_s,
+                 worker_outcome_channel=cfg.worker_outcome_channel)
     print(json.dumps({"ticket": ticket["id"], **disp}))
     return 0 if disp.get("kind") == "terminal" else 1
 
