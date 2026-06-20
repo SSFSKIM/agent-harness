@@ -10,6 +10,17 @@ describe("resolveOptions", () => {
     expect(o.enableFileCheckpointing).toBe(true);
     expect(o.agents["Explore"].disallowedTools).toContain("Write");
   });
+  it("applies harness-wide defaults (opus-4-8 / auto / xhigh) when omitted", () => {
+    const o: any = resolveOptions({});
+    expect(o.model).toBe("claude-opus-4-8");
+    expect(o.permissionMode).toBe("auto");
+    expect(o.effort).toBe("xhigh");
+  });
+  it("default-auto does NOT override an explicit model (only explicit auto gates)", () => {
+    const o: any = resolveOptions({ model: "claude-haiku-4-5" });
+    expect(o.model).toBe("claude-haiku-4-5");   // explicit model preserved; auto is only the default → no gate
+    expect(o.permissionMode).toBe("auto");      // mode still defaults to auto
+  });
   it("wires outputStyle into systemPrompt.append and never leaks it into Options", () => {
     const o: any = resolveOptions({ outputStyle: "explanatory" });
     expect(o.systemPrompt.append).toContain("educational");
@@ -88,7 +99,7 @@ describe("resolveOptions", () => {
     expect(o.includePartialMessages).toBe(true);
     expect(o.forwardSubagentText).toBe(true);
     const bare: any = resolveOptions({});
-    for (const k of ["effort", "thinking", "maxBudgetUsd", "taskBudget", "includePartialMessages", "forwardSubagentText"])
+    for (const k of ["thinking", "maxBudgetUsd", "taskBudget", "includePartialMessages", "forwardSubagentText"])
       expect(bare).not.toHaveProperty(k);
   });
   it("emits maxBudgetUsd:0 (guards on !== undefined, not truthiness)", () => {
@@ -97,7 +108,7 @@ describe("resolveOptions", () => {
   it("forces a supported model when permissionMode is auto (model-gated)", () => {
     expect((resolveOptions({ permissionMode: "auto", model: "claude-haiku-4-5" }) as any).model).toBe("claude-sonnet-4-6");
     expect((resolveOptions({ permissionMode: "auto", model: "claude-opus-4-8" }) as any).model).toBe("claude-opus-4-8");
-    expect((resolveOptions({ permissionMode: "auto" }) as any).model).toBe("claude-sonnet-4-6");
+    expect((resolveOptions({ permissionMode: "auto" }) as any).model).toBe("claude-opus-4-8");
   });
   it("does not touch the model for non-auto modes", () => {
     expect((resolveOptions({ permissionMode: "default", model: "claude-haiku-4-5" }) as any).model).toBe("claude-haiku-4-5");

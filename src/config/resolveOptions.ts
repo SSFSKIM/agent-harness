@@ -34,23 +34,25 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   // entirely — it is NOT merged with process.env. Spread process.env first so our
   // provider flags/overrides augment (not erase) PATH/HOME/ANTHROPIC_API_KEY/etc.
   if (Object.keys(env).length) options.env = { ...process.env, ...env };
-  if (config.model) options.model = config.model;
+  const model = config.model ?? DEFAULTS.model;
+  options.model = model;
   if (config.fallbackModel) options.fallbackModel = config.fallbackModel;
   if (config.maxTurns !== undefined) options.maxTurns = config.maxTurns;
-  if (config.effort) options.effort = config.effort;
+  const effort = config.effort ?? DEFAULTS.effort;
+  if (effort) options.effort = effort;
   if (config.thinking) options.thinking = config.thinking;
   if (config.maxBudgetUsd !== undefined) options.maxBudgetUsd = config.maxBudgetUsd;
   if (config.taskBudget) options.taskBudget = config.taskBudget;
   if (config.includePartialMessages) options.includePartialMessages = config.includePartialMessages;
   if (config.forwardSubagentText) options.forwardSubagentText = config.forwardSubagentText;
-  if (config.permissionMode) options.permissionMode = config.permissionMode;
-  // `auto` is MODEL-GATED (Opus 4.6+/Sonnet 4.6); on an unsupported model it silently degrades to `default`
-  // (probe 24-P2a). Centralize the gate here — like bypassPermissions below — so every lib/createHarness caller
-  // is born auto-safe: force a supported model (a supported explicit one is preserved; undefined → DEFAULT).
-  if (config.permissionMode === "auto") options.model = resolveAutoModel(config.model);
-  // SDK contract (sdk.d.ts:1719): bypassPermissions REQUIRES allowDangerouslySkipPermissions.
-  // Centralize it here so no path (CLI/lib/tests) can set the mode without satisfying it.
-  if (config.permissionMode === "bypassPermissions") options.allowDangerouslySkipPermissions = true;
+  const mode = config.permissionMode ?? DEFAULTS.permissionMode;
+  if (mode) options.permissionMode = mode;
+  // `auto` is MODEL-GATED (Opus 4.6+/Sonnet 4.6). Force a supported model ONLY when the caller EXPLICITLY
+  // chose auto — do NOT run the gate when auto is merely the default, or an explicit non-auto-capable model
+  // (e.g. haiku) would be silently overridden to sonnet. The opus-4-8 default is itself auto-capable.
+  if (config.permissionMode === "auto") options.model = resolveAutoModel(model);
+  // SDK contract: bypassPermissions REQUIRES allowDangerouslySkipPermissions. Centralized here.
+  if (mode === "bypassPermissions") options.allowDangerouslySkipPermissions = true;
   if (config.permissionBroker) options.canUseTool = createPermissionGate(config.permissionBroker);
   if (config.mcpServers) options.mcpServers = config.mcpServers;
   if (config.plugins) options.plugins = config.plugins;

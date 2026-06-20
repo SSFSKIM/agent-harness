@@ -79,4 +79,7 @@ export const DEFAULTS = {
   enableFileCheckpointing: true,
   toolPreset: "claude_code" as const,
   provider: "anthropic" as const,
+  model: "claude-opus-4-8",                 // harness-wide default model (opus-4-8 is already 1M — probe 26)
+  permissionMode: "auto" as PermissionMode, // SDK-native auto classifier
+  effort: "xhigh" as EffortLevel,           // default reasoning effort
 };
