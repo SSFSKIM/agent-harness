@@ -13,10 +13,10 @@ class TestGenInventory(unittest.TestCase):
         sk = self.plugin / "skills" / "execplan"
         sk.mkdir()
         (sk / "SKILL.md").write_text("---\nname: execplan\ndescription: Living ExecPlans\n---\n")
-        (self.plugin / "agents" / "dreamer.md").write_text(
-            "---\nname: dreamer\ndescription: Consolidates memory\n---\nbody\n")
-        hooks = {"hooks": {"SessionStart": [{"hooks": [{"type": "command",
-                 "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/feeder_sessionstart.py\""}]}]}}
+        (self.plugin / "agents" / "gardener.md").write_text(
+            "---\nname: gardener\ndescription: Entropy GC persona\n---\nbody\n")
+        hooks = {"hooks": {"Stop": [{"hooks": [{"type": "command",
+                 "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/tidy_stop.py\""}]}]}}
         (self.plugin / "hooks" / "hooks.json").write_text(json.dumps(hooks))
         self.out = Path(self._tmp.name) / "docs" / "generated" / "component-inventory.md"
         self.out.parent.mkdir(parents=True)
@@ -26,8 +26,8 @@ class TestGenInventory(unittest.TestCase):
 
     def test_build_lists_all_components(self):
         text = gen_inventory.build(self.plugin)
-        for token in ("GENERATED", "execplan", "dreamer", "SessionStart",
-                      "feeder_sessionstart.py"):
+        for token in ("GENERATED", "execplan", "gardener", "Stop",
+                      "tidy_stop.py"):
             self.assertIn(token, text)
 
     def test_check_detects_drift(self):

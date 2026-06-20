@@ -146,11 +146,30 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
   `python3 plugin/scripts/check.py` → GREEN. Commit.
 
 ## Progress log
-- [ ] M1 — retire dead machine
-- [ ] M2 — docs reorg + machine rewire (atomic)
+- [x] (2026-06-21) M1 — retired the dead machine. Deleted 5 scripts
+  (`feeder_firstprompt`, `feeder_sessionstart`, `imprint_enqueue`, `imprint_guard`,
+  `imprint_run`), their 3 tests, the `dream` skill, the `dreamer` agent; removed
+  the `imprint_guard` entry from `lint_structure.py` `ALLOWED_IMPORTS`; repointed
+  the `test_gen_inventory` fixture off the deleted components; regenerated the
+  inventory (−2 rows). Gate GREEN (694 tests, was 699). `tidy_stop` kept untouched
+  (M2 owns its sentinel re-point).
+- [ ] M2 — docs reorg + machine rewire (atomic): incl. `tidy_stop` sentinel
+  MEMORY.md→`.harness.json` + scaffold emitting `.harness.json`.
 - [ ] M3 — narrative + fresh-scaffold verification
 
 ## Surprises & discoveries
+- **`tidy_stop.py` is a gate-on-stop safety net, NOT memory machinery** — it runs
+  the fast lint subset at session Stop and blocks (exit 2) on FAIL. Its only memory
+  tie is its activation sentinel (`docs/memory/MEMORY.md`). Surfaced to the human →
+  decision: **keep it**, re-point the sentinel to `.harness.json` (M2). Retiring it
+  would have silently cut a live safety net to a naming accident.
+- **`gen_inventory.py` auto-discovers** components from `skills/*/SKILL.md`,
+  `agents/*.md`, and `hooks.json` — no hardcoded list, so deletions just need a regen.
+- **`scaffold.py` does NOT emit `.harness.json`** today. Since `.harness.json` becomes
+  `tidy_stop`'s new sentinel (and is part of the strict base per the parent spec), M2
+  adds a minimal `.harness.json` to scaffold so the sentinel is reliable on fresh hosts.
+- **`harness_lib.MANAGED_ROOTS` includes `"memory"`** and `lint_docs`/`nav` carry
+  `MEMORY.md` special-cases — the M2 governance rewire (drop `memory`, surface `adr`).
 
 ## Decision log
 - 2026-06-21: Staged GREEN commits (Approach B) — reviewability; the lint/scaffold
@@ -160,6 +179,10 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
 - 2026-06-21: tech-debt-tracker absorbs openq+limitations as a migrated section
   (one row per page, content preserved, sourced to this plan); `memory-loop-redesign`
   open-question is closed (loop retired, not redesigned), recorded as a tracker line.
+- 2026-06-21: **Keep `tidy_stop` (gate-on-stop net), re-point sentinel
+  MEMORY.md→`.harness.json`** (human decision) — it is not memory machinery. The
+  sentinel re-point + scaffold emitting a minimal `.harness.json` move to M2 (atomic
+  with MEMORY.md removal), keeping M1 a pure deletion.
 
 ## Feedback (from completion gate)
 
