@@ -271,13 +271,22 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     return {"summary": summary}
 
 
-def eligible_tickets(tickets: list[dict], *, done_types=("completed",)) -> list[dict]:
+def eligible_tickets(tickets: list[dict], *, done_types=("completed",),
+                     require_label: bool = False) -> list[dict]:
     """The DAG-eligible subset: a ticket whose every blocked_by blocker is in a
     done state-type. A ticket with no blockers is always eligible. Pure function —
-    blockers come from the board read (list_ready_issues -> ticket['blockers'])."""
+    blockers come from the board read (list_ready_issues -> ticket['blockers']).
+
+    When `require_label` is True, a ticket carrying no dev-stage label
+    (`taxonomy.ticket_type` is None) is ALSO dropped — so untyped board tickets (e.g.
+    Linear's default onboarding issues sitting in the ready state) are never dispatched
+    as raw-prompt workers (use-all shakedown F1; `director.dispatch_requires_label`)."""
     done = set(done_types)
-    return [t for t in tickets
-            if all(b.get("state_type") in done for b in t.get("blockers", []))]
+    out = [t for t in tickets
+           if all(b.get("state_type") in done for b in t.get("blockers", []))]
+    if require_label:
+        out = [t for t in out if taxonomy.ticket_type(t) is not None]
+    return out
 
 
 def _stuck_report(pending: list[dict], done_set: set) -> list[dict]:
@@ -563,7 +572,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
 
 
 def run_once(board, command: list[str], *, team: str, states: dict,
-             done_types=("completed",), status=None, **wave_kwargs) -> list[dict]:
+             done_types=("completed",), dispatch_requires_label: bool = False,
+             status=None, **wave_kwargs) -> list[dict]:
     """One poll→filter→dispatch→reconcile pass. Polls ready tickets, keeps only the
     DAG-eligible ones (blockers all done), then dispatches+drains that wave. Returns
     a per-ticket summary list. The shared Director queue carries approvals to the
@@ -576,7 +586,8 @@ def run_once(board, command: list[str], *, team: str, states: dict,
     status = status or status_mod.NoopStatusWriter()
     status.wave(1)
     ready = board.list_ready_issues(team, states["ready"])
-    eligible = eligible_tickets(ready, done_types=done_types)
+    eligible = eligible_tickets(ready, done_types=done_types,
+                                require_label=dispatch_requires_label)
     summaries = list(_dispatch_wave(board, eligible, command=command, states=states,
                                     status=status, **wave_kwargs).values())
     status.finished("pass_complete")
@@ -593,7 +604,8 @@ def _record_run_history(status, history_base) -> None:
 
 
 def run_until_drained(board, command: list[str], *, team: str, states: dict,
-                      done_types=("completed",), max_passes: int = 50,
+                      done_types=("completed",), dispatch_requires_label: bool = False,
+                      max_passes: int = 50,
                       max_dispatched: int = 200, status=None, history_base=None,
                       **wave_kwargs) -> dict:
     """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
@@ -633,7 +645,8 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
             poll_error = str(exc)
             break
         pending = [t for t in ready if t["id"] not in results]  # not yet terminal this run
-        eligible = eligible_tickets(pending, done_types=done_types)
+        eligible = eligible_tickets(pending, done_types=done_types,
+                                    require_label=dispatch_requires_label)
         if not eligible:
             # No progress possible: every pending ticket (if any) is blocked — a failed
             # blocker, a cycle, or an unreadable blocker state. Report each with its
@@ -797,7 +810,8 @@ def _reconcile_merges(board, *, team: str, states: dict, queue_base) -> None:
 
 
 def run_forever(board, command: list[str], *, team: str, states: dict,
-                done_types=("completed",), concurrency: int = 3, queue_base=None,
+                done_types=("completed",), dispatch_requires_label: bool = False,
+                concurrency: int = 3, queue_base=None,
                 workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                 tools=None, tool_executor=None, install_skills: bool = False,
                 read_timeout_s: float = 30.0, timeout_s: float = 300.0, status=None,
@@ -917,7 +931,8 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                         if poll_failing:  # recovered — log the transition back
                             poll_failing = False
                             print(json.dumps({"daemon": "poll_recovered"}), file=sys.stderr)
-                        eligible = eligible_tickets(ready, done_types=done_types)
+                        eligible = eligible_tickets(ready, done_types=done_types,
+                                                    require_label=dispatch_requires_label)
                         elig_ids = {t["id"] for t in eligible}
                         claimable = [t for t in eligible if t["id"] not in state.in_flight
                                      and t["id"] not in state.claim_failed]
@@ -1095,6 +1110,7 @@ def resolve_settings(args, cfg) -> dict:
                   if args.done_types else cfg.done_types)
     return {
         "team": _pick(args.team, cfg.team), "states": states, "done_types": done_types,
+        "dispatch_requires_label": cfg.dispatch_requires_label,
         "concurrency": _pick(args.concurrency, cfg.concurrency),
         "max_turns": _pick(args.max_turns, cfg.max_turns),
         "max_passes": _pick(args.max_passes, cfg.max_passes),
@@ -1244,6 +1260,7 @@ def main(argv=None, *, board=None) -> int:
     kwargs = {"team": s["team"], "states": states, "concurrency": s["concurrency"],
               "queue_base": s["queue_dir"], "tools": tools, "tool_executor": tool_executor,
               "install_skills": install_skills, "done_types": s["done_types"],
+              "dispatch_requires_label": s["dispatch_requires_label"],
               "status": None if args.no_status else status_mod.StatusWriter(base=s["status_dir"]),
               # Posture from the resolved config (a host may tighten it in
               # .harness.json director.worker); --autonomous differs only by the decider.

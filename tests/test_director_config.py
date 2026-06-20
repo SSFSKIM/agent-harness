@@ -101,6 +101,26 @@ class LoadConfigTest(unittest.TestCase):
         cfg = config.load_director_config(root=self.root)
         self.assertFalse(cfg.merger.require_resolved_threads)
 
+    # -- use-all shakedown fixes: read_timeout default + dispatch_requires_label -----
+    def test_read_timeout_default_is_180(self):
+        # F3: the default per-message read budget is 180s (was 30s, which crashed real
+        # Codex workers on ReadTimeout). A host can still override it.
+        self.assertEqual(config.defaults().read_timeout_s, 180.0)
+        _write(self.root, {"director": {"read_timeout_s": 45}})
+        self.assertEqual(config.load_director_config(root=self.root).read_timeout_s, 45.0)
+
+    def test_dispatch_requires_label_default_off_and_opt_in(self):
+        # F1: default False (pre-3b raw-prompt-for-untyped compat); a taxonomy-driven host
+        # opts in to skip untyped board tickets.
+        self.assertFalse(config.defaults().dispatch_requires_label)
+        _write(self.root, {"director": {"dispatch_requires_label": True}})
+        self.assertTrue(config.load_director_config(root=self.root).dispatch_requires_label)
+
+    def test_bad_dispatch_requires_label_raises(self):
+        _write(self.root, {"director": {"dispatch_requires_label": "yes"}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
     # -- worker capability knobs (tools / install_skills) -------------------
     def test_worker_tools_default_off(self):
         # global default leaves the offline behavior unchanged (no tool, no skills)

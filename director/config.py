@@ -51,7 +51,18 @@ DEFAULTS: dict = {
     "max_passes": 50,
     "max_dispatched": 200,
     "done_types": ["completed"],
-    "read_timeout_s": 30.0,
+    # When True, the orchestrator dispatches ONLY tickets carrying a dev-stage label
+    # (taxonomy.ticket_type) — untyped board tickets (e.g. Linear's default onboarding
+    # issues sitting in the ready state) are skipped, never run as raw-prompt workers
+    # (use-all shakedown F1). Default False preserves the pre-3b raw-prompt-for-untyped
+    # backward-compat; a taxonomy-driven host (the self-host board) opts in.
+    "dispatch_requires_label": False,
+    # Per-message inactivity budget for a worker turn (app_server `_wait_readable`). Real
+    # Codex workers go silent >30s (cold start, a long command, deep reasoning), so the old
+    # 30s default crashed them on ReadTimeout (use-all shakedown F3); 180s matches the
+    # merger. `drive()` also catches ReadTimeout → a recoverable `failed`, so a stall retries
+    # rather than crashing the ticket.
+    "read_timeout_s": 180.0,
     "turn_review_timeout_s": 300.0,
     # active-run reconciliation cadence: how often the wave loop re-reads in-flight
     # ticket states to stop a worker a human moved out of `started` (lower = faster
@@ -142,6 +153,7 @@ class DirectorConfig:
     max_passes: int
     max_dispatched: int
     done_types: tuple
+    dispatch_requires_label: bool
     read_timeout_s: float
     turn_review_timeout_s: float
     reconcile_interval_s: float
@@ -286,6 +298,10 @@ def _build(raw: dict) -> DirectorConfig:
     if not isinstance(codex_command, str) or not codex_command.strip():
         raise ValueError(f"director.codex_command must be a non-empty string, got {codex_command!r}")
 
+    drl = raw.get("dispatch_requires_label", DEFAULTS["dispatch_requires_label"])
+    if not isinstance(drl, bool):
+        raise ValueError(f"director.dispatch_requires_label must be a boolean, got {drl!r}")
+
     return DirectorConfig(
         team=_str_or_none(raw.get("team", DEFAULTS["team"]), "team"),
         states=states,
@@ -294,6 +310,7 @@ def _build(raw: dict) -> DirectorConfig:
         max_passes=_pos_int(raw.get("max_passes", DEFAULTS["max_passes"]), "max_passes"),
         max_dispatched=_pos_int(raw.get("max_dispatched", DEFAULTS["max_dispatched"]), "max_dispatched"),
         done_types=tuple(dt),
+        dispatch_requires_label=drl,
         read_timeout_s=_pos_num(raw.get("read_timeout_s", DEFAULTS["read_timeout_s"]), "read_timeout_s"),
         turn_review_timeout_s=_pos_num(raw.get("turn_review_timeout_s",
                                                DEFAULTS["turn_review_timeout_s"]), "turn_review_timeout_s"),

@@ -4,12 +4,13 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.queue as dq  # noqa: E402
 import director.director_min as dmin  # noqa: E402
 import director.run as run  # noqa: E402
-from director.worker.app_server import extract_usage  # noqa: E402
+from director.worker.app_server import ReadTimeout, extract_usage  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
@@ -135,6 +136,32 @@ class RunEndToEndTest(unittest.TestCase):
         (ws / ".codex").symlink_to(outside, target_is_directory=True)
         with self.assertRaises(RuntimeError):
             run.install_workspace_skills(ws)
+
+
+class _ReadTimeoutClient:
+    """A fake AppServerClient whose turn raises ReadTimeout — the worker went silent past
+    the read budget (cold start / long command / deep reasoning). Context-manager + the
+    handshake methods drive() calls; run_turn raises (use-all shakedown F3)."""
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def initialize(self): pass
+    def thread_start(self, **kw): return "thread_1"
+    def run_turn(self, *a, **kw): raise ReadTimeout("no app-server output within read timeout")
+
+
+class ReadTimeoutDispositionTest(unittest.TestCase):
+    def test_drive_returns_failed_on_read_timeout(self):
+        # F3: a ReadTimeout mid-turn must surface as a RECOVERABLE `failed` disposition
+        # (so the orchestrator retries it like any failed turn), NOT an uncaught crash.
+        # Pre-fix, drive() let ReadTimeout propagate and the whole ticket died with a
+        # traceback — the real bug the canary shakedown hit on the first live worker.
+        # _prepare is mocked, so workspace_root is never used (no fs touch).
+        with mock.patch("director.run._prepare", return_value=_ReadTimeoutClient()):
+            disp = run.drive({"id": "RT-1", "prompt": "p"}, command=["x"],
+                             workspace_root=Path("/tmp/unused-rt"))
+        self.assertEqual(disp["kind"], "failed")
+        self.assertEqual(disp["status"], "read_timeout")
+        self.assertIn("telemetry", disp)  # carries run facts like every other disposition
 
 
 class WorkspaceSafetyTest(unittest.TestCase):

@@ -101,6 +101,40 @@ class EligibilityTest(unittest.TestCase):
                                                    {"id": "b", "state_type": "unstarted"}])])
         self.assertEqual(out, [])
 
+    def test_require_label_drops_untyped(self):
+        # F1: with require_label, an untyped ticket (no dev-stage label → ticket_type None)
+        # is dropped, so a board's stray non-harness tickets are never dispatched.
+        untyped = self._t("a", [])  # no 'labels' key
+        typed = {"id": "b", "identifier": "b", "blockers": [], "labels": ["impl"]}
+        out = orch.eligible_tickets([untyped, typed], require_label=True)
+        self.assertEqual([t["id"] for t in out], ["b"])
+
+    def test_require_label_default_off_keeps_untyped(self):
+        # Backward compat: default require_label=False dispatches an untyped ticket.
+        out = orch.eligible_tickets([self._t("a", [])])
+        self.assertEqual([t["id"] for t in out], ["a"])
+
+    def test_run_once_require_label_skips_untyped(self):
+        # End-to-end: run_once threads dispatch_requires_label into eligible_tickets, so an
+        # untyped ready ticket is never handed to dispatch.
+        board = orch.MockBoard([
+            {"id": "a", "identifier": "A", "title": "t", "description": "d",
+             "prompt": "pa", "state_id": "st_todo"},  # untyped
+            {"id": "b", "identifier": "B", "title": "t", "description": "d",
+             "prompt": "pb", "state_id": "st_todo", "labels": ["impl"]}])  # typed
+        states = orch.resolve_states(board, "T")
+        seen = []
+
+        def fake(ticket, **kw):
+            seen.append(ticket["id"])
+            return _done()
+
+        with mock.patch("director.orchestrator.dispatch", fake):
+            res = orch.run_once(board, command=["x"], team="T", states=states,
+                                dispatch_requires_label=True)
+        self.assertEqual(seen, ["b"])  # A (untyped) skipped
+        self.assertEqual([r["ticket"] for r in res], ["B"])
+
     def test_run_once_skips_blocked_ticket(self):
         board = orch.MockBoard([
             {"id": "a", "identifier": "A", "title": "t", "description": "d",

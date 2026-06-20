@@ -22,7 +22,7 @@ from pathlib import Path
 from director import config, taxonomy
 from director.decider import autonomous_decide
 from director.worker import autonomy, policy as worker_policy, tools as worker_tools
-from director.worker.app_server import AppServerClient, TurnCancelled
+from director.worker.app_server import AppServerClient, ReadTimeout, TurnCancelled
 from director.worker.approval import make_seam
 
 DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
@@ -369,6 +369,12 @@ def drive(ticket: dict, *, command: list[str], decide=autonomous_decide,
                     input_text = disp.get("reply") or ""
             except TurnCancelled:  # mid-turn reconciliation cancel (D-59) — release, no retry
                 return _cancelled()
+            except ReadTimeout:  # F3: worker silent past read_timeout (cold start / a long
+                # command / deep reasoning) — a RECOVERABLE failure, not an uncaught crash;
+                # the orchestrator's reconcile retries it like any failed turn (R6 bound).
+                return {"kind": "failed", "status": "read_timeout", "turns": turns,
+                        "turn_id": turn_id, "final_message": final_message,
+                        "thread_id": thread_id, "telemetry": _telemetry()}
         return {"kind": "stuck", "reason": "max_turns", "turns": turns,
                 "turn_id": turn_id, "final_message": final_message, "thread_id": thread_id,
                 "telemetry": _telemetry()}
@@ -448,7 +454,7 @@ def main(argv=None) -> int:
                  decide=autonomous_decide, queue_base=queue_dir, tools=tools,
                  tool_executor=tool_executor, install_skills=args.install_skills,
                  approval_policy=posture.approval_policy, sandbox=posture.sandbox,
-                 max_turns=max_turns, hooks=hooks,
+                 max_turns=max_turns, read_timeout_s=cfg.read_timeout_s, hooks=hooks,
                  hook_timeout_s=cfg.workspace.hook_timeout_s)
     print(json.dumps({"ticket": ticket["id"], **disp}))
     return 0 if disp.get("kind") == "terminal" else 1
