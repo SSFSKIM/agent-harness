@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-21
 owner: harness
 type: exec-plan
@@ -224,4 +224,41 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
 - **Proposed rule (→ tracker):** no seeded template may reference a `docs/<root>/` not in
   `scaffold.DIRS`; mechanize as a `test_scaffold` assertion / lint (both reviewers proposed it).
 
+**Round 2 (after the P1 fix — codex spec-compliance + code-quality):**
+- **code-quality: SATISFIED** (no P1).
+- **spec-compliance: NOT-SATISFIED**, but only on the `test_nav.py` P2 (fixture still under
+  `docs/memory/`) + a sandbox caveat (the reviewer's env denied creating `/tmp/sc-check` to run the
+  scaffold-grep verification — run independently here: a fresh scaffold has **zero** `docs/memory`
+  references). R1.1–R1.8 confirmed built; the substantive P1 (portable-layer sweep) confirmed fixed.
+- **Disposition:** the `test_nav` fixture repoint is a P2 (both reviewers) → **deferred to the
+  tracker** — a mechanical repoint broke inter-fixture relative links across the larger
+  TestNavTree/Relations/Roadmap fixtures, so it was reverted to the passing original. Completion bar
+  met: gate GREEN, code-quality SATISFIED, all P1s fixed + verified, remaining items tracked P2 doc-debt.
+
 ## Outcomes & retrospective
+
+**Delivered (Slice 1 of the packaging spec).** The memory subsystem is retired: no
+`docs/memory/` tree; the feeder/imprint/dream machine (5 scripts, the `dream` skill, the
+`dreamer` agent, the MEMORY.md bootloader + 2 seed templates) deleted; ADRs surfaced to
+`docs/adr/`; openq+limitations folded into the tech-debt tracker; `recursion-guard` rehomed to
+`docs/design-docs/`; on-demand `docs/logs.md` added; `tidy_stop` **kept** (gate-on-stop net) with
+its activation sentinel re-pointed to `.harness.json` (now scaffold-seeded). The scaffold/lint
+machine (`scaffold.py`, `lint_docs.py`, `harness_lib.py`, `nav.py`) is rewired off `memory/` onto
+`adr/`, and the narrative was swept across BOTH the self-host docs AND the portable harness-init
+templates + skills. Net **−611 lines** (1019 del / 408 ins). A fresh `scaffold.py` produces the new
+shape with **zero** `docs/memory` references; gate GREEN throughout (692 tests).
+
+**Verification.** Behavioral check (runnable surface = the scaffold CLI): fresh scaffold →
+`docs/adr/` + `docs/logs.md` + `.harness.json`, no `docs/memory/`; fresh-host `check.py --root`
+GREEN. Reviews: codex spec-compliance + code-quality + review-arch + review-reliability — one P1
+(portable layer not swept) found and fixed; code-quality SATISFIED; remaining items tracked P2 doc-debt.
+
+**Retrospective — the one real miss.** M3's docs-sweep grep was scoped to `docs/` + `AGENTS.md`,
+missing the portable twin (`plugin/skills/harness-init/templates/`) — the exact "edited the
+self-host doc, forgot the template twin" failure core-belief 13 exists to prevent. All four
+reviewers caught it; fixed in the P1 round. Lesson mechanized as a tracker row (a `test_scaffold`
+assertion that no seeded template references a `docs/<root>/` absent from `scaffold.DIRS`).
+Carried-forward P2 doc-debt: the `test_nav` fixture repoint, and the numbered memory-loop rule
+text still in RELIABILITY/SECURITY/QUALITY_SCORE.
+
+**Next:** Slice 2 (strict-base docs + guidance enrichment) — the packaging spec's next phase.
