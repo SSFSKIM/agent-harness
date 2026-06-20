@@ -165,7 +165,7 @@ def with_terminal_contract(prompt: str) -> str:
 # use-all shakedown); the four impl-specific disciplines (reproduction-first, acceptance
 # mirroring, temp-proof revert, PR feedback sweep) live in _IMPL_TEMPLATE, not here. Harvested from
 # docs/symphony-original/WORKFLOW.md's stage-agnostic craft (NOT its lifecycle/board
-# steps — our orchestrator/merger own those). See docs/memory/adr/0002-graduated-autonomy.md
+# steps — our orchestrator/merger own those). See docs/adr/0002-graduated-autonomy.md
 # + docs/product-specs/2026-06-17-worker-operating-protocol.md.
 WORKER_PROTOCOL = """\
 These hold for every stage, on every turn:

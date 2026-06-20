@@ -39,7 +39,7 @@ the machine itself lives in this repo at `plugin/`.
   (S/D lints); see
   ARCHITECTURE.md invariant 7.
 - Docs governance is tiered: machine-critical docs and harness-managed roots
-  (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
+  (`adr`, `design-docs`, `exec-plans`, `product-specs`) are strict;
   host-owned business/marketing/research docs are flexible unless listed in
   `.harness.json` `managed_doc_roots` or the host sets
   `doc_governance: strict`.

@@ -15,8 +15,9 @@ Deep truth lives in `docs/` — follow the pointers.
    skip the survey and go straight to the work — over-orienting a focused ticket
    just burns context. The `docs-nav` skill (`nav.py`) is the on-demand way to
    explore the docs corpus by querying, not bulk-reading, whenever a task needs it.
-   The automatic context feeder may be disabled: read `docs/memory/MEMORY.md`
-   when you need continuity and follow its loading protocol.
+   Session continuity uses Claude Code's **native memory** — the harness ships no
+   feeder/imprint loop; durable knowledge lives in `docs/` (decisions in
+   `docs/adr/`, evolution in `docs/logs.md`).
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
@@ -31,9 +32,10 @@ Deep truth lives in `docs/` — follow the pointers.
 5. **Review.** Two QA reviews (spec-compliance then code-quality) run at *every*
    ExecPlan completion; `review_level` governs only the additional risk personas
    dispatched at the level the plan calls for. Always self-review (execplan skill).
-6. **Write back.** Update `docs/memory/progress/current.md` before ending a
-   long session. The automatic memory loop may be disabled; follow the harness
-   page for the current mode.
+6. **Write back.** Session continuity uses Claude Code's native memory — no
+   write-back step. Durable knowledge goes into `docs/` as you make it: decisions
+   in `docs/adr/`, deferred work in `docs/exec-plans/tech-debt-tracker.md`,
+   evolution in `docs/logs.md` (on-demand, milestone-grained).
 
 ## Map
 
@@ -42,9 +44,10 @@ Deep truth lives in `docs/` — follow the pointers.
 <!-- FILL: rows for this repo's real source layout (src/, build, test cmds). -->
 | `docs/CHARTER.md` | Top-level intent: mission, design philosophy, locked assumptions — the Orient anchor |
 | `docs/design-docs/core-beliefs.md` | Golden rules (agent-first operating principles) |
-| `docs/design-docs/agent-harness.md` | The installed harness: components, memory loop, gate |
+| `docs/design-docs/agent-harness.md` | The installed harness: components, native memory, gate |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |
-| `docs/memory/` | Structured long-term memory (`MEMORY.md` = bootloader) |
+| `docs/adr/` | Architecture Decision Records — durable decisions + why |
+| `docs/logs.md` | On-demand, milestone-grained project/docs-evolution log |
 | `docs/product-specs/` | What this product is, behavior-wise |
 | `docs/references/` | Digests of external APIs this repo depends on |
 | `docs/RELIABILITY.md` | Failure-mode rules (review grounding; grows over time) |
@@ -53,7 +56,7 @@ Deep truth lives in `docs/` — follow the pointers.
 ## Laws (short form — full text: docs/design-docs/core-beliefs.md)
 
 - **Not in the repo = does not exist.** Decisions made in chat must be encoded
-  into `docs/` or `docs/memory/`.
+  into `docs/` — an ADR in `docs/adr/`, a doc page, or a `docs/logs.md` entry.
 - **Map, not encyclopedia.** Entry points stay short; depth behind pointers.
 - **Minimal blocking gates.** Only the deterministic check gate blocks a
   commit; everything else is fix-forward via the tech-debt tracker.

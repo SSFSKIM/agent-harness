@@ -3,21 +3,24 @@ status: stable
 last_verified: {{TODAY}}
 owner: harness
 type: design-doc
-description: The installed harness: its components, the memory loop, and the commit gate.
+description: The installed harness: its components, native memory, and the commit gate.
 ---
 # agent-harness — the installed harness
 
 This repo is operated by the `agent-harness` Claude Code plugin: docs-as-memory
-knowledge system, taste lints whose FAIL messages carry FIX instructions,
-review personas grounded 1:1 in docs, and a dormant memory loop (feeder /
-imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
+knowledge system, taste lints whose FAIL messages carry FIX instructions, and
+review personas grounded 1:1 in docs. Session continuity uses Claude Code's
+native memory (no feeder/imprint/dream loop). Bootstrapped by the `harness-init`
+skill on {{TODAY}}.
 
 ## Run it
 
 - Load: `claude --plugin-dir <plugin>` from this repo's root — the plugin's
   location on this machine is recorded in `.git/hooks/pre-commit` (its
-  check.py path reveals the plugin dir). The automatic feeder/imprint memory
-  loop ships disabled; `docs/memory/` is hand-maintained until redesign.
+  check.py path reveals the plugin dir). Session continuity uses Claude Code's
+  native memory — no feeder/imprint loop. Durable knowledge: `docs/adr/`
+  (decisions), `docs/exec-plans/tech-debt-tracker.md` (debt/open questions),
+  `docs/logs.md` (evolution).
 - Gate: run `.git/hooks/pre-commit` — scaffold installs it with this
   machine's exact `check.py` invocation (no placeholders to resolve; rerun
   scaffold.py after moving the repo or plugin and the hook is rewritten).
@@ -39,7 +42,7 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 	  same file (`stale_days`, `managed_doc_roots`, `doc_governance`). See
 	  ARCHITECTURE.md invariant 7; the rules are this repo's, not the machine's.
 - Docs governance is tiered: machine-critical docs and harness-managed roots
-  (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict;
+  (`adr`, `design-docs`, `exec-plans`, `product-specs`) are strict;
   host-owned business/marketing/research docs are flexible unless listed in
   `.harness.json` `managed_doc_roots` or the host sets
   `doc_governance: strict`.
@@ -62,10 +65,10 @@ imprint / dreaming). Bootstrapped by the `harness-init` skill on {{TODAY}}.
 | Component taste rule | `docs/DESIGN.md` |
 | Failure mode / idempotency rule | `docs/RELIABILITY.md` |
 | Threat / mitigation | `docs/SECURITY.md` |
-| Reusable how-it-works | `docs/memory/knowledge/` |
-| Decision + why | `docs/memory/adr/` |
-| Known landmine | `docs/memory/limitations/` |
-| Unresolved question | `docs/memory/openq/` |
+| Reusable how-it-works | `docs/design-docs/` |
+| Decision + why | `docs/adr/` |
+| Known landmine / unresolved question | `docs/exec-plans/tech-debt-tracker.md` |
+| Project / docs evolution | `docs/logs.md` |
 | Product behavior | `docs/product-specs/` (harness-managed by default) |
 | External API facts | `docs/references/` |
 | Host-specific business/marketing/curriculum/etc. | Natural `docs/<domain>/` roots chosen during `harness-init` |
@@ -83,19 +86,19 @@ they are opted into managed governance.
 repo opts into global docs governance but still needs declared legacy subtrees.
 Harness-managed trees can't be listed there.
 
-## Memory loop — currently DISABLED (hand-maintained memory)
+## Memory — native (no loop)
 
-The automatic memory loop ships **off**: the SessionStart/UserPromptSubmit
-(feeder) and PreCompact/SessionEnd (imprint) hooks are unwired pending a more
-sophisticated redesign. Until then `docs/memory/` is **maintained by hand** —
-write progress/ADRs/knowledge/limitations directly; lints still enforce
-frontmatter, naming, and index registration.
+The harness ships **no automatic memory loop**. Session continuity uses Claude
+Code's native memory; there is no feeder/imprint/dream machine. Durable,
+version-controlled knowledge lives in `docs/`:
 
-- Retained but dormant (re-enable by restoring the hook entries in the
-  plugin's `hooks.json`): `feeder_*` (read path: context pack + addendum),
-  `imprint_*` (write path: session digests + memory updates). The `/dream`
-  (consolidate) and `garden` (entropy GC) skills run manually.
-- Never bypass the `docs/memory/` structure even when editing by hand.
+- **Decisions + why** → `docs/adr/` (ADRs, registered in `docs/adr/index.md`).
+- **Deferred work + open questions + limitations** → `docs/exec-plans/tech-debt-tracker.md`.
+- **Evolution narrative** → `docs/logs.md` (milestone-grained, read on-demand).
+- **Reusable how-it-works** → `docs/design-docs/`.
+
+`garden` (entropy GC) remains a manual tool. The lints still enforce frontmatter,
+naming, and index registration on every governed page.
 
 ## Growing the grounding docs
 

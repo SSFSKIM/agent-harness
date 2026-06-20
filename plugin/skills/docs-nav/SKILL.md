@@ -57,13 +57,13 @@ code-execution path (`from nav import build_index, backlinks`).
 ## What the output means
 
 - `catalog` reads **frontmatter only** — a page with an empty body still appears
-  with its `type`/`tags`/`description`. It lists content pages; reserved spines
-  (`index.md`, `MEMORY.md`) and the entry maps are excluded.
+  with its `type`/`tags`/`description`. It lists content pages; the reserved spine
+  (`index.md`) and the entry maps are excluded.
 - `stale`/`orphans`/`drift` are **advisory** — never a gate failure. `stale`
   agrees with what lint D4 would flag. `orphans` is graph-based: a page reachable
   only by a bare-text mention (not a `[](…)` link) counts as an orphan, so a
   high count usually means index pages use prose, not markdown links. Terminal /
-  historical tiers (exec-plans, session-digests) are orphaned by design — scope
+  historical tiers (exec-plans) are orphaned by design — scope
   with `orphans --type knowledge` to surface only the *concerning* ones.
 - `drift` compares each page's `resource` to its code's last git-commit date;
   `unknown` means no git / missing path / a URL (fail-soft, never an error).

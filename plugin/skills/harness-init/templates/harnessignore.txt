@@ -13,7 +13,7 @@
 # (frontmatter + kebab-case + index, or `git mv` into a managed tree), then
 # delete its line.
 #
-# Cannot exempt harness-managed trees (design-docs/ memory/ exec-plans/
+# Cannot exempt harness-managed trees (design-docs/ adr/ exec-plans/
 # product-specs/ generated/) or top-level machine docs
 # (PLANS/DESIGN/SECURITY/RELIABILITY/QUALITY_SCORE/PRODUCT_SENSE.md) — those
 # entries are ignored; the harness always governs its own tree.

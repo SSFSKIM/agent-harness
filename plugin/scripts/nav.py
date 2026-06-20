@@ -71,8 +71,8 @@ def build_index(root):
 
     Indexed set = non-exempt docs/ pages + the entry maps (AGENTS.md,
     ARCHITECTURE.md), the latter as link roots. A record is `catalog`-eligible
-    when it carries frontmatter and is not a reserved spine file (index.md /
-    MEMORY.md) — that is the content corpus the `catalog`/`orphans` queries act
+    when it carries frontmatter and is not a reserved spine file (index.md)
+    — that is the content corpus the `catalog`/`orphans` queries act
     on. Bodies are read only for the link scan; catalog columns come from
     frontmatter alone. Record keys: path, type, tags, status, description,
     resource, phase, last_verified, links, catalog.
@@ -147,7 +147,7 @@ def backlinks(records, path, root):
 def orphans(records, kind=None):
     """Catalog pages with no inbound markdown link (unreachable in the graph).
 
-    Reserved spines (index.md/MEMORY.md) and the entry maps are not catalog
+    Reserved spines (index.md) and the entry maps are not catalog
     pages, so they are never reported. A page linked only by a bare-text mention
     (not a `[](…)` link) still counts as an orphan — this mirrors the D5 graph.
     `kind` restricts the report to one `type` (e.g. only `knowledge`), useful

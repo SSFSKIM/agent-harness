@@ -58,7 +58,7 @@ These are governance fields with no OKF equivalent; they make the corpus a
 *maintained working memory* rather than a static catalog.
 
 **Navigation core (D11, KF v2.0)** — present on every governed *content* page
-(reserved spines `index.md`/`MEMORY.md` are exempt — they are listings, not
+(reserved spines `index.md` are exempt — they are listings, not
 navigable concept-pages):
 
 | Key | Requirement |
@@ -176,7 +176,7 @@ Each is enforced by `plugin/scripts/lint_docs.py` and surfaced by the
 | **D5** | Every markdown link to a `.md` target resolves. |
 | **D6** | Filename is `kebab-case.md` (or `UPPER_CASE.md` for top-level machine docs). |
 | **D8** | Indexed categories have an `index.md`, and every page is registered in it. |
-| **D11** | Navigation core (KF v2.0): non-empty `type` + `description` on every governed content page; `phase` on every `product-spec`. (Reserved spines `index.md`/`MEMORY.md` exempt.) |
+| **D11** | Navigation core (KF v2.0): non-empty `type` + `description` on every governed content page; `phase` on every `product-spec`. (Reserved spine `index.md` exempt.) |
 | **D12** | Validate-if-present: a repo-path `resource` exists, each `supersedes` target resolves, and `phase` is well-formed. |
 
 The remaining keys (`tags`, `title`) stay **outside** conformance — a page is no

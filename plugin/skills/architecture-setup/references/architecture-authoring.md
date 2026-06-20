@@ -94,7 +94,7 @@ specific enough to answer "where's the thing that does X?".
 - Hiding important absences because "the code already implies it." Future agents
   copy existing patterns; absent dependencies need written names.
 - Stuffing active plans or sprint state into the architecture doc. Use
-  `docs/exec-plans/` and `docs/memory/progress/current.md` for volatile work.
+  `docs/exec-plans/` and `docs/logs.md` for volatile work.
 - Encoding app-specific rules in the portable plugin. The machine provides the
   method and gate substrate; host rules live in the host repo.
 

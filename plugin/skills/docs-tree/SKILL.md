@@ -15,10 +15,9 @@ query by type/tag, check backlinks before editing, sweep for stale/orphan/drift
 | Failure mode / idempotency rule | `docs/RELIABILITY.md` |
 | Threat / mitigation | `docs/SECURITY.md` |
 | Component taste rule | `docs/DESIGN.md` |
-| Reusable how-it-works | `docs/memory/knowledge/` |
-| Decision + why | `docs/memory/adr/` |
-| Known landmine | `docs/memory/limitations/` |
-| Unresolved question | `docs/memory/openq/` |
+| Reusable how-it-works | `docs/design-docs/` |
+| Decision + why | `docs/adr/` |
+| Known landmine / unresolved question | `docs/exec-plans/tech-debt-tracker.md` |
 | Product behavior | `docs/product-specs/` (harness-managed by default) |
 | External API facts | `docs/references/` (llms.txt style) |
 | Host-specific business/marketing/curriculum/etc. knowledge | Create or use a natural `docs/<domain>/` root; opt it into governance only when useful |

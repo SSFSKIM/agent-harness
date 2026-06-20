@@ -76,15 +76,15 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   the diff, tests, or runtime evidence prove them. A P1 needs either a cited
   written rule or concrete bug evidence.
 - Output contract — **review** personas (review-arch/reliability/security):
-  P1 (blocks) / P2 (fix-forward) / Verdict. **Constructive** personas
-  (doc-gardener, dreamer) instead report their work product (what they
-  changed/authored); they don't emit a Verdict.
+  P1 (blocks) / P2 (fix-forward) / Verdict. A **constructive** persona
+  (doc-gardener) instead reports its work product (what it
+  changed/authored); it doesn't emit a Verdict.
 - Construction that needs the repo's FULL context is a **skill**, not a persona
   (e.g. `architecture-setup`): an isolated subagent can't read the codebase as
   deeply, and a one-time setup action doesn't need the per-commit guarantee a
   lint gives. Review wants isolation (independent judgment); setup wants the main
-  agent's hands. doc-gardener/dreamer remain personas for now (bounded
-  memory/docs scope) — revisit if they outgrow it.
+  agent's hands. doc-gardener remains a persona for now (bounded
+  docs scope) — revisit if it outgrows it.
 - Non-review personas must cite at least one `docs/` path in their body as the
   primary grounding doc; the host repo's own files (its `ARCHITECTURE.md`,
   source) are read as DATA/target input, not as taste authority over the persona.

@@ -205,4 +205,23 @@ over the live tree (excluding `exec-plans/completed/` history) returns nothing;
 
 ## Feedback (from completion gate)
 
+**Round 1 (codex spec-compliance + review-arch + review-reliability) — all NOT-SATISFIED, one shared P1:**
+- **P1 — the portable machine layer was not swept** (only the self-host instance layer was). The
+  `harness-init` seed templates (`agents-md.md`, `agent-harness.md`, `knowledge-format.md`,
+  `reliability.md`, `security.md`) and live skills (`docs-tree/SKILL.md`, `harness-init/SKILL.md`,
+  `harness-init/references/migration.md`, `architecture-setup/references/architecture-authoring.md`)
+  still describe/route to the deleted `docs/memory/` — a fresh scaffold would produce a
+  self-contradictory host. Root cause: M3's grep was scoped to `docs/`+`AGENTS.md`, missing the
+  template twins (core-belief 13 failure). **Fixed in round 2** (mirror the self-host model into the
+  portable layer).
+- **P2 (fixed round 2):** `director/taxonomy.py:168` comment cited the moved ADR path;
+  `docs/KNOWLEDGE_FORMAT.md` lines 61/179 + `plugin/scripts/nav.py` docstrings 75/150 kept stale
+  `MEMORY.md` reserved-spine mentions; `plugin/.claude-plugin/plugin.json` description still
+  advertised the retired memory loop (description fixed now; version bump + marketplace = Slice 5).
+- **P2 (non-issue):** codex flagged the migrated `tracker-fixed-traceability` openq as unsourced —
+  it is a **duplicate** of pre-existing tracker row "Tracker `fixed` rows should cite the
+  implementing commit SHA"; deliberately not re-added.
+- **Proposed rule (→ tracker):** no seeded template may reference a `docs/<root>/` not in
+  `scaffold.DIRS`; mechanize as a `test_scaffold` assertion / lint (both reviewers proposed it).
+
 ## Outcomes & retrospective

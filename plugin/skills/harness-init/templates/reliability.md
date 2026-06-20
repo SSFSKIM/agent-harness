@@ -13,9 +13,8 @@ this repo learns becomes the next numbered rule (feedback twice → promote).
 
 - **R1 — Hooks fail open.** Harness hooks must never block a session or lose
   work on their own failure; they degrade, log, and let the session proceed.
-- **R2 — Memory writes are idempotent.** Imprint write-backs are deduped by
-  session/event key; re-running a write-back must not duplicate pages or
-  index entries.
-- **R3 — Fresh-session recoverability.** Any in-flight work must be resumable
-  by a fresh session from `docs/memory/` + `docs/exec-plans/` alone — if it
-  is not, the write-back was insufficient.
+- **R2 — Fresh-session recoverability.** Any in-flight work must be resumable
+  by a fresh session from `docs/` (decisions in `docs/adr/`, deferred work in
+  `docs/exec-plans/tech-debt-tracker.md`, living plans in `docs/exec-plans/`)
+  plus Claude Code's native memory — if it is not, the durable knowledge was
+  insufficiently recorded.

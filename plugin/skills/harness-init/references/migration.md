@@ -11,10 +11,10 @@ universal taxonomy.
 |---|---|
 | README.md | Stays at root; link it from the AGENTS.md map. Extract durable knowledge into docs/ pages. |
 | CONTRIBUTING / style guides | `docs/design-docs/` (or fold into core-beliefs.md if short) |
-| ADRs (`adr/`, `docs/adr/`, RFCs) | `docs/memory/adr/` + register in its index.md |
+| ADRs (`adr/`, `docs/adr/`, RFCs) | `docs/adr/` + register in its index.md |
 | Architecture overviews | `ARCHITECTURE.md` at root (codemap + invariants) or `docs/design-docs/` |
-| How-it-works guides, runbooks | `docs/memory/knowledge/` |
-| Known issues, quirks, gotchas | `docs/memory/limitations/` |
+| How-it-works guides, runbooks | `docs/design-docs/` |
+| Known issues, quirks, gotchas | `docs/exec-plans/tech-debt-tracker.md` |
 | Roadmaps, TODO lists | `docs/exec-plans/active/` (living plans) or tech-debt-tracker rows |
 | External API / service notes | `docs/references/` (llms.txt-style digests) |
 | Product / feature specs | `docs/product-specs/` (harness-managed by default) |
@@ -43,9 +43,9 @@ universal taxonomy.
 ## AGENTS.md / CLAUDE.md merge
 
 - Existing AGENTS.md: keep it the single map. Add the harness rows
-  (agent-harness.md, docs/memory/, exec-plans/, RELIABILITY/SECURITY) and the
-  5-step operating model; keep it map-like by relocating deep detail to docs/
-  pages it links.
+  (agent-harness.md, docs/adr/, exec-plans/, docs/logs.md, RELIABILITY/SECURITY)
+  and the 5-step operating model; keep it map-like by relocating deep detail to
+  docs/ pages it links.
 - Existing CLAUDE.md with real content: move that content into AGENTS.md or
   the right docs/ page, then reduce CLAUDE.md to the 3-line pointer
   (single-map principle — two competing manuals drift).

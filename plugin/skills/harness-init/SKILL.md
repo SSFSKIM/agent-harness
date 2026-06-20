@@ -30,7 +30,7 @@ needs them in step 3.
 Idempotent — seeded files are never overwritten (CREATE/SKIP per path);
 `.gitignore` is append-only; the component inventory is (re)generated.
 Creates the docs tree, seed grounding docs (incl. `docs/KNOWLEDGE_FORMAT.md` —
-the doc-format contract a host authors pages against), memory bootloader, the
+the doc-format contract a host authors pages against), the
 CLAUDE.md→AGENTS.md pointer, and a `.git/hooks/pre-commit` gate hook — the
 hook IS the recorded gate command (machine-local absolute paths; rerunning
 scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
@@ -42,7 +42,7 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
 	  deeper docs instead of making AGENTS.md the encyclopedia.
 - Host already had AGENTS.md or a substantive CLAUDE.md: scaffold skipped
   them — merge instead. Fold the harness pointers (operating model, link to
-  `docs/design-docs/agent-harness.md`, memory paths) into the existing map.
+  `docs/design-docs/agent-harness.md`, durable-knowledge paths) into the existing map.
   - Minimal/thin CLAUDE.md → reduce it to a 3-line pointer, content relocated.
   - **Doc-sophisticated host** (a working, layered CLAUDE.md that loads
     subsystem docs, or a deliberate AGENTS+CLAUDE split): do NOT gut it. Make
@@ -59,7 +59,7 @@ scaffold rewrites it after a repo/plugin move). New repo: `git init` first.
 
 Follow `references/migration.md`, but do not force every host into the same
 knowledge taxonomy. The scaffold creates the minimum machine-critical docs and
-harness-managed roots (`design-docs/`, `exec-plans/`, `memory/`,
+harness-managed roots (`design-docs/`, `exec-plans/`, `adr/`,
 `product-specs/`). For additional project-specific docs, infer the repo's
 natural shape: a fundraising repo may need `docs/business/`, a growth repo may
 need `docs/marketing/`, a school repo may need `docs/curriculum/`. Create or
@@ -74,7 +74,7 @@ opts that root into `.harness.json` `managed_doc_roots` or sets
 
 `docs/.harnessignore` remains a strict-mode migration tool. Use it when a host
 has opted into global docs governance but still needs a declared legacy wave.
-Harness-managed trees (`memory/`, `design-docs/`, `exec-plans/`) and top-level
+Harness-managed trees (`adr/`, `design-docs/`, `exec-plans/`) and top-level
 machine docs (`SECURITY.md`, `DESIGN.md`, …) cannot be exempted — the harness
 always governs its own execution surface.
 
@@ -146,9 +146,10 @@ wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 
 ## 9. Write back, commit, hand off
 
-- Fill `docs/memory/progress/current.md` with the host's real state (it
-  ships with FILL markers).
+- Record the host's real starting state where it belongs: an opening entry in
+  `docs/logs.md` and any known landmines as `docs/exec-plans/tech-debt-tracker.md`
+  rows.
 - Commit the scaffold + migration as its own commit before substantive work.
 - Hand off: the next session starts in the host root with
-  `claude --plugin-dir "$PLUGIN"` — `docs/memory/MEMORY.md` is the continuity
-  entrypoint while the automatic feeder is disabled.
+  `claude --plugin-dir "$PLUGIN"` — Claude Code's native memory is the continuity
+  store; durable knowledge lives in `docs/adr/` + `docs/logs.md`.
