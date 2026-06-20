@@ -1,5 +1,5 @@
 // test/unit/peer.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Peer } from "../../src/peer.js";
 
 function harness() {
@@ -36,5 +36,18 @@ describe("Peer", () => {
     expect(h.out[0]).toEqual({ id: 7, result: { thread: { id: "thr_1" } } });
     expect(h.out[1]).toEqual({ method: "turn/completed", params: { turn: { id: "turn_1", status: "completed" } } });
     expect("jsonrpc" in h.out[0]).toBe(false);
+    h.peer.replyError(3, -32601, "not found");
+    expect(h.out[2]).toEqual({ id: 3, error: { code: -32601, message: "not found" } });
+    expect("jsonrpc" in h.out[2]).toBe(false);
+  });
+
+  it("skips a malformed line (logs to console.error) and keeps processing", () => {
+    const h = harness();
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    h.peer.feed("{not json}\n");
+    h.peer.feed('{"method":"turn/started","params":{}}\n');
+    expect(spy).toHaveBeenCalled();
+    expect(h.notes).toEqual([{ m: "turn/started", p: {} }]);
+    spy.mockRestore();
   });
 });
