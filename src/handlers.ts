@@ -4,6 +4,7 @@ import { Registry } from "./registry.js";
 import { TurnTranslator } from "./translator.js";
 import { ERR, type ThreadStartParams, type TurnStartParams, type UsageTotals } from "./protocol.js";
 import { withReportOutcome, type OutcomeHolder } from "./tools.js";
+import { withLinear } from "./linear.js";
 import { resolvePosture } from "./posture.js";
 
 export interface OpenFn { (cfg: any, holder: OutcomeHolder): Session }
@@ -47,7 +48,9 @@ export class AppServer {
   private threadStart(params: ThreadStartParams, id: number | string): void {
     const holder: OutcomeHolder = {};
     const posture = resolvePosture({ approvalPolicy: params.approvalPolicy, autoReview: this.autoReview });
-    const cfg = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode }, holder);
+    let cfg = withReportOutcome({ cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode }, holder);
+    const linearKey = process.env.LINEAR_API_KEY;
+    if (linearKey) cfg = withLinear(cfg, linearKey);
     const session = this.open(cfg, holder);
     const { id: threadId } = this.reg.newThread(session);
     this.reg.get(threadId)!.outcome = holder;
