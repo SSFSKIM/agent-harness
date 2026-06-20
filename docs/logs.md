@@ -18,6 +18,21 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Packaging: strict-base docs + guidance enrichment (Slice 2)
+
+The harness-init seed-template layer became the self-describing strict base
+(packaging
+[Slice 2](product-specs/2026-06-21-harness-packaging-portable-template.md)).
+Added a `PRINCIPLES.md` template (the human's externalized decision-taste the
+central Director reads at a fork), dedicated guided indexes for `references/`
+(why external-API/`llms.txt` digests exist) and `product-specs/`, and lifecycle
+`index.md` guides for `exec-plans/active|completed`. The `ARCHITECTURE.md`
+template became a **redirect** to the `architecture-setup` skill rather than a
+hand-fill skeleton — the same no-drift principle (point, don't copy) that kept
+the plan skeleton single-sourced in `PLANS.md`. `scaffold.py` wires the five new
+seeds and trims `TOP_INDEXES` to `("adr",)`. A fresh scaffold now gates GREEN
+with every doc teaching how to write itself.
+
 ## 2026-06-21 — Packaging: memory subsystem retired (Slice 1)
 
 The disabled feeder→imprint→dream memory loop was **retired** in favor of native

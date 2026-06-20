@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-21
 owner: harness
 type: exec-plan
@@ -216,5 +216,58 @@ scarce"), while staying clearly adapt-or-delete so they aren't this-repo content
   describes the Director generically instead.
 
 ## Feedback (from completion gate)
+- **review-spec-compliance (codex fallback → Claude): SATISFIED.** No P1/P2.
+  Verified a fresh `scaffold.py --root` + `check.py --root` GREEN, all 21
+  R2.1-listed docs present, the CLAUDE template a 3-line pointer, R2.2–R2.6
+  satisfied, the test change a legitimate contract update (fails-before/
+  passes-after), scope tight. One non-blocking note: R2.6's literal "(the plan
+  skeleton from PLANS.md)" wording vs. the chosen pointer guide — judged a
+  faithful reading of the spec's own no-drift Design principle, suggested future
+  spec wording disambiguate.
+- **review-arch: SATISFIED.** No P1. One P2 (fixed inline, commit cfa393f): the
+  PRINCIPLES seed named `DIRECTOR.md` as a sibling doc, but a fresh host has none
+  (Director centralized, seeded nowhere) — reworded to describe the centralized
+  Director's manual living in the agent-harness repo. Proposed rules → tracker.
+- **review-reliability: SATISFIED.** No P1/P2 blocking. Verified idempotency
+  (never-overwrite preserved across a double scaffold), exactly one `index.md`
+  per INDEXED_DIR after the TOP_INDEXES trim (disjoint sets, no double-write, no
+  orphaned dir), exec-plans index guides RESERVED (roadmap shows 0 plans). One
+  pre-existing out-of-scope note (`inventory()` subprocess lacks a timeout).
+  Proposed rule → tracker.
+- **review-code-quality: SATISFIED.** No P1. P2-1 (fixed inline): the PRINCIPLES
+  preamble restated the consult-decide-park loop three times — tightened (cut the
+  self-referential sibling bullet, condensed "It is alive"). P2-2 (copy-paste
+  between the two exec-plan index guides) and P2-3 (single-element TOP_INDEXES) —
+  reviewer judged no action needed (premature abstraction / correct as-is); left
+  as-is. Proposed rule → tracker.
 
 ## Outcomes & retrospective
+
+**Delivered.** The harness-init seed-template layer is now the self-describing
+strict base R2.1–R2.6 specifies. New: a `PRINCIPLES.md` template (3 universal
+seed principles, no `adr/` link), dedicated guided indexes for `references/` and
+`product-specs/`, lifecycle `index.md` guides for `exec-plans/active|completed`
+(pointer to the single-sourced PLANS.md skeleton, not a copy), and an
+ARCHITECTURE template that redirects to the `architecture-setup` skill instead of
+shipping a hand-fill skeleton. `scaffold.py` wires the five new seeds and trims
+`TOP_INDEXES` to `("adr",)`. A fresh `scaffold.py --root <tmp>` + `check.py
+--root <tmp>` is GREEN with no stray FILL and 0 fake plans in the roadmap; the
+self-host gate stays GREEN (the one test asserting the retired ARCHITECTURE
+skeleton was rewritten to the redirect contract).
+
+**What worked.** Reconciling the Explore audit against held Slice-1 facts caught
+two confabulated "critical" findings before they cost rework (the design-docs
+index entries are correctly seeded, not leaked; exec-plans needs no index). The
+no-drift-by-construction principle resolved the one genuine ambiguity (R2.6
+"plan skeleton") cleanly: pointer guides, not a second copy. Running the Claude
+risk personas against real code corroborated the reviews and supplied the one
+real fix (the dangling DIRECTOR.md pointer) the gate's lints could not catch (a
+backtick mention, not a D5 link).
+
+**Carried forward (tracker, P2):** three proposed rule additions — extend the
+"map not encyclopedia" bar to runtime-reread seed templates; a "centralized model
+by reference only" template rule; name `scaffold.py`'s idempotency/disjoint-set/
+single-index invariants in RELIABILITY (+ the `inventory()` timeout).
+
+**Next:** Slice 3 (Director relocation `docs/DIRECTOR.md` → `.claude/` + launcher
+retirement) — the packaging spec's next phase.

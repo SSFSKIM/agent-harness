@@ -17,22 +17,17 @@ determines the call with confidence, the Director **decides and logs** (citing
 the principle); if this file is silent or ambiguous, it **parks** the item
 "awaiting human."
 
-This is a **sibling**, not a duplicate, of the other operating docs:
-- `PRODUCT_SENSE.md` — what this project *optimizes* (the scarce resource).
-- The centralized Director's operating manual — the *mechanics* of
-  taste-vs-handle (when to escalate at all). It lives with the Director (run from
-  the agent-harness repo), not in this host; this file is what that Director
-  reads here at a fork.
-- **`PRINCIPLES.md`** (this file) — the *content* that lets "escalate" first try
-  "infer the human's call."
+It is a **sibling**, not a duplicate, of the other operating docs:
+`PRODUCT_SENSE.md` says what this project *optimizes* (the scarce resource); the
+centralized Director's operating manual holds the *mechanics* of taste-vs-handle
+(it lives with the Director in the agent-harness repo, not in this host); this
+file holds the *content* that lets "escalate" first try "infer the human's call."
 
 **It is alive.** Seed it from the human's observed decision patterns (this repo's
-`CLAUDE.md` / `AGENTS.md` guidelines, the decisions already on record), then let
-the human edit and extend it directly. The **audit loop** sharpens it: every
-"decide + log" the Director makes is reviewable later; a wrong inference is a
-signal to add or refine a principle here, so the parked set shrinks over time. A
-principle is most useful with a *why* (so the Director can extend it to forks not
-listed) and, where helpful, a worked example.
+`CLAUDE.md` / `AGENTS.md`, the decisions on record), then let the human edit it
+directly. The **audit loop** sharpens it: every "decide + log" is reviewable
+later, and a wrong inference is the signal to refine a principle here so the
+parked set shrinks over time.
 
 ## How to write a principle
 
