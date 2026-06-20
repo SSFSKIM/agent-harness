@@ -6,7 +6,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
 import { resumeSession } from "../../src/index.js";
 
-const live = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const live = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) ? describe : describe.skip;
 const MODEL = "claude-haiku-4-5-20251001";
 
 live("live daemon durable sessions (real SDK)", () => {

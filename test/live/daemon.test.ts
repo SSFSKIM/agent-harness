@@ -7,7 +7,7 @@ import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
 import { DaemonServer } from "../../src/daemon/server.js";
 import { daemonRequest } from "../../src/daemon/client.js";
 
-const live = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const live = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) ? describe : describe.skip;
 
 live("live daemon (real SDK)", () => {
   it("hosts a real session: spawn → submit → streamed PONG result", async () => {

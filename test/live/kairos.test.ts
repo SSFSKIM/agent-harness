@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { KairosAssistant } from "../../src/kairos/assistant.js";
 import type { BriefMessage } from "../../src/kairos/brief.js";
 
-const live = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const live = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) ? describe : describe.skip;
 
 live("live kairos (real SDK)", () => {
   it("a heartbeat tick reports through the Brief channel under permissionMode auto", async () => {

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 import { DaemonSupervisor } from "../../src/daemon/supervisor.js";
 
-const live = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const live = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) ? describe : describe.skip;
 
 live("daemon defaults (live)", () => {
   it("a bare spawn runs on opus-4-8 with the CC preset and completes a turn", async () => {

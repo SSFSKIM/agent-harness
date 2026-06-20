@@ -9,7 +9,7 @@ import { daemonRequest } from "../../src/daemon/client.js";
 import { daemonMonitorClient } from "../../src/monitor/client.js";
 import { collect } from "../../src/monitor/snapshot.js";
 
-const live = process.env.ANTHROPIC_API_KEY ? describe : describe.skip;
+const live = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) ? describe : describe.skip;
 const tmp = () => mkdtempSync(join(tmpdir(), "cc-mon-"));
 
 live("monitor e2e (live daemon)", () => {
