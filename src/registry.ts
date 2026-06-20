@@ -1,13 +1,14 @@
 import type { Session } from "cc-harness";
+import type { OutcomeHolder } from "./tools.js";
 
-export interface ThreadEntry { session: Session; turnSeq: number }
+export interface ThreadEntry { session: Session; turnSeq: number; outcome: OutcomeHolder }
 
 export class Registry {
   private threads = new Map<string, ThreadEntry>();
   private threadN = 0;
   newThread(session: Session): { id: string } {
     const id = `thr_${++this.threadN}`;
-    this.threads.set(id, { session, turnSeq: 0 });
+    this.threads.set(id, { session, turnSeq: 0, outcome: {} });
     return { id };
   }
   get(id: string): ThreadEntry | undefined { return this.threads.get(id); }

@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { Peer } from "../../src/peer.js";
 import { AppServer, toUsageTotals } from "../../src/handlers.js";
+import type { OutcomeHolder } from "../../src/tools.js";
 
 // A fake Session whose submit() streams one assistant message then resolves with a result string.
 function fakeSession() {
@@ -33,6 +34,51 @@ describe("toUsageTotals", () => {
   it("returns zeros for an empty/unknown shape (lenient, no throw)", () => {
     expect(toUsageTotals({})).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
     expect(toUsageTotals(undefined)).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+  });
+});
+
+describe("outcome propagation", () => {
+  it("attaches a captured report_outcome to turn/completed.outcome", async () => {
+    const out: any[] = [];
+    const fakeOpen = (_cfg: any, holder: OutcomeHolder) => ({
+      submit: async (prompt: string, onMessage: (m: any) => void) => {
+        onMessage({ type: "assistant", message: { content: [{ type: "text", text: "working" }] } });
+        if (prompt.includes("REPORT")) holder.outcome = { status: "done", reason: "ok" };  // the tool would do this
+        return { result: "done" };
+      },
+      usage: async () => ({}), dispose: async () => {},
+    } as any);
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: fakeOpen });
+    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: {} }) + "\n");
+    peer.feed(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    const threadId = out.find((o) => o.id === 2).result.thread.id;
+    peer.feed(JSON.stringify({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: "REPORT" }], cwd: "/w" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 10));
+    const tc = out.find((o) => o.method === "turn/completed");
+    expect(tc.params.outcome).toEqual({ status: "done", reason: "ok" });
+  });
+
+  it("turn/completed.outcome is absent when report_outcome was not called", async () => {
+    const out: any[] = [];
+    const fakeOpen = (_cfg: any, _holder: OutcomeHolder) => ({
+      submit: async (_prompt: string, onMessage: (m: any) => void) => {
+        onMessage({ type: "assistant", message: { content: [{ type: "text", text: "no outcome" }] } });
+        return { result: "done" };
+      },
+      usage: async () => ({}), dispose: async () => {},
+    } as any);
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: fakeOpen });
+    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: {} }) + "\n");
+    peer.feed(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    const threadId = out.find((o) => o.id === 2).result.thread.id;
+    peer.feed(JSON.stringify({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }], cwd: "/w" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 10));
+    const tc = out.find((o) => o.method === "turn/completed");
+    expect(tc.params.outcome).toBeUndefined();
   });
 });
 
