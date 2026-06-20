@@ -44,6 +44,11 @@ describe("collect", () => {
     expect(snap.sessions[0].tokens).toBe(100);
   });
 
+  it("carries permissionMode from the ListEntry onto the SessionRow", async () => {
+    const snap = await collect(clientFrom([rec({ id: "p", permissionMode: "acceptEdits" })], { p: { totalTokens: 1, maxTokens: 100 } }), { now: () => 0 });
+    expect(snap.sessions[0].permissionMode).toBe("acceptEdits");
+  });
+
   it("surfaces parked permissions in snapshot.pending; empty when the client lacks the method", async () => {
     const withPending: MonitorClient = {
       list: async () => [rec({ id: "a", status: "idle" })], contextUsage: async () => ({}),

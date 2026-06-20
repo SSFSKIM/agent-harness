@@ -11,6 +11,7 @@ export interface SessionRow {
   id: string;
   status: ListEntry["status"];
   model?: string;
+  permissionMode?: string;   // live permission mode (Increment C)
   ctxPercent?: number;   // computed from totalTokens/maxTokens; undefined when not derivable
   tokens?: number;       // totalTokens from the context_usage payload
   createdAt: number;
@@ -52,7 +53,7 @@ export async function collect(client: MonitorClient, opts: CollectOpts): Promise
           ? Math.round((u.totalTokens / u.maxTokens) * 100) : undefined;
       } catch { /* per-session failure → leave ctx/tokens undefined */ }
     }
-    sessions.push({ id: e.id, status: e.status, model: e.model, ctxPercent, tokens, createdAt: e.createdAt, proactive: e.proactive?.state });
+    sessions.push({ id: e.id, status: e.status, model: e.model, permissionMode: e.permissionMode, ctxPercent, tokens, createdAt: e.createdAt, proactive: e.proactive?.state });
   }
   let pending: PendingEntry[] = [];
   try { pending = client.pendingPermissions ? await client.pendingPermissions() : []; }
