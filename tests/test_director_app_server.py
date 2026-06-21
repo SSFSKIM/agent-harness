@@ -1,3 +1,4 @@
+import inspect
 import sys
 import tempfile
 import unittest
@@ -5,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.worker.app_server as appsrv  # noqa: E402
+from director import config  # noqa: E402
 
 MOCK = str(Path(appsrv.__file__).resolve().parent / "_mock_app_server.py")
 
@@ -96,6 +98,24 @@ class AppServerClientTest(unittest.TestCase):
             res = c.run_turn(tid, "x")
         self.assertEqual(res["status"], "completed")
         self.assertIsNone(res["usage"])
+
+
+class DefaultsDriftTest(unittest.TestCase):
+    """R4.2 (Slice 4): app_server's FALLBACK worker posture must derive from the single
+    source `config.DEFAULTS["worker"]`, never a second hardcoded copy that can silently
+    drift. This FAILS on the pre-reconciliation code, where `thread_start` defaulted to
+    `"untrusted"` while `config.DEFAULTS["worker"]["approval_policy"]` is `"on-request"`."""
+
+    def test_thread_start_defaults_match_config(self):
+        params = inspect.signature(appsrv.AppServerClient.thread_start).parameters
+        worker = config.DEFAULTS["worker"]
+        self.assertEqual(params["approval_policy"].default, worker["approval_policy"])
+        self.assertEqual(params["sandbox"].default, worker["sandbox"])
+
+    def test_run_turn_default_matches_config(self):
+        params = inspect.signature(appsrv.AppServerClient.run_turn).parameters
+        self.assertEqual(params["approval_policy"].default,
+                         config.DEFAULTS["worker"]["approval_policy"])
 
 
 class ExtractUsageTest(unittest.TestCase):

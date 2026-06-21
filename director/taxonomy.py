@@ -66,9 +66,9 @@ and document it in the ExecPlan.
 Before you finish — SELF-QA (your own responsibility; this is NOT a gate, and the
 PR-merger does only a thin integration check later): (1) keep the host gate GREEN;
 (2) self-review spec-compliance (does the build match the spec/ticket?) and code-quality;
-(3) write and run task-specific tests for what you built — follow the `qa` skill:
-smoke/unit always, plus end-to-end via `playwright`/`playwright-cli` for UI work (graceful
-fallback to smoke/unit where no browser is available); (4) open a PR with the `push` skill
+(3) write and run task-specific tests for what you built — smoke/unit always, plus
+end-to-end via `playwright`/`playwright-cli` for UI work (graceful fallback to smoke/unit
+where no browser is available); (4) open a PR with the `push` skill
 whose body states WHAT spec/feature you built, WHICH reviews you ran, and WHICH tests you
 wrote and their results — the PR-merger reads this; (5) PR FEEDBACK SWEEP — after opening
 the PR and before report_outcome(done), gather the PR's checks and every comment channel

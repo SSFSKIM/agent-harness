@@ -149,14 +149,18 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("check.py", out)
 
     def test_impl_prompt_includes_self_qa_and_pr_procedure(self):
-        # M1: the impl worker is guided to self-QA (spec/code/tests) and open a PR with a
-        # self-description before done — a procedure, not a gate (spec R1/R2/D-46).
+        # M1 (worker-qa) + Slice 4 R4.3: the impl worker still self-QAs INLINE (spec/code
+        # self-review + task-specific tests) and opens a PR with a self-description before
+        # done — a procedure, not a gate (spec R1/R2/D-46). The standalone `qa` workspace
+        # skill was RETIRED (redundant with the execplan completion gate the worker runs);
+        # the discipline stays inline, so the prompt no longer points at a separate qa skill.
         out = tax.compose_worker_prompt({"identifier": "X-5", "prompt": "build it",
                                          "labels": ["impl"]})
         self.assertIn("SELF-QA", out)
-        self.assertIn("qa", out)            # references the qa skill
-        self.assertIn("PR", out)            # open a PR with a self-description
+        self.assertIn("task-specific tests", out)  # the self-QA test discipline, inline
+        self.assertIn("PR", out)                    # open a PR with a self-description
         self.assertIn("report_outcome(done)", out)
+        self.assertNotIn("`qa` skill", out)         # retired — no standalone qa-skill pointer
 
     def test_impl_prompt_includes_the_four_operating_disciplines(self):
         # M2 (slice 1, gap #5): the impl worker is guided through reproduction-first

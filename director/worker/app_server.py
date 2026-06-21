@@ -23,6 +23,19 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from director import config
+
+# The worker-posture FALLBACK defaults below (thread_start / run_turn) derive from
+# `config.DEFAULTS["worker"]` — the single source of truth (declarative-config slice;
+# autonomy.py uses the same precedent). Sourcing them here rather than re-typing the
+# literals means there is exactly ONE copy of "the default posture", so the wire client
+# cannot drift from the documented default (the stale hardcoded `"untrusted"` it used to
+# carry predated the 2026-06-15 `on-request` decision, SECURITY T11). Evaluated once at
+# import; every production caller (director/run.py) passes the resolved posture
+# explicitly, so these are exercised only by direct/test callers.
+_DEFAULT_APPROVAL_POLICY = config.DEFAULTS["worker"]["approval_policy"]
+_DEFAULT_SANDBOX = config.DEFAULTS["worker"]["sandbox"]
+
 # Codex server->client request methods that mean "a human-style decision is needed".
 APPROVAL_METHODS = (
     "item/commandExecution/requestApproval",
@@ -346,8 +359,8 @@ class AppServerClient:
         self._send({"method": "initialized", "params": {}})
 
     def thread_start(self, model: str | None = None,
-                     approval_policy: str = "untrusted",
-                     sandbox: str = "workspace-write",  # SandboxMode enum (hyphenated)
+                     approval_policy: str = _DEFAULT_APPROVAL_POLICY,
+                     sandbox: str = _DEFAULT_SANDBOX,  # SandboxMode enum (hyphenated)
                      tools: list[dict] | None = None) -> str:
         params: dict = {"cwd": self.cwd, "approvalPolicy": approval_policy, "sandbox": sandbox}
         if model:
@@ -357,7 +370,7 @@ class AppServerClient:
         return self._request("thread/start", params)["thread"]["id"]
 
     def run_turn(self, thread_id: str, text: str,
-                 approval_policy: str = "untrusted",
+                 approval_policy: str = _DEFAULT_APPROVAL_POLICY,
                  sandbox_policy: dict | None = None) -> dict:
         """Start a turn and stream to terminal. Returns {status, turn_id,
         final_message, usage, rate_limits}.

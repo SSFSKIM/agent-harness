@@ -520,3 +520,55 @@ turn's `reply` (the ordinary answer path — no new mechanism).
 **park** and log your reasoning (PRINCIPLES P8). A wrong autonomous taste call costs more
 than one escalation; the log is how the human teaches you, and how `PRINCIPLES.md` sharpens
 so the parked set shrinks over time.
+
+## 14. The two agent profiles (where each is configured)
+
+The harness runs exactly two kinds of agent — **you, the Director** (this watched
+session) and the **Codex workers** you dispatch (one per ticket). Each has **one
+settable source of truth + this guide**; neither is configured anywhere else. There is
+deliberately no `agents/` directory — each profile's home already exists.
+
+### Director profile — two config halves + the env contract
+
+Your configuration splits cleanly in two, by what it governs (this is distinct from
+§0's *distribution* split of method-vs-Director — here it is *config location*):
+
+- **Agent identity → `.claude/`** — `settings.json` (the session's tool/permission
+  surface) and **this manual** (`.claude/DIRECTOR.md`; reading it is what makes a
+  session the Director — see *Identity*). This half is central-agent config: it ships
+  in *this* repo and is never seeded into a host (the Director is centralized, §0).
+- **Orchestrator runtime → `.harness.json` `director` block** — the deployment policy
+  (team, state map, concurrency, worker posture, timeouts, paths, merger knobs). §11 is
+  the full knob reference; §0 is the minimum block to aim at a project.
+- **Secrets → `.env` / `$VAR`** — never committed; `.harness.json` references them by
+  `$NAME` indirection (§11).
+
+**The env contract** — the three the Director cannot run without (§0 prerequisites):
+`LINEAR_API_KEY` (board read/write), `GH_TOKEN` (the worker's gh ops — forwarded into
+the sandbox *only* because it is the lone key in `worker_policy.worker_env`), and
+`DIRECTOR_TEAM` (the Linear team to poll, wired in as `"team": "$DIRECTOR_TEAM"`).
+
+### Worker profile — one source, the override surface, the installed skills
+
+- **Single source of truth → `config.DEFAULTS["worker"]`** (`director/config.py`):
+  `approval_policy` / `sandbox` (the security posture), `auto_review` / `network` (the
+  self-governance + egress flags), and `tools` / `install_skills` (the capability knobs).
+  The posture rationale (on-request + auto_review + full network — the 2026-06-15 human
+  decision, SECURITY T11) lives in the `DEFAULTS` comment + `director/worker/autonomy.py`.
+  **There is no second copy:** `director/worker/app_server.py`'s fallback posture defaults
+  *derive* from `config.DEFAULTS["worker"]` (not re-typed literals), so the wire client
+  cannot drift from this source — a test (`DefaultsDriftTest` in
+  `tests/test_director_app_server.py`) asserts the equality.
+- **Per-host override → `.harness.json` `director.worker`** — a host overrides to
+  *tighten* the posture in the fail-safe direction (e.g. `"network": false`,
+  `"approval_policy": "untrusted"`) or to opt into a board capability (e.g.
+  `"tools": "linear"`, `"install_skills": true`, both off by default). §11 covers
+  precedence (a CLI flag > the block > the built-in default); `config.py` validates the
+  block and fails loud on a malformed knob before any worker spawns.
+- **Installed-skill set → `director/workspace_skills/`** — the vendored Codex skills
+  (`commit` / `push` / `pull` / `land` / `linear` / `debug`, from Symphony — see
+  `ATTRIBUTION.md`) copied into each worker's `.codex/skills/` by
+  `director/run.py:install_workspace_skills` when `install_skills` is on. The standalone
+  `qa` skill was **retired**: an impl worker self-QAs *inline* (the SELF-QA discipline in
+  `director/taxonomy.py:_IMPL_TEMPLATE`) and through the execplan completion gate it runs
+  (spec-compliance + code-quality + behavioral) — not a separate skill.

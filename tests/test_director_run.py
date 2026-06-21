@@ -65,7 +65,10 @@ class RunEndToEndTest(unittest.TestCase):
         run.install_workspace_skills(ws)
         self.assertTrue((ws / ".codex" / "skills" / "linear" / "SKILL.md").exists())
         self.assertTrue((ws / ".codex" / "skills" / "commit" / "SKILL.md").exists())
-        self.assertTrue((ws / ".codex" / "skills" / "qa" / "SKILL.md").exists())  # M1
+        self.assertTrue((ws / ".codex" / "skills" / "push" / "SKILL.md").exists())
+        # Slice 4 R4.3: the standalone `qa` skill was retired (redundant with the
+        # execplan completion gate); it must no longer be installed into a worker.
+        self.assertFalse((ws / ".codex" / "skills" / "qa").exists())
         run.install_workspace_skills(ws)  # idempotent re-run
 
     def test_run_ticket_threads_tools_and_executor(self):
