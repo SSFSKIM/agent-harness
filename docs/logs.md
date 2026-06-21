@@ -18,6 +18,23 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — R5.3 DONE: the plugin is published (repo public, MIT)
+
+The packaging initiative's last deferred item — R5.3's public republish, held as a
+human go/no-go — was executed on the human's decision. `SSFSKIM/agent-harness` went
+**private → public**; the GitHub **default branch was repointed to `master`** (a
+marketplace install pulls the default branch, and `master` — not the 363-commits-behind
+`flexible-host-governance` — carries the packaging/`director/`/`base/` work); and an
+**MIT `LICENSE`** was added (a public repo with none defaults to all-rights-reserved;
+copyright holder = the repo owner). Verified post-flip: GitHub detects the license as
+MIT, and both `.claude-plugin/marketplace.json` and `plugin/.claude-plugin/plugin.json`
+are reachable on the public default branch, so `/plugin marketplace add
+SSFSKIM/agent-harness` resolves the `agent-harness` plugin (v0.2.0, 8 skills + 6 agents).
+The vendored Apache-2.0 Symphony reference (`docs/symphony-original/`) is gitignored and
+not published, so the repo's own work is MIT-clean. Optional polish left open (not
+requested): the thin marketplace `owner` block and a public-facing README; no `v0.2.0`
+release tag was cut (marketplace installs pull the branch, not a release).
+
 ## 2026-06-21 — Gardening pass: promote the packaging proposed-rules + retire the memory-loop rule text
 
 A doc-gardening pass closing the packaging initiative's accumulated doc-debt
