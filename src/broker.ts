@@ -9,7 +9,10 @@ import type { DynamicToolSpec } from "./protocol.js";
 // the Linear key, both Director-side) runs the tool and replies; we only translate. This is what makes the
 // server a faithful drop-in: dynamic tools, their guardrails, and their credentials all stay on the consumer.
 const DYN_SERVER = "cc-dyn";
-export const dynamicToolId = (name: string): string => `mcp__${DYN_SERVER}__${name}`;
+/** Model-facing MCP tool name for an advertised dynamic tool. Namespace-qualified so two namespaces can carry
+ *  same-named tools without colliding in the single in-process server. */
+export const dynamicToolName = (name: string, namespace?: string): string => (namespace ? `${namespace}__${name}` : name);
+export const dynamicToolId = (name: string, namespace?: string): string => `mcp__${DYN_SERVER}__${dynamicToolName(name, namespace)}`;
 
 /** The client's `item/tool/call` reply (codex shape: contentItems + success; Director also adds `output`). */
 export interface DynamicToolResult {
@@ -18,23 +21,47 @@ export interface DynamicToolResult {
   contentItems?: Array<{ type: string; text?: string; imageUrl?: string }>;
 }
 
+interface NormTool { namespace?: string; name: string; description: string; inputSchema: any }
+
+/** Flatten the codex `DynamicToolSpec` union into individually-callable tools. The canonical spec is a tagged
+ *  union {type:"function"|"namespace"}, but codex's own deserializer ALSO accepts the flat
+ *  {name,description,inputSchema} form the Director sends — so we detect by shape: a `tools` array ⇒ a
+ *  namespace spec (expand its inner function tools, tagging each with the namespace); otherwise a single
+ *  function tool (flat or {type:"function"}). */
+export function normalizeSpecs(specs: DynamicToolSpec[] | undefined): NormTool[] {
+  const out: NormTool[] = [];
+  for (const s of specs ?? []) {
+    const a = s as any;
+    if (Array.isArray(a?.tools)) {
+      for (const t of a.tools) if (t?.name) out.push({ namespace: a.name, name: t.name, description: t.description ?? "", inputSchema: t.inputSchema });
+    } else if (a?.name) {
+      out.push({ namespace: a.namespace, name: a.name, description: a.description ?? "", inputSchema: a.inputSchema });
+    }
+  }
+  return out;
+}
+
 /** Relays a dynamic-tool invocation to the client over item/tool/call, emitting the documented
  *  item/started → request → item/completed lifecycle. Construct once per thread; turnId is read live. */
 export class ToolBroker {
   private callN = 0;
   constructor(private peer: Peer, private threadId: string, private turnId: () => string) {}
 
-  async call(toolName: string, args: unknown): Promise<DynamicToolResult> {
+  async call(toolName: string, args: unknown, namespace?: string): Promise<DynamicToolResult> {
     const threadId = this.threadId;
     const turnId = this.turnId();
     const callId = `call_${threadId}_${++this.callN}`;
-    this.peer.notify("item/started", { threadId, turnId, item: { type: "dynamicToolCall", status: "inProgress", callId, tool: toolName, arguments: args } });
-    const resp = await this.peer.request("item/tool/call", { threadId, turnId, callId, tool: toolName, arguments: args });
+    // The codex ThreadItem.dynamicToolCall shape: `id` (not callId) is the stable identifier clients correlate on.
+    const item = (status: string, extra: Record<string, unknown> = {}) => ({ type: "dynamicToolCall", id: callId, ...(namespace ? { namespace } : {}), tool: toolName, arguments: args, status, ...extra });
+    this.peer.notify("item/started", { item: item("inProgress"), threadId, turnId, startedAtMs: Date.now() });
+    const reqParams: Record<string, unknown> = { threadId, turnId, callId, tool: toolName, arguments: args };
+    if (namespace) reqParams.namespace = namespace;
+    const resp = await this.peer.request("item/tool/call", reqParams);
     const result: DynamicToolResult = resp.error
       ? { success: false, contentItems: [{ type: "inputText", text: `tool error: ${resp.error.message}` }] }
       : ((resp.result as DynamicToolResult) ?? {});
     const ok = result.success !== false;
-    this.peer.notify("item/completed", { threadId, turnId, item: { type: "dynamicToolCall", status: ok ? "completed" : "failed", callId, tool: toolName, contentItems: result.contentItems ?? [], success: ok } });
+    this.peer.notify("item/completed", { item: item(ok ? "completed" : "failed", { contentItems: result.contentItems ?? [], success: ok }), threadId, turnId, completedAtMs: Date.now() });
     return result;
   }
 }
@@ -83,9 +110,9 @@ export function jsonSchemaToZodShape(schema: any): Record<string, z.ZodTypeAny> 
 }
 
 export function buildDynamicToolServer(specs: DynamicToolSpec[], broker: ToolBroker) {
-  const tools = specs.map((spec) =>
-    tool(spec.name, spec.description ?? "", jsonSchemaToZodShape(spec.inputSchema), async (args: any) => {
-      const r = await broker.call(spec.name, args ?? {});
+  const tools = normalizeSpecs(specs).map((nt) =>
+    tool(dynamicToolName(nt.name, nt.namespace), nt.description, jsonSchemaToZodShape(nt.inputSchema), async (args: any) => {
+      const r = await broker.call(nt.name, args ?? {}, nt.namespace);
       return { content: [{ type: "text" as const, text: resultText(r) }], isError: r.success === false };
     }),
   );
@@ -94,12 +121,13 @@ export function buildDynamicToolServer(specs: DynamicToolSpec[], broker: ToolBro
 
 /** COPY of cfg with the dynamic-tool broker server + its allowed tool ids merged (never mutates). */
 export function withDynamicTools(cfg: any, specs: DynamicToolSpec[], broker: ToolBroker): any {
-  if (!specs?.length) return cfg;
+  const norm = normalizeSpecs(specs);
+  if (!norm.length) return cfg;
   const existing = (cfg.mcpServers as Record<string, unknown> | undefined) ?? {};
   const allowed = (cfg.allowedTools as string[] | undefined) ?? [];
   return {
     ...cfg,
     mcpServers: { ...existing, [DYN_SERVER]: buildDynamicToolServer(specs, broker) },
-    allowedTools: [...new Set([...allowed, ...specs.map((s) => dynamicToolId(s.name))])],
+    allowedTools: [...new Set([...allowed, ...norm.map((nt) => dynamicToolId(nt.name, nt.namespace))])],
   };
 }

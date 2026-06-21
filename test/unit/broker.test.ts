@@ -1,10 +1,32 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { dynamicToolId, jsonSchemaToZodShape } from "../../src/broker.js";
+import { dynamicToolId, dynamicToolName, jsonSchemaToZodShape, normalizeSpecs } from "../../src/broker.js";
 
 describe("dynamicToolId", () => {
   it("namespaces under the cc-dyn in-process server", () => {
     expect(dynamicToolId("linear_graphql")).toBe("mcp__cc-dyn__linear_graphql");
+  });
+  it("qualifies the name when a namespace is present (collision-safe)", () => {
+    expect(dynamicToolName("get", "linear")).toBe("linear__get");
+    expect(dynamicToolId("get", "linear")).toBe("mcp__cc-dyn__linear__get");
+  });
+});
+
+describe("normalizeSpecs", () => {
+  it("passes through the flat function form the Director sends", () => {
+    const n = normalizeSpecs([{ name: "linear_graphql", description: "d", inputSchema: { type: "object" } }] as any);
+    expect(n).toEqual([{ namespace: undefined, name: "linear_graphql", description: "d", inputSchema: { type: "object" } }]);
+  });
+  it("accepts the tagged {type:'function'} form and carries an explicit namespace", () => {
+    const n = normalizeSpecs([{ type: "function", name: "get", description: "d", inputSchema: {}, namespace: "linear" }] as any);
+    expect(n[0]).toMatchObject({ namespace: "linear", name: "get" });
+  });
+  it("expands a {type:'namespace'} spec into its inner tools, tagging each with the namespace", () => {
+    const n = normalizeSpecs([{ type: "namespace", name: "linear", description: "ns", tools: [
+      { type: "function", name: "get", description: "g", inputSchema: {} },
+      { type: "function", name: "list", description: "l", inputSchema: {} },
+    ] }] as any);
+    expect(n.map((t) => `${t.namespace}/${t.name}`)).toEqual(["linear/get", "linear/list"]);
   });
 });
 
