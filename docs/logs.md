@@ -18,6 +18,30 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Gardening pass: promote the packaging proposed-rules + retire the memory-loop rule text
+
+A doc-gardening pass closing the packaging initiative's accumulated doc-debt
+(tech-debt-tracker rows for Slices 2–6) plus the residual retired-loop rule text.
+**Promoted** (write-now proposals, each terse): DESIGN `## Scripts` gained the
+script→script-import prohibition (a helper two scripts share goes to `harness_lib`,
+never cross-imported) and the `base/` rendered-not-baked discipline; DESIGN `## Skills`
+gained the seed-template prose-density + centralized-consumption-by-reference rule and
+the "retire = grep the surviving bodies, not just the links" hygiene rule; ARCHITECTURE
+invariant 5 (main) gained the tracked-config-belongs-in-`.claude/` boundary and the
+`director/` invariant 5 gained signature-default aliasing via a module constant;
+RELIABILITY R22 widened from `lint_docs` to every `check.py` gate lint step. The two
+specs were amended (packaging R6.4 names the self-host *instance* `agent-harness.md`; the
+2026-06-16 qa spec got a one-line supersession note). **Retired-loop text:** chose a
+**parallel historical note** over a renumber — RELIABILITY's new status note frames
+R1–R5/R7 as the retired feeder/imprint loop's lineage (R8–R22, ~15 tracker rows, and
+tests cite the numbering, so renumbering would shatter every cross-ref); QUALITY_SCORE
+dropped the `memory-store`/`feeder`/`imprint`/`dreaming` rows; ARCHITECTURE's stale
+"Failure modes" headline was rewritten to the live R-rules. **Held by discipline** (left
+tracked, not promoted): the feedback-twice scaffold-invariant rules (Slice 2) and the
+recurrence-gated marketplace containment lint (Slice 5); the driver-layer named-constant
+refactor (Slice 4) is code-debt, not doc-debt. Honest gap recorded in QUALITY_SCORE: the
+`director/` application is not yet graded there.
+
 ## 2026-06-21 — Packaging COMPLETE: the packaged base artifact + legacy strip (Slice 6, capstone)
 
 The capstone landed and **completes the six-slice packaging spec** (packaging

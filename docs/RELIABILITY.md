@@ -11,6 +11,18 @@ description: The numbered reliability rules that ground the review-reliability p
 Grounding document for the review-reliability persona. Rules are numbered;
 cite them in findings.
 
+> **Status — the memory-loop rules are historical (loop retired, packaging
+> Slice 1).** **R1–R5** and **R7** (idempotent imprinting, feeder degradation,
+> single-flight imprint worker, at-least-once imprint queue, transient
+> transcripts, mark-seen-before-enrich) describe the **retired** feeder/imprint/
+> dream memory loop (`docs/logs.md`). They are kept verbatim — and deliberately
+> **not renumbered** — because the live rules R8–R22 (and ~15 tech-debt rows,
+> code comments, and tests) cite this numbering, and several live rules
+> *generalize* the loop's contracts (R8 per-entry isolation, R9 atomic append,
+> R10 lock-liveness). **R8–R22 and R11 (stop-tidy) remain in force** — they
+> govern the live runtime: the commit gate, `tidy_stop`, and `director/`. Read
+> R1–R5/R7 as lineage, the rest as current.
+
 - **R1 — Idempotent imprinting.** Hooks can fire more than once for one event.
   Every memory write-back is deduped by key `session_id:event[:bucket]`
   (imprint_guard). pre_compact adds a 10-minute time bucket (multiple
@@ -161,15 +173,19 @@ cite them in findings.
   on the corpus it only observes. (Promoted from three tech-debt rows on the third
   recurrence: per-page/per-edge isolation, empty-set emit totality, and this I/O
   re-read gap.)
-- **R22 — The commit-gate lint (`lint_docs.py`) is total over a hostile corpus.**
-  R21's sibling for the *write* gate — and strictly higher-stakes: `lint_docs.py`
-  runs on every commit, so a traceback here BLOCKS the commit (not just a dropped
-  read). Every per-page check (D3/D4/D11/D12 in `check_frontmatter`, and the rest)
-  must degrade to a clean FAIL or a skip and never raise: a frontmatter value
-  authored as a list where a scalar is expected (`type`/`description`/`phase`/
-  `resource` → guard with `isinstance(v, str)` so it FAILs cleanly, never throws),
-  a non-str element in a list-valued key, a missing/odd path (resolve via the
-  total `Path.exists()` pattern), and pathological regex input (no catastrophic
-  backtracking) all produce a deterministic FAIL/skip. Third instance of the
-  pattern (D4 list-degradation → D11 `isinstance` guards → D12 path/grammar
-  totality); generalizes R12/R8 to the gate surface.
+- **R22 — Every commit-gate lint step in `check.py` is total over a hostile corpus.**
+  R21's sibling for the *write* gate — and strictly higher-stakes: a `check.py` lint
+  step (`lint_docs`, `lint_structure`, `lint_base`, and any future step) runs on every
+  commit, so a traceback here BLOCKS the commit (not just a dropped read). Every
+  per-page / per-file check must degrade to a clean FAIL or a skip and never raise.
+  In `lint_docs` (D3/D4/D11/D12 in `check_frontmatter`, and the rest): a frontmatter
+  value authored as a list where a scalar is expected (`type`/`description`/`phase`/
+  `resource` → guard with `isinstance(v, str)` so it FAILs cleanly, never throws), a
+  non-str element in a list-valued key, a missing/odd path (resolve via the total
+  `Path.exists()` pattern), and pathological regex input (no catastrophic backtracking)
+  all produce a deterministic FAIL/skip. `lint_base`'s tolerant `_read` holds the same
+  contract (a missing/non-UTF8 base template → a coded `B2`/`B6` FAIL, never a
+  traceback). A new gate step inherits the totality rule by being a `check.py` step,
+  not by re-deriving it. Third instance of the pattern (D4 list-degradation → D11
+  `isinstance` guards → D12 path/grammar totality, now generalized across all gate
+  lints); generalizes R12/R8 to the gate surface.

@@ -9,6 +9,15 @@ description: Has workers self-QA and open a PR, then routes done-and-QA'd PRs th
 ---
 # 워커 self-QA + 직렬화된 PR-merge (Phase 4 꼬리)
 
+> **Superseded detail (gardening note, 2026-06-21).** Two names in the design
+> below were later retired by the packaging initiative; the historical prose is
+> kept unrewritten (per the Slice-3 precedent — `docs/logs.md`): the worker
+> `qa` skill (`director/workspace_skills/qa/SKILL.md`) was retired in packaging
+> Slice 4 — the worker now self-QAs inline via `taxonomy._IMPL_TEMPLATE` and the
+> execplan completion gate — and `docs/DIRECTOR.md` relocated to
+> `.claude/DIRECTOR.md` in Slice 3. Read the `qa`-skill and `docs/DIRECTOR.md`
+> mentions below as the design as it stood on 2026-06-16.
+
 Phase 4 (자율 Director) 의 마지막 슬라이스. 부모 spec:
 [Symphony 티켓 오케스트레이션 + 중앙 Director](2026-06-14-symphony-director-orchestration.md)
 (로드맵의 "board reporting → PR-merge 관리"). 직전 슬라이스

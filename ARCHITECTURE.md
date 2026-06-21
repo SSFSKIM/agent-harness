@@ -43,7 +43,10 @@ point rightward at skills — the most actionable instruction wins.
    commit.
 4. **Generated files** carry a GENERATED header; only scripts write them.
 5. **Runtime state** (queues, locks, seen-sessions, processed-log) lives in
-   `.claude/harness/` — gitignored, never under `docs/`.
+   `.claude/harness/` — gitignored, never under `docs/`. Tracked central-agent
+   operating config (`.claude/DIRECTOR.md`, `settings.json`) likewise belongs in
+   `.claude/`, not the `docs/` knowledge graph: `docs/` is the project's
+   knowledge base, `.claude/` is how the agent itself is configured.
 6. **Tiered docs governance:** machine-critical docs and harness-managed roots
    (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict by
    default. Host-owned business/marketing/research docs under `docs/` are
@@ -96,9 +99,14 @@ point rightward at skills — the most actionable instruction wins.
 
 ## Failure modes
 
-See `docs/RELIABILITY.md`. Headlines: imprint writes are idempotent (dedupe
-keys), feeder degrades to a deterministic minimal pack on timeout/error,
-imprint worker is single-flight via lock file with stale-lock recovery.
+See `docs/RELIABILITY.md` (numbered R-rules). Live headlines: the commit-gate
+lints and `nav.py` are total over a hostile corpus (R21/R22 — a malformed page
+FAILs/skips, never tracebacks); `director/` telemetry extractors and status
+writers never raise or block the primary path (R12/R13); config/host-policy
+loaders fail-open-absent / fail-loud-malformed before any side effect (R15); the
+Stop-tidy gate blocks at most once per dirty-tree state (R11). The retired
+feeder/imprint rules (R1–R5/R7) are kept only as historical lineage — see the
+status note atop RELIABILITY.md.
 
 ## Host runtime (`director/`) invariants
 
@@ -143,7 +151,11 @@ architecture invariants live here (review-arch grounds in this doc). Runtime
    `WORKFLOW.md` analog (SPEC §5–6). Every default that also lives in `DEFAULTS` is
    **aliased** from it (e.g. `merger.DEFAULT_MAX_MERGES = config.DEFAULTS["merger"]
    ["max_merges"]`) — no parallel literal in ANY `director/` module (merger included),
-   so the single source can never silently drift.
+   so the single source can never silently drift. The alias may bind a **function-
+   signature parameter default** through a module constant (`approval_policy: str =
+   _DEFAULT_APPROVAL_POLICY` where `_DEFAULT_APPROVAL_POLICY = config.DEFAULTS[...]`),
+   never a `None`-sentinel re-resolved in the body: binding the value at the signature is
+   what lets an `inspect.signature` drift test pin the equality and fail on a stale literal.
 6. **One first-turn framing seam.** The worker's first-turn protocol — the
    `WORKER_PROTOCOL` operating-disciplines preamble + the `TERMINAL_CONTRACT`, via
    `taxonomy.frame_first_turn` — is injected at exactly ONE point, `run.drive`'s first

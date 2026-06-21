@@ -11,12 +11,24 @@ description: The grounding document of design taste for building harness compone
 Grounding document for the review-arch persona (with ARCHITECTURE.md).
 
 ## Scripts
-- Pure stdlib; allowlist in lint_structure.py. New import → justify or drop.
+- Pure stdlib + `harness_lib` only (the `lint_structure.py` allowlist) — a
+  script never imports a sibling script. New import → justify or drop. A helper
+  two scripts share is promoted to `harness_lib` under a public name, never
+  cross-imported between scripts: the `plugin/scripts` analog of ARCHITECTURE.md's
+  `director/` invariant 8 (`SEEDS`/`render`/`components_table` live in `harness_lib`
+  so `lint_base` and `scaffold` share one source instead of importing each
+  other).
 - Every check function takes explicit paths (root/plugin) so tests run on
   fixtures; `main()` does the wiring. Logic-free runners (check.py) are the
   only TDD exemption.
 - Lint failures: `FAIL <rule> <path>: <problem> FIX: <instruction>` — the FIX
   text is the product; write it for an agent that will act on it verbatim.
+- The checked-in `base/` reference instance is **rendered, not baked**:
+  `lint_base` re-renders the seed set and diffs, so markers an adopting host
+  fills (`{{PROJECT}}`/`{{TODAY}}`) are preserved verbatim while machine-derived
+  content (`{{COMPONENTS}}`/`{{CATEGORY}}`) is substituted; the drift-check is
+  **self-host-gated** (a no-op when `base/` is absent), and `base/` lives
+  outside `docs/` so the repo lints and `nav.py` never scan it.
 
 ## Host vs machine enforcement
 - The plugin lints (S/D series) govern only the harness's OWN structure
@@ -64,6 +76,15 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   stage-specific guidance only in the template, terse throughout. Enrich it by adding a
   load-bearing discipline, never prose volume — the worker re-reads it every first turn,
   so every sentence costs tokens and attention.
+- `harness-init` seed templates an agent re-reads at runtime (`PRINCIPLES.md`,
+  `PRODUCT_SENSE.md`, the index guides) sit on the same token-cost footing and the same
+  map-not-encyclopedia bar. They frame purpose via the **centralized consumption model by
+  reference only** — a host's Director is read centrally, so a seed never assumes the host
+  runs the Director locally.
+- **Retiring a name = grep the surviving bodies, not just the links.** D5 catches a broken
+  markdown link but not a stale prose self-reference (a §-pointer, a code comment, a
+  how-to-invoke line). When you remove or rename a skill, doc, or path, grep every
+  surviving doc/file body for the old name and repoint it in the same change.
 
 ## Agents (personas)
 - One persona ↔ one **primary** grounding doc, 1:1 (lint S5) — additional constraint

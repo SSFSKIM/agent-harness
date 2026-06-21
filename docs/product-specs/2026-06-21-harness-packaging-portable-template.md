@@ -198,9 +198,13 @@ existing components.
 - **R6.3 — `SETUP.md`** in the base: guided "bring this instance alive + point the
   central Director at it" (reuses DIRECTOR.md §0).
 - **R6.4 — Legacy strip from the base.** Exclude `docs/symphony-original/`, `EDUCATION.md`,
-  `docs/superpowers/`, `docs/generated/`, and instance design-docs
-  (`agent-harness.md`, `okf-comparison.md`, `symphony-parity-gap.md`). These stay in the
-  self-host repo; the base ships none of them.
+  `docs/superpowers/`, `docs/generated/`, and the **self-host instance** design-docs
+  (`okf-comparison.md`, `symphony-parity-gap.md`, and the *filled* self-host
+  `docs/design-docs/agent-harness.md`). These stay in the self-host repo; the base ships
+  none of them. **Note (clarified in the slice):** the base *does* ship the generic
+  `design-docs/agent-harness.md` **template** — it carries the `{{COMPONENTS}}` machine
+  index that R6.2 drift-checks; what is stripped is the self-host instance content of that
+  doc, not the template seed.
 
 Verify: the base folder is inspectable, self-describing, legacy-free; the drift-check
 passes; a from-scratch read (no source repo) is enough to bring it to life.

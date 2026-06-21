@@ -101,7 +101,11 @@ Grounding document for the review-security persona. Threats are numbered.
   make plugin component drift blocking for external-plugin hosts; absent those
   keys, component drift is self-host strict and ported-host advisory. So
   `.harness.json` cannot let `SECURITY.md` go stale (mirrors T8's
-  non-exemptable rule).
+  non-exemptable rule). The checked-in `base/` reference instance is
+  **content-only**: its rendered `.harness.json` and docs are inert templates
+  carrying `{{PROJECT}}` markers, adopted into a live repo only through the
+  `harness-init` scaffold — never raw-copied into an executable slot. A base
+  file is reference text, not a live gate config.
 - **T10 — Worker tool authority.** A Codex worker drives Linear through the
   `linear_graphql` dynamic tool (`director/worker/tools.py`) using the human's
   `.env` key — an outward-facing, irreversible write surface, hence part of the
