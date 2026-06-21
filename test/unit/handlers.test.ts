@@ -2,7 +2,6 @@
 import { describe, it, expect } from "vitest";
 import { Peer } from "../../src/peer.js";
 import { AppServer, toUsageTotals } from "../../src/handlers.js";
-import type { OutcomeHolder } from "../../src/tools.js";
 import type { OpenFn } from "../../src/handlers.js";
 
 // A fake Session whose submit() streams one assistant message then resolves with a result string.
@@ -38,54 +37,55 @@ describe("toUsageTotals", () => {
   });
 });
 
-describe("outcome propagation", () => {
-  it("attaches a captured report_outcome to turn/completed.outcome", async () => {
+describe("dynamic tool brokering", () => {
+  it("relays a dynamic-tool call to the client via item/tool/call and feeds the reply back to the agent", async () => {
     const out: any[] = [];
-    const fakeOpen = (_cfg: any, holder: OutcomeHolder) => ({
-      submit: async (prompt: string, onMessage: (m: any) => void) => {
-        onMessage({ type: "assistant", message: { content: [{ type: "text", text: "working" }] } });
-        if (prompt.includes("REPORT")) holder.outcome = { status: "done", reason: "ok" };  // the tool would do this
-        return { result: "done" };
+    // The session drives one broker call mid-turn and folds the reply into its final text.
+    const openDrivesTool: OpenFn = (_cfg, ctx) => ({
+      submit: async (_p: string, onMsg: (m: any) => void) => {
+        onMsg({ type: "assistant", message: { content: [{ type: "text", text: "calling" }] } });
+        const r = await ctx.broker!.call("linear_graphql", { query: "Q" });
+        return { result: `got: ${(r.contentItems ?? []).map((c) => c?.text ?? "").join("")}` };
       },
       usage: async () => ({}), dispose: async () => {},
     } as any);
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
-    server = new AppServer(peer, { open: fakeOpen });
-    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: {} }) + "\n");
-    peer.feed(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: "/w" } }) + "\n");
-    const threadId = out.find((o) => o.id === 2).result.thread.id;
-    peer.feed(JSON.stringify({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: "REPORT" }], cwd: "/w" } }) + "\n");
-    await new Promise((r) => setTimeout(r, 10));
-    const tc = out.find((o) => o.method === "turn/completed");
-    expect(tc.params.outcome).toEqual({ status: "done", reason: "ok" });
+    // The sink emulates the client: it answers any item/tool/call request with a fixed result.
+    const peer: Peer = new Peer(
+      (o: any) => { out.push(o); if (o.method === "item/tool/call") peer.feed(JSON.stringify({ id: o.id, result: { contentItems: [{ type: "inputText", text: "OK-42" }], success: true } }) + "\n"); },
+      (m, p, id) => server.handleRequest(m, p, id),
+      () => {},
+    );
+    server = new AppServer(peer, { open: openDrivesTool });
+    const spec = { name: "linear_graphql", description: "d", inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } } } };
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", dynamicTools: [spec] } }) + "\n");
+    const threadId = out.find((o) => o.id === 1).result.thread.id;
+    peer.feed(JSON.stringify({ id: 2, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }], cwd: "/w" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 20));
+    const call = out.find((o) => o.method === "item/tool/call");
+    expect(call.params).toMatchObject({ tool: "linear_graphql", arguments: { query: "Q" }, threadId });
+    expect(typeof call.params.callId).toBe("string");
+    const fa = out.find((o) => o.method === "item/completed" && o.params?.item?.phase === "final_answer");
+    expect(fa.params.item.text).toBe("got: OK-42");
+    // documented lifecycle: item/started + item/completed for the dynamicToolCall item
+    expect(out.some((o) => o.method === "item/started" && o.params?.item?.type === "dynamicToolCall")).toBe(true);
+    expect(out.some((o) => o.method === "item/completed" && o.params?.item?.type === "dynamicToolCall" && o.params?.item?.success === true)).toBe(true);
   });
 
-  it("turn/completed.outcome is absent when report_outcome was not called", async () => {
-    const out: any[] = [];
-    const fakeOpen = (_cfg: any, _holder: OutcomeHolder) => ({
-      submit: async (_prompt: string, onMessage: (m: any) => void) => {
-        onMessage({ type: "assistant", message: { content: [{ type: "text", text: "no outcome" }] } });
-        return { result: "done" };
-      },
-      usage: async () => ({}), dispose: async () => {},
-    } as any);
+  it("does NOT register a broker server when no dynamicTools are advertised", async () => {
+    const cfgs: any[] = [];
+    const captureOpen: OpenFn = (cfg) => { cfgs.push(cfg); return fakeSession(); };
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
-    server = new AppServer(peer, { open: fakeOpen });
-    peer.feed(JSON.stringify({ id: 1, method: "initialize", params: {} }) + "\n");
-    peer.feed(JSON.stringify({ id: 2, method: "thread/start", params: { cwd: "/w" } }) + "\n");
-    const threadId = out.find((o) => o.id === 2).result.thread.id;
-    peer.feed(JSON.stringify({ id: 3, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }], cwd: "/w" } }) + "\n");
-    await new Promise((r) => setTimeout(r, 10));
-    const tc = out.find((o) => o.method === "turn/completed");
-    expect(tc.params.outcome).toBeUndefined();
+    const peer = new Peer(() => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open: captureOpen });
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    expect(cfgs[0]?.mcpServers).toBeUndefined();
   });
 });
 
 describe("posture wiring in handlers", () => {
   function captureOpen(capturedCfgs: any[]): OpenFn {
-    return (cfg, _holder) => {
+    return (cfg) => {
       capturedCfgs.push(cfg);
       return {
         submit: async (_p: string, onMsg: (m: any) => void) => { onMsg({ type: "assistant", message: { content: [{ type: "text", text: "ok" }] } }); return { result: "ok" }; },
@@ -96,9 +96,8 @@ describe("posture wiring in handlers", () => {
 
   it("autoReview:true -> open cfg permissionMode:'auto'", async () => {
     const cfgs: any[] = [];
-    const out: any[] = [];
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const peer = new Peer(() => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
     server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: true });
     peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
     expect(cfgs[0]?.permissionMode).toBe("auto");
@@ -106,9 +105,8 @@ describe("posture wiring in handlers", () => {
 
   it("on-request + no autoReview -> open cfg permissionMode:'default'", async () => {
     const cfgs: any[] = [];
-    const out: any[] = [];
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const peer = new Peer(() => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
     server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: false });
     peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
     expect(cfgs[0]?.permissionMode).toBe("default");
@@ -116,9 +114,8 @@ describe("posture wiring in handlers", () => {
 
   it("on-request + no autoReview -> open cfg has permissionBroker set", async () => {
     const cfgs: any[] = [];
-    const out: any[] = [];
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const peer = new Peer(() => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
     server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: false });
     peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
     expect(cfgs[0]?.permissionBroker).toBeDefined();
@@ -126,9 +123,8 @@ describe("posture wiring in handlers", () => {
 
   it("autoReview:true -> open cfg does NOT have permissionBroker", async () => {
     const cfgs: any[] = [];
-    const out: any[] = [];
     let server!: AppServer;
-    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const peer = new Peer(() => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
     server = new AppServer(peer, { open: captureOpen(cfgs), autoReview: true });
     peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w", approvalPolicy: "on-request" } }) + "\n");
     expect(cfgs[0]?.permissionBroker).toBeUndefined();
@@ -136,10 +132,11 @@ describe("posture wiring in handlers", () => {
 });
 
 describe("AppServer happy path", () => {
-  it("initialize advertises the outcome capability", () => {
+  it("initialize returns userAgent + platformOs (no Claude-specific capability)", () => {
     const { out, peer } = wire();
     peer.feed(JSON.stringify({ id: 1, method: "initialize", params: { capabilities: {} } }) + "\n");
-    expect(out[0]).toMatchObject({ id: 1, result: { capabilities: { outcomeOnTurnCompleted: true } } });
+    expect(out[0]).toMatchObject({ id: 1, result: { userAgent: "cc-codex-appserver" } });
+    expect((out[0] as any).result.capabilities).toBeUndefined();
   });
   it("thread/start returns {thread:{id}} and turn/start streams to a MANDATORY final_answer + turn/completed", async () => {
     const { out, peer } = wire();

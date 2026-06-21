@@ -11,7 +11,7 @@ describe("runServer", () => {
     await new Promise((r) => setTimeout(r, 5));
     expect(lines[0].endsWith("\n")).toBe(true);
     const msg = JSON.parse(lines[0]);
-    expect(msg).toMatchObject({ id: 1, result: { capabilities: { outcomeOnTurnCompleted: true } } });
+    expect(msg).toMatchObject({ id: 1, result: { userAgent: "cc-codex-appserver" } });
     expect("jsonrpc" in msg).toBe(false);
   });
 });

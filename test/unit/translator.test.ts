@@ -29,11 +29,12 @@ describe("TurnTranslator", () => {
     const phases = fin.filter((o: any) => o.method === "item/completed").map((o: any) => o.params.item.phase);
     expect(phases).toEqual(["final_answer"]);                  // no duplicate commentary
   });
-  it("attaches outcome to turn/completed when present", () => {
+  it("turn/completed carries no outcome field (report_outcome rides item/tool/call now)", () => {
     const t = new TurnTranslator("thr_1", "turn_1");
-    const fin = t.finalize({ text: "done", isError: false, outcome: { status: "done", reason: "ok" } });
+    const fin = t.finalize({ text: "done", isError: false });
     const tc: any = fin.find((o: any) => o.method === "turn/completed");
-    expect(tc.params.outcome).toEqual({ status: "done", reason: "ok" });
+    expect(tc.params.outcome).toBeUndefined();
+    expect(tc.params).toEqual({ turn: { id: "turn_1", status: "completed" } });
   });
   it("maps an errored result to turn/failed", () => {
     const t = new TurnTranslator("thr_1", "turn_1");

@@ -1,4 +1,4 @@
-import type { Outcome, UsageTotals } from "./protocol.js";
+import type { UsageTotals } from "./protocol.js";
 
 /** Pull the concatenated text of an SDK assistant message; "" if it carries no text block.
  *  Probe-pinned (Task 1): text lives at message.content[] entries with type==="text". */
@@ -28,17 +28,16 @@ export class TurnTranslator {
     return out;
   }
 
-  /** Terminal notifications. The final_answer agentMessage is MANDATORY (the Director's primary signal). */
-  finalize(result: { text: string; isError: boolean; usage?: UsageTotals; outcome?: Outcome }): object[] {
+  /** Terminal notifications. The final_answer agentMessage is MANDATORY (the Director's primary signal).
+   *  report_outcome (when advertised) rides item/tool/call like any dynamic tool — it is NOT carried here. */
+  finalize(result: { text: string; isError: boolean; usage?: UsageTotals }): object[] {
     if (result.isError) return [{ method: "turn/failed", params: { turn: { id: this.turnId, status: "failed" } } }];
     const out: object[] = [];
     const finalText = result.text || this.held || "";
     if (this.held !== undefined && this.held !== finalText) out.push(this.agentMessage(this.held, "commentary"));
     out.push(this.agentMessage(finalText, "final_answer"));
     if (result.usage) out.push({ method: "thread/tokenUsage/updated", params: { threadId: this.threadId, turnId: this.turnId, tokenUsage: { total: { totalTokens: result.usage.totalTokens, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens } } } });
-    const params: any = { turn: { id: this.turnId, status: "completed" } };
-    if (result.outcome) params.outcome = result.outcome;
-    out.push({ method: "turn/completed", params });
+    out.push({ method: "turn/completed", params: { turn: { id: this.turnId, status: "completed" } } });
     return out;
   }
 }
