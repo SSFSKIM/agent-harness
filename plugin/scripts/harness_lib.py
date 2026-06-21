@@ -168,7 +168,7 @@ MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "KNOWLEDGE_FORMAT.md",
 SEEDS = (  # (template under skills/harness-init/templates/, destination rel. to host root)
     ("agents-md.md", "AGENTS.md"),
     ("claude-md.md", "CLAUDE.md"),
-    ("harness-json.json", ".harness.json"),  # marks a harness host; {} = all defaults
+    ("harness-json.json", ".harness.json"),  # marks a harness host (tidy_stop sentinel); {} = all defaults
     ("charter.md", "docs/CHARTER.md"),  # top-level intent — authored FILL seed (not a MACHINE_DOC)
     ("agent-harness.md", "docs/design-docs/agent-harness.md"),
     ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),

@@ -78,6 +78,16 @@ class LintBaseTest(unittest.TestCase):
         errs = self._errors(root)  # must not raise
         self.assertTrue(any(e.startswith("B2") for e in errs))
 
+    def test_missing_template_fails_b6_no_cascade(self):
+        # R22: an unreadable/missing seed template degrades to a coded B6 FAIL (that dest
+        # skipped, not rendered) — never a raise, and no rendered output for it.
+        errors = []
+        bogus = Path(tempfile.mkdtemp()) / "no-such-templates-dir"
+        self.addCleanup(shutil.rmtree, bogus.parent, ignore_errors=True)
+        exp = lint_base.expected_files(PLUGIN, bogus, errors)  # must not raise
+        self.assertTrue(any(e.startswith("B6") for e in errors))
+        self.assertEqual(exp, {})  # nothing rendered when no template is readable
+
     def test_read_helper_is_total(self):
         # R22: _read never raises — a missing path returns (None, reason).
         text, err = lint_base._read(Path(tempfile.gettempdir()) / "definitely-not-here-xyz.md")
