@@ -43,7 +43,7 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   applied to every host is the lint-layer form of the monolithic-AGENTS.md
   anti-pattern.
 - Docs governance is tiered, not global. Machine-critical docs and
-  harness-managed roots (`design-docs`, `exec-plans`, `memory`,
+  harness-managed roots (`adr`, `design-docs`, `exec-plans`,
   `product-specs`) stay strict by default because the machine reads them or the
   agent needs them to understand product intent. Host-owned
   business/marketing/research docs under `docs/` are flexible by default;

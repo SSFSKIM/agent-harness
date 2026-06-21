@@ -43,7 +43,7 @@ Deep truth lives in `docs/` — follow the pointers.
 |---|---|
 | `docs/CHARTER.md` | Top-level intent: mission, design philosophy (기획의도), locked assumptions — the Orient anchor |
 | `ARCHITECTURE.md` | Codemap, layer law, invariants, data flows |
-| `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v1.2): frontmatter schema, optional keys (`type`/`tags`/`resource`/`phase`/`supersedes`/`title`/`description`), conformance↔D-rule map |
+| `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v2.0): frontmatter schema, optional keys (`type`/`tags`/`resource`/`phase`/`supersedes`/`title`/`description`), conformance↔D-rule map |
 | `docs/design-docs/core-beliefs.md` | Golden rules + agent-first operating principles |
 | `docs/design-docs/index.md` | Design docs catalog |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |

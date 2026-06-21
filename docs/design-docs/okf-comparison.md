@@ -8,6 +8,17 @@ description: A holistic comparison of Google's Open Knowledge Format against thi
 ---
 # OKF parity — Google's Open Knowledge Format vs our docs-as-memory system
 
+> **Dated snapshot (2026-06-17), partly superseded.** This comparison was written
+> while the harness still ran the automatic feeder/imprint/dream memory loop and a
+> `MEMORY.md` bootloader over a `docs/memory/` tree. That loop and tree were
+> **retired** (packaging Slice 1; native Claude Code memory now carries session
+> continuity — see `docs/logs.md`). So read the body's references to "the
+> feeder/imprint loop", the `MEMORY.md` bootloader/loading-protocol, the `docs/memory/`
+> epistemic taxonomy, and `imprint-job` as the **owner** as **the system as it stood
+> on 2026-06-17**, not the current shape. The format-layer analysis (the convergent
+> md+frontmatter+index+link-graph substrate, the enforced `lint_docs.py` D-gate, the
+> ranked OKF adoptions §5 — which became KF v2.0 + `nav.py`) is unchanged and current.
+
 A holistic comparison of Google's **Open Knowledge Format (OKF v0.1, Draft)**
 against this harness's knowledge system (`docs/`, the docs-tree
 skill, and the `lint_docs.py` D-gate). Written 2026-06-17 from a full read of

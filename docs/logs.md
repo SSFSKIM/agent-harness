@@ -36,7 +36,13 @@ specs were amended (packaging R6.4 names the self-host *instance* `agent-harness
 R1–R5/R7 as the retired feeder/imprint loop's lineage (R8–R22, ~15 tracker rows, and
 tests cite the numbering, so renumbering would shatter every cross-ref); QUALITY_SCORE
 dropped the `memory-store`/`feeder`/`imprint`/`dreaming` rows; ARCHITECTURE's stale
-"Failure modes" headline was rewritten to the live R-rules. **Held by discipline** (left
+"Failure modes" headline was rewritten to the live R-rules. A follow-on `doc-gardener`
+sweep then caught the broader residue across 8 files: the retired `memory` managed-root
+in ARCHITECTURE/DESIGN/SECURITY (now `adr`), the `MEMORY.md` bootloader + imprint-child
+residual in SECURITY T8/T9 (reframed as a closed/historical path), the `imprint-job`
+owner example, a stale "KF v1.2" in the AGENTS.md map (the format is v2.0), and a
+"dated snapshot, partly superseded" banner atop `okf-comparison.md` (its format-layer
+analysis stays current). **Held by discipline** (left
 tracked, not promoted): the feedback-twice scaffold-invariant rules (Slice 2) and the
 recurrence-gated marketplace containment lint (Slice 5); the driver-layer named-constant
 refactor (Slice 4) is code-debt, not doc-debt. Honest gap recorded in QUALITY_SCORE: the

@@ -60,19 +60,17 @@ Grounding document for the review-security persona. Threats are numbered.
   skips the style/content lints (D3/D5/D6) for explicitly-declared,
   non-managed legacy subtrees when a host opts into strict docs governance —
   nothing else. It grants no capability. Matching is on path-segment boundaries
-  (a partial prefix like `mem` can never reach `memory/…`), and it cannot exempt
+  (a partial prefix like `des` can never reach `design-docs/…`), and it cannot exempt
   a harness-managed tree (`hl.MANAGED_ROOTS`:
-  memory/design-docs/exec-plans/product-specs/generated) **nor a top-level
-  machine doc** (`hl.MANAGED_DOCS`: PLANS/DESIGN/SECURITY/RELIABILITY/
-  QUALITY_SCORE/PRODUCT_SENSE — the persona-grounding + execplan docs the gate
-  rides on). Host-owned business/marketing/research docs are flexible by
+  adr/design-docs/exec-plans/generated/product-specs) **nor a top-level
+  machine doc** (`hl.MANAGED_DOCS`: PLANS/DESIGN/KNOWLEDGE_FORMAT/SECURITY/
+  RELIABILITY/QUALITY_SCORE/PRODUCT_SENSE — the persona-grounding + execplan docs
+  the gate rides on). Host-owned business/marketing/research docs are flexible by
   default, so they do not need `.harnessignore` merely to exist. D8
-  index-registration remains for harness-managed indexed memory/design/product
-  roots; the feeder reads only structured, indexed memory. So `.harnessignore`
-  cannot un-govern or poison the memory/design/product tree. It is versioned
-  config (Tier 0): changes are git-visible and reviewed like any committed file
-  — a framing that depends on the T1 imprint guard holding (a headless child
-  must not write it; see tracker).
+  index-registration remains for harness-managed indexed adr/design/product
+  roots. So `.harnessignore` cannot un-govern or poison the adr/design/product
+  tree. It is versioned config (Tier 0): changes are git-visible and reviewed like
+  any committed file.
 - **T9 — `.harness.json` + `.claude/lints/` are Tier-0 executable config.**
   The gate config's `lint_cmd`/`test_cmd` are shell commands `check.py` (and so
   the scaffold-installed `.git/hooks/pre-commit`) runs on every commit with user
@@ -84,17 +82,15 @@ Grounding document for the review-security persona. Threats are numbered.
   malformed config cannot inject a bogus step: `hl.gate_config` fails open to
   `{}`, `hl.gate_command` returns None for a non-str/blank value, and a
   present-but-unparseable command fails the gate CLOSED (`check._host_step` —
-  a host that asked for enforcement never silently loses it). Residual risk,
-  shared with T8: the imprint child has
-  unscoped Write, so a transcript injection defeating the T1 guard could write
-  `.harness.json` (repo root) or a lint and thereby run code at the next commit.
-  The Tier-0 framing depends on the T1 guard; path-scoping the imprint child's
-  writes (open tracker item) is what closes it. Freshness overrides
+  a host that asked for enforcement never silently loses it). (Historical residual,
+  now closed: the retired imprint child held unscoped Write, so a transcript
+  injection defeating the T1 guard could have written `.harness.json` or a lint and
+  run code at the next commit. The feeder/imprint loop was retired with no headless
+  writer remaining — packaging Slice 1 — so this path no longer exists; the
+  surviving write surfaces are the human and the review gate.) Freshness overrides
   (`stale_days`) can only TIGHTEN the harness's own critical docs, never loosen
-  them: `lint_docs.PROTECTED_PATHS` (the `MANAGED_DOCS` at `docs/<name>` plus
-  the bootloader `docs/memory/MEMORY.md`) clamps D4 to
-  `min(override, harness default)` for the MANAGED_DOCS (the bootloader is
-  D4-exempt by design — `check_frontmatter` skips `MEMORY.md`).
+  them: `lint_docs.PROTECTED_PATHS` (the `MANAGED_DOCS` at `docs/<name>`) clamps
+  D4 to `min(override, harness default)` for the MANAGED_DOCS.
   `managed_doc_roots` can opt host-owned roots into blocking docs
   governance, while `doc_governance: strict` restores the self-host-style global
   docs contract. `component_inventory: strict` and `component_coverage: strict`

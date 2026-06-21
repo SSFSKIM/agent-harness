@@ -52,7 +52,7 @@ frontmatter fails the gate (D3) unless it is in an exempt tree (`generated/`,
 |---|---|
 | `status` | `stable` / `active` / `draft` / `archived` / `completed`. Drives the staleness exemption: `archived` and `completed` pages are stale-exempt (D4). |
 | `last_verified` | ISO `YYYY-MM-DD` of the last time the page's **content was checked against reality**. Over `STALE_DAYS` (30) old and not archived/completed → **D4 fails**. Bump it on a **content** edit (you verified the page). A purely **mechanical metadata-only change** — e.g. a bulk add of navigation keys — is *not* a re-verification and must **not** bump it: resetting the clock at scale would erode the staleness signal the gate depends on. |
-| `owner` | Who maintains the page (e.g. `harness`, `doc-gardener`, `imprint-job`). |
+| `owner` | Who maintains the page (e.g. `harness`, `doc-gardener`, `review-reliability`). |
 
 These are governance fields with no OKF equivalent; they make the corpus a
 *maintained working memory* rather than a static catalog.

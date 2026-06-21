@@ -48,7 +48,7 @@ point rightward at skills — the most actionable instruction wins.
    `.claude/`, not the `docs/` knowledge graph: `docs/` is the project's
    knowledge base, `.claude/` is how the agent itself is configured.
 6. **Tiered docs governance:** machine-critical docs and harness-managed roots
-   (`design-docs`, `exec-plans`, `memory`, `product-specs`) are strict by
+   (`adr`, `design-docs`, `exec-plans`, `product-specs`) are strict by
    default. Host-owned business/marketing/research docs under `docs/` are
    flexible unless the host opts a root into `.harness.json`
    `managed_doc_roots` or sets `doc_governance: strict`. `docs/.harnessignore`
