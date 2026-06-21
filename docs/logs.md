@@ -18,6 +18,22 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Packaging: plugin cleanup + manifest update (Slice 5)
+
+The two plugin manifests were brought in line with reality (packaging
+[Slice 5](product-specs/2026-06-21-harness-packaging-portable-template.md)).
+`.claude-plugin/marketplace.json`'s skill list dropped the retired `dream` and
+added the present `docs-nav` (now the 8 skills on disk, agreeing with the
+gate-checked component inventory); `plugin/.claude-plugin/plugin.json` bumped
+`0.1.0`→`0.2.0` to mark the packaging effort (removed components, relocated
+Director, consolidated profiles). The generated inventory needed no regeneration —
+it was already current from Slice 1's deletions under the gate. "docs-as-memory"
+was kept deliberately: it names the durable-docs-as-knowledge model, not the retired
+feeder/imprint/dream loop. Republish (a public release) is prepared but **not
+performed** — that push is a separate human go/no-go. The reviews added one durable
+discipline: a finding recorded only in a plan vanishes when the plan is archived, so
+the "marketplace list isn't gate-checked" gap landed in the tech-debt tracker.
+
 ## 2026-06-21 — Packaging: two agent profiles consolidated (Slice 4)
 
 The harness's two agents — the Director and the Codex worker — each got **one
