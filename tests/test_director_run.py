@@ -11,6 +11,7 @@ import director.queue as dq  # noqa: E402
 import director.director_min as dmin  # noqa: E402
 import director.run as run  # noqa: E402
 from director.worker.app_server import ReadTimeout, extract_usage  # noqa: E402
+from director.worker import tools as worker_tools  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
@@ -250,6 +251,58 @@ class OutcomeChannelTest(unittest.TestCase):
             disp = run.drive({"id": "OC-2", "prompt": "p"}, command=["x"],
                              workspace_root=Path("/tmp/unused-oc"), max_turns=1)
         self.assertNotEqual(disp["kind"], "terminal")
+
+
+class BrokeredLinearTurnCompletedTest(unittest.TestCase):
+    """Phase-2 readiness: brokered linear_graphql (item/tool/call → the guardrailed
+    executor) must work INSIDE the turn_completed channel, so when the app-server flips
+    Linear from in-process MCP back to brokered, the Director (consumer) side is proven.
+    The real `make_linear_tool_executor` runs with a fake transport; authority.py is ON."""
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.qbase = self.tmp / "q"
+
+    def _ticket(self):
+        p = self.tmp / "stub.json"
+        p.write_text(json.dumps({"id": "BL-1", "prompt": "do work",
+                                 "workspace": str(self.tmp / "ws")}))
+        return run.load_ticket(p)
+
+    def test_brokered_linear_allowed_in_turn_completed(self):
+        # turn_completed channel (capability) + a brokered linear_graphql READ that
+        # authority.py allows, executed through the real executor with a fake transport.
+        posted = []
+
+        def fake_post(endpoint, body, headers):
+            posted.append(json.loads(body.decode("utf-8")))
+            return {"data": {"viewer": {"id": "u1"}}}
+
+        execu = worker_tools.make_linear_tool_executor(
+            api_key="test-key", http_post=fake_post, guard=True)
+        disp = run.drive(self._ticket(), command=[sys.executable, MOCK, "tc_tool"],
+                         queue_base=self.qbase, workspace_root=self.tmp / "wsr",
+                         tools=[worker_tools.linear_graphql_spec()], tool_executor=execu)
+        self.assertEqual(disp["kind"], "terminal")            # outcome rode turn/completed
+        self.assertEqual(disp["outcome"]["status"], "done")
+        self.assertTrue(posted, "authority allowed the read → executor hit the (fake) transport")
+        self.assertIn("viewer", posted[0]["query"])
+
+    def test_brokered_linear_destructive_blocked_in_turn_completed(self):
+        # Same path, destructive mutation → authority.py refuses BEFORE any network
+        # (T10 holds in the turn_completed channel); the turn still completes → terminal.
+        posted = []
+
+        def fake_post(endpoint, body, headers):
+            posted.append(body)
+            return {"data": {}}
+
+        execu = worker_tools.make_linear_tool_executor(
+            api_key="test-key", http_post=fake_post, guard=True)
+        disp = run.drive(self._ticket(), command=[sys.executable, MOCK, "tc_tool_block"],
+                         queue_base=self.qbase, workspace_root=self.tmp / "wsr2",
+                         tools=[worker_tools.linear_graphql_spec()], tool_executor=execu)
+        self.assertEqual(disp["kind"], "terminal")
+        self.assertFalse(posted, "authority must refuse the destructive mutation before any POST")
 
 
 class WorkspaceSafetyTest(unittest.TestCase):

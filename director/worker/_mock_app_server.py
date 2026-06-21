@@ -40,6 +40,19 @@ def complete_turn():
          "params": {"turn": {"id": TURN_ID, "status": "completed"}}})
 
 
+def complete_turn_with_outcome():
+    # turn_completed-channel completion: final agentMessage + turn/completed carrying the
+    # terminal outcome (the cc-codex-appserver shape). Used by the brokered-linear tc_tool
+    # scenarios to prove item/tool/call coexists with the turn_completed outcome channel.
+    out({"method": "item/completed",
+         "params": {"itemId": "msg_tc", "threadId": THREAD_ID, "turnId": TURN_ID,
+                    "item": {"type": "agentMessage", "text": "done",
+                             "phase": "final_answer"}}})
+    out({"method": "turn/completed",
+         "params": {"turn": {"id": TURN_ID, "status": "completed"},
+                    "outcome": {"status": "done", "reason": "brokered-linear done"}}})
+
+
 def main():
     scenario = sys.argv[1] if len(sys.argv) > 1 else "plain"
     awaiting_approval = False
@@ -60,7 +73,8 @@ def main():
             # cc-codex-appserver advertises capabilities.outcomeOnTurnCompleted; the
             # "turn_completed" scenario mirrors it so capability auto-negotiation is
             # exercised. Every other scenario leaves it absent (legacy sink channel).
-            caps = {"outcomeOnTurnCompleted": True} if scenario == "turn_completed" else {}
+            caps = ({"outcomeOnTurnCompleted": True}
+                    if scenario in ("turn_completed", "tc_tool", "tc_tool_block") else {})
             out({"id": mid, "result": {"userAgent": "mock", "platformOs": "test",
                                        "capabilities": caps}})
         elif method == "initialized":
@@ -86,6 +100,20 @@ def main():
                 out({"id": TOOL_CALL_ID, "method": "item/tool/call",
                      "params": {"tool": "linear_graphql",
                                 "arguments": {"query": "query { viewer { id } }"},
+                                "itemId": "item_t", "threadId": THREAD_ID,
+                                "turnId": TURN_ID}})
+                awaiting_tool = True
+            elif scenario in ("tc_tool", "tc_tool_block"):
+                # turn_completed channel (capability advertised at initialize) PLUS a
+                # brokered linear_graphql item/tool/call — proves the Director routes the
+                # tool through its guardrailed executor while on the new outcome channel.
+                # tc_tool sends an authority-ALLOWED read; tc_tool_block a destructive
+                # mutation authority.py must refuse before any network.
+                q = ('mutation { issueDelete(id: "abc") { success } }'
+                     if scenario == "tc_tool_block" else "query { viewer { id } }")
+                out({"id": TOOL_CALL_ID, "method": "item/tool/call",
+                     "params": {"tool": "linear_graphql",
+                                "arguments": {"query": q},
                                 "itemId": "item_t", "threadId": THREAD_ID,
                                 "turnId": TURN_ID}})
                 awaiting_tool = True
@@ -171,7 +199,10 @@ def main():
             # the client's tool result -> resume the SAME turn
             out({"method": "item/completed",
                  "params": {"itemId": "item_t", "threadId": THREAD_ID, "turnId": TURN_ID}})
-            complete_turn()
+            if scenario in ("tc_tool", "tc_tool_block"):
+                complete_turn_with_outcome()
+            else:
+                complete_turn()
             awaiting_tool = False
         # anything else: ignore
 
