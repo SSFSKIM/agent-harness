@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-21
 owner: harness
 type: exec-plan
@@ -198,9 +198,19 @@ Two axes: how to make app_server drift-proof, and where the two guides live.
   `agents/worker/` dir exists (`ls director ..` — none created).
 
 ## Progress log
-- [ ] (2026-06-21) Plan created; surface mapped (app_server drift, qa footprint,
-  guide homes); import-safety + test-impact verified. (done: exploration +
-  plan; remaining: M1–M3 + completion gate)
+- [x] (2026-06-21) Plan created; surface mapped (app_server drift, qa footprint,
+  guide homes); import-safety + test-impact verified.
+- [x] (2026-06-21) M1 — app_server `thread_start`/`run_turn` defaults sourced from
+  `config.DEFAULTS["worker"]` via `_DEFAULT_APPROVAL_POLICY`/`_DEFAULT_SANDBOX`;
+  `DefaultsDriftTest` added (proven to fail on the old `"untrusted"` literal).
+- [x] (2026-06-21) M2 — `qa` skill `git rm`'d; `_IMPL_TEMPLATE` step (3) qa-pointer
+  dropped (discipline kept inline); `test_director_taxonomy` + `test_director_run`
+  updated (negative assertions lock the retirement).
+- [x] (2026-06-21) M3 — `.claude/DIRECTOR.md` §14 "The two agent profiles" authored.
+- [x] (2026-06-21) Completion gate: GREEN (694 tests); reviews — spec-compliance
+  (codex) SATISFIED, arch SATISFIED, reliability SATISFIED (+1 P2), code-quality
+  (codex) round 1 NOT-SATISFIED (P1: §14 prose overclaim) → fixed → round 2
+  SATISFIED. P2s tracked.
 
 ## Surprises & discoveries
 - The worker self-QA discipline is NOT only in the `qa` skill — it is inlined in
@@ -208,8 +218,31 @@ Two axes: how to make app_server drift-proof, and where the two guides live.
   worker runs. The `qa` skill was a third, redundant copy of test-writing detail.
   Human confirmed the redundancy directly.
 - `app_server` already has the precedent for the fix next door: `autonomy.py`
-  sources its `APPROVAL_POLICY`/`SANDBOX` constants from `config.DEFAULTS["worker"]`.
-  `app_server` simply never adopted it — hence the stale `"untrusted"`.
+  sources its `APPROVAL_POLICY`/`SANDBOX` constants from `config.DEFAULTS["worker"]`,
+  and its docstring *declares* app_server's posture values "owned by
+  `config.DEFAULTS`" — so the `"untrusted"` literal was genuinely stale, not an
+  intentional fallback. `app_server` simply never adopted the precedent.
+- **A second, INTENTIONAL `"untrusted"` lives one layer up** — `director/run.py`
+  (`drive`/`run_ticket`) and `director/orchestrator.py` (`run_once`/`run_forever`)
+  default a *bare* call to the conservative `"untrusted"` posture (documented at
+  `run.py:232-234`, pinned by `test_default_posture_is_untrusted`). This is a
+  deliberate two-tier design: every real run resolves config and passes
+  `on-request` explicitly; the driver's bare-call fallback is the *most
+  conservative* posture as a fail-safe. So reconciling those four to
+  `config.DEFAULTS` would WIDEN a deliberate fail-safe and break its test — the
+  wrong move. Code-quality's round-1 P1 was my §14 prose overclaiming "no second
+  copy"; the fix was to make the prose tell the truth about the layering, NOT to
+  touch run.py/orchestrator.py.
+- **The git-add stale-pathspec trap struck a THIRD time** (Slices 2, 3, now 4):
+  listing the just-`git rm`'d `qa/SKILL.md` in a later multi-path `git add` aborted
+  the whole staging (`git add` is all-or-nothing), so the first commit captured
+  only the deletion. Caught immediately via `git show --stat`; landed the rest in a
+  follow-up. The durable rule (strengthened in memory): after `git rm <path>`, never
+  name that path again — stage only paths still on disk.
+- **codex ran the spec-compliance AND code-quality reviews synchronously this time**
+  (real verdicts), unlike Slice 2 where `/codex:rescue` dispatched a background task
+  and ended its turn verdict-less. The explicit "run SYNCHRONOUSLY, return the verdict
+  in your final message, do not dispatch a background task" instruction worked.
 
 ## Decision log
 - 2026-06-21: app_server defaults → derive from `config.DEFAULTS["worker"]`
@@ -228,5 +261,63 @@ Two axes: how to make app_server drift-proof, and where the two guides live.
   the knob values (a copy would be the drift this slice removes).
 
 ## Feedback (from completion gate)
+All four reviews SATISFIED. One P1 was caught and fixed in-gate; two P2s + two
+proposed rules are tracked (also in `docs/exec-plans/tech-debt-tracker.md`).
+
+- **P1 (code-quality round 1, FIXED) — §14 prose overclaim.** `.claude/DIRECTOR.md`
+  §14 said the worker posture has "no second copy," but `director/run.py:225,260`
+  and `director/orchestrator.py:522,818` default a bare call to `"untrusted"`.
+  Resolution: those literals are *intentional* (a conservative fail-safe, pinned by
+  `test_default_posture_is_untrusted`), so the fix was to reword §14 to state the
+  truth (resolved runs pass posture explicitly; the wire client's fallback derives
+  from config; the driver's bare-call default is conservative-by-design), NOT to
+  change run.py/orchestrator.py. Fixed in `ec894ac`, re-reviewed → SATISFIED.
+- **P2 (reliability) — driver-layer posture-default tier is unnamed.** The
+  intentional conservative `"untrusted"` at `run.py:225,260` + `orchestrator.py:522,818`
+  was re-flagged by reviewers as a drift surface because it is an un-named literal
+  that re-states a posture string. Consider promoting it to a named constant (e.g.
+  `run.CONSERVATIVE_POSTURE`) and/or a one-line doc so a future reviewer reads it as
+  a deliberate second tier, not drift; or make the driver posture a required kwarg so
+  no fallback literal exists. Tracked.
+- **P2 (code-quality) — stale `qa` pointers in a historical spec.**
+  `docs/product-specs/2026-06-16-worker-qa-and-serialized-pr-merge.md:109,128` (Korean
+  Design/components prose) point at the now-deleted `director/workspace_skills/qa/SKILL.md`;
+  the same spec already carries pre-Slice-3 `docs/DIRECTOR.md` mentions (122,131) left
+  untouched. D5-clean (prose, not links); instance-history not shipped in the base
+  (Slice 6 R6.4 strips instance specs). Doc-gardening pass: add a one-line supersession
+  note or accept as historical (the Slice-3 precedent left such mentions). Tracked.
+- **Proposed rule (review-arch) — codify signature-default aliasing.** ARCHITECTURE
+  invariant 5's "alias from `DEFAULTS`, no second copy" examples are all module-level
+  constants; this slice extends it to a *function-signature parameter default* sourced
+  via a module constant (`approval_policy: str = _DEFAULT_APPROVAL_POLICY`). Name this
+  form under invariant 5 so it reads as sanctioned, not a fresh judgment call. Tracked.
 
 ## Outcomes & retrospective
+Slice 4 delivered exactly its Goal: the two agents the harness runs each have one
+settable source + one guide, with the worker posture drift-proof by construction.
+
+- **R4.2 (the real code change) — worker posture single-sourced.**
+  `director/worker/app_server.py` now derives its `thread_start`/`run_turn` fallback
+  posture from `config.DEFAULTS["worker"]` (module constants `_DEFAULT_APPROVAL_POLICY`/
+  `_DEFAULT_SANDBOX`), eliminating the stale `"untrusted"` literal (predated the
+  2026-06-15 `on-request` decision). `DefaultsDriftTest` asserts the equality and is
+  non-vacuous — proven to fail on the old literal. No production behavior changed (every
+  real caller passes posture explicitly; the mock ignores it; 694 tests green).
+- **R4.3 — `qa` skill retired.** Deleted with the worker self-QA discipline preserved
+  inline (`taxonomy._IMPL_TEMPLATE`) + ridden by the execplan completion gate the worker
+  runs; install/taxonomy tests updated with negative assertions that lock the retirement.
+- **R4.1 + R4.2 guides — `.claude/DIRECTOR.md` §14 "The two agent profiles."** Director
+  profile (two config halves + env contract: GH_TOKEN/LINEAR_API_KEY/DIRECTOR_TEAM) +
+  worker profile (single source + override surface + installed-skill bundle), each
+  pointing to its source rather than copying knob values. No `agents/*` directory created.
+- **What the reviews bought:** the value was the *interpretation*, not the mechanics —
+  distinguishing app_server's genuinely-stale `"untrusted"` (reconcile, R4.2) from the
+  driver layer's *intentional* conservative `"untrusted"` (leave; reconciling would widen
+  a fail-safe). The §14 prose overclaim was the honest casualty of that nuance, caught by
+  code-quality and fixed.
+- **Process note:** the git-add stale-pathspec trap recurred a third time — the durable
+  fix is mechanical discipline (never re-list a `git rm`'d path), now imperatively stated
+  in memory. Codex reviews ran synchronously with explicit anti-background instructions.
+- **Next:** Slice 5 (plugin cleanup + manifest update) — `plugin.json`/`marketplace.json`
+  drop the memory clause + version bump, regenerate the inventory; republish is a separate
+  human go/no-go.

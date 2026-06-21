@@ -18,6 +18,25 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Packaging: two agent profiles consolidated (Slice 4)
+
+The harness's two agents — the Director and the Codex worker — each got **one
+settable source + one guide** (packaging
+[Slice 4](product-specs/2026-06-21-harness-packaging-portable-template.md)). The
+real change is a drift fix: `director/worker/app_server.py` now derives its
+`thread_start`/`run_turn` fallback posture from `config.DEFAULTS["worker"]` (via
+module constants) instead of a stale hardcoded `"untrusted"` (which predated the
+2026-06-15 `on-request` decision) — a new `DefaultsDriftTest` pins the equality and
+fails on the old literal. The redundant `qa` workspace skill was retired (the worker
+self-QAs inline in `taxonomy._IMPL_TEMPLATE` and through the execplan completion gate
+it runs). `.claude/DIRECTOR.md` gained **§14 "The two agent profiles"** — the Director's
+two config halves (`.claude/` identity + `.harness.json` runtime + `.env` secrets) and
+env contract, and the worker's single source + override surface + installed-skill bundle.
+Reviews caught one real subtlety: the driver layer (`run.py`/`orchestrator.py`) keeps an
+*intentional* conservative `"untrusted"` bare-call default (a fail-safe, pinned by a test)
+— distinct from app_server's genuinely-stale copy — so only app_server was reconciled, and
+§14's prose was corrected to tell the truth about the two tiers. No `agents/*` directory.
+
 ## 2026-06-21 — Packaging: Director relocation + launcher retirement (Slice 3)
 
 The Director operating manual moved `docs/DIRECTOR.md` → `.claude/DIRECTOR.md`
