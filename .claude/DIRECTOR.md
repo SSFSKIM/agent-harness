@@ -555,10 +555,16 @@ the sandbox *only* because it is the lone key in `worker_policy.worker_env`), an
   self-governance + egress flags), and `tools` / `install_skills` (the capability knobs).
   The posture rationale (on-request + auto_review + full network — the 2026-06-15 human
   decision, SECURITY T11) lives in the `DEFAULTS` comment + `director/worker/autonomy.py`.
-  **There is no second copy:** `director/worker/app_server.py`'s fallback posture defaults
-  *derive* from `config.DEFAULTS["worker"]` (not re-typed literals), so the wire client
-  cannot drift from this source — a test (`DefaultsDriftTest` in
-  `tests/test_director_app_server.py`) asserts the equality.
+  **Every real run resolves this config and passes the posture explicitly** down the
+  dispatch stack (`orchestrator`/`run.main` → `drive` → the wire client), so
+  `config.DEFAULTS` is the effective single source for every worker spawn. The **wire
+  client carries no copy of its own:** `director/worker/app_server.py`'s fallback posture
+  defaults *derive* from `config.DEFAULTS["worker"]` (not re-typed literals), so even a
+  bare/test call to it cannot drift from the documented default — a test
+  (`DefaultsDriftTest` in `tests/test_director_app_server.py`) asserts the equality. (The
+  driver entrypoints' *own* bare-call signature default is deliberately the most
+  conservative posture, `untrusted` — a fail-safe for a direct/test caller that resolves
+  no config, distinct from the resolved-deployment default; `director/run.py` documents it.)
 - **Per-host override → `.harness.json` `director.worker`** — a host overrides to
   *tighten* the posture in the fail-safe direction (e.g. `"network": false`,
   `"approval_policy": "untrusted"`) or to opt into a board capability (e.g.
