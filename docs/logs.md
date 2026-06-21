@@ -18,6 +18,30 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Packaging COMPLETE: the packaged base artifact + legacy strip (Slice 6, capstone)
+
+The capstone landed and **completes the six-slice packaging spec** (packaging
+[Slice 6](product-specs/2026-06-21-harness-packaging-portable-template.md)). A new
+checked-in **`base/`** tree is the tangible "open one folder and see the whole clean
+system" artifact: the 24 seed templates rendered at their host destinations (the live
+`{{COMPONENTS}}` machine index + the `adr` `{{CATEGORY}}` substituted; `{{PROJECT}}`/
+`{{TODAY}}` preserved as fill-markers) + a `SETUP.md` that brings it to life and points
+the centralized Director (reusing `.claude/DIRECTOR.md` §0). It is legacy-free (no
+`docs/generated/`, symphony-original, EDUCATION, superpowers, okf-comparison,
+symphony-parity-gap). A new blocking `plugin/scripts/lint_base.py` (the `base` gate
+step) keeps the hand-synced base honest — it derives its expected set from the same
+`harness_lib.SEEDS`/`render`/`components_table` that `scaffold.py` uses (so the base is
+drift-proof by construction: a missing/extra/edited file or a stale component table
+fails the gate), is R22-total, and no-ops on a ported host. The seed primitives were
+promoted from `scaffold.py` to `harness_lib.py` (ARCHITECTURE invariant 8). `{{TODAY}}`
+is preserved rather than baked, so the drift-check has no calendar dependence.
+
+**With this, the harness is a portable, inspectable, drift-checked strict base — not
+just one instance of itself.** The six slices: memory retirement → strict-base docs →
+Director relocation → two-profile consolidation → plugin cleanup → this base artifact.
+Remaining: doc-debt gardening (the tracked proposed rules + retired-loop text in
+QUALITY_SCORE/RELIABILITY/SECURITY) and R5.3's public republish (a human go/no-go).
+
 ## 2026-06-21 — Packaging: plugin cleanup + manifest update (Slice 5)
 
 The two plugin manifests were brought in line with reality (packaging

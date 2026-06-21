@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-21
 owner: harness
 type: exec-plan
@@ -198,10 +198,27 @@ Machinery a novice needs (all verified):
   gate.
 
 ## Progress log
-- [ ] (2026-06-21) Plan created; scaffold/lint/gate machinery mapped; substitution
+- [x] (2026-06-21) Plan created; scaffold/lint/gate machinery mapped; substitution
   surface scoped (preserve PROJECT/TODAY, substitute COMPONENTS/CATEGORY); base
-  location (`base/`) + lint design (`lint_base.py`, self-host-gated blocking,
-  reuses scaffold.SEEDS) settled. (done: exploration + plan; remaining: M1–M3 + gate)
+  location (`base/`) + lint design settled.
+- [x] (2026-06-21) M1 — `base/` built (24 seeds rendered at host dests + adr index +
+  SETUP.md); COMPONENTS/CATEGORY substituted, PROJECT/TODAY preserved; legacy-free.
+- [x] (2026-06-21) M2 — `lint_base.py` + the `base` step in check.py + 11 tests;
+  promoted SEEDS/TOP_INDEXES/render/components_table to harness_lib (invariant 8).
+- [x] (2026-06-21) M3 — full gate GREEN incl. the base step; nav shows 0 base/ paths.
+- [x] (2026-06-21) Completion gate: GREEN (705 tests); reviews — spec-compliance,
+  arch, security, code-quality all SATISFIED; reliability found 2 R22-totality P2s
+  in `lint_base` → fixed (tolerant `_read` + B6 code + structural `allowed`) →
+  re-reviewed SATISFIED. 2 trivial code-quality P2s applied (comment + B6 test);
+  remaining P2s + proposed rules tracked. Codex stalling → Claude personas (sanctioned).
+
+## Behavioral check
+The runnable surface is `lint_base.py` (the new gate step) + the `base/` artifact.
+Exercised: `python3 plugin/scripts/lint_base.py` → `lint_base: OK` on the synced base;
+the 11 `test_lint_base` cases drive each FAIL class (B1 missing, B2 edited/stale-table/
+non-UTF8, B3 extra, B4 generated, B5 missing SETUP, B6 unreadable template) + the
+no-op-when-absent path; the full `check.py` gate runs the `base` step GREEN. No web
+surface, so no playwright drive.
 
 ## Surprises & discoveries
 - `{{TODAY}}` saturates the templates (19/21), which is what rules out a
@@ -224,5 +241,68 @@ Machinery a novice needs (all verified):
   reference, not a gated root (SETUP.md says so).
 
 ## Feedback (from completion gate)
+Five-persona full review. All SATISFIED. One round of R22 fixes (reliability); the
+rest tracked in `docs/exec-plans/tech-debt-tracker.md`.
+
+- **P2 (reliability, FIXED in-gate) — `lint_base` R22 totality.** Two reads could
+  raise (`FileNotFoundError` on a missing seed template; `UnicodeDecodeError` on a
+  non-UTF8 base file) instead of a clean coded FAIL — a written-R22 violation in a
+  new gate lint. Fixed: a tolerant `_read` helper, a `B6` code for an unreadable
+  template (dest skipped), and `allowed` computed structurally from `SEEDS` so a B6
+  skip can't cascade into a false B3. +2 regression tests, re-reviewed → SATISFIED.
+- **P2 (code-quality, FIXED) — dropped comment + B6 coverage.** Re-added the
+  "tidy_stop sentinel" detail to the promoted `SEEDS` comment; added
+  `test_missing_template_fails_b6_no_cascade`.
+- **P2 (code-quality, tracked) — `expected_files` dual contract** (returns the dict
+  AND appends to a caller `errors` list). A deliberate builder pattern (mirrors the
+  `lint_docs` check_* functions); documented; acceptable. Tracked for taste only.
+- **P2 (arch, considered — no change) — the B3 `docs/generated/` skip + the extra
+  subprocess spawn on ported hosts.** The B3 skip is NOT dead code: it prevents B3
+  from double-reporting `generated/` contents alongside B4. The per-gate subprocess
+  spawn matches the `gen_inventory --check` precedent. Both correct as-is; noted.
+- **Proposed rules (tracked):** (arch) write the script→script-import prohibition +
+  a `base/` artifact discipline into DESIGN.md; (spec-compliance) amend the parent
+  spec's R6.4 to name "the self-host *instance* `agent-harness.md`" (the base ships
+  the generic template — confirmed correct); (reliability) widen R22's text from
+  `lint_docs.py` to "every commit-gate lint step"; (security, optional) a one-line
+  SECURITY T9 note that the checked-in `base/` is content-only.
 
 ## Outcomes & retrospective
+Slice 6 — the capstone — delivered the tangible "open one folder and see the whole
+system" artifact, and **completes the six-slice packaging spec**.
+
+- **R6.1/R6.3/R6.4 — the base artifact.** A checked-in `base/` tree mirrors the host
+  layout a `harness-init` adoption produces: the 24 seed templates rendered at their
+  destinations (the live `{{COMPONENTS}}` machine index + the `adr` `{{CATEGORY}}`
+  substituted; `{{PROJECT}}`/`{{TODAY}}` preserved as honest fill-markers) + a
+  base-authored `SETUP.md` (bring-to-life + point the centralized Director, reusing
+  `.claude/DIRECTOR.md` §0). Legacy-free: no `docs/generated/`, symphony-original,
+  EDUCATION, superpowers, okf-comparison, or symphony-parity-gap.
+- **R6.2 — the drift-check.** `plugin/scripts/lint_base.py` blocks when `base/`
+  diverges from its source (a missing/extra/edited file, or a stale component table),
+  no-ops when `base/` is absent (self-host gating, the `gen_inventory` precedent), and
+  is R22-total. It derives the expected set from the SAME `harness_lib.SEEDS`/`render`/
+  `components_table` that `scaffold.py` uses — so the base is **drift-proof by
+  construction** (add a seed, the base is flagged missing it automatically).
+- **The decisive design calls:** (1) substitute `{{COMPONENTS}}` but preserve
+  `{{TODAY}}` — `{{TODAY}}` saturates 19/21 templates, so baking it would make the
+  drift-check fight the calendar; preserving it keeps the check deterministic while
+  still showing the live machine index. (2) Promote the seed primitives to
+  `harness_lib` rather than `import scaffold` from `lint_base` — ARCHITECTURE
+  invariant 8 (shared helpers in a core module, not a sibling private-import); arch
+  confirmed `harness_lib` already carries the destination-side seed vocabulary
+  (`MANAGED_ROOTS`/`MANAGED_DOCS`), so this is consistent factoring. (3) Resolved the
+  R6.4 `agent-harness.md` ambiguity by keeping the generic template in the base (it
+  carries the component index R6.2 drift-checks) and reading R6.4's strip-item as the
+  self-host instance doc — spec-compliance verified the two files are materially
+  different and called the resolution "defensible and correct."
+- **Process:** the full review caught a real written-rule (R22) violation in fresh
+  gate code; fixing it in-gate (rather than tracking) kept the capstone clean. Codex
+  remained degraded — the Claude personas carried all five reviews (sanctioned).
+- **Packaging spec COMPLETE.** All six slices (memory retirement → strict-base docs →
+  Director relocation → two-profile consolidation → plugin cleanup → this base
+  artifact) are landed and gated. The harness is now a portable, inspectable,
+  drift-checked strict base, not just one instance of itself. Remaining follow-ups are
+  doc-debt (the tracked proposed rules + the pre-existing retired-loop text in
+  QUALITY_SCORE/RELIABILITY/SECURITY) for a gardening pass — and R5.3's public
+  republish, still a separate human go/no-go.
