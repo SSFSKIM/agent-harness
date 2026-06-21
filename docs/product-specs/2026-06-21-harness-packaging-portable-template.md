@@ -1,5 +1,5 @@
 ---
-status: draft
+status: stable
 last_verified: 2026-06-21
 owner: harness
 phase: packaging/00-portable-template
