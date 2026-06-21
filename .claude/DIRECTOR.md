@@ -84,8 +84,7 @@ one stage it should run (`impl` routes the full ExecPlan methodology). With
 `dispatch_requires_label: true` an unlabelled ticket is never claimed, so onboarding
 and stray issues are ignored rather than dispatched as workers.
 
-**Launch.** Reading this manual is what makes you the Director (there is no
-launcher skill). Start the watched orchestrator as a background task and arm the
+**Launch.** Start the watched orchestrator as a background task and arm the
 queue Monitor so each worker turn-end event-wakes you (§5):
 
 ```

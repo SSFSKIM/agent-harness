@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-21
 owner: harness
 type: exec-plan
@@ -162,5 +162,60 @@ docs/ knowledge page.
   history stay — fix what D5 enforces, don't rewrite history.
 
 ## Feedback (from completion gate)
+- **review-spec-compliance: SATISFIED (round 2).** Round 1 NOT-SATISFIED on one
+  P1 (below). Round 2 confirmed the fix + R3.1–R3.3 intact, no archived history
+  rewritten. Non-blocking note: this plan's M3 DoD grep should also exclude
+  `product-specs/` to match its own scope fence → tracker.
+- **review-arch: SATISFIED (round 2).** Same P1 in round 1; round 2 confirmed the
+  docs↔config boundary is improved, the launcher retirement loses nothing, the
+  CHARTER de-link (Approach B) is correct. P2 (non-blocking): the AGENTS.md:54 map
+  row lists a `.claude/` path in an otherwise docs/-oriented table — defensible
+  with the explicit "central-agent config" label; left as-is. Proposed rule → tracker.
+- **review-reliability: SATISFIED (round 1).** Independently verified the
+  `director/*.py` edits are comment/docstring-only, **nothing opens/resolves the
+  DIRECTOR.md path at runtime** (so the move is a true runtime no-op), the launcher
+  deletion breaks no wiring (lint_structure scans only `plugin/skills/`; settings/
+  hooks reference-free), 524 director tests pass.
+- **review-code-quality: SATISFIED.** No P1. P2-1 (fixed inline): §0 "Launch"
+  redundantly restated "there is no launcher skill" that the header already
+  settled — trimmed to lead with the launch commands. P2-2 (map-row placement) —
+  same as arch, left as-is. No new rule (terseness is already core-belief 3).
+- **P1 (round 1, spec-compliance + arch, FIXED — commit e45cab9):** the relocated
+  manual's own §0 "Launch" step still told the reader to invoke the `director`
+  launcher skill deleted in this same slice, contradicting the header. I fixed the
+  header self-reference but missed the §0 one inside the same file — the exact
+  "grep the moved file body, not just inbound links" gap (now a tracker rule).
 
 ## Outcomes & retrospective
+
+**Delivered.** `docs/DIRECTOR.md` now lives at `.claude/DIRECTOR.md` as
+central-agent config (alongside `settings.json`), out of the `docs/` knowledge
+graph. The `.claude/skills/director/` launcher is retired — "becoming the
+Director" is "read `.claude/DIRECTOR.md`", whose §0/§5 already carried the exact
+stand-up commands the launcher pointed to. Every live reference is repointed: the
+two D5 markdown links (AGENTS.md §0 pointer → `.claude/`; CHARTER de-linked to a
+bare mention), the AGENTS.md map row + porting prose (launcher clause dropped),
+the `harness-init` §0 pointer, the self-host `PRINCIPLES.md` sibling mention, and
+the five `director/*.py` comment path strings. `check.py` GREEN; no live
+`docs/DIRECTOR.md` reference; 524 director tests pass (comment-only code edits).
+
+**What worked.** Separating D5-checked markdown links from bare/backtick prose
+collapsed an 80-hit grep into a 2-link surgery and confirmed the spec's
+"bulk-update archived links" was a no-op (history left intact). The reliability
+persona's runtime-path-consumer check turned "the code edits are comment-only"
+from a claim into verified fact (nothing opens the path → the move is a runtime
+no-op).
+
+**What I missed (and the lesson).** The relocation had **two** launcher
+self-references inside the moved manual; I fixed the header, missed the §0 Launch
+step. Both spec-compliance and arch caught it. D5 couldn't — it's prose, not a
+link. The discipline (now tracked): when you retire an artifact, grep the
+*surviving file bodies* for its name, not only the inbound links. (I also re-hit
+the Slice-2 `git add` stale-pathspec trap when committing the rename — caught and
+fixed immediately; the memory note stands.)
+
+**Carried forward (tracker, P2):** the docs↔`.claude/` boundary rule; the
+"retire = grep the moved body" hygiene rule; the M3-DoD-grep self-consistency nit.
+
+**Next:** Slice 4 (two agent profiles consolidated) — the packaging spec's next
+phase.

@@ -18,6 +18,20 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-21 — Packaging: Director relocation + launcher retirement (Slice 3)
+
+The Director operating manual moved `docs/DIRECTOR.md` → `.claude/DIRECTOR.md`
+(packaging
+[Slice 3](product-specs/2026-06-21-harness-packaging-portable-template.md)) — it
+is central-agent config (how the watched main session behaves), not a `docs/`
+knowledge page, so it now sits beside `settings.json`. The
+`.claude/skills/director/` launcher skill was retired: "becoming the Director" is
+now "read `.claude/DIRECTOR.md`", whose §0/§5 already carried the launcher's
+stand-up commands. Every live reference was repointed (2 D5 links, the AGENTS.md
+map row + porting prose, `harness-init` §0, `PRINCIPLES.md`, and `director/*.py`
+comment path strings); archived plans/specs keep their historical mentions (D5
+ignores prose — not a history rewrite). No runtime behavior changed.
+
 ## 2026-06-21 — Packaging: strict-base docs + guidance enrichment (Slice 2)
 
 The harness-init seed-template layer became the self-describing strict base
