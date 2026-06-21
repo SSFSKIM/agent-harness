@@ -81,7 +81,8 @@ DEFAULTS: dict = {
     "codex_command": "codex app-server",
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
-    # tool) and whether the vendored `.codex/skills` are installed into its workspace.
+    # tool) and whether the vendored methodology skills are installed into its workspace
+    # (into both .codex/skills and .claude/skills — whichever runtime the host wired reads one).
     # Default OFF so the global/offline behavior is unchanged — a Linear-backed host
     # opts in via `.harness.json` (`director.worker.tools="linear"`, `install_skills=
     # true`). The offline `--mock` niche ignores these regardless (orchestrator.main).

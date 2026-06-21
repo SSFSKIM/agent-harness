@@ -34,33 +34,69 @@ _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
 _SKILLS_SRC = Path(__file__).resolve().parent / "workspace_skills"
 
 
+# The two worker runtimes read the SAME vendored methodology from DIFFERENT paths: the
+# Codex app-server from `.codex/skills/`, the Claude worker (cc-codex-appserver → cc-harness,
+# whose settingSources default to user/project/local) from Claude Code's project skills at
+# `.claude/skills/`. Installing into both keeps adoption config-only — the Director need not
+# know which runtime the host wired; the SKILL.md `name`/`description` frontmatter is valid for
+# either. See memory: cc-codex-appserver-drop-in-verified.
+_SKILL_ROOTS = (".codex", ".claude")
+
+
 def install_workspace_skills(workspace) -> None:
-    """Copy the vendored Codex worker skills into <workspace>/.codex/skills/.
+    """Copy the vendored worker methodology into BOTH `<workspace>/.codex/skills/` and
+    `<workspace>/.claude/skills/`, so whichever runtime the host wired finds it.
 
     Safety (completion-gate P1): the per-ticket workspace is reused across runs and
     a prior worker (workspace-write sandbox) can plant symlinks, so we must never
-    write THROUGH a pre-existing symlink. A symlinked `.codex`/`skills` parent is
-    refused; each skill target is removed (link unlinked, dir/file deleted) before a
-    fresh copy — copytree never runs into an attacker-controlled destination.
-    Idempotent: always re-copies clean."""
+    write THROUGH a pre-existing symlink. A symlinked root/`skills` parent is refused;
+    each skill target is removed (link unlinked, dir/file deleted) before a fresh copy —
+    copytree never runs into an attacker-controlled destination. Idempotent.
+
+    PR hygiene: the injected skills are not part of the ticket's work, so they are added to
+    the clone's local `.git/info/exclude` (uncommitted, modifies no tracked file) and thus
+    stay out of `git status`/`git add -A` — see `_exclude_injected_skills`."""
     ws = Path(workspace)
-    for parent in (ws / ".codex", ws / ".codex" / "skills"):
-        if parent.is_symlink():
-            raise RuntimeError(f"refusing to install skills through symlink: {parent}")
-    dst = ws / ".codex" / "skills"
-    dst.mkdir(parents=True, exist_ok=True)
-    for item in _SKILLS_SRC.iterdir():
-        if item.name == "ATTRIBUTION.md":
-            continue
-        target = dst / item.name
-        if target.is_symlink() or target.is_file():
-            target.unlink()
-        elif target.is_dir():
-            shutil.rmtree(target)
-        if item.is_dir():
-            shutil.copytree(item, target)
-        else:
-            shutil.copy2(item, target)
+    for root in _SKILL_ROOTS:
+        for parent in (ws / root, ws / root / "skills"):
+            if parent.is_symlink():
+                raise RuntimeError(f"refusing to install skills through symlink: {parent}")
+        dst = ws / root / "skills"
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in _SKILLS_SRC.iterdir():
+            if item.name == "ATTRIBUTION.md":
+                continue
+            target = dst / item.name
+            if target.is_symlink() or target.is_file():
+                target.unlink()
+            elif target.is_dir():
+                shutil.rmtree(target)
+            if item.is_dir():
+                shutil.copytree(item, target)
+            else:
+                shutil.copy2(item, target)
+    _exclude_injected_skills(ws)
+
+
+def _exclude_injected_skills(ws: Path) -> None:
+    """Keep the Director-injected skill dirs out of the worker's PR via the clone's
+    `.git/info/exclude` — a per-clone, uncommitted ignore that touches no tracked file and
+    never appears in the worker's diff (a worker that runs `git add -A` would otherwise stage
+    the methodology). No-op when the workspace has no git dir (mock/offline runs)."""
+    gitdir = ws / ".git"
+    if not gitdir.is_dir():
+        return
+    info = gitdir / "info"
+    info.mkdir(exist_ok=True)
+    exclude = info / "exclude"
+    existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+    patterns = [f"/{root}/skills/" for root in _SKILL_ROOTS]
+    missing = [p for p in patterns if p not in existing.splitlines()]
+    if not missing:
+        return
+    prefix = existing if (not existing or existing.endswith("\n")) else existing + "\n"
+    note = "# director: injected worker methodology (not part of the ticket)\n"
+    exclude.write_text(prefix + note + "\n".join(missing) + "\n", encoding="utf-8")
 
 
 def load_ticket(path: str | Path) -> dict:
@@ -439,7 +475,8 @@ def main(argv=None) -> int:
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
                     help="advertise worker tools (linear = linear_graphql)")
     ap.add_argument("--install-skills", action="store_true",
-                    help="install vendored .codex/skills into the worker workspace")
+                    help="install vendored methodology into the worker workspace "
+                         "(both .codex/skills and .claude/skills)")
     ap.add_argument("--autonomous", action="store_true",
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "

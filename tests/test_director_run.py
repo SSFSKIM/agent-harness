@@ -63,12 +63,15 @@ class RunEndToEndTest(unittest.TestCase):
     def test_install_workspace_skills(self):
         ws = self.tmp / "wsskills"
         run.install_workspace_skills(ws)
-        self.assertTrue((ws / ".codex" / "skills" / "linear" / "SKILL.md").exists())
-        self.assertTrue((ws / ".codex" / "skills" / "commit" / "SKILL.md").exists())
-        self.assertTrue((ws / ".codex" / "skills" / "push" / "SKILL.md").exists())
-        # Slice 4 R4.3: the standalone `qa` skill was retired (redundant with the
-        # execplan completion gate); it must no longer be installed into a worker.
-        self.assertFalse((ws / ".codex" / "skills" / "qa").exists())
+        # Installed into BOTH runtime roots: .codex (Codex app-server) and .claude (the
+        # Claude worker, which reads project skills from .claude/skills via cc-harness).
+        for root in (".codex", ".claude"):
+            self.assertTrue((ws / root / "skills" / "linear" / "SKILL.md").exists())
+            self.assertTrue((ws / root / "skills" / "commit" / "SKILL.md").exists())
+            self.assertTrue((ws / root / "skills" / "push" / "SKILL.md").exists())
+            # Slice 4 R4.3: the standalone `qa` skill was retired (redundant with the
+            # execplan completion gate); it must no longer be installed into a worker.
+            self.assertFalse((ws / root / "skills" / "qa").exists())
         run.install_workspace_skills(ws)  # idempotent re-run
 
     def test_run_ticket_threads_tools_and_executor(self):
@@ -139,6 +142,21 @@ class RunEndToEndTest(unittest.TestCase):
         (ws / ".codex").symlink_to(outside, target_is_directory=True)
         with self.assertRaises(RuntimeError):
             run.install_workspace_skills(ws)
+
+    def test_install_skills_excludes_injected_from_worker_git(self):
+        # PR hygiene: a worker that runs `git add -A` must not stage the Director-injected
+        # methodology. install writes the skill roots to the clone's .git/info/exclude
+        # (uncommitted, touches no tracked file). The bare-dir test above already proves
+        # install still succeeds when there's no git dir.
+        ws = self.tmp / "wsgit"
+        (ws / ".git" / "info").mkdir(parents=True)
+        run.install_workspace_skills(ws)
+        lines = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
+        self.assertIn("/.codex/skills/", lines)
+        self.assertIn("/.claude/skills/", lines)
+        run.install_workspace_skills(ws)  # idempotent: no duplicate patterns
+        lines2 = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines2.count("/.claude/skills/"), 1)
 
 
 class _ReadTimeoutClient:

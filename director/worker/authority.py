@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 
-# The exact mutations the worker's installed `.codex/skills` + 3b worker-driven
+# The exact mutations the worker's installed methodology skills + 3b worker-driven
 # decomposition use (D-27): board reads stay free, these forward-only writes are
 # the worker's legitimate job. Destructive ops (delete/archive/batch) are absent →
 # default-deny refuses them. Overridable at executor construction.
