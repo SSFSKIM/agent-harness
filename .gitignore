@@ -1,4 +1,8 @@
-.claude/harness/
+# Harness runtime state, wherever it lands. The `**/` is load-bearing: a bare
+# `.claude/harness/` has a mid-pattern separator, so git anchors it to the repo
+# root and misses runtime state written under a subdir (e.g. a test run's
+# tests/.claude/harness/, which leaked into the tree before this was widened).
+**/.claude/harness/
 __pycache__/
 *.pyc
 .DS_Store
