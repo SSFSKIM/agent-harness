@@ -32,6 +32,7 @@ def main():
         ("structure", [sys.executable, str(here / "lint_structure.py")]),
         ("docs", [sys.executable, str(here / "lint_docs.py")]),
         ("generated", [sys.executable, str(here / "gen_inventory.py"), "--check"]),
+        ("base", [sys.executable, str(here / "lint_base.py")]),  # base/ drift-check (self-host; no-op elsewhere)
     ]
     failed = []
     # Host-authored structural lint (the setter axis) + the host test suite,

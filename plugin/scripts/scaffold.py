@@ -12,40 +12,16 @@ import sys
 from pathlib import Path
 
 import harness_lib as hl
+# SEEDS / TOP_INDEXES / render / components_table are the seed-layout primitives —
+# promoted to the core module so lint_base.py can share them (ARCHITECTURE invariant
+# 8). Re-exported here so `scaffold.SEEDS` etc. and this module's internal use both work.
+from harness_lib import SEEDS, TOP_INDEXES, components_table, render
 
 DIRS = (
     "docs/adr", "docs/design-docs", "docs/exec-plans/active",
     "docs/exec-plans/completed", "docs/generated", "docs/product-specs",
     "docs/references",
 )
-SEEDS = (  # (template, destination relative to host root)
-    ("agents-md.md", "AGENTS.md"),
-    ("claude-md.md", "CLAUDE.md"),
-    ("harness-json.json", ".harness.json"),  # marks a harness host (tidy_stop sentinel); {} = all defaults
-    ("charter.md", "docs/CHARTER.md"),  # top-level intent — authored FILL seed (not a MACHINE_DOC)
-    ("agent-harness.md", "docs/design-docs/agent-harness.md"),
-    ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
-    ("design-docs-index.md", "docs/design-docs/index.md"),
-    ("product-specs-index.md", "docs/product-specs/index.md"),  # guided: phase/parent + derived roadmap
-    ("references-index.md", "docs/references/index.md"),  # guided: why references exist (llms.txt convention)
-    ("exec-plan-active-index.md", "docs/exec-plans/active/index.md"),  # lifecycle guide (not a listing)
-    ("exec-plan-completed-index.md", "docs/exec-plans/completed/index.md"),  # lifecycle guide (not a listing)
-    ("reliability.md", "docs/RELIABILITY.md"),
-    ("security.md", "docs/SECURITY.md"),
-    ("logs.md", "docs/logs.md"),  # on-demand milestone log (replaces the retired memory bootloader/progress)
-    ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
-    ("harnessignore.txt", "docs/.harnessignore"),  # strict-mode migration backlog
-    # docs the machine reads (lint D10) — gate/personas break without them:
-    ("plans-md.md", "docs/PLANS.md"),
-    ("design-md.md", "docs/DESIGN.md"),
-    ("knowledge-format.md", "docs/KNOWLEDGE_FORMAT.md"),  # the format contract a host authors docs against
-    ("architecture-md.md", "ARCHITECTURE.md"),
-    ("quality-score.md", "docs/QUALITY_SCORE.md"),
-    ("product-sense.md", "docs/PRODUCT_SENSE.md"),
-    ("principles.md", "docs/PRINCIPLES.md"),  # the human's externalized decision-taste (central Director reads it at a fork)
-)
-TOP_INDEXES = ("adr",)  # docs/<cat>/index.md via generic category-index.md;
-# product-specs + references now ship dedicated guided indexes (see SEEDS)
 GITIGNORE_LINES = (".claude/harness/",)
 # Forms by which a host may already blanket-ignore all of .claude/ — then
 # .claude/harness/ runtime state is covered, but instance skills under
@@ -53,23 +29,6 @@ GITIGNORE_LINES = (".claude/harness/",)
 CLAUDE_IGNORE_FORMS = frozenset(
     {".claude", ".claude/", "/.claude", "/.claude/", ".claude/*"})
 HOOK_MARKER = "# agent-harness gate"
-
-
-def components_table(plugin):
-    rows = []
-    for md in sorted((plugin / "skills").glob("*/SKILL.md")):
-        fm = hl.read_frontmatter(md) or {}
-        rows.append(f"| skill | `{md.parent.name}` | {fm.get('description', '')[:90]} |")
-    for md in sorted((plugin / "agents").glob("*.md")):
-        fm = hl.read_frontmatter(md) or {}
-        rows.append(f"| agent | `{md.stem}` | {fm.get('description', '')[:90]} |")
-    return "\n".join(rows)
-
-
-def render(text, subs):
-    for key, val in subs.items():
-        text = text.replace("{{" + key + "}}", val)
-    return text
 
 
 def seed(templates, template, target, rel, subs, log):

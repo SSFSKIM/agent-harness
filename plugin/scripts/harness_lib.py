@@ -160,6 +160,64 @@ MANAGED_DOCS = ("PLANS.md", "DESIGN.md", "KNOWLEDGE_FORMAT.md",
                 "QUALITY_SCORE.md", "PRODUCT_SENSE.md",
                 "RELIABILITY.md", "SECURITY.md")
 
+# -- seed-template layout (the harness-init strict base) ----------------------
+# The single source of truth for WHICH templates seed WHERE. Both scaffold.py
+# (writes a host) and lint_base.py (checks the committed base/ artifact) read
+# this — one mapping, no second copy (ARCHITECTURE invariant 8: shared helpers
+# live in a core module, not private-imported from a sibling).
+SEEDS = (  # (template under skills/harness-init/templates/, destination rel. to host root)
+    ("agents-md.md", "AGENTS.md"),
+    ("claude-md.md", "CLAUDE.md"),
+    ("harness-json.json", ".harness.json"),  # marks a harness host; {} = all defaults
+    ("charter.md", "docs/CHARTER.md"),  # top-level intent — authored FILL seed (not a MACHINE_DOC)
+    ("agent-harness.md", "docs/design-docs/agent-harness.md"),
+    ("core-beliefs.md", "docs/design-docs/core-beliefs.md"),
+    ("design-docs-index.md", "docs/design-docs/index.md"),
+    ("product-specs-index.md", "docs/product-specs/index.md"),  # guided: phase/parent + derived roadmap
+    ("references-index.md", "docs/references/index.md"),  # guided: why references exist (llms.txt convention)
+    ("exec-plan-active-index.md", "docs/exec-plans/active/index.md"),  # lifecycle guide (not a listing)
+    ("exec-plan-completed-index.md", "docs/exec-plans/completed/index.md"),  # lifecycle guide (not a listing)
+    ("reliability.md", "docs/RELIABILITY.md"),
+    ("security.md", "docs/SECURITY.md"),
+    ("logs.md", "docs/logs.md"),  # on-demand milestone log (replaces the retired memory bootloader/progress)
+    ("tech-debt-tracker.md", "docs/exec-plans/tech-debt-tracker.md"),
+    ("harnessignore.txt", "docs/.harnessignore"),  # strict-mode migration backlog
+    # docs the machine reads (lint D10) — gate/personas break without them:
+    ("plans-md.md", "docs/PLANS.md"),
+    ("design-md.md", "docs/DESIGN.md"),
+    ("knowledge-format.md", "docs/KNOWLEDGE_FORMAT.md"),  # the format contract a host authors docs against
+    ("architecture-md.md", "ARCHITECTURE.md"),
+    ("quality-score.md", "docs/QUALITY_SCORE.md"),
+    ("product-sense.md", "docs/PRODUCT_SENSE.md"),
+    ("principles.md", "docs/PRINCIPLES.md"),  # the human's externalized decision-taste (central Director reads it at a fork)
+)
+# Categories whose docs/<cat>/index.md is seeded from the generic category-index.md
+# template (via {{CATEGORY}}); product-specs + references ship dedicated guided indexes.
+TOP_INDEXES = ("adr",)
+
+
+def render(text, subs):
+    """Substitute `{{KEY}}` markers. Only keys present in `subs` are replaced —
+    a marker with no sub (e.g. `{{PROJECT}}` when seeding the base) is preserved."""
+    for key, val in subs.items():
+        text = text.replace("{{" + key + "}}", val)
+    return text
+
+
+def components_table(plugin):
+    """The skill+agent inventory table that fills the `{{COMPONENTS}}` marker —
+    one `| type | name | description |` row per plugin component (frontmatter
+    descriptions, truncated). The base's machine-index; its drift is what
+    lint_base catches when a component is added/removed."""
+    rows = []
+    for md in sorted((plugin / "skills").glob("*/SKILL.md")):
+        fm = read_frontmatter(md) or {}
+        rows.append(f"| skill | `{md.parent.name}` | {fm.get('description', '')[:90]} |")
+    for md in sorted((plugin / "agents").glob("*.md")):
+        fm = read_frontmatter(md) or {}
+        rows.append(f"| agent | `{md.stem}` | {fm.get('description', '')[:90]} |")
+    return "\n".join(rows)
+
 
 def exempt_roots(root):
     """Host-declared strict-mode legacy doc subtrees content lints skip.
