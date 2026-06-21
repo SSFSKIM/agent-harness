@@ -71,6 +71,19 @@ class LintBaseTest(unittest.TestCase):
         (root / "base" / "SETUP.md").unlink()
         self.assertTrue(any(e.startswith("B5") for e in self._errors(root)))
 
+    def test_non_utf8_base_file_fails_not_raises(self):
+        # R22 totality: a non-UTF8 base file degrades to a coded FAIL, never a traceback.
+        root = self._tmp_root_with_base()
+        (root / "base" / "docs" / "PLANS.md").write_bytes(b"\xff\xfe not utf-8")
+        errs = self._errors(root)  # must not raise
+        self.assertTrue(any(e.startswith("B2") for e in errs))
+
+    def test_read_helper_is_total(self):
+        # R22: _read never raises — a missing path returns (None, reason).
+        text, err = lint_base._read(Path(tempfile.gettempdir()) / "definitely-not-here-xyz.md")
+        self.assertIsNone(text)
+        self.assertIsNotNone(err)
+
     def test_no_base_is_noop_exit0(self):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
