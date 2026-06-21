@@ -1,10 +1,11 @@
 {
   "worker_policy": {
-    "worker_env": ["GH_TOKEN"],
+    "worker_env": ["GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"],
     "network_allowlist": ["chatgpt.com", "api.openai.com", "github.com", "registry.npmjs.org"],
     "capabilities": []
   },
   "director": {
+    "codex_command": "node /Users/new/Documents/GitHub/codex_somersault/CC-to-SDK/app-server/dist/bin.js app-server",
     "worker": {
       "tools": "linear",
       "install_skills": true
