@@ -5,7 +5,9 @@
     "capabilities": []
   },
   "director": {
-    "codex_command": "cc-codex-appserver app-server",
+    "worker_runtimes": {
+      "claude": "cc-codex-appserver app-server"
+    },
     "worker": {
       "tools": "linear",
       "install_skills": true
