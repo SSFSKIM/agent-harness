@@ -1,6 +1,15 @@
 {
   "enabledPlugins": {
-    "linear@claude-plugins-official": true
+    "linear@claude-plugins-official": true,
+    "agent-harness@agent-harness": true,
+    "agent-harness-workspace@agent-harness": true
   },
-  "extraKnownMarketplaces": {}
+  "extraKnownMarketplaces": {
+    "agent-harness": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  }
 }
