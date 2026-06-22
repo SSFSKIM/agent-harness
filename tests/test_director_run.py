@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -171,6 +172,46 @@ class RunEndToEndTest(unittest.TestCase):
         lines2 = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines2.count("/.claude/skills/"), 1)
         self.assertEqual(lines2.count("/.claude/agents/"), 1)
+
+    def test_install_refuses_symlinked_git_exclude(self):
+        # Hardening (codex review): the PR-hygiene exclude write must not follow a symlink
+        # any more than the skill/agent copy does — a prior sandboxed worker that symlinks
+        # `.git/info/exclude` outside the workspace must not redirect the Director's write.
+        ws = self.tmp / "wsgitsym"
+        (ws / ".git" / "info").mkdir(parents=True)
+        outside = self.tmp / "outside_exclude"
+        outside.write_text("SENTINEL\n", encoding="utf-8")
+        (ws / ".git" / "info" / "exclude").symlink_to(outside)
+        with self.assertRaises(RuntimeError):
+            run.install_worker_methodology(ws)
+        # the outside file was NOT written through (still the sentinel)
+        self.assertEqual(outside.read_text(encoding="utf-8"), "SENTINEL\n")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires os.mkfifo (POSIX)")
+    def test_install_replaces_special_node_target(self):
+        # Hardening (codex review): a pre-existing special node (fifo/socket/device) at a
+        # vendored target — neither file nor dir — must be removed before copy, or the
+        # idempotent re-run breaks. A prior sandboxed worker could plant one.
+        ws = self.tmp / "wsfifo"
+        skills = ws / ".codex" / "skills"
+        skills.mkdir(parents=True)
+        os.mkfifo(skills / "linear")
+        run.install_worker_methodology(ws)  # must not raise
+        self.assertFalse((skills / "linear").is_fifo())
+        self.assertTrue((skills / "linear" / "SKILL.md").exists())
+
+    def test_install_refuses_colliding_vendored_sources(self):
+        # Hardening (codex review): two sources mapping into the SAME dest subdir must have
+        # disjoint entry names (they do today) — a future collision must fail loud, not
+        # silently clobber. Drive it with two temp sources that share a name in `skills/`.
+        srcA = self.tmp / "srcA"
+        srcB = self.tmp / "srcB"
+        (srcA / "dup").mkdir(parents=True)
+        (srcB / "dup").mkdir(parents=True)
+        with mock.patch.object(run, "_VENDORED_SOURCES",
+                               ((srcA, "skills"), (srcB, "skills"))):
+            with self.assertRaises(RuntimeError):
+                run.install_worker_methodology(self.tmp / "wscollide")
 
 
 class _ReadTimeoutClient:

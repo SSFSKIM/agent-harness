@@ -82,6 +82,18 @@ def install_worker_methodology(workspace) -> None:
     added to the clone's local `.git/info/exclude` (uncommitted, modifies no tracked file)
     and thus stay out of `git status`/`git add -A` — see `_exclude_injected_methodology`."""
     ws = Path(workspace)
+    # Sources sharing a dest subdir (workspace + methodology skills both → `skills/`) must
+    # have DISJOINT entry names, or the later copy silently clobbers the earlier. Enforce it
+    # (fail loud, naming both sources) rather than rely on disjointness holding as the
+    # plugins evolve — the two name-sets are disjoint today.
+    seen: dict[tuple[str, str], Path] = {}
+    for src, sub in _VENDORED_SOURCES:
+        for item in src.iterdir():
+            key = (sub, item.name)
+            if key in seen:
+                raise RuntimeError(f"vendored-source name collision in {sub}/: '{item.name}' "
+                                   f"from both {seen[key]} and {src}")
+            seen[key] = src
     for root in _WORKER_ROOTS:
         parents = [ws / root] + [ws / root / sub for sub in _VENDORED_SUBDIRS]
         for parent in parents:
@@ -92,7 +104,11 @@ def install_worker_methodology(workspace) -> None:
             dst.mkdir(parents=True, exist_ok=True)
             for item in src.iterdir():
                 target = dst / item.name
-                if target.is_symlink() or target.is_file():
+                # Remove any pre-existing target before copying (idempotent re-run; a prior
+                # sandboxed worker may have planted it). Unlink a symlink WITHOUT following it,
+                # and a special node (fifo/socket/device) too — only a real directory is
+                # rmtree'd; a symlink-to-dir is removed as the link itself, never followed.
+                if target.is_symlink() or (target.exists() and not target.is_dir()):
                     target.unlink()
                 elif target.is_dir():
                     shutil.rmtree(target)
@@ -108,13 +124,21 @@ def _exclude_injected_methodology(ws: Path) -> None:
     worker's PR via the clone's `.git/info/exclude` — a per-clone, uncommitted ignore that
     touches no tracked file and never appears in the worker's diff (a worker that runs
     `git add -A` would otherwise stage the methodology). No-op when the workspace has no git
-    dir (mock/offline runs)."""
+    dir (mock/offline runs). Like the skill/agent copy, this REFUSES to write through a
+    planted symlink: a prior sandboxed worker that symlinked `.git`, `.git/info`, or the
+    `exclude` file could otherwise redirect this write outside the workspace."""
     gitdir = ws / ".git"
+    if gitdir.is_symlink():
+        raise RuntimeError(f"refusing to write exclude through symlinked git dir: {gitdir}")
     if not gitdir.is_dir():
         return
     info = gitdir / "info"
+    if info.is_symlink():
+        raise RuntimeError(f"refusing to write exclude through symlink: {info}")
     info.mkdir(exist_ok=True)
     exclude = info / "exclude"
+    if exclude.is_symlink():
+        raise RuntimeError(f"refusing to write exclude through symlink: {exclude}")
     existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
     patterns = [f"/{root}/{sub}/" for root in _WORKER_ROOTS for sub in _VENDORED_SUBDIRS]
     missing = [p for p in patterns if p not in existing.splitlines()]
