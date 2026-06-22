@@ -60,7 +60,7 @@ _VENDORED_SUBDIRS = tuple(dict.fromkeys(sub for _, sub in _VENDORED_SOURCES))
 # only from its own `agents/` dir (never an arbitrary repo path — memory
 # mid-session-agents-not-dispatchable), which is why the agents MUST be copied, not path-read.
 # See memory: cc-codex-appserver-drop-in-verified.
-_SKILL_ROOTS = (".codex", ".claude")
+_WORKER_ROOTS = (".codex", ".claude")
 
 
 def install_worker_methodology(workspace) -> None:
@@ -80,9 +80,9 @@ def install_worker_methodology(workspace) -> None:
 
     PR hygiene: the injected methodology is not part of the ticket's work, so its dirs are
     added to the clone's local `.git/info/exclude` (uncommitted, modifies no tracked file)
-    and thus stay out of `git status`/`git add -A` — see `_exclude_injected_skills`."""
+    and thus stay out of `git status`/`git add -A` — see `_exclude_injected_methodology`."""
     ws = Path(workspace)
-    for root in _SKILL_ROOTS:
+    for root in _WORKER_ROOTS:
         parents = [ws / root] + [ws / root / sub for sub in _VENDORED_SUBDIRS]
         for parent in parents:
             if parent.is_symlink():
@@ -100,10 +100,10 @@ def install_worker_methodology(workspace) -> None:
                     shutil.copytree(item, target)
                 else:
                     shutil.copy2(item, target)
-    _exclude_injected_skills(ws)
+    _exclude_injected_methodology(ws)
 
 
-def _exclude_injected_skills(ws: Path) -> None:
+def _exclude_injected_methodology(ws: Path) -> None:
     """Keep the Director-injected methodology dirs (`skills/` + `agents/`) out of the
     worker's PR via the clone's `.git/info/exclude` — a per-clone, uncommitted ignore that
     touches no tracked file and never appears in the worker's diff (a worker that runs
@@ -116,7 +116,7 @@ def _exclude_injected_skills(ws: Path) -> None:
     info.mkdir(exist_ok=True)
     exclude = info / "exclude"
     existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
-    patterns = [f"/{root}/{sub}/" for root in _SKILL_ROOTS for sub in _VENDORED_SUBDIRS]
+    patterns = [f"/{root}/{sub}/" for root in _WORKER_ROOTS for sub in _VENDORED_SUBDIRS]
     missing = [p for p in patterns if p not in existing.splitlines()]
     if not missing:
         return

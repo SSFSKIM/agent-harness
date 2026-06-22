@@ -154,7 +154,7 @@ class RunEndToEndTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             run.install_worker_methodology(ws)
 
-    def test_install_skills_excludes_injected_from_worker_git(self):
+    def test_install_methodology_excludes_injected_from_worker_git(self):
         # PR hygiene: a worker that runs `git add -A` must not stage the Director-injected
         # methodology. install writes the skill roots to the clone's .git/info/exclude
         # (uncommitted, touches no tracked file). The bare-dir test above already proves

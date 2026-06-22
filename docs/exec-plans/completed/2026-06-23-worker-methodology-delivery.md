@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-23
 owner: Director (master, dogfooded inline)
 type: exec-plan
@@ -150,8 +150,10 @@ the agents dirs exactly as they do for skills.
   roots; agents exclude patterns + idempotency; all call sites renamed. 32 tests green.
 - [x] (2026-06-23) M4 — DIRECTOR.md "Installed methodology" bullet rewritten (both plugins +
   agents + bare-name dispatch + deferral); last_verified → 2026-06-23. Full gate GREEN.
-- [ ] M5 — gate GREEN (twice); QA review pass pending (spec-compliance → code-quality →
-  arch + reliability), then complete + git mv.
+- [x] (2026-06-23) M5 — gate GREEN; QA review pass complete (spec-compliance, arch,
+  reliability all SATISFIED; code-quality SATISFIED-on-merits, its only blocker the
+  forward-link D5 resolved by this completion's `git mv`). P2s fixed inline (see Feedback);
+  deferral + 2 proposed rules tracked. Completed + `git mv` to completed/.
 
 ## Surprises & discoveries
 - The worker protocol was already complete; the dispatch failure is a *delivery* gap
@@ -167,5 +169,37 @@ the agents dirs exactly as they do for skills.
   self-hosting workspace; rewriting belongs to the deferred production-host-repo work.
 
 ## Feedback (from completion gate)
+All four required reviews returned SATISFIED (review-spec-compliance, review-arch,
+review-reliability; review-code-quality SATISFIED on the merits of the diff — its sole
+blocker was a forward-reference D5 (the tech-debt row links the plan into `completed/`
+before this completion's `git mv`), which resolves on the move).
+- **P1: none** on the code.
+- **P2 fixed inline** (all the "rename = grep the surviving bodies, not just the links"
+  class — an incomplete rename, not deferrable debt): `director/config.py:84` DEFAULTS
+  comment + `director/orchestrator.py:1183` `--install-skills` help still named only
+  `.codex/skills`/`.claude/skills` (omitting the now-delivered `agents/`); `_SKILL_ROOTS`
+  → `_WORKER_ROOTS`; `_exclude_injected_skills` → `_exclude_injected_methodology` (+ its
+  test method) since it now excludes both `skills/` and `agents/`.
+- **Tracked (tech-debt-tracker.md, fix-forward):** (1) the production-host docs-vendoring
+  deferral — methodology skills/agents reference agent-harness repo docs by path, so they
+  self-contain only on an agent-harness clone (the dogfood), not an arbitrary host repo;
+  (2) proposed DESIGN.md rule — document both `subagent_type` forms at a dual-scope persona
+  dispatch site (already satisfied by the SKILL.md edit); (3) proposed RELIABILITY rule —
+  the PR-hygiene exclude should cover the worktree git layout (`.git`-as-file), not only a
+  `.git/` dir (pre-existing, host-config-dependent, already tracked).
 
 ## Outcomes & retrospective
+**Delivered:** `install_worker_methodology` now vendors BOTH plugins (workspace skills +
+the 8 methodology skills + the 6 review/gardener agents) into each worker's `.codex/` and
+`.claude/`. A worker — not just the Director — can now run the whole execplan completion
+gate, because its review personas are registered in a runtime `agents/` dir (the load-
+bearing fix). Verified: a temp-workspace install yields 14 skills + 6 agents per root, the
+4-pattern PR-hygiene exclude, and idempotency; the full gate is GREEN; 32 run-tests pass.
+**Key discovery:** the worker protocol was already complete — the failure was a pure
+*delivery* gap (agents not dispatchable from a repo path), the class in
+[[mid-session-agents-not-dispatchable]]. **Design:** vendoring (B) over plugin-install (A)
+kept adoption config-only and any-host-repo robust; the bare-name-vs-namespaced dispatch
+seam is documented in the execplan skill. **Retro:** the only review findings were
+stale-sibling-surfaces of my own rename — the very rule I'd authored — a good argument for
+a mechanical "rename sweep" check; the production-host self-containment is the real next
+step, now tracked. The Director stays a pure orchestrator; the worker now owns the methodology.
