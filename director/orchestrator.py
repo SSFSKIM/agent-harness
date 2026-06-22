@@ -1182,7 +1182,7 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--install-skills", action="store_true", default=None,
                     help="install both plugins — workspace skills + methodology skills/agents "
                          "(both .codex/ and .claude/) — into each worker workspace "
-                         "(default: director.worker.install_skills, else off)")
+                         "(default: director.worker.install_skills, else on)")
     ap.add_argument("--once", action="store_true",
                     help="single pass (no re-poll); default is the DAG-aware continuous loop")
     ap.add_argument("--max-passes", type=int, default=None,

@@ -122,11 +122,13 @@ class LoadConfigTest(unittest.TestCase):
             config.load_director_config(root=self.root)
 
     # -- worker capability knobs (tools / install_skills) -------------------
-    def test_worker_tools_default_off(self):
-        # global default leaves the offline behavior unchanged (no tool, no skills)
+    def test_worker_capability_defaults(self):
+        # `tools` defaults off (Linear access is a board-specific opt-in), but
+        # `install_skills` defaults ON — the worker runs the full methodology by default
+        # (it does all the real work; the Director only orchestrates).
         d = config.defaults()
         self.assertEqual(d.worker_tools, "none")
-        self.assertFalse(d.worker_install_skills)
+        self.assertTrue(d.worker_install_skills)
 
     def test_worker_tools_opt_in(self):
         _write(self.root, {"director": {"worker": {"tools": "linear",
@@ -368,6 +370,19 @@ class WiringTest(unittest.TestCase):
         kw = drained.call_args.kwargs
         self.assertIsNotNone(kw["tools"])
         self.assertTrue(kw["install_skills"])
+
+    def test_real_run_defaults_install_skills_on(self):
+        # the production path installs the methodology by DEFAULT — no worker block, no
+        # flag, a real (non-mock) run still threads install_skills=True to the dispatcher.
+        from director import orchestrator
+        _write(self.root, {"director": {"team": "T"}})  # no worker block at all
+        board = orchestrator.MockBoard.demo()
+        with _chdir(self.root), mock.patch(
+                "director.orchestrator.run_until_drained",
+                return_value={"summaries": [], "passes": 1,
+                              "stopped_reason": "drained", "stuck": []}) as drained:
+            orchestrator.main([], board=board)  # team from config, no flags
+        self.assertTrue(drained.call_args.kwargs["install_skills"])
 
     def test_reconcile_interval_resolves(self):
         from director import orchestrator

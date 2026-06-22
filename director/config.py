@@ -84,12 +84,13 @@ DEFAULTS: dict = {
     # tool) and whether the worker methodology — both plugins' skills + the review/gardener
     # agents — is installed into its workspace (into both .codex/ and .claude/, skills/ AND
     # agents/ — whichever runtime the host wired reads one).
-    # Default OFF so the global/offline behavior is unchanged — a Linear-backed host
-    # opts in via `.harness.json` (`director.worker.tools="linear"`, `install_skills=
-    # true`). The offline `--mock` niche ignores these regardless (orchestrator.main).
+    # `install_skills` defaults ON: the worker does ALL the real work (research, spec, plan,
+    # build, QA), so it needs the full methodology by default — the Director only orchestrates.
+    # `tools` stays OFF (Linear access is a separate, board-specific opt-in). The offline
+    # `--mock` niche forces install_skills off regardless (orchestrator.main).
     "worker": {"approval_policy": "on-request", "sandbox": "workspace-write",
                "auto_review": True, "network": True,
-               "tools": "none", "install_skills": False},
+               "tools": "none", "install_skills": True},
     # paths are OPTIONAL overrides: None = "use the module's built-in default"
     # (run.DEFAULT_WORKSPACE_ROOT for workspaces; queue/status `_root(base=None)`).
     "paths": {"workspace_root": None, "queue_dir": None, "status_dir": None},

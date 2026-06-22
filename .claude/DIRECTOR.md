@@ -567,8 +567,9 @@ the sandbox *only* because it is the lone key in `worker_policy.worker_env`), an
   no config, distinct from the resolved-deployment default; `director/run.py` documents it.)
 - **Per-host override → `.harness.json` `director.worker`** — a host overrides to
   *tighten* the posture in the fail-safe direction (e.g. `"network": false`,
-  `"approval_policy": "untrusted"`) or to opt into a board capability (e.g.
-  `"tools": "linear"`, `"install_skills": true`, both off by default). §11 covers
+  `"approval_policy": "untrusted"`) or to adjust a worker capability — `"tools": "linear"`
+  (Linear access, **off** by default) and `"install_skills"` (the full methodology, **on**
+  by default — the worker does all the work; turn off with `false`). §11 covers
   precedence (a CLI flag > the block > the built-in default); `config.py` validates the
   block and fails loud on a malformed knob before any worker spawns.
 - **Installed methodology → BOTH plugins, copied into each worker's `.codex/` and `.claude/`
