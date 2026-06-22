@@ -69,8 +69,12 @@ Method and template live in `docs/PLANS.md` — read it first.
    (substitute the actual SHA from the plan's frontmatter) to see it. Read
    your grounding doc first. Output P1/P2 findings with file:line and a
    Verdict."
-   (Task tool subagent_type is plugin-namespaced: `agent-harness:review-spec-compliance`,
-   `agent-harness:review-code-quality`, `agent-harness:review-arch`, etc.)
+   (The Task tool `subagent_type` depends on how the methodology reached your runtime:
+   `agent-harness:review-spec-compliance` / `…:review-code-quality` / `…:review-arch` …
+   when it is installed as a PLUGIN (the Director), or the bare `review-spec-compliance` /
+   `review-code-quality` / `review-arch` … when the agents are VENDORED into the workspace's
+   `.claude/agents/` or `.codex/agents/` (a worker — see
+   `director/run.py:install_worker_methodology`). Use whichever your runtime exposes.)
 6. Process findings (steps 4 + 5): P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
    `docs/exec-plans/tech-debt-tracker.md`.

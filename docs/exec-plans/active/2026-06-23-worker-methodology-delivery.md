@@ -137,12 +137,21 @@ the agents dirs exactly as they do for skills.
   not protocol), plugin/{skills,agents} inventory, install tests, DIRECTOR.md bullet,
   execplan dispatch note. Confirmed the 6 review agents loaded as dispatchable plugin
   agents this session.
-- [x] (2026-06-23) Plan authored + creation-time self-review.
-- [ ] M1 delivery — (pending)
-- [ ] M2 dispatch note — (pending)
-- [ ] M3 tests — (pending)
-- [ ] M4 docs — (pending)
-- [ ] M5 gate — (pending)
+- [x] (2026-06-23) Plan authored + creation-time self-review. Gate GREEN; plan committed (9b5825e).
+- [x] (2026-06-23) M1 — run.py: `_VENDORED_SOURCES` data-drives the 3-source install
+  (workspace skills + methodology skills → `skills/`; agents → `agents/`) into both roots;
+  symlink-refusal + exclude generalized to both subdirs; `_VENDORED_SUBDIRS` DERIVED from
+  the sources (no drift); renamed `install_workspace_skills` → `install_worker_methodology`
+  (caller + help + docstrings updated). Behavioral check: temp-workspace install → 14 skills
+  + 6 agents per root, 4 exclude patterns, idempotent.
+- [x] (2026-06-23) M2 — execplan SKILL.md dispatch note now documents both `subagent_type`
+  forms (plugin-namespaced for the Director, bare for a vendored worker).
+- [x] (2026-06-23) M3 — test_director_run: methodology skills + agents asserted in both
+  roots; agents exclude patterns + idempotency; all call sites renamed. 32 tests green.
+- [x] (2026-06-23) M4 — DIRECTOR.md "Installed methodology" bullet rewritten (both plugins +
+  agents + bare-name dispatch + deferral); last_verified → 2026-06-23. Full gate GREEN.
+- [ ] M5 — gate GREEN (twice); QA review pass pending (spec-compliance → code-quality →
+  arch + reliability), then complete + git mv.
 
 ## Surprises & discoveries
 - The worker protocol was already complete; the dispatch failure is a *delivery* gap

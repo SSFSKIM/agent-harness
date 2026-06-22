@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-20
+last_verified: 2026-06-23
 owner: harness
 type: methodology
 tags: [director, orchestration, operating-manual]
@@ -571,10 +571,25 @@ the sandbox *only* because it is the lone key in `worker_policy.worker_env`), an
   `"tools": "linear"`, `"install_skills": true`, both off by default). §11 covers
   precedence (a CLI flag > the block > the built-in default); `config.py` validates the
   block and fails loud on a malformed knob before any worker spawns.
-- **Installed-skill set → the `agent-harness-workspace` plugin (`plugin-workspace/skills/`)** —
-  the vendored Codex skills (`commit` / `push` / `pull` / `land` / `linear` / `debug`, from
-  Symphony, Apache-2.0 — see the plugin's `NOTICE`) copied into each worker's `.codex/skills/`
-  and `.claude/skills/` by `director/run.py:install_workspace_skills` when `install_skills` is on. The standalone
-  `qa` skill was **retired**: an impl worker self-QAs *inline* (the SELF-QA discipline in
-  `director/taxonomy.py:_IMPL_TEMPLATE`) and through the execplan completion gate it runs
-  (spec-compliance + code-quality + behavioral) — not a separate skill.
+- **Installed methodology → BOTH plugins, copied into each worker's `.codex/` and `.claude/`
+  by `director/run.py:install_worker_methodology` when `install_skills` is on** — so a
+  WORKER, not just the Director, runs the whole methodology (the Director is a human proxy:
+  it decides *what*; the worker does the research/spec/plan/build/QA). Three sources land:
+  - the `agent-harness-workspace` plugin (`plugin-workspace/skills/`) — the vendored Codex
+    skills (`commit` / `push` / `pull` / `land` / `linear` / `debug`, from Symphony,
+    Apache-2.0 — see the plugin's `NOTICE`) → `skills/`;
+  - the `agent-harness` plugin's 8 methodology skills (`plugin/skills/`: `execplan`,
+    `product-design`, `docs-nav`, …) the worker INVOKES → `skills/` (the two name-sets are
+    disjoint, so both share one `skills/` dir);
+  - the `agent-harness` plugin's 6 review/gardener AGENTS (`plugin/agents/`) → `agents/`.
+    These are the load-bearing add: a runtime dispatches agents only from its own `agents/`
+    dir, never from a repo path, so without this copy the worker's execplan completion gate
+    has no review personas to dispatch. Vendored project-level, they dispatch by BARE name
+    (`review-arch`), not the Director's plugin-namespaced `agent-harness:review-arch` — the
+    `execplan` skill documents both forms. (Self-hosting reads the methodology by repo path
+    today; making it work for a non-clone host repo — vendoring the grounding docs too — is
+    deferred.)
+
+  The standalone `qa` skill was **retired**: an impl worker self-QAs *inline* (the SELF-QA
+  discipline in `director/taxonomy.py:_IMPL_TEMPLATE`) and through the execplan completion
+  gate it runs (spec-compliance + code-quality + behavioral) — not a separate skill.
