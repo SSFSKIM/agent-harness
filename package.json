@@ -5,7 +5,8 @@
   "bin": { "cc-codex-appserver": "dist/bin.js" },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/bin.js",
+    "prepare": "npm run build",
     "test:unit": "vitest run test/unit",
     "test": "vitest run"
   },
