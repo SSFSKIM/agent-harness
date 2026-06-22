@@ -17,6 +17,17 @@ def _client(scenario, **kw):
 
 
 class AppServerClientTest(unittest.TestCase):
+    def test_cwd_is_absolutized(self):
+        # A RELATIVE cwd is meaningless across the stdio boundary: it is both the worker
+        # subprocess working dir AND sent as thread/start params.cwd, which a Claude worker
+        # re-resolves against its OWN cwd (it's launched in that dir) -> a relative path
+        # double-resolves to a nonexistent dir and the SDK spawn dies with ENOENT. The
+        # client must store/send an ABSOLUTE cwd. (Host default workspace root is relative.)
+        c = appsrv.AppServerClient([sys.executable, MOCK, "plain"],
+                                   cwd=".claude/harness/director-workspaces/T-1")
+        self.assertTrue(Path(c.cwd).is_absolute(), f"cwd must be absolute, got {c.cwd!r}")
+        self.assertEqual(Path(c.cwd), (Path.cwd() / ".claude/harness/director-workspaces/T-1"))
+
     def test_plain_turn_completes(self):
         events = []
         with _client("plain", on_event=lambda ev: events.append(ev["method"])) as c:

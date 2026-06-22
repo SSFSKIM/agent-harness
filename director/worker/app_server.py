@@ -202,7 +202,13 @@ class AppServerClient:
                  env: dict | None = None,
                  cancel_event=None):
         self.command = command
-        self.cwd = str(cwd)
+        # ABSOLUTE cwd is load-bearing across the stdio boundary: `cwd` is BOTH the
+        # subprocess working dir AND sent verbatim as `thread/start` params.cwd. The host
+        # default workspace root is relative (run.DEFAULT_WORKSPACE_ROOT); a Claude worker
+        # is already launched IN this dir, then re-resolves params.cwd against its OWN cwd —
+        # a relative path double-resolves to a nonexistent dir and the SDK spawn dies with
+        # `ENOENT` (mislabeled "libc mismatch"). A cross-process path must be absolute.
+        self.cwd = os.path.abspath(str(cwd))
         # The worker subprocess environment. `None` inherits the parent env (legacy /
         # direct callers); the spawn seam (run._prepare) passes a deny-by-default env
         # so a worker never inherits host secrets (director/worker/policy.py, T11).
