@@ -271,6 +271,55 @@ class LoadConfigTest(unittest.TestCase):
         self.assertIn("posture", out)
         self.assertEqual(out["posture"]["approval_policy"], "on-request")
 
+    # -- worker-runtime toggle (default codex) ------------------------------
+    def test_worker_runtime_defaults_to_codex(self):
+        cfg = config.defaults()
+        self.assertEqual(cfg.worker_runtime, "codex")
+        self.assertEqual(cfg.worker_runtimes, {"codex": "codex app-server"})
+
+    def test_codex_runtime_tracks_codex_command(self):
+        # the built-in "codex" runtime IS codex_command (back-compat: a host that only
+        # sets codex_command still resolves the default "codex" runtime to it).
+        cfg = config._build({"codex_command": "codex --foo app-server"})
+        self.assertEqual(cfg.worker_runtimes["codex"], "codex --foo app-server")
+
+    def test_named_runtime_added_default_stays_codex(self):
+        _write(self.root, {"director": {"worker_runtimes": {
+            "claude": "cc-codex-appserver app-server"}}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.worker_runtime, "codex")                        # default selector
+        self.assertEqual(cfg.worker_runtimes["codex"], "codex app-server")   # still present
+        self.assertEqual(cfg.worker_runtimes["claude"], "cc-codex-appserver app-server")
+
+    def test_worker_runtime_selector_can_default_to_claude(self):
+        _write(self.root, {"director": {
+            "worker_runtime": "claude",
+            "worker_runtimes": {"claude": "cc-codex-appserver app-server"}}})
+        self.assertEqual(config.load_director_config(root=self.root).worker_runtime, "claude")
+
+    def test_unknown_worker_runtime_selector_raises(self):
+        _write(self.root, {"director": {"worker_runtime": "claude"}})  # claude undefined
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_bad_worker_runtimes_type_raises(self):
+        _write(self.root, {"director": {"worker_runtimes": ["x"]}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_empty_runtime_command_raises(self):
+        _write(self.root, {"director": {"worker_runtimes": {"claude": "  "}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_resolve_worker_command_default_and_toggle(self):
+        cfg = config._build({"worker_runtimes": {"claude": "cc-codex-appserver app-server"}})
+        self.assertEqual(config.resolve_worker_command(cfg, None), "codex app-server")
+        self.assertEqual(config.resolve_worker_command(cfg, "claude"),
+                         "cc-codex-appserver app-server")
+        with self.assertRaises(ValueError):
+            config.resolve_worker_command(cfg, "gemini")
+
 
 class WiringTest(unittest.TestCase):
     """orchestrator.resolve_settings precedence (CLI > config > default) and the
@@ -289,7 +338,7 @@ class WiringTest(unittest.TestCase):
                     concurrency=None, max_turns=None, max_passes=None, max_dispatched=None,
                     read_timeout=None, turn_review_timeout=None, reconcile_interval=None,
                     poll_interval=None, backoff_base=None, backoff_cap=None, codex=None,
-                    workspace_root=None, queue_dir=None, status_dir=None)
+                    worker=None, workspace_root=None, queue_dir=None, status_dir=None)
         base.update(over)
         return argparse.Namespace(**base)
 
@@ -329,6 +378,21 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s["concurrency"], 2)          # CLI wins
         self.assertEqual(s["team"], "T-cli")
         self.assertEqual(s["done_types"], ("completed", "canceled"))
+
+    def test_worker_runtime_toggle_via_cli(self):
+        from director import orchestrator
+        cfg = config._build({"worker_runtimes": {"claude": "cc-codex-appserver app-server"}})
+        self.assertEqual(orchestrator.resolve_settings(self._args(), cfg)["codex_command"],
+                         "codex app-server")                                   # default = codex
+        self.assertEqual(orchestrator.resolve_settings(self._args(worker="claude"), cfg)
+                         ["codex_command"], "cc-codex-appserver app-server")   # --worker flips
+
+    def test_raw_codex_override_wins_over_worker(self):
+        from director import orchestrator
+        cfg = config._build({"worker_runtimes": {"claude": "cc-codex-appserver app-server"}})
+        s = orchestrator.resolve_settings(
+            self._args(codex="my app-server", worker="claude"), cfg)
+        self.assertEqual(s["codex_command"], "my app-server")                  # raw --codex wins
 
     def test_worker_tools_resolve(self):
         from director import orchestrator

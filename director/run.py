@@ -520,7 +520,10 @@ def main(argv=None) -> int:
     ap.add_argument("--mock-scenario", default="plain",
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
-    ap.add_argument("--codex", default=None, help="real worker command")
+    ap.add_argument("--codex", default=None, help="real worker command (raw override)")
+    ap.add_argument("--worker", default=None,
+                    help="worker runtime to dispatch: a key in director.worker_runtimes "
+                         "(default: director.worker_runtime, built-in 'codex')")
     ap.add_argument("--queue-dir", default=None, help="Director queue dir override")
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
                     help="advertise worker tools (linear = linear_graphql)")
@@ -538,7 +541,8 @@ def main(argv=None) -> int:
     # Resolve posture / codex / bounds CLI > config > default (declarative-config
     # slice). A malformed .harness.json director block raises here, before any spawn.
     cfg = config.load_director_config()
-    codex_command = args.codex if args.codex is not None else cfg.codex_command
+    codex_command = (args.codex if args.codex is not None
+                     else config.resolve_worker_command(cfg, args.worker))
     max_turns = args.max_turns if args.max_turns is not None else cfg.max_turns
     queue_dir = args.queue_dir if args.queue_dir is not None else cfg.paths.queue_dir
 

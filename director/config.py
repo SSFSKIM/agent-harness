@@ -79,6 +79,15 @@ DEFAULTS: dict = {
     "backoff_base_s": 10.0,
     "backoff_cap_s": 300.0,
     "codex_command": "codex app-server",
+    # Worker-runtime toggle (default-codex). `worker_runtimes` is a {name: command}
+    # map of selectable worker binaries; `worker_runtime` is the default selector and
+    # `--worker NAME` overrides it per run. The "codex" runtime is always present and
+    # tracks `codex_command` (back-compat: a host that only sets codex_command still
+    # resolves the default "codex" runtime). A host adds e.g. "claude" here. The map
+    # below is the host-declared EXTRA runtimes; "codex" is injected from codex_command
+    # in _build, so DEFAULTS-only resolves to {"codex": <codex_command>}.
+    "worker_runtime": "codex",
+    "worker_runtimes": {},
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
     # tool) and whether the worker methodology — both plugins' skills + the review/gardener
@@ -164,6 +173,8 @@ class DirectorConfig:
     backoff_base_s: float
     backoff_cap_s: float
     codex_command: str
+    worker_runtime: str
+    worker_runtimes: dict   # {name: command}; always contains "codex" (= codex_command)
     posture: Posture
     worker_tools: str
     worker_install_skills: bool
@@ -301,6 +312,24 @@ def _build(raw: dict) -> DirectorConfig:
     if not isinstance(codex_command, str) or not codex_command.strip():
         raise ValueError(f"director.codex_command must be a non-empty string, got {codex_command!r}")
 
+    # Worker-runtime toggle: "codex" is always present and tracks codex_command; the host
+    # block adds named alternates (e.g. "claude"). worker_runtime selects the default.
+    wr_raw = raw.get("worker_runtimes", DEFAULTS["worker_runtimes"])
+    if not isinstance(wr_raw, dict):
+        raise ValueError(f"director.worker_runtimes must be an object, got {wr_raw!r}")
+    worker_runtimes = {"codex": codex_command}
+    for name, cmd in wr_raw.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"director.worker_runtimes has a non-string key {name!r}")
+        if not isinstance(cmd, str) or not cmd.strip():
+            raise ValueError(f"director.worker_runtimes[{name!r}] must be a non-empty "
+                             f"string, got {cmd!r}")
+        worker_runtimes[name] = cmd
+    worker_runtime = raw.get("worker_runtime", DEFAULTS["worker_runtime"])
+    if not isinstance(worker_runtime, str) or worker_runtime not in worker_runtimes:
+        raise ValueError(f"director.worker_runtime must name a configured runtime "
+                         f"{sorted(worker_runtimes)}, got {worker_runtime!r}")
+
     drl = raw.get("dispatch_requires_label", DEFAULTS["dispatch_requires_label"])
     if not isinstance(drl, bool):
         raise ValueError(f"director.dispatch_requires_label must be a boolean, got {drl!r}")
@@ -325,9 +354,25 @@ def _build(raw: dict) -> DirectorConfig:
                                         DEFAULTS["backoff_base_s"]), "backoff_base_s"),
         backoff_cap_s=_pos_num(raw.get("backoff_cap_s",
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
-        codex_command=codex_command, posture=posture,
+        codex_command=codex_command,
+        worker_runtime=worker_runtime, worker_runtimes=worker_runtimes,
+        posture=posture,
         worker_tools=w["tools"], worker_install_skills=worker_install_skills,
         paths=paths, merger=merger, workspace=workspace)
+
+
+def resolve_worker_command(cfg: DirectorConfig, worker: str | None) -> str:
+    """The effective worker command for a run. `worker` (the `--worker` flag) selects a
+    named runtime from `cfg.worker_runtimes`; None falls back to `cfg.worker_runtime`
+    (default "codex"). Fail-loud on an unknown name (spec R7) — a typo'd runtime must
+    not silently dispatch the default worker. The raw `--codex CMD` override bypasses
+    this entirely (handled by the caller)."""
+    name = worker or cfg.worker_runtime
+    try:
+        return cfg.worker_runtimes[name]
+    except KeyError:
+        raise ValueError(f"unknown worker runtime {name!r}; configured: "
+                         f"{sorted(cfg.worker_runtimes)}") from None
 
 
 def defaults() -> DirectorConfig:

@@ -55,6 +55,20 @@ class RunEndToEndTest(unittest.TestCase):
                        "--mock-scenario", "report", "--queue-dir", str(self.qbase)])
         self.assertEqual(rc, 0)
 
+    def test_main_accepts_worker_codex(self):
+        # --worker codex is wired and resolves the default runtime; --mock still runs.
+        rc = run.main(["--ticket", str(self._ticket_path()), "--mock",
+                       "--mock-scenario", "report", "--queue-dir", str(self.qbase),
+                       "--worker", "codex"])
+        self.assertEqual(rc, 0)
+
+    def test_main_unknown_worker_runtime_fails_loud(self):
+        # a typo'd --worker must fail loud BEFORE dispatch, not silently run the default.
+        with self.assertRaises(ValueError):
+            run.main(["--ticket", str(self._ticket_path()), "--mock",
+                      "--mock-scenario", "report", "--queue-dir", str(self.qbase),
+                      "--worker", "nope"])
+
     def test_load_ticket_requires_id_and_prompt(self):
         bad = self.tmp / "bad.json"
         bad.write_text(json.dumps({"id": "X"}))  # no prompt

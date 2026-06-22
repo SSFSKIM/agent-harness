@@ -1121,7 +1121,8 @@ def resolve_settings(args, cfg) -> dict:
         "poll_interval_s": _pick(args.poll_interval, cfg.poll_interval_s),
         "backoff_base_s": _pick(args.backoff_base, cfg.backoff_base_s),
         "backoff_cap_s": _pick(args.backoff_cap, cfg.backoff_cap_s),
-        "codex_command": _pick(args.codex, cfg.codex_command),
+        "codex_command": (args.codex if args.codex is not None
+                          else config.resolve_worker_command(cfg, getattr(args, "worker", None))),
         "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
         "status_dir": _pick(args.status_dir, cfg.paths.status_dir),
@@ -1173,7 +1174,10 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--mock-scenario", default="plain",
                     choices=["plain", "approval", "approval_done", "report",
                              "tool", "turn_failed"])
-    ap.add_argument("--codex", default=None, help="real worker command")
+    ap.add_argument("--codex", default=None, help="real worker command (raw override)")
+    ap.add_argument("--worker", default=None,
+                    help="worker runtime to dispatch: a key in director.worker_runtimes "
+                         "(default: director.worker_runtime, built-in 'codex')")
     ap.add_argument("--queue-dir", default=None)
     ap.add_argument("--workspace-root", default=None)
     ap.add_argument("--tools", choices=["none", "linear"], default=None,
