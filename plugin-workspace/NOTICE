@@ -1,0 +1,20 @@
+agent-harness-workspace
+Copyright 2026 SSFSKIM
+
+This plugin packages worker skills that are VENDORED VERBATIM from
+OpenAI Symphony (https://github.com/openai/symphony), `.codex/skills/`,
+which is licensed under the Apache License, Version 2.0.
+
+  Portions Copyright OpenAI, the Symphony authors.
+
+The skills `commit`, `push`, `pull`, `land` (incl. `land_watch.py`),
+`linear`, and `debug` under `skills/` are unmodified copies of the
+corresponding upstream skills. See the upstream repository's `LICENSE`
+and `NOTICE` for the authoritative copyright and attribution.
+
+This bundle is a template set installed into a per-ticket worker
+workspace (by `director/run.py:install_workspace_skills`) so the worker
+knows how to drive git/PR flows and the client-advertised
+`linear_graphql` tool. It is not part of the MIT-licensed agent-harness
+machine plugin; the Apache-2.0 terms in this directory's `LICENSE`
+govern these files.

@@ -31,7 +31,10 @@ DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
 # drive bound (R6): a worker that never signals terminal stops here, reported stuck.
 DEFAULT_MAX_TURNS = config.DEFAULTS["max_turns"]
 _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
-_SKILLS_SRC = Path(__file__).resolve().parent / "workspace_skills"
+# The worker skills are packaged as the standalone `agent-harness-workspace` plugin
+# (Apache-2.0, vendored from openai/symphony). `skills/` holds ONLY the skill dirs;
+# the plugin's LICENSE/NOTICE/manifest live at the plugin root, outside `skills/`.
+_SKILLS_SRC = Path(__file__).resolve().parent.parent / "plugin-workspace" / "skills"
 
 
 # The two worker runtimes read the SAME vendored methodology from DIFFERENT paths: the
@@ -64,8 +67,6 @@ def install_workspace_skills(workspace) -> None:
         dst = ws / root / "skills"
         dst.mkdir(parents=True, exist_ok=True)
         for item in _SKILLS_SRC.iterdir():
-            if item.name == "ATTRIBUTION.md":
-                continue
             target = dst / item.name
             if target.is_symlink() or target.is_file():
                 target.unlink()
