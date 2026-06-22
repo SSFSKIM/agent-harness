@@ -949,8 +949,8 @@ class LandSkillPreparesTest(unittest.TestCase):
     """R2: the land skill prepares (does not merge) and carries the preservation check."""
 
     def test_land_skill_no_longer_self_merges_and_checks_preservation(self):
-        src = (Path(merger.__file__).resolve().parent / "workspace_skills" / "land"
-               / "SKILL.md").read_text()
+        src = (Path(merger.__file__).resolve().parent.parent / "plugin-workspace"
+               / "skills" / "land" / "SKILL.md").read_text()
         low = src.lower()
         self.assertNotIn("gh pr merge --squash --subject", src)  # the self-merge command is gone
         self.assertIn("do not", low)                             # do NOT merge yourself

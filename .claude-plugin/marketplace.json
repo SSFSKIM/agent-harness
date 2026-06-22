@@ -10,6 +10,11 @@
       "name": "agent-harness",
       "source": "./plugin",
       "description": "ExecPlans, taste lints, review-persona gates, docs-as-memory, and the harness-init porting toolchain (skills: execplan, harness-lint, docs-tree, docs-nav, product-design, harness-init, architecture-setup, garden) for minimum human-in-loop development."
+    },
+    {
+      "name": "agent-harness-workspace",
+      "source": "./plugin-workspace",
+      "description": "Vendored OpenAI Symphony worker skills (Apache-2.0): git/PR/Linear execution flows (skills: commit, push, pull, land, debug, linear) installed into a Director worker's workspace and shared by the Codex and Claude worker runtimes."
     }
   ]
 }

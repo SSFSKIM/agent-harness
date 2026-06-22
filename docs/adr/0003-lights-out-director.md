@@ -83,7 +83,7 @@ agent) present?* × *is the human present?* Today's flag is the diagonal:
      judgment valve and removing it would *increase* Director load.
    - **orchestrator** — owns lifecycle *state* writes (claim/reconcile/terminal).
      Unchanged. Slice 2c removes only the worker's *state-write hole* (`issueUpdate`
-     out of `DEFAULT_MUTATION_ALLOWLIST` + the `workspace_skills/linear` doc that
+     out of `DEFAULT_MUTATION_ALLOWLIST` + the `plugin-workspace/skills/linear` doc that
      wrongly tells the worker to transition state) — **zero Director burden added**;
      it just stops a second writer racing the orchestrator.
    - **Director** — *adjudicates the worker's proposal* (one decision per turn-end);

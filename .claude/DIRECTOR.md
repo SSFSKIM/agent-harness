@@ -571,10 +571,10 @@ the sandbox *only* because it is the lone key in `worker_policy.worker_env`), an
   `"tools": "linear"`, `"install_skills": true`, both off by default). §11 covers
   precedence (a CLI flag > the block > the built-in default); `config.py` validates the
   block and fails loud on a malformed knob before any worker spawns.
-- **Installed-skill set → `director/workspace_skills/`** — the vendored Codex skills
-  (`commit` / `push` / `pull` / `land` / `linear` / `debug`, from Symphony — see
-  `ATTRIBUTION.md`) copied into each worker's `.codex/skills/` by
-  `director/run.py:install_workspace_skills` when `install_skills` is on. The standalone
+- **Installed-skill set → the `agent-harness-workspace` plugin (`plugin-workspace/skills/`)** —
+  the vendored Codex skills (`commit` / `push` / `pull` / `land` / `linear` / `debug`, from
+  Symphony, Apache-2.0 — see the plugin's `NOTICE`) copied into each worker's `.codex/skills/`
+  and `.claude/skills/` by `director/run.py:install_workspace_skills` when `install_skills` is on. The standalone
   `qa` skill was **retired**: an impl worker self-QAs *inline* (the SELF-QA discipline in
   `director/taxonomy.py:_IMPL_TEMPLATE`) and through the execplan completion gate it runs
   (spec-compliance + code-quality + behavioral) — not a separate skill.

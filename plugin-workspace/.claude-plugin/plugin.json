@@ -1,0 +1,5 @@
+{
+  "name": "agent-harness-workspace",
+  "version": "0.1.0",
+  "description": "Vendored OpenAI Symphony worker skills (Apache-2.0): git/PR/Linear execution flows — commit, push, pull, land, debug, linear — installed into a Director worker's workspace and shared by the Codex and Claude worker runtimes."
+}
