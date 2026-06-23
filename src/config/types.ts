@@ -39,7 +39,17 @@ export interface HarnessConfig {
   webFetchDomains?: { allow?: string[]; deny?: string[] };
   // sandbox — `network` mirrors the SDK SandboxNetworkSettings object
   // (allowedDomains/allowLocalBinding/allowUnixSockets/…), NOT a boolean.
-  sandbox?: boolean | { enabled?: boolean; network?: Record<string, unknown>; autoAllowBashIfSandboxed?: boolean };
+  sandbox?: boolean | {
+    enabled?: boolean;
+    network?: Record<string, unknown>;          // SDK SandboxNetworkSettings
+    filesystem?: Record<string, unknown>;        // SDK SandboxFilesystemSettings (allowWrite/denyRead/…)
+    autoAllowBashIfSandboxed?: boolean;
+    allowUnsandboxedCommands?: boolean;
+    failIfUnavailable?: boolean;
+    excludedCommands?: string[];                  // run these OUTSIDE the sandbox (e.g. gh, docker)
+    enableWeakerNestedSandbox?: boolean;
+    enableWeakerNetworkIsolation?: boolean;
+  };
   // provider
   provider?: "anthropic" | "bedrock" | "vertex" | "foundry";
   baseUrl?: string;

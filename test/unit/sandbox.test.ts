@@ -16,4 +16,22 @@ describe("resolveSandbox", () => {
     expect(resolveSandbox({ sandbox: { network: { allowLocalBinding: true } } }))
       .toEqual({ enabled: true, network: { allowLocalBinding: true } });
   });
+  it("forwards filesystem, excludedCommands, failIfUnavailable, allowUnsandboxedCommands", () => {
+    expect(resolveSandbox({ sandbox: {
+      filesystem: { denyRead: ["~/.ssh"] },
+      excludedCommands: ["gh *"],
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+    } })).toEqual({
+      enabled: true,
+      filesystem: { denyRead: ["~/.ssh"] },
+      excludedCommands: ["gh *"],
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+    });
+  });
+  it("honors explicit enabled:false in object form", () => {
+    expect(resolveSandbox({ sandbox: { enabled: false, excludedCommands: ["x"] } }))
+      .toEqual({ enabled: false, excludedCommands: ["x"] });
+  });
 });

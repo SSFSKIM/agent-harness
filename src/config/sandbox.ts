@@ -4,6 +4,8 @@ export function resolveSandbox(config: HarnessConfig): Record<string, unknown> |
   const s = config.sandbox;
   if (s === undefined || s === false) return undefined;
   if (s === true) return { enabled: true };
-  return { enabled: s.enabled ?? true, ...(s.network !== undefined ? { network: s.network } : {}),
-    ...(s.autoAllowBashIfSandboxed !== undefined ? { autoAllowBashIfSandboxed: s.autoAllowBashIfSandboxed } : {}) };
+  // Pass the object through structurally — it is the SDK SandboxSettings shape
+  // (enabled/network/filesystem/excludedCommands/failIfUnavailable/…). `enabled`
+  // defaults to true; an explicit `enabled: false` in `s` overrides it.
+  return { enabled: true, ...s };
 }
