@@ -400,11 +400,28 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(config.resolve_worker_sandbox(cfg, None), "danger-full-access")
 
     def test_worker_runtime_sandbox_invalid_mode_raises(self):
+        rt = {"worker_runtimes": {"claude": "cc app-server"}}  # claude configured
         with self.assertRaises(ValueError):
-            config._build({"worker_runtime_sandbox": {"claude": "no-sandbox"}})
-        _write(self.root, {"director": {"worker_runtime_sandbox": {"claude": "off"}}})
+            config._build({**rt, "worker_runtime_sandbox": {"claude": "no-sandbox"}})
+        # a non-string mode (JSON list/object) must fail loud as a NAMED ValueError, never a
+        # raw TypeError from the membership test (review fix — corroborated by 2 reviewers).
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_sandbox": {"claude": ["x"]}})
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_sandbox": {"claude": {"mode": "x"}}})
+        _write(self.root, {"director": {**rt, "worker_runtime_sandbox": {"claude": "off"}}})
         with self.assertRaises(ValueError):
             config.load_director_config(root=self.root)
+
+    def test_worker_runtime_sandbox_unknown_runtime_key_raises(self):
+        # a key naming no configured runtime fails loud — catches a typo'd runtime name (which
+        # would otherwise silently leave the runtime on the default posture) and the --codex
+        # raw-command edge where resolve_worker_command's gate is bypassed.
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_sandbox": {"claude": "danger-full-access"}})  # claude not configured
+        # "codex" is always a configured runtime, so an override for it is accepted.
+        cfg = config._build({"worker_runtime_sandbox": {"codex": "read-only"}})
+        self.assertEqual(config.resolve_worker_sandbox(cfg, None), "read-only")
 
     def test_worker_runtime_sandbox_bad_shape_raises(self):
         with self.assertRaises(ValueError):

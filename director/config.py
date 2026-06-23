@@ -343,10 +343,14 @@ def _build(raw: dict) -> DirectorConfig:
         raise ValueError(f"director.worker_runtime must name a configured runtime "
                          f"{sorted(worker_runtimes)}, got {worker_runtime!r}")
 
-    # Per-runtime sandbox override (deployment policy): {name: mode∈_SANDBOX_VALUES}. Keys
-    # need NOT be configured runtimes — an override for an unknown name is simply inert
-    # (resolve_worker_sandbox only consults it for the run's effective runtime). This stays
-    # decoupled from worker_runtimes so a host can declare the posture policy independently.
+    # Per-runtime sandbox override (deployment policy): {name: mode∈_SANDBOX_VALUES}. Each
+    # key MUST name a configured runtime (`worker_runtimes`, which always includes "codex"):
+    # a typo or a never-dispatchable name then fails loud at load instead of silently leaving
+    # that runtime on the default posture (a security DECISION that silently doesn't take
+    # effect is its own bug), and the `--codex` raw-command path can't activate an override
+    # for an otherwise-ungated runtime. Validated fail-loud with a NAMED ValueError — the
+    # `isinstance(mode, str)` guard precedes the membership test so a non-string value (e.g.
+    # a JSON list) raises ValueError, not a raw TypeError.
     wrs_raw = raw.get("worker_runtime_sandbox", DEFAULTS["worker_runtime_sandbox"])
     if not isinstance(wrs_raw, dict):
         raise ValueError(f"director.worker_runtime_sandbox must be an object, got {wrs_raw!r}")
@@ -354,7 +358,11 @@ def _build(raw: dict) -> DirectorConfig:
     for name, mode in wrs_raw.items():
         if not isinstance(name, str) or not name:
             raise ValueError(f"director.worker_runtime_sandbox has a non-string key {name!r}")
-        if mode not in _SANDBOX_VALUES:
+        if name not in worker_runtimes:
+            raise ValueError(f"director.worker_runtime_sandbox[{name!r}] names no configured "
+                             f"runtime {sorted(worker_runtimes)}; add it to worker_runtimes "
+                             f"(or set codex_command) first")
+        if not isinstance(mode, str) or mode not in _SANDBOX_VALUES:
             raise ValueError(f"director.worker_runtime_sandbox[{name!r}] must be one of "
                              f"{sorted(_SANDBOX_VALUES)}, got {mode!r}")
         worker_runtime_sandbox[name] = mode
@@ -410,13 +418,15 @@ def resolve_worker_command(cfg: DirectorConfig, worker: str | None) -> str:
 def resolve_worker_sandbox(cfg: DirectorConfig, worker: str | None) -> str:
     """The effective OS-sandbox posture for a run's worker runtime. Mirrors
     `resolve_worker_command`'s name resolution (None → the default `worker_runtime`),
-    then returns the per-runtime `worker_runtime_sandbox` override if one is declared,
-    else the global `posture.sandbox`. This is how a host runs one runtime
-    classifier-only (e.g. `{"claude": "danger-full-access"}` → the SDK adapter applies
-    no OS sandbox) while every other runtime keeps the default containment. Unlike
-    `resolve_worker_command`, an unknown name does NOT fail loud here — it simply has no
-    override and falls back to the global posture (the command resolver already gates
-    unknown runtimes; the posture is a non-fatal refinement)."""
+    then returns the per-runtime `worker_runtime_sandbox` override if one is declared for
+    that runtime, else the global `posture.sandbox`. This is how a host runs one runtime
+    classifier-only (e.g. `{"claude": "danger-full-access"}` → the SDK adapter applies no
+    OS sandbox) while every other runtime keeps the default containment. Override keys are
+    validated at load to name a configured runtime, so a name with no override — including
+    the `--codex` raw-command path paired with an unmatched `--worker` — cleanly falls back
+    to the global posture rather than activating a stray override (fail-safe by default).
+    A non-fatal refinement: an unknown name here never raises (the command resolver owns
+    the fail-loud on an unconfigured runtime)."""
     name = cfg.worker_runtime if worker is None else worker
     return cfg.worker_runtime_sandbox.get(name, cfg.posture.sandbox)
 

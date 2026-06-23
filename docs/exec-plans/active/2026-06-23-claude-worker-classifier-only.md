@@ -96,7 +96,9 @@ INFORMED-ACCEPTED in SECURITY.md + the tech-debt tracker.
 - [x] (2026-06-23) M3 — `.harness.json` `worker_runtime_sandbox={"claude":
   "danger-full-access"}`; SECURITY.md caveat flipped to INFORMED-ACCEPTED classifier-only;
   tracker PR3 row marked superseded-by-decision. Gate GREEN.
-- [ ] completion reviews (spec-compliance, code-quality, security) — pending.
+- [x] (2026-06-24) completion reviews: spec-compliance (codex) SATISFIED; security
+  (review-security) SATISFIED (0 P1); code-quality (codex) NOT-SATISFIED → 2 P2s
+  fix-forwarded (below), gate re-GREEN (70 tests).
 
 ## Surprises & discoveries
 - The adapter's `danger-full-access → {}` short-circuit (`sandbox.ts:48`) means disabling
@@ -114,5 +116,16 @@ INFORMED-ACCEPTED in SECURITY.md + the tech-debt tracker.
   human's literal decision + adapter-pristine; retention is a noted follow-up.
 
 ## Feedback (from completion gate)
+- **P2 (code-quality + security, corroborated) — fixed:** the mode membership test lacked
+  an `isinstance(mode, str)` guard, so a non-string value (`{"claude": []}`) raised a raw
+  `TypeError` instead of the named `ValueError` the contract promises. Added the guard.
+- **P2 (code-quality) — fixed:** override keys were decoupled from `worker_runtimes`, so a
+  typo silently left a runtime on the default posture and the `--codex` raw path could
+  activate an override for an ungated runtime. Now keys MUST name a configured runtime
+  (fail-loud at load); docstring corrected to match.
+- **Proposed rule (security, not blocking) — tracked:** SECURITY.md should name a
+  per-runtime security-posture override as a Tier-0 governed surface (git-visible,
+  reviewed as a security change, may only weaken the runtime it names — never the default).
+  → tech-debt tracker.
 
 ## Outcomes & retrospective
