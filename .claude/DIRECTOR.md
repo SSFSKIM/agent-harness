@@ -205,8 +205,12 @@ Read it (and the `--request` join), then answer **free-form** with a disposition
   answer the worker's actual question as the human would. The worker resumes the SAME
   thread with your directive; the board does not move.
 - **Terminal — `{"kind": "terminal", "outcome": {"status": "done"|"blocked", "reason":
-  "...", "spawned_ticket_ids": [...]}}`.** Only when work is genuinely finished/blocked
-  (usually the worker already sent `report_outcome`; confirm it). The orchestrator
+  "...", "pr_url": "...", "pr_branch": "...", "spawned_ticket_ids": [...]}}`.** Only when
+  work is genuinely finished/blocked (usually the worker already sent `report_outcome`;
+  confirm it). **For a `done` that opened a PR, carry the worker's `pr_url`/`pr_branch`
+  through in the outcome** — they drive the merge-gate below. If you omit them they are
+  **backfilled from the worker's `report_outcome`** (the authoritative proposal) so the
+  gate can never be silently skipped, but echo them when you can. The orchestrator
   executes the board transition here — **with one merge-gated wrinkle:** a `done` that
   opened a **PR** does not go straight to `Done`. When a `merging` state is configured
   (merge-gated-eligibility), the orchestrator parks the ticket in **`merging`** (work done,

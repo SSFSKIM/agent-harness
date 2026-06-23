@@ -120,5 +120,66 @@ class QueueDeciderTest(unittest.TestCase):
         self.assertIsNone(dq.read_answer("X|turn|0", base=base))  # left for the Director
 
 
+class BackfillPrFieldsTest(unittest.TestCase):
+    """Merge-gate-bypass fix (LIN-27 dogfood): the watched decider backfills the worker's
+    authoritative pr_url/pr_branch (+evidence) into a terminal-done disposition the Director
+    omitted, so a PR-bearing done can never silently skip the merge gate."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def test_backfills_when_director_omits_pr_fields(self):
+        disp = {"kind": "terminal", "outcome": {"status": "done", "reason": "shipped"}}
+        worker = {"status": "done", "pr_url": "http://x/pull/1", "pr_branch": "feat",
+                  "evidence": {"unresolved_threads": 0}}
+        out = decider._backfill_pr_fields(disp, worker)
+        self.assertEqual(out["outcome"]["pr_url"], "http://x/pull/1")
+        self.assertEqual(out["outcome"]["pr_branch"], "feat")
+        self.assertEqual(out["outcome"]["evidence"], {"unresolved_threads": 0})
+        self.assertEqual(out["outcome"]["reason"], "shipped")  # director's fields preserved
+
+    def test_director_pr_value_wins_when_present(self):
+        disp = {"kind": "terminal",
+                "outcome": {"status": "done", "pr_url": "http://dir/pull/9"}}
+        worker = {"status": "done", "pr_url": "http://worker/pull/1", "pr_branch": "wb"}
+        out = decider._backfill_pr_fields(disp, worker)
+        self.assertEqual(out["outcome"]["pr_url"], "http://dir/pull/9")  # not overwritten
+        self.assertEqual(out["outcome"]["pr_branch"], "wb")              # absent → backfilled
+
+    def test_pass_through_non_terminal_blocked_and_no_worker(self):
+        worker = {"status": "done", "pr_url": "http://x/1", "pr_branch": "b"}
+        reply = {"kind": "reply", "reply": "go"}
+        self.assertIs(decider._backfill_pr_fields(reply, worker), reply)
+        blocked = {"kind": "terminal", "outcome": {"status": "blocked", "reason": "x"}}
+        self.assertIs(decider._backfill_pr_fields(blocked, worker), blocked)
+        done = {"kind": "terminal", "outcome": {"status": "done"}}
+        self.assertIs(decider._backfill_pr_fields(done, None), done)  # no worker outcome
+
+    def test_queue_decider_backfills_worker_pr_end_to_end(self):
+        # The dogfood scenario: Director confirms terminal done WITHOUT echoing the PR;
+        # the worker's report_outcome (ctx) carried it → the returned disposition has it.
+        base = self.tmp / "qpr"
+        ctx = {"ticket": {"id": "T-PR", "workspace": "/ws"}, "turn_index": 0, "attempt": 1,
+               "final_message": "done",
+               "outcome": {"status": "done", "pr_url": "http://x/pull/7",
+                           "pr_branch": "feat-7"}}
+        decide = decider.make_queue_decider(base=base, timeout_s=5)
+        out = {}
+        th = threading.Thread(target=lambda: out.update(disp=decide(ctx)))
+        th.start()
+        for _ in range(200):
+            if dq.read_requests(base=base):
+                break
+            time.sleep(0.01)
+        dmin.answer_turn("T-PR|turn|0|a1",
+                         {"kind": "terminal", "outcome": {"status": "done", "reason": "ok"}},
+                         base=base)
+        th.join(timeout=5)
+        oc = out["disp"]["outcome"]
+        self.assertEqual(oc["pr_url"], "http://x/pull/7")   # backfilled from worker
+        self.assertEqual(oc["pr_branch"], "feat-7")
+        self.assertEqual(oc["reason"], "ok")                # director's reason kept
+
+
 if __name__ == "__main__":
     unittest.main()

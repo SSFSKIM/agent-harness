@@ -82,6 +82,32 @@ def disposition_from_answer(answer: dict | None) -> dict:
     return {"kind": "escalate", "reason": "turn review unanswered or malformed"}
 
 
+def _backfill_pr_fields(disp: dict, worker_outcome: dict | None) -> dict:
+    """Merge-gate safety (merge-gate-bypass fix, LIN-27 dogfood): the worker's
+    `report_outcome` is the AUTHORITATIVE PR proposal. A watched Director confirming a
+    `terminal done` may omit `pr_url`/`pr_branch` from its free-form disposition — which
+    would make the orchestrator's `_maybe_enqueue_merge` see no PR and send a PR-bearing
+    ticket straight to `done` UNMERGED, silently skipping the merger's preservation +
+    hygiene gate. So when a `terminal done` disposition lacks the PR fields (and
+    `evidence`, which the merger's R4 audit consumes), backfill them from the worker's
+    reported outcome. The Director's own value always wins when present; the autonomous
+    decider already passes the worker outcome through, so this only affects the watched
+    path. Non-terminal / non-done dispositions pass through untouched."""
+    if not (isinstance(disp, dict) and disp.get("kind") == "terminal"):
+        return disp
+    if not isinstance(worker_outcome, dict):
+        return disp
+    outcome = dict(disp.get("outcome") or {})
+    if outcome.get("status") != "done":
+        return disp
+    changed = False
+    for field in ("pr_url", "pr_branch", "evidence"):
+        if not outcome.get(field) and worker_outcome.get(field):
+            outcome[field] = worker_outcome[field]
+            changed = True
+    return {**disp, "outcome": outcome} if changed else disp
+
+
 def make_queue_decider(base=None, timeout_s: float = 300.0, now=_now_iso):
     """Watched decider (spec R5): post each turn-end to the Director queue and block
     for the main session's FREE-FORM answer. The Director reads `final_message` +
@@ -118,5 +144,8 @@ def make_queue_decider(base=None, timeout_s: float = 300.0, now=_now_iso):
             "created_at": now(),
         }, base=base)
         answer = dq.wait_for_answer(rid, base=base, timeout_s=timeout_s)
-        return disposition_from_answer(answer)
+        # Backfill the worker's authoritative PR fields into a terminal-done disposition
+        # the Director may have left them out of — so a PR-bearing done can never silently
+        # skip the merge gate (merge-gate-bypass fix).
+        return _backfill_pr_fields(disposition_from_answer(answer), ctx.get("outcome"))
     return decide

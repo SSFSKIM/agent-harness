@@ -897,6 +897,22 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self._reconcile(self._done(pr_url="http://pr/9", pr_branch="feat/y"))
         self.assertIsNone(self._merge_reqs()[0]["payload"]["evidence"])
 
+    def test_pr_bearing_done_not_parked_records_misfire(self):
+        # merge-gate-bypass defense-in-depth (LIN-27 dogfood): a PR-bearing done that FAILS
+        # to enqueue while `merging` IS configured records a misfire in the summary — never
+        # silently lands Done with the PR left unmerged.
+        from unittest import mock
+        states = dict(self.states)
+        states["merging"] = "st_merge"  # configure merge-gating
+        with mock.patch("director.queue.append_merge_request",
+                        side_effect=RuntimeError("boom")):
+            out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
+                                 self._done(pr_url="http://pr/7", pr_branch="feat/x"),
+                                 1, states, 1, queue_base=self.qbase,
+                                 workspace_root=self.tmp / "wsr")
+        self.assertFalse(out["summary"]["merge_enqueued"])
+        self.assertIn("misfire", out["summary"]["reconcile_error"])
+
     def test_done_enqueues_merge_before_terminal_transition(self):
         # act-before-consume (review-reliability P1): the PR-merge must be enqueued BEFORE
         # the `done` board write, so a crash between them never strands an un-enqueued PR

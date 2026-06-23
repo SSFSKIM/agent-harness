@@ -196,6 +196,14 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                         f"{reason} — PR queued; awaiting merge to main")
                 summary = summarize("completed", "merging", merge_enqueued=True)
             else:
+                # Misfire net (merge-gate-bypass defense-in-depth): a PR-bearing done that
+                # did NOT park in `merging` despite that state being configured means the
+                # enqueue failed — the merger gate would be skipped and the PR left
+                # unmerged. Surface it in the summary; never silently land Done. (No PR, or
+                # `merging` unconfigured, is the legitimate direct-done path — not a misfire.)
+                if (outcome.get("pr_url") or outcome.get("pr_branch")) and states.get("merging"):
+                    errs.append("misfire: PR-bearing done not parked in merging "
+                                "(merge enqueue failed?) — PR may be left unmerged")
                 set_state(states["done"])
                 comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
                 summary = summarize("completed", "done", merge_enqueued=enqueued)
