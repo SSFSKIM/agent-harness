@@ -1,0 +1,43 @@
+{
+  "name": "cc-harness",
+  "version": "0.1.0",
+  "description": "Headless TypeScript harness over the Claude Agent SDK with Claude Code-faithful defaults — one-shot runs, interactive sessions, a multi-session daemon, hooks, swarm, and durable tasks.",
+  "keywords": ["claude", "claude-code", "claude-agent-sdk", "anthropic", "agent", "llm", "ai", "harness", "headless"],
+  "homepage": "https://github.com/SSFSKIM/codex_somersault/tree/main/CC-to-SDK/harness#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/SSFSKIM/codex_somersault.git", "directory": "CC-to-SDK/harness" },
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": { "cc-harness": "./dist/cli.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepack": "npm run build",
+    "verify:pack": "node scripts/verify-package.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:live": "vitest run test/live",
+    "cli": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.178",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
+}

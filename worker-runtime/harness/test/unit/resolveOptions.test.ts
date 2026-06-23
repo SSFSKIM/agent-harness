@@ -1,0 +1,116 @@
+import { describe, it, expect } from "vitest";
+import { resolveOptions } from "../../src/config/resolveOptions.js";
+
+describe("resolveOptions", () => {
+  it("produces CC-faithful defaults", () => {
+    const o: any = resolveOptions({});
+    expect(o.settingSources).toEqual(["user", "project", "local"]);
+    expect(o.systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
+    expect(o.tools).toEqual({ type: "preset", preset: "claude_code" });
+    expect(o.enableFileCheckpointing).toBe(true);
+    expect(o.agents["Explore"].disallowedTools).toContain("Write");
+  });
+  it("applies harness-wide defaults (opus-4-8 / auto / xhigh) when omitted", () => {
+    const o: any = resolveOptions({});
+    expect(o.model).toBe("claude-opus-4-8");
+    expect(o.permissionMode).toBe("auto");
+    expect(o.effort).toBe("xhigh");
+  });
+  it("default-auto does NOT override an explicit model (only explicit auto gates)", () => {
+    const o: any = resolveOptions({ model: "claude-haiku-4-5" });
+    expect(o.model).toBe("claude-haiku-4-5");   // explicit model preserved; auto is only the default → no gate
+    expect(o.permissionMode).toBe("auto");      // mode still defaults to auto
+  });
+  it("wires outputStyle into systemPrompt.append and never leaks it into Options", () => {
+    const o: any = resolveOptions({ outputStyle: "explanatory" });
+    expect(o.systemPrompt.append).toContain("educational");
+    expect(o).not.toHaveProperty("outputStyle"); // phantom option must not reach the SDK
+  });
+  it("sets allowDangerouslySkipPermissions when bypassPermissions is used", () => {
+    const o: any = resolveOptions({ permissionMode: "bypassPermissions" });
+    expect(o.permissionMode).toBe("bypassPermissions");
+    expect(o.allowDangerouslySkipPermissions).toBe(true);
+  });
+  it("does not set allowDangerouslySkipPermissions for other permission modes", () => {
+    const o: any = resolveOptions({ permissionMode: "default" });
+    expect(o).not.toHaveProperty("allowDangerouslySkipPermissions");
+  });
+  it("threads provider env, sandbox, model, mcp, plugins, cwd, maxTurns", () => {
+    const o: any = resolveOptions({
+      provider: "bedrock", sandbox: true, model: "claude-opus-4-8",
+      mcpServers: { x: { type: "stdio", command: "echo" } }, cwd: "/tmp", maxTurns: 5,
+    });
+    expect(o.env.CLAUDE_CODE_USE_BEDROCK).toBe("1");
+    expect(o.sandbox).toEqual({ enabled: true });
+    expect(o.model).toBe("claude-opus-4-8");
+    expect(o.mcpServers).toBeTruthy();
+    expect(o.cwd).toBe("/tmp");
+    expect(o.maxTurns).toBe(5);
+  });
+  it("disableProjectContext clears sources and excludes dynamic sections", () => {
+    const o: any = resolveOptions({ disableProjectContext: true });
+    expect(o.settingSources).toEqual([]);
+    expect(o.systemPrompt.excludeDynamicSections).toBe(true);
+  });
+  it("merges env over process.env so PATH/HOME/auth are not erased", () => {
+    // SDK `env` replaces the whole subprocess environment; resolveOptions must
+    // spread process.env so a single provider flag does not wipe inherited vars.
+    const o: any = resolveOptions({ provider: "bedrock" });
+    expect(o.env.CLAUDE_CODE_USE_BEDROCK).toBe("1");
+    expect(o.env.PATH).toBe(process.env.PATH);
+  });
+  it("does not set env (inherits process.env) when there are no overrides", () => {
+    const o: any = resolveOptions({});
+    expect(o.env).toBeUndefined();
+  });
+  it("threads resume and sessionStore when set, omits them otherwise", () => {
+    const store = { append: async () => {}, load: async () => null } as any;
+    const o: any = resolveOptions({ resume: "sess-abc", sessionStore: store });
+    expect(o.resume).toBe("sess-abc");
+    expect(o.sessionStore).toBe(store);
+    const bare: any = resolveOptions({});
+    expect(bare).not.toHaveProperty("resume");
+    expect(bare).not.toHaveProperty("sessionStore");
+  });
+  it("emits persistSession for true and false, omits when undefined", () => {
+    expect((resolveOptions({ persistSession: false }) as any).persistSession).toBe(false);
+    expect((resolveOptions({ persistSession: true }) as any).persistSession).toBe(true);
+    expect(resolveOptions({})).not.toHaveProperty("persistSession");
+  });
+  it("passes config.hooks through to options.hooks, omits when absent", () => {
+    const hooks = { PostToolUse: [{ hooks: [async () => ({})] }] };
+    const o: any = resolveOptions({ hooks });
+    expect(o.hooks).toBe(hooks);
+    expect(resolveOptions({})).not.toHaveProperty("hooks");
+  });
+  it("threads the turn-control fields through, omits them when absent", () => {
+    const o: any = resolveOptions({
+      effort: "high",
+      thinking: { type: "enabled", budgetTokens: 1024 },
+      maxBudgetUsd: 0.5,
+      taskBudget: { total: 60000 },
+      includePartialMessages: true,
+      forwardSubagentText: true,
+    });
+    expect(o.effort).toBe("high");
+    expect(o.thinking).toEqual({ type: "enabled", budgetTokens: 1024 });
+    expect(o.maxBudgetUsd).toBe(0.5);
+    expect(o.taskBudget).toEqual({ total: 60000 });
+    expect(o.includePartialMessages).toBe(true);
+    expect(o.forwardSubagentText).toBe(true);
+    const bare: any = resolveOptions({});
+    for (const k of ["thinking", "maxBudgetUsd", "taskBudget", "includePartialMessages", "forwardSubagentText"])
+      expect(bare).not.toHaveProperty(k);
+  });
+  it("emits maxBudgetUsd:0 (guards on !== undefined, not truthiness)", () => {
+    expect((resolveOptions({ maxBudgetUsd: 0 }) as any).maxBudgetUsd).toBe(0);
+  });
+  it("forces a supported model when permissionMode is auto (model-gated)", () => {
+    expect((resolveOptions({ permissionMode: "auto", model: "claude-haiku-4-5" }) as any).model).toBe("claude-sonnet-4-6");
+    expect((resolveOptions({ permissionMode: "auto", model: "claude-opus-4-8" }) as any).model).toBe("claude-opus-4-8");
+    expect((resolveOptions({ permissionMode: "auto" }) as any).model).toBe("claude-opus-4-8");
+  });
+  it("does not touch the model for non-auto modes", () => {
+    expect((resolveOptions({ permissionMode: "default", model: "claude-haiku-4-5" }) as any).model).toBe("claude-haiku-4-5");
+  });
+});
