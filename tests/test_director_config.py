@@ -367,6 +367,51 @@ class LoadConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config.load_director_config(root=self.root)
 
+    # -- per-runtime sandbox override (claude-classifier-only decision, 2026-06-23) --
+    def test_worker_runtime_sandbox_defaults_empty(self):
+        cfg = config._build({})
+        self.assertEqual(cfg.worker_runtime_sandbox, {})
+
+    def test_resolve_worker_sandbox_falls_back_to_global_posture(self):
+        # no override → every runtime (incl. None/default and an unknown name) uses the
+        # global posture.sandbox; unlike resolve_worker_command, unknown does NOT raise.
+        cfg = config._build({"worker_runtimes": {"claude": "cc-codex-appserver app-server"}})
+        self.assertEqual(cfg.posture.sandbox, "workspace-write")
+        self.assertEqual(config.resolve_worker_sandbox(cfg, None), "workspace-write")
+        self.assertEqual(config.resolve_worker_sandbox(cfg, "claude"), "workspace-write")
+        self.assertEqual(config.resolve_worker_sandbox(cfg, "gemini"), "workspace-write")
+
+    def test_resolve_worker_sandbox_per_runtime_override(self):
+        # the live decision: claude → danger-full-access (classifier-only), codex untouched.
+        cfg = config._build({
+            "worker_runtimes": {"claude": "cc-codex-appserver app-server"},
+            "worker_runtime_sandbox": {"claude": "danger-full-access"}})
+        self.assertEqual(config.resolve_worker_sandbox(cfg, "claude"), "danger-full-access")
+        self.assertEqual(config.resolve_worker_sandbox(cfg, None), "workspace-write")   # default codex
+        self.assertEqual(config.resolve_worker_sandbox(cfg, "codex"), "workspace-write")
+
+    def test_resolve_worker_sandbox_respects_default_selector(self):
+        # when claude is the DEFAULT runtime, an absent --worker (None) resolves to it,
+        # so its override applies to the default run too.
+        cfg = config._build({
+            "worker_runtime": "claude",
+            "worker_runtimes": {"claude": "cc-codex-appserver app-server"},
+            "worker_runtime_sandbox": {"claude": "danger-full-access"}})
+        self.assertEqual(config.resolve_worker_sandbox(cfg, None), "danger-full-access")
+
+    def test_worker_runtime_sandbox_invalid_mode_raises(self):
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_sandbox": {"claude": "no-sandbox"}})
+        _write(self.root, {"director": {"worker_runtime_sandbox": {"claude": "off"}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
+    def test_worker_runtime_sandbox_bad_shape_raises(self):
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_sandbox": ["claude"]})        # not a dict
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_sandbox": {"": "workspace-write"}})  # empty key
+
 
 class WiringTest(unittest.TestCase):
     """orchestrator.resolve_settings precedence (CLI > config > default) and the
@@ -406,6 +451,19 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s["team"], "T-cfg")
         self.assertEqual(s["states"]["ready"], "Backlog")
         self.assertEqual(s["states"]["started"], "In Progress")  # default kept
+
+    def test_worker_sandbox_override_flows_to_dispatch_settings(self):
+        # M2: the per-runtime sandbox override reaches the orchestrator dispatch posture.
+        # claude → danger-full-access (classifier-only); a default (codex) run keeps
+        # workspace-write — codex's own sandbox is untouched by the claude decision.
+        from director import orchestrator
+        cfg = config._build({
+            "worker_runtimes": {"claude": "cc-codex-appserver app-server"},
+            "worker_runtime_sandbox": {"claude": "danger-full-access"}})
+        s_claude = orchestrator.resolve_settings(self._args(worker="claude"), cfg)
+        self.assertEqual(s_claude["worker_sandbox"], "danger-full-access")
+        s_codex = orchestrator.resolve_settings(self._args(), cfg)  # --worker absent → codex
+        self.assertEqual(s_codex["worker_sandbox"], "workspace-write")
 
     def test_merging_state_flows_from_config_to_runtime(self):
         # merge-gated-eligibility R1/R7 (review P1): a configured `merging` must reach the

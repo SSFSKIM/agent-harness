@@ -143,24 +143,44 @@ Grounding document for the review-security persona. Threats are numbered.
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
 
-  **Worker-runtime caveat (`--worker claude`).** Boundary (1) — the OS sandbox — was
-  originally a property of the **codex** runtime only. The selectable `claude` runtime
-  (`cc-codex-appserver`, now vendored in-repo at `worker-runtime/`; default-off, opt-in
-  via `--worker claude`) initially mapped only
-  `approvalPolicy`->`permissionMode` (`cc-harness-appserver` `dist/handlers.js`/`dist/posture.js`)
-  and **dropped** the `sandbox=workspace-write` posture the Director sends
-  (`director/worker/app_server.py:371`) — approval-gated (boundary 2) but NOT OS-sandboxed
-  (boundary 1). **FIXED 2026-06-23 (producer PR #3 `0b7e205`, dogfood-confirmed):** the
-  adapter now applies an OS-level sandbox (Seatbelt/bubblewrap Bash isolation + an L3
-  credential-read deny), so boundary (1) holds for `--worker claude` too — confirmed live
-  in the LIN-27 dogfood, where the sandbox denied `test_director_dashboard`'s loopback
-  socket bind (worker correctly read it as an env artifact, not a regression). Two caveats
-  remain: (a) it is the **SDK's** sandbox profile, NOT byte-identical to codex's — e.g.
-  local listening-socket binds are denied under workspace-write (a real constraint for
-  port-binding tests, not a bug); and (b) the **T11 fs-wide-read + egress residual below
-  is SHARED** by both runtimes — write-containment + cred-read-deny is not an egress jail,
-  so a prompt-injected worker on either runtime can still exfil reachable on-disk secrets
-  while network is on (safe only with throwaway creds). Default stays codex by config.
+  **Worker-runtime caveat (`--worker claude` — OS sandbox INTENTIONALLY DISABLED,
+  2026-06-23).** Boundary (1), the OS sandbox, is a property of the **codex** runtime.
+  The selectable `claude` runtime (the Agent-SDK adapter, vendored in-repo at
+  `worker-runtime/app-server/`; default-off, opt-in via `--worker claude`) once gained
+  an equivalent OS sandbox (producer PR #3 `0b7e205`: Seatbelt/bubblewrap Bash isolation
+  + L3 credential-read deny + an egress allowlist), confirmed in the LIN-27 dogfood. That
+  OS sandbox is now **deliberately turned off** for the claude runtime by **human decision
+  (2026-06-23): rely on the Agent-SDK auto-mode permission classifier instead.** Rationale:
+  the OS sandbox's denials are real productivity friction (granular denials buried in
+  compound commands — e.g. the dogfood's `test_director_dashboard` loopback bind — hangs
+  like `jest`+watchman, out-of-workspace global-cache writes), and the auto-mode classifier's
+  hard-block list (download-and-execute `curl|bash`, sending sensitive data to external
+  endpoints, prod deploys/migrations, mass cloud deletion, IAM/permission grants, shared-infra
+  modification, irreversible pre-session file destruction, force-push / push-to-main,
+  destructive git (`reset --hard`/`checkout -- .`/`clean -fd`/`stash drop|clear`),
+  `commit --amend` of a non-session HEAD, `terraform|pulumi|cdk destroy`) is trusted as
+  sufficient for this deployment.
+  - **Mechanism (boundary-free Director config, no adapter fork):**
+    `director.worker_runtime_sandbox = {"claude": "danger-full-access"}`
+    (`director/config.py`, resolved by `resolve_worker_sandbox`). The Director then sends
+    `sandbox=danger-full-access` on `thread/start` for claude only; the adapter's
+    `resolveSandbox` (`worker-runtime/app-server/src/sandbox.ts`) short-circuits to `{}` —
+    **no OS sandbox, no credential-read deny rules, no egress allowlist** — leaving
+    `permissionMode: auto` (the classifier) as the sole action boundary. **Codex is
+    untouched** (still `workspace-write`). The PR3 sandbox code stays in the adapter,
+    dormant; re-enable by removing the override (→ `workspace-write`).
+  - **Retained boundaries for claude:** (2) the auto-mode classifier + its hard-block list
+    above; (3) **T10** — the brokered `linear_graphql` host-key default-deny (a Director-side
+    write surface, independent of the worker runtime).
+  - **INFORMED-ACCEPTED residual:** with no OS sandbox, the classifier — content/intent-based,
+    therefore evadable by a determined prompt-injection (obfuscated exfil, laundered writes) —
+    is the only floor. The deterministic protections lost are write-containment (a worker can
+    now write outside the workspace, incl. `~/.bashrc`/`~/.ssh` persistence — NOT enumerated
+    in the classifier hard-block list) and credential-read deny. This **subsumes and widens
+    the T11 residual below** for claude: safe ONLY where every reachable credential is
+    throwaway and the host is acceptable to mutate. Decision owner accepted this explicitly;
+    revisit when the worker moves to an isolated environment (container/VM — see T11), where
+    the environment is the boundary and an in-process sandbox is redundant anyway.
   **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
   residual below applies to **both** watched and un-watched. The exfil threat has three
   channels; the first is closed, the other two are **deferred to the always-on/cloud

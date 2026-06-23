@@ -571,7 +571,8 @@ def main(argv=None) -> int:
     disp = drive(ticket, command=_command(args, codex_command, posture),
                  decide=autonomous_decide, queue_base=queue_dir, tools=tools,
                  tool_executor=tool_executor, install_skills=args.install_skills,
-                 approval_policy=posture.approval_policy, sandbox=posture.sandbox,
+                 approval_policy=posture.approval_policy,
+                 sandbox=config.resolve_worker_sandbox(cfg, args.worker),
                  max_turns=max_turns, read_timeout_s=cfg.read_timeout_s, hooks=hooks,
                  hook_timeout_s=cfg.workspace.hook_timeout_s)
     print(json.dumps({"ticket": ticket["id"], **disp}))

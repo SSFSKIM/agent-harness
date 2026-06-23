@@ -8,6 +8,9 @@
     "worker_runtimes": {
       "claude": "node {harness_root}/worker-runtime/app-server/dist/bin.js app-server"
     },
+    "worker_runtime_sandbox": {
+      "claude": "danger-full-access"
+    },
     "worker": {
       "tools": "linear",
       "install_skills": true

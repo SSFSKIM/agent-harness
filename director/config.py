@@ -88,6 +88,14 @@ DEFAULTS: dict = {
     # in _build, so DEFAULTS-only resolves to {"codex": <codex_command>}.
     "worker_runtime": "codex",
     "worker_runtimes": {},
+    # Per-runtime OS-sandbox posture OVERRIDE: {runtime_name: sandbox_mode}. A runtime
+    # listed here is dispatched with that sandbox posture instead of the global
+    # `director.worker.sandbox` — e.g. {"claude": "danger-full-access"} runs the SDK
+    # adapter classifier-only (the adapter maps danger-full-access → no OS Bash sandbox,
+    # no deny rules, no egress allowlist; the auto-mode permission classifier is the sole
+    # boundary). Empty = every runtime uses the global posture. INFORMED-ACCEPTED security
+    # decision per runtime (SECURITY.md "Worker-runtime caveat").
+    "worker_runtime_sandbox": {},
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
     # tool) and whether the worker methodology — both plugins' skills + the review/gardener
@@ -175,6 +183,7 @@ class DirectorConfig:
     codex_command: str
     worker_runtime: str
     worker_runtimes: dict   # {name: command}; always contains "codex" (= codex_command)
+    worker_runtime_sandbox: dict  # {name: sandbox_mode} per-runtime override of posture.sandbox
     posture: Posture
     worker_tools: str
     worker_install_skills: bool
@@ -334,6 +343,22 @@ def _build(raw: dict) -> DirectorConfig:
         raise ValueError(f"director.worker_runtime must name a configured runtime "
                          f"{sorted(worker_runtimes)}, got {worker_runtime!r}")
 
+    # Per-runtime sandbox override (deployment policy): {name: mode∈_SANDBOX_VALUES}. Keys
+    # need NOT be configured runtimes — an override for an unknown name is simply inert
+    # (resolve_worker_sandbox only consults it for the run's effective runtime). This stays
+    # decoupled from worker_runtimes so a host can declare the posture policy independently.
+    wrs_raw = raw.get("worker_runtime_sandbox", DEFAULTS["worker_runtime_sandbox"])
+    if not isinstance(wrs_raw, dict):
+        raise ValueError(f"director.worker_runtime_sandbox must be an object, got {wrs_raw!r}")
+    worker_runtime_sandbox = {}
+    for name, mode in wrs_raw.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"director.worker_runtime_sandbox has a non-string key {name!r}")
+        if mode not in _SANDBOX_VALUES:
+            raise ValueError(f"director.worker_runtime_sandbox[{name!r}] must be one of "
+                             f"{sorted(_SANDBOX_VALUES)}, got {mode!r}")
+        worker_runtime_sandbox[name] = mode
+
     drl = raw.get("dispatch_requires_label", DEFAULTS["dispatch_requires_label"])
     if not isinstance(drl, bool):
         raise ValueError(f"director.dispatch_requires_label must be a boolean, got {drl!r}")
@@ -360,6 +385,7 @@ def _build(raw: dict) -> DirectorConfig:
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
         codex_command=codex_command,
         worker_runtime=worker_runtime, worker_runtimes=worker_runtimes,
+        worker_runtime_sandbox=worker_runtime_sandbox,
         posture=posture,
         worker_tools=w["tools"], worker_install_skills=worker_install_skills,
         paths=paths, merger=merger, workspace=workspace)
@@ -379,6 +405,20 @@ def resolve_worker_command(cfg: DirectorConfig, worker: str | None) -> str:
     except KeyError:
         raise ValueError(f"unknown worker runtime {name!r}; configured: "
                          f"{sorted(cfg.worker_runtimes)}") from None
+
+
+def resolve_worker_sandbox(cfg: DirectorConfig, worker: str | None) -> str:
+    """The effective OS-sandbox posture for a run's worker runtime. Mirrors
+    `resolve_worker_command`'s name resolution (None → the default `worker_runtime`),
+    then returns the per-runtime `worker_runtime_sandbox` override if one is declared,
+    else the global `posture.sandbox`. This is how a host runs one runtime
+    classifier-only (e.g. `{"claude": "danger-full-access"}` → the SDK adapter applies
+    no OS sandbox) while every other runtime keeps the default containment. Unlike
+    `resolve_worker_command`, an unknown name does NOT fail loud here — it simply has no
+    override and falls back to the global posture (the command resolver already gates
+    unknown runtimes; the posture is a non-fatal refinement)."""
+    name = cfg.worker_runtime if worker is None else worker
+    return cfg.worker_runtime_sandbox.get(name, cfg.posture.sandbox)
 
 
 def defaults() -> DirectorConfig:

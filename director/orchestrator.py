@@ -1139,6 +1139,9 @@ def resolve_settings(args, cfg) -> dict:
         "backoff_cap_s": _pick(args.backoff_cap, cfg.backoff_cap_s),
         "codex_command": (args.codex if args.codex is not None
                           else config.resolve_worker_command(cfg, getattr(args, "worker", None))),
+        # Effective OS-sandbox posture for the dispatched runtime (per-runtime override →
+        # else global posture). A runtime mapped to danger-full-access runs classifier-only.
+        "worker_sandbox": config.resolve_worker_sandbox(cfg, getattr(args, "worker", None)),
         "workspace_root": _pick(args.workspace_root, cfg.paths.workspace_root),
         "queue_dir": _pick(args.queue_dir, cfg.paths.queue_dir),
         "status_dir": _pick(args.status_dir, cfg.paths.status_dir),
@@ -1286,7 +1289,7 @@ def main(argv=None, *, board=None) -> int:
               # Posture from the resolved config (a host may tighten it in
               # .harness.json director.worker); --autonomous differs only by the decider.
               "approval_policy": s["posture"].approval_policy,
-              "sandbox": s["posture"].sandbox,
+              "sandbox": s["worker_sandbox"],
               "decide": decide, "max_turns": s["max_turns"],
               "read_timeout_s": s["read_timeout_s"],
               "reconcile_interval_s": s["reconcile_interval_s"],
