@@ -210,3 +210,52 @@ describe("AppServer happy path", () => {
     expect(methods).toContain("turn/completed");
   });
 });
+
+describe("per-turn usage heartbeat (live mid-turn accrual + keep-alive)", () => {
+  // A session whose turn stays open until released, so heartbeats fire WHILE the turn runs.
+  function gatedServer(out: any[], heartbeatMs: number) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const open: OpenFn = () => ({
+      submit: async (_p: string, _onMsg: (m: any) => void) => { await gate; return { result: "done" }; },
+      usage: async () => ({ session: { model_usage: { m: { inputTokens: 10, outputTokens: 5 } } } }),
+      dispose: async () => {},
+    } as any);
+    let server!: AppServer;
+    const peer = new Peer((o) => out.push(o), (m, p, id) => server.handleRequest(m, p, id), () => {});
+    server = new AppServer(peer, { open, heartbeatMs });
+    return { peer, release: () => release() };
+  }
+
+  it("emits thread/tokenUsage/updated DURING the turn, not only at finalize", async () => {
+    const out: any[] = [];
+    const { peer, release } = gatedServer(out, 5);
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    const threadId = out.find((o) => o.id === 1).result.thread.id;
+    peer.feed(JSON.stringify({ id: 2, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }] } }) + "\n");
+    await new Promise((r) => setTimeout(r, 30));                       // turn still gated open
+    const beats = out.filter((o) => o.method === "thread/tokenUsage/updated");
+    expect(beats.length).toBeGreaterThanOrEqual(1);                   // a heartbeat fired mid-turn
+    expect(beats[0].params.tokenUsage.total).toEqual({ totalTokens: 15, inputTokens: 10, outputTokens: 5 });
+    expect(out.some((o) => o.method === "turn/completed")).toBe(false); // turn not finalized yet
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(out.some((o) => o.method === "turn/completed")).toBe(true);
+  });
+
+  it("stops the heartbeat after the turn finalizes (no tokenUsage after turn/completed)", async () => {
+    const out: any[] = [];
+    const { peer, release } = gatedServer(out, 5);
+    peer.feed(JSON.stringify({ id: 1, method: "thread/start", params: { cwd: "/w" } }) + "\n");
+    const threadId = out.find((o) => o.id === 1).result.thread.id;
+    peer.feed(JSON.stringify({ id: 2, method: "turn/start", params: { threadId, input: [{ type: "text", text: "go" }] } }) + "\n");
+    await new Promise((r) => setTimeout(r, 15));
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    const completedAt = out.findIndex((o) => o.method === "turn/completed");
+    expect(completedAt).toBeGreaterThanOrEqual(0);
+    const before = out.length;
+    await new Promise((r) => setTimeout(r, 30));                       // wait several would-be heartbeat ticks
+    expect(out.length).toBe(before);                                  // nothing emitted after the turn ended
+  });
+});

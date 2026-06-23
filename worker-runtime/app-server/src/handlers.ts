@@ -32,10 +32,15 @@ export class AppServer {
   private open: OpenFn;
   private autoReview: boolean;
   private network: boolean;
-  constructor(private peer: Peer, deps: { open?: OpenFn; autoReview?: boolean; network?: boolean } = {}) {
+  private heartbeatMs: number;
+  constructor(private peer: Peer, deps: { open?: OpenFn; autoReview?: boolean; network?: boolean; heartbeatMs?: number } = {}) {
     this.open = deps.open ?? ((cfg) => openSession(cfg));
     this.autoReview = deps.autoReview ?? false;
     this.network = deps.network ?? false;
+    // Per-turn usage-heartbeat cadence. ~30s sits well under the Director's DEFAULT
+    // read_timeout (180s), so a long silent tool run (a full check.py between streamed
+    // messages) can never look like a hung worker — a notification lands every tick.
+    this.heartbeatMs = deps.heartbeatMs ?? 30_000;
   }
 
   disposeAll(): Promise<void> { return this.reg.disposeAll(); }
@@ -99,6 +104,7 @@ export class AppServer {
   }
 
   private async runTurn(entry: ThreadEntry, text: string, tr: TurnTranslator): Promise<void> {
+    const stopBeat = this.startUsageHeartbeat(entry, tr);
     try {
       const { result } = await entry.session.submit(text, (m) => { for (const o of tr.onMessage(m)) this.peer.notify((o as any).method, (o as any).params); });
       let usage: UsageTotals | undefined;
@@ -107,6 +113,31 @@ export class AppServer {
     } catch (e) {
       console.error("[appserver] turn error:", (e as Error).message);
       for (const o of tr.finalize({ text: "", isError: true })) this.peer.notify((o as any).method, (o as any).params);
+    } finally {
+      stopBeat();
     }
+  }
+
+  /** Start a per-turn usage heartbeat: every `heartbeatMs`, read the session's cumulative usage
+   *  (a control-plane query, safe mid-turn like getContextUsage/interrupt) and emit a
+   *  thread/tokenUsage/updated. Two jobs at once: (1) LIVE mid-turn token accrual on the Director
+   *  dashboard (codex streams usage per-event; the SDK adapter otherwise only emits at finalize),
+   *  and (2) a keep-alive — any notification resets the Director's inter-read timeout, so a long
+   *  silent tool run no longer trips ReadTimeout and mislabels a SUCCEEDING worker as failed (the
+   *  read_timeout band-aid becomes belt-and-suspenders). Best-effort: a failed usage() keeps the
+   *  last value and still beats; nothing emits after the turn finalized (the `stopped` guard).
+   *  Returns the stop function (called in runTurn's finally). */
+  private startUsageHeartbeat(entry: ThreadEntry, tr: TurnTranslator): () => void {
+    let last: UsageTotals = { totalTokens: 0, inputTokens: 0, outputTokens: 0 };
+    let stopped = false;
+    const tick = async () => {
+      try { last = toUsageTotals(await entry.session.usage()); } catch { /* keep last; still beat */ }
+      if (stopped) return;                    // the turn finalized while usage() was in flight — don't emit out of order
+      const o = tr.tokenUsage(last) as any;
+      this.peer.notify(o.method, o.params);
+    };
+    const iv = setInterval(() => { void tick(); }, this.heartbeatMs);
+    (iv as any).unref?.();                     // a pending heartbeat must never keep the process alive on its own
+    return () => { stopped = true; clearInterval(iv); };
   }
 }

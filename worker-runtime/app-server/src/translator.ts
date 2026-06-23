@@ -20,6 +20,14 @@ export class TurnTranslator {
     return { method: "item/completed", params: { itemId: this.nextItem(), threadId: this.threadId, turnId: this.turnId, item: { type: "agentMessage", text, phase } } };
   }
 
+  /** A thread/tokenUsage/updated notification carrying the absolute CUMULATIVE totals.
+   *  Emitted both by the per-turn usage heartbeat (live mid-turn accrual + keep-alive — without
+   *  it the Director only ever sees tokens at turn-end, and a long silent tool run looks like a
+   *  hung worker) AND at finalize, so the Director's extract_usage reads ONE shape either way. */
+  tokenUsage(usage: UsageTotals): object {
+    return { method: "thread/tokenUsage/updated", params: { threadId: this.threadId, turnId: this.turnId, tokenUsage: { total: { totalTokens: usage.totalTokens, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens } } } };
+  }
+
   /** Wire notifications for ONE streamed (non-result) SDK message. */
   onMessage(m: any): object[] {
     const out: object[] = [];
@@ -36,7 +44,7 @@ export class TurnTranslator {
     const finalText = result.text || this.held || "";
     if (this.held !== undefined && this.held !== finalText) out.push(this.agentMessage(this.held, "commentary"));
     out.push(this.agentMessage(finalText, "final_answer"));
-    if (result.usage) out.push({ method: "thread/tokenUsage/updated", params: { threadId: this.threadId, turnId: this.turnId, tokenUsage: { total: { totalTokens: result.usage.totalTokens, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens } } } });
+    if (result.usage) out.push(this.tokenUsage(result.usage));
     out.push({ method: "turn/completed", params: { turn: { id: this.turnId, status: "completed" } } });
     return out;
   }

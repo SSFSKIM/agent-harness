@@ -41,4 +41,11 @@ describe("TurnTranslator", () => {
     const fin = t.finalize({ text: "", isError: true });
     expect(fin).toEqual([{ method: "turn/failed", params: { turn: { id: "turn_1", status: "failed" } } }]);
   });
+  it("tokenUsage() emits the thread/tokenUsage/updated shape (the one contract reused by heartbeat + finalize)", () => {
+    const t = new TurnTranslator("thr_1", "turn_1");
+    expect(t.tokenUsage({ totalTokens: 9, inputTokens: 6, outputTokens: 3 })).toEqual({
+      method: "thread/tokenUsage/updated",
+      params: { threadId: "thr_1", turnId: "turn_1", tokenUsage: { total: { totalTokens: 9, inputTokens: 6, outputTokens: 3 } } },
+    });
+  });
 });
