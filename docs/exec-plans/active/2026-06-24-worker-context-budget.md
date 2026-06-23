@@ -187,8 +187,10 @@ Background a novice needs:
 - [x] (2026-06-24) M3 — wired `SessionOpts.contextBudget` (`src/session/session.ts`), `OpenSessionConfig`
   passthrough (`src/session/index.ts`), type-only public exports (`src/index.ts`), `session.test.ts`
   wiring tests. Full harness suite 452 green; typecheck + `npm run build` clean.
-- [ ] M4 — app-server enablement (`handlers.ts cfg.contextBudget = true`) + live proof. (done: code path
-  ready; remaining: enable in handlers + gated live test — see Surprises re: shared file.)
+- [x] (2026-06-24) M4 (code) — `handlers.threadStart` sets `cfg.contextBudget = true`; handlers unit
+  assertion added; new gated `test/live/context-budget.test.ts` (config-driven self-compaction, skips clean
+  keyless — verified). app-server typecheck + 51 unit tests green. Remaining: commit the two app-server files
+  (shared with the human's uncommitted heartbeat — commit-boundary pending) + the keyed live run (controller).
 - [ ] M5 — docs (README/RELIABILITY) + completion gate.
 
 ## Surprises & discoveries
