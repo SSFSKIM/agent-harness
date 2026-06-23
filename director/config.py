@@ -321,6 +321,10 @@ def _build(raw: dict) -> DirectorConfig:
     for name, cmd in wr_raw.items():
         if not isinstance(name, str) or not name:
             raise ValueError(f"director.worker_runtimes has a non-string key {name!r}")
+        if name == "codex":
+            raise ValueError('director.worker_runtimes may not redefine the reserved '
+                             '"codex" runtime (it tracks director.codex_command); '
+                             'set codex_command instead')
         if not isinstance(cmd, str) or not cmd.strip():
             raise ValueError(f"director.worker_runtimes[{name!r}] must be a non-empty "
                              f"string, got {cmd!r}")
@@ -366,8 +370,10 @@ def resolve_worker_command(cfg: DirectorConfig, worker: str | None) -> str:
     named runtime from `cfg.worker_runtimes`; None falls back to `cfg.worker_runtime`
     (default "codex"). Fail-loud on an unknown name (spec R7) — a typo'd runtime must
     not silently dispatch the default worker. The raw `--codex CMD` override bypasses
-    this entirely (handled by the caller)."""
-    name = worker or cfg.worker_runtime
+    this entirely (handled by the caller). Only None (flag absent) falls back to the
+    default — an explicit empty/blank `--worker` is a provided value that names no
+    runtime, so it fails loud rather than silently dispatching the default."""
+    name = cfg.worker_runtime if worker is None else worker
     try:
         return cfg.worker_runtimes[name]
     except KeyError:

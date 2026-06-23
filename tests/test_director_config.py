@@ -320,6 +320,25 @@ class LoadConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config.resolve_worker_command(cfg, "gemini")
 
+    def test_resolve_worker_command_empty_string_fails_loud(self):
+        # --worker "" is a provided-but-empty value: it must fail loud, NOT silently
+        # fall back to the default (only an absent flag / None falls back).
+        cfg = config._build({"worker_runtimes": {"claude": "cc-codex-appserver app-server"}})
+        self.assertEqual(config.resolve_worker_command(cfg, None), "codex app-server")  # absent → default
+        with self.assertRaises(ValueError):
+            config.resolve_worker_command(cfg, "")
+        with self.assertRaises(ValueError):
+            config.resolve_worker_command(cfg, "   ")
+
+    def test_reserved_codex_runtime_key_rejected(self):
+        # a host may not redefine the reserved "codex" runtime via worker_runtimes — it
+        # tracks codex_command; allowing it would silently clobber the default selector.
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtimes": {"codex": "cc-codex-appserver app-server"}})
+        _write(self.root, {"director": {"worker_runtimes": {"codex": "x app-server"}}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
 
 class WiringTest(unittest.TestCase):
     """orchestrator.resolve_settings precedence (CLI > config > default) and the
