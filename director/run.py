@@ -573,7 +573,8 @@ def main(argv=None) -> int:
                  tool_executor=tool_executor, install_skills=args.install_skills,
                  approval_policy=posture.approval_policy,
                  sandbox=config.resolve_worker_sandbox(cfg, args.worker),
-                 max_turns=max_turns, read_timeout_s=cfg.read_timeout_s, hooks=hooks,
+                 max_turns=max_turns,
+                 read_timeout_s=config.resolve_worker_read_timeout(cfg, args.worker), hooks=hooks,
                  hook_timeout_s=cfg.workspace.hook_timeout_s)
     print(json.dumps({"ticket": ticket["id"], **disp}))
     return 0 if disp.get("kind") == "terminal" else 1

@@ -1131,7 +1131,11 @@ def resolve_settings(args, cfg) -> dict:
         "max_turns": _pick(args.max_turns, cfg.max_turns),
         "max_passes": _pick(args.max_passes, cfg.max_passes),
         "max_dispatched": _pick(args.max_dispatched, cfg.max_dispatched),
-        "read_timeout_s": _pick(args.read_timeout, cfg.read_timeout_s),
+        # Per-runtime read-timeout (slow runtimes get a longer stall tolerance) → else global.
+        # --read-timeout still wins via _pick. A runtime silent >this between streamed
+        # notifications is a recoverable ReadTimeout, not a hung worker (dogfood finding O3).
+        "read_timeout_s": _pick(args.read_timeout,
+                                config.resolve_worker_read_timeout(cfg, getattr(args, "worker", None))),
         "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
         "reconcile_interval_s": _pick(args.reconcile_interval, cfg.reconcile_interval_s),
         "poll_interval_s": _pick(args.poll_interval, cfg.poll_interval_s),

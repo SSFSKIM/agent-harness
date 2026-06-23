@@ -429,6 +429,67 @@ class LoadConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config._build({"worker_runtime_sandbox": {"": "workspace-write"}})  # empty key
 
+    # --- per-runtime read-timeout override (O3 fix) ---
+
+    def test_worker_runtime_read_timeout_defaults_empty(self):
+        cfg = config._build({})
+        self.assertEqual(cfg.worker_runtime_read_timeout, {})
+
+    def test_resolve_worker_read_timeout_falls_back_to_global(self):
+        # no override → every runtime (incl. None/default and an unknown name) uses the global
+        # read_timeout_s; like resolve_worker_sandbox, an unknown name does NOT raise.
+        cfg = config._build({"worker_runtimes": {"claude": "cc app-server"}})
+        self.assertEqual(cfg.read_timeout_s, 180.0)
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, None), 180.0)
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, "claude"), 180.0)
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, "gemini"), 180.0)
+
+    def test_resolve_worker_read_timeout_per_runtime_override(self):
+        # the O3 fix: claude → 1200s stall tolerance (silent long turns), codex untouched.
+        cfg = config._build({
+            "worker_runtimes": {"claude": "cc app-server"},
+            "worker_runtime_read_timeout": {"claude": 1200}})
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, "claude"), 1200.0)
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, None), 180.0)    # default codex
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, "codex"), 180.0)
+
+    def test_resolve_worker_read_timeout_respects_default_selector(self):
+        # claude as the DEFAULT runtime → an absent --worker (None) resolves to it.
+        cfg = config._build({
+            "worker_runtime": "claude",
+            "worker_runtimes": {"claude": "cc app-server"},
+            "worker_runtime_read_timeout": {"claude": 900}})
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, None), 900.0)
+
+    def test_worker_runtime_read_timeout_invalid_value_raises(self):
+        rt = {"worker_runtimes": {"claude": "cc app-server"}}
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_read_timeout": {"claude": 0}})    # not positive
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_read_timeout": {"claude": -5}})   # negative
+        # a non-number (JSON list/string/bool) must fail loud as a NAMED ValueError via
+        # `_pos_num`, never a raw TypeError (the sandbox-P2 fail-loud discipline).
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_read_timeout": {"claude": ["x"]}})
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_read_timeout": {"claude": "1200"}})
+        with self.assertRaises(ValueError):
+            config._build({**rt, "worker_runtime_read_timeout": {"claude": True}})
+
+    def test_worker_runtime_read_timeout_unknown_runtime_key_raises(self):
+        # a key naming no configured runtime fails loud (typo / --codex raw-command edge).
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_read_timeout": {"claude": 1200}})  # claude not configured
+        # "codex" is always configured, so an override for it is accepted.
+        cfg = config._build({"worker_runtime_read_timeout": {"codex": 600}})
+        self.assertEqual(config.resolve_worker_read_timeout(cfg, None), 600.0)
+
+    def test_worker_runtime_read_timeout_bad_shape_raises(self):
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_read_timeout": ["claude"]})       # not a dict
+        with self.assertRaises(ValueError):
+            config._build({"worker_runtime_read_timeout": {"": 1200}})       # empty key
+
 
 class WiringTest(unittest.TestCase):
     """orchestrator.resolve_settings precedence (CLI > config > default) and the
@@ -481,6 +542,20 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(s_claude["worker_sandbox"], "danger-full-access")
         s_codex = orchestrator.resolve_settings(self._args(), cfg)  # --worker absent → codex
         self.assertEqual(s_codex["worker_sandbox"], "workspace-write")
+
+    def test_worker_read_timeout_override_flows_to_dispatch_settings(self):
+        # O3 fix: the per-runtime read-timeout override reaches the dispatch read_timeout_s.
+        # claude → 1200s; a default (codex) run keeps the global 180s; --read-timeout wins.
+        from director import orchestrator
+        cfg = config._build({
+            "worker_runtimes": {"claude": "cc app-server"},
+            "worker_runtime_read_timeout": {"claude": 1200}})
+        s_claude = orchestrator.resolve_settings(self._args(worker="claude"), cfg)
+        self.assertEqual(s_claude["read_timeout_s"], 1200.0)
+        s_codex = orchestrator.resolve_settings(self._args(), cfg)  # --worker absent → codex
+        self.assertEqual(s_codex["read_timeout_s"], 180.0)
+        s_cli = orchestrator.resolve_settings(self._args(worker="claude", read_timeout=42.0), cfg)
+        self.assertEqual(s_cli["read_timeout_s"], 42.0)            # CLI flag still wins
 
     def test_merging_state_flows_from_config_to_runtime(self):
         # merge-gated-eligibility R1/R7 (review P1): a configured `merging` must reach the

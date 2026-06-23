@@ -96,6 +96,14 @@ DEFAULTS: dict = {
     # boundary). Empty = every runtime uses the global posture. INFORMED-ACCEPTED security
     # decision per runtime (SECURITY.md "Worker-runtime caveat").
     "worker_runtime_sandbox": {},
+    # Per-runtime READ-TIMEOUT override: {runtime_name: seconds}. A runtime listed here
+    # waits this long for inter-notification silence before `drive()` treats the turn as a
+    # recoverable ReadTimeout, instead of the global `read_timeout_s`. For runtimes whose
+    # turns go silent longer than the codex-tuned 180s default — the claude SDK adapter
+    # buffers output and can run a long tool (a full check.py) between streamed messages, so
+    # {"claude": 1200} stops a SUCCEEDING worker being declared failed at 180s (live dogfood
+    # finding O3). Empty = every runtime uses the global read_timeout_s.
+    "worker_runtime_read_timeout": {},
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
     # tool) and whether the worker methodology — both plugins' skills + the review/gardener
@@ -184,6 +192,7 @@ class DirectorConfig:
     worker_runtime: str
     worker_runtimes: dict   # {name: command}; always contains "codex" (= codex_command)
     worker_runtime_sandbox: dict  # {name: sandbox_mode} per-runtime override of posture.sandbox
+    worker_runtime_read_timeout: dict  # {name: seconds} per-runtime override of read_timeout_s
     posture: Posture
     worker_tools: str
     worker_install_skills: bool
@@ -367,6 +376,23 @@ def _build(raw: dict) -> DirectorConfig:
                              f"{sorted(_SANDBOX_VALUES)}, got {mode!r}")
         worker_runtime_sandbox[name] = mode
 
+    # Per-runtime read-timeout override (deployment tuning): {name: positive seconds}. Same
+    # fail-loud key discipline as worker_runtime_sandbox — each key MUST name a configured
+    # runtime; the value reuses `_pos_num`, so a non-number / non-positive fails loud with a
+    # NAMED ValueError rather than silently mis-tuning a worker's stall tolerance.
+    wrt_raw = raw.get("worker_runtime_read_timeout", DEFAULTS["worker_runtime_read_timeout"])
+    if not isinstance(wrt_raw, dict):
+        raise ValueError(f"director.worker_runtime_read_timeout must be an object, got {wrt_raw!r}")
+    worker_runtime_read_timeout = {}
+    for name, secs in wrt_raw.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"director.worker_runtime_read_timeout has a non-string key {name!r}")
+        if name not in worker_runtimes:
+            raise ValueError(f"director.worker_runtime_read_timeout[{name!r}] names no configured "
+                             f"runtime {sorted(worker_runtimes)}; add it to worker_runtimes "
+                             f"(or set codex_command) first")
+        worker_runtime_read_timeout[name] = _pos_num(secs, f"worker_runtime_read_timeout[{name!r}]")
+
     drl = raw.get("dispatch_requires_label", DEFAULTS["dispatch_requires_label"])
     if not isinstance(drl, bool):
         raise ValueError(f"director.dispatch_requires_label must be a boolean, got {drl!r}")
@@ -394,6 +420,7 @@ def _build(raw: dict) -> DirectorConfig:
         codex_command=codex_command,
         worker_runtime=worker_runtime, worker_runtimes=worker_runtimes,
         worker_runtime_sandbox=worker_runtime_sandbox,
+        worker_runtime_read_timeout=worker_runtime_read_timeout,
         posture=posture,
         worker_tools=w["tools"], worker_install_skills=worker_install_skills,
         paths=paths, merger=merger, workspace=workspace)
@@ -429,6 +456,19 @@ def resolve_worker_sandbox(cfg: DirectorConfig, worker: str | None) -> str:
     the fail-loud on an unconfigured runtime)."""
     name = cfg.worker_runtime if worker is None else worker
     return cfg.worker_runtime_sandbox.get(name, cfg.posture.sandbox)
+
+
+def resolve_worker_read_timeout(cfg: DirectorConfig, worker: str | None) -> float:
+    """The effective inter-notification read-timeout for a run's worker runtime. Mirrors
+    `resolve_worker_sandbox`: name resolution (None → the default `worker_runtime`), then the
+    per-runtime `worker_runtime_read_timeout` override if declared for that runtime, else the
+    global `cfg.read_timeout_s`. This lets a host give a slow runtime (e.g. the claude SDK
+    adapter, which can be silent >180s during a long tool run between streamed messages) a
+    longer stall tolerance without loosening it for codex. Override keys are validated at load
+    to name a configured runtime; an unknown name here never raises (the command resolver owns
+    the fail-loud on an unconfigured runtime)."""
+    name = cfg.worker_runtime if worker is None else worker
+    return cfg.worker_runtime_read_timeout.get(name, cfg.read_timeout_s)
 
 
 def defaults() -> DirectorConfig:
