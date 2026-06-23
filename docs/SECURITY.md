@@ -138,6 +138,17 @@ Grounding document for the review-security persona. Threats are numbered.
   forced read-only); (2) `auto_review` (fail-closed) on escalations; (3) **T10**
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
+
+  **Worker-runtime caveat (`--worker claude`, 2026-06-23).** Boundary (1) — the OS
+  sandbox — is a property of the **codex** runtime, not the harness. The selectable
+  `claude` runtime (`cc-codex-appserver`; default-off, opt-in via `--worker claude`) is
+  **approval-gated but NOT OS-sandboxed**: the Director sends `sandbox=workspace-write`
+  (`director/worker/app_server.py:371`) but the adapter (`cc-harness-appserver`
+  `dist/handlers.js`/`dist/posture.js`) maps only `approvalPolicy`->`permissionMode` and
+  drops `sandbox`, so a Claude worker keeps the auto_review/approval round-trip (boundary
+  2) but none of codex's filesystem/network containment (boundary 1). Default stays
+  codex; treat `--worker claude` as approval-gated-only until the producer maps the
+  posture (tech-debt tracker).
   **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
   residual below applies to **both** watched and un-watched. The exfil threat has three
   channels; the first is closed, the other two are **deferred to the always-on/cloud
