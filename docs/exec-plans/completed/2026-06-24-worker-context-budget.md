@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-24
 owner: harness
 type: exec-plan
@@ -193,8 +193,12 @@ Background a novice needs:
   (shared with the human's uncommitted heartbeat — commit-boundary pending) + the keyed live run (controller).
 - [x] (2026-06-24) M5 (docs) — `worker-runtime/README.md` budget paragraph; `docs/RELIABILITY.md` R23
   (worker-runtime SDK hooks fail open, generalizing R6). check.py GREEN.
-- [ ] Completion gate — behavioral check, self-review, QA + targeted reviews. **Review range = `c6d0746..HEAD`**
-  (the human's heartbeat commits 3fb7474+c6d0746 landed concurrently inside base..HEAD and are out-of-scope).
+- [x] (2026-06-24) Completion gate — all reviews SATISFIED (spec-compliance, code-quality, arch, reliability +
+  Codex over 2 rounds). **Review range = `c6d0746..HEAD`** (the human's heartbeat commits 3fb7474+c6d0746 landed
+  concurrently inside base..HEAD and are out-of-scope).
+- [x] (2026-06-24) Behavioral check (keyed live, controller-run on the human's request) — see Surprises B1.
+  Smoke PASS (worker runs end-to-end with contextBudget, does real work + commits); self-compaction OBSERVED
+  not firing on haiku or sonnet from the soft persona alone → accepted as advisory (human decision). M4/M5 closed.
 
 ## Surprises & discoveries
 - (2026-06-24) `handlers.ts` + `translator.ts` carry the human's **uncommitted** usage-heartbeat work
@@ -203,6 +207,18 @@ Background a novice needs:
   M1–M3 are committed harness-only (explicit path staging) to keep diffs clean; M4 sequencing handled then.
 - (2026-06-24) Component A (`cfg.contextTool/compactTool` in `handlers.threadStart`) is ALREADY committed
   in HEAD (0c36fe3) — the plan's premise holds; M4 only adds `cfg.contextBudget`.
+- **(2026-06-24) B1 — the behavioral goal is only PARTLY met: the wiring is sound but the model declines to
+  self-compact from the soft persona.** Keyed live runs (haiku, then sonnet on the human's request) both did
+  real work + git commits but did NOT call RequestCompaction. A decisive diagnostic (a `UserPromptSubmit` hook
+  injecting a sentinel the model echoed back) PROVED the push reaches the model on a programmatic `submit()` —
+  so it is **model judgment, not a wiring bug**: persona applied, push delivered, tool callable (proactive-
+  compaction.test.ts shows the model DOES compact when the turn prompt explicitly says so). Root cause: the
+  persona's own "you have a large context window; do not compact reflexively" + a conditional push let a capable
+  model trust its real read ("~30k is tiny for my window") over the configured thresholds. A "strengthen" option
+  (drop the room-reassurance, tell the model to trust the budget, make the past-target push imperative) was
+  offered and prototyped; **the human chose to REVERT it and ship the current soft persona as advisory
+  best-effort** (decision below). Net: self-compaction is model-dependent; native SDK auto-compact is the floor;
+  the live test became an end-to-end smoke + observation (gates only that the feature doesn't break a worker).
 
 ## Decision log
 - 2026-06-24: Chose Approach A (persona policy + checkpoint/high-water push) over persona-only
@@ -219,6 +235,12 @@ Background a novice needs:
 - 2026-06-24: Public surface kept **minimal** — only the `contextBudget?` config field + the `ContextBudget`
   /`ContextBudgetInput` *types* are exported; the persona/hook plumbing stays internal (mirrors how
   `withContextTool`/`parseCompactOutcome` are not in the barrel), so the frozen value-export pin is untouched.
+- 2026-06-24: **Ship the soft persona as advisory best-effort; do NOT strengthen (human call).** After the live
+  behavioral miss (Surprises B1), the human was offered three paths (strengthen+re-validate / advisory best-effort
+  / deterministic backstop) and chose to keep the current soft, anxiety-averse persona and accept that
+  self-compaction is model-dependent — rather than make the nudge imperative. So the persona/hook ship exactly as
+  reviewed; the live test is reframed as a smoke + observation; README marks self-compaction advisory. The
+  "strengthen the nudge" lever is recorded for a future revisit if self-compaction is wanted to actually fire.
 
 ## Feedback (from completion gate)
 - (2026-06-24) Spec-compliance, round 1 — split verdict: harness `review-spec-compliance` SATISFIED
@@ -254,3 +276,28 @@ Background a novice needs:
   Verified: hook suite 16 green, harness 456 green, app-server 51 green, build clean, gate GREEN.
 
 ## Outcomes & retrospective
+**Delivered.** The context-budget mechanism ships end-to-end: a system-prompt **persona** (`cc-harness`
+`src/context/budget.ts`) + a checkpoint/high-water **usage-push hook** (`budgetHook.ts`, turn-safe per R23) +
+**Session wiring** (`contextBudget` self-enables `cc-context`) + **app-server enablement** (every worker
+session, `handlers.threadStart`). Unit-tested (harness 456 green incl. 16 hook + 3 session-wiring tests;
+app-server 51 green), typecheck + build clean, `check.py` GREEN. All completion reviews SATISFIED —
+spec-compliance, code-quality, arch, reliability (harness personas) + Codex over two rounds; Codex caught four
+real issues the green personas missed (F1 false "past target" message, F2 failed-commit checkpoint, F3 a
+`JSON.stringify` throw that violated the very R23 this diff ships, F4 withdrawn) — all fixed or reasoned.
+
+**The honest result: wiring works, the behavior is model-dependent.** A keyed live run (haiku, then sonnet on
+the human's request) proved the push reaches the model on a programmatic `submit()` (sentinel diagnostic) and
+the worker runs the feature end-to-end — but the model **declines to self-compact** from the soft standing
+persona alone (it trusts its own "I still have room" read over the configured thresholds, reinforced by the
+persona's "do not compact reflexively"). The human chose to **ship the soft persona as advisory best-effort**
+rather than make the nudge imperative. So: self-compaction is a best-effort nudge, the SDK's native auto-compact
+is the real floor, and the live test is an end-to-end smoke + observation.
+
+**Retrospective.** The pairing of grounded harness personas with an adversarial Codex pass earned its keep —
+the personas confirmed structure (and stayed green on real semantic bugs), Codex found the bugs (without
+confabulating). The biggest lesson is the value of the *behavioral* gate: every unit was green and every review
+SATISFIED, yet the feature does not achieve its headline goal for capable models — only a real live run surfaced
+that. **Follow-up lever (deferred, tech-debt):** if self-compaction is ever wanted to actually fire, strengthen
+the nudge — drop the "you have a large window; do not compact reflexively" reassurance, tell the model to trust
+the configured budget over its room-sense, and make the past-target checkpoint push imperative — then re-validate
+live. Left unbuilt by human decision this slice.

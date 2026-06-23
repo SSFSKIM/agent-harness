@@ -28,9 +28,11 @@ tools: a system-prompt persona telling the worker WHEN to self-compact (checkpoi
 275k–650k token band, and an explicit guard against ending work early just to free space) plus a
 hook that pushes the worker's current usage at a clean checkpoint (a `git commit`) or a high-water
 crossing. Compaction stays the model's decision — the hook only injects advisory usage, never
-forces it (the SDK's native auto-compact remains the involuntary floor). See `cc-harness`
-`src/context/budget.ts` (persona) + `budgetHook.ts` (push), config-driven self-compaction
-live-tested in `harness/test/live/context-budget.test.ts`.
+forces it. **Self-compaction is advisory and model-dependent**: a capable model often judges it
+still has room and declines the checkpoint nudge (observed on haiku and sonnet, 2026-06-24), so
+treat this as a best-effort nudge with the SDK's native auto-compact as the involuntary floor.
+See `cc-harness` `src/context/budget.ts` (persona) + `budgetHook.ts` (push); the end-to-end smoke
++ observation lives in `harness/test/live/context-budget.test.ts`.
 
 ## Build (one-time, after clone)
 
