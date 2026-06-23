@@ -16,6 +16,13 @@ Two packages (npm `file:` siblings):
 The only external dependency is the published `@anthropic-ai/claude-agent-sdk` (pinned
 in each `package.json`) plus `zod` — the SDK itself is **not** vendored.
 
+Every worker session is opened with two in-process self-introspection MCP tools enabled
+(`handlers.threadStart` sets `contextTool`/`compactTool`): `mcp__cc-context__GetContextUsage`
+(read its own context-window usage) and `mcp__cc-compact__RequestCompaction` (schedule a
+self-compaction at the end of the current turn). These let a worker manage its own context
+on long multi-turn tickets. They are additive — only appended to `allowedTools`, so built-in
+tools stay available (live-tested in `test/live/appserver.e2e.test.ts`).
+
 ## Build (one-time, after clone)
 
 ```sh

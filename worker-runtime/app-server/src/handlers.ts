@@ -53,6 +53,13 @@ export class AppServer {
   private threadStart(params: ThreadStartParams, id: number | string): void {
     const posture = resolvePosture({ approvalPolicy: params.approvalPolicy, autoReview: this.autoReview });
     let cfg: any = { cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode };
+    // Self-introspection: every worker session gets cc-context (GetContextUsage) and
+    // cc-compact (RequestCompaction) so the agent can read its own context usage and
+    // schedule a self-compaction before exhausting the window — essential for long
+    // multi-turn Director tickets. Additive: openSession only APPENDS these to
+    // allowedTools (same mechanism as withDynamicTools), so built-in tools stay available.
+    cfg.contextTool = true;
+    cfg.compactTool = true;
     // OS-level sandbox (Seatbelt/bubblewrap) for Bash + L3 credential-read deny rules,
     // translated from the Director's codex sandbox posture. Opt-out modes return {} (no change).
     const plan = resolveSandbox({

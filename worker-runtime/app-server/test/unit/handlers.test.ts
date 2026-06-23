@@ -63,6 +63,33 @@ describe("sandbox wiring (threadStart)", () => {
   });
 });
 
+describe("self-introspection tool wiring (threadStart)", () => {
+  function captureCfg() {
+    let captured: any;
+    const peer = new Peer((_o) => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const server = new AppServer(peer, { open: (cfg) => { captured = cfg; return fakeSession(); } });
+    return { server, cfg: () => captured };
+  }
+
+  it("exposes the cc-context + cc-compact self-introspection tools to every session", () => {
+    const h = captureCfg();
+    h.server.handleRequest("thread/start", { cwd: "/tmp/ws" }, 1);
+    // openSession reads these session-level booleans → wires the GetContextUsage +
+    // RequestCompaction in-process MCP tools so the agent can self-introspect/compact.
+    expect(h.cfg().contextTool).toBe(true);
+    expect(h.cfg().compactTool).toBe(true);
+  });
+
+  it("keeps the self-introspection tools enabled alongside dynamic tools", () => {
+    const h = captureCfg();
+    const spec = { name: "linear_graphql", description: "d", inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } } } };
+    h.server.handleRequest("thread/start", { cwd: "/tmp/ws", dynamicTools: [spec] }, 1);
+    expect(h.cfg().contextTool).toBe(true);   // survives the withDynamicTools spread
+    expect(h.cfg().compactTool).toBe(true);
+    expect(h.cfg().mcpServers).toBeDefined(); // dynamic-tool server still wired
+  });
+});
+
 describe("dynamic tool brokering", () => {
   it("relays a dynamic-tool call to the client via item/tool/call and feeds the reply back to the agent", async () => {
     const out: any[] = [];
