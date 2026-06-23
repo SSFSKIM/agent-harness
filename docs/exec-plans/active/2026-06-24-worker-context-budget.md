@@ -233,5 +233,24 @@ Background a novice needs:
     the plan's own success assumption. **Fixed:** added `bashFailed(tool_response)` (error/interrupted flag or
     no-op/`fatal:` text marker) so a failed commit does not arm; new test covers it. Both fixes verified — hook
     suite 14 green, full harness suite 454 green, gate GREEN. Re-review dispatched.
+- (2026-06-24) Round 2 — code-quality SATISFIED, arch SATISFIED, reliability SATISFIED, Codex NOT-SATISFIED.
+  Findings actioned:
+  - **F3 (reliability, real R23 self-violation)** — `flagCommit` (PostToolUse) called `bashFailed` →
+    `JSON.stringify(unknown tool_response)`, which throws on a circular/BigInt/throwing-toJSON value → aborts
+    the turn, violating the R23 this diff ships. **Fixed:** `bashFailed` is now throw-proof (inspects explicit
+    flags + known string fields `stdout/stderr/output/content`, never stringifies arbitrary input) AND
+    `flagCommit` is wrapped in `try/catch` (R23-canonical, defense-in-depth). New test: a circular
+    `tool_response` resolves to `{}` (no throw).
+  - **F4 (Codex, stale commit flag on a transient usage-read failure)** — EVALUATED, kept current behavior.
+    The flag persists across a failed `getContextUsage()` read so the checkpoint nudge fires on the next
+    successful turn (defer); Codex's "clear before read" would LOSE the nudge on failure — strictly worse.
+    Documented the defer intent inline; the F3 throw-proofing removes the only real failure surface here.
+  - **Nits (feedback-twice → fixed):** `"net net"` comment typo → "high-water net"; `isGitCommit` regex now
+    `\bcommit\b(?!-)` so `commit-tree`/`commit-graph` plumbing isn't a checkpoint (new test); barrel routes
+    `ContextBudget`/`ContextBudgetInput` through `context/index.js` for consistency.
+  - **P2 deferred (documented-accepted, → tech-debt):** `bashFailed`/`isGitCommit` remain best-effort commit
+    detection (a contrived `fatal:` in stdout, or unusual git invocations, could mis-read) — harmless by design
+    (advisory nudge gated on ≥soft, never a forced compaction); plan assumption #3 accepts this.
+  Verified: hook suite 16 green, harness 456 green, app-server 51 green, build clean, gate GREEN.
 
 ## Outcomes & retrospective

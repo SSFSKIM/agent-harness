@@ -23,8 +23,7 @@ export type { KairosConfig, BriefSink, BriefMessage, BriefStatus, PostureConfig 
 export { listSessions, getSessionMessages, getSessionInfo, forkSession, renameSession, tagSession, deleteSession } from "./sessions/index.js";
 export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts, ForkSessionOpts, MutateSessionOpts } from "./sessions/index.js";
 export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/index.js";
-export type { RawContextUsage, ContextUsageSummary } from "./context/index.js";
-export type { ContextBudget, ContextBudgetInput } from "./context/budget.js";
+export type { RawContextUsage, ContextUsageSummary, ContextBudget, ContextBudgetInput } from "./context/index.js";
 export { createCompactMcpServer, COMPACT_TOOL } from "./compaction/index.js";
 export type { CompactOutcome } from "./compaction/index.js";
 export { openSession, resumeSession, Session } from "./session/index.js";

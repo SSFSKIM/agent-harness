@@ -35,6 +35,11 @@ describe("buildContextBudgetHooks — PostToolUse commit detection", () => {
     // target (500k) is below net (600k), and no commit was armed → nothing fires
     expect(injected(await cb.userPromptSubmit(ups))).toBeUndefined();
   });
+  it("does not treat `git commit-tree`/`commit-graph` plumbing as a checkpoint", async () => {
+    const cb = callbacks(buildContextBudgetHooks(holderAt({ raw: usage(CFG.target) }), CFG));
+    await cb.postToolUse({ tool_name: "Bash", tool_input: { command: "git commit-tree HEAD^{tree}" } } as any);
+    expect(injected(await cb.userPromptSubmit(ups))).toBeUndefined();
+  });
 });
 
 describe("buildContextBudgetHooks — checkpoint push", () => {
@@ -107,6 +112,12 @@ describe("buildContextBudgetHooks — turn safety", () => {
   it("no live query yet yields {}", async () => {
     const cb = callbacks(buildContextBudgetHooks({}, CFG));
     expect(await cb.userPromptSubmit(ups)).toEqual({});
+  });
+  it("flagCommit never throws on a hostile (circular) tool_response — R23 for the PostToolUse path", async () => {
+    const circular: any = {}; circular.self = circular; // JSON.stringify would throw on this
+    const cb = callbacks(buildContextBudgetHooks(holderAt({ raw: usage(CFG.soft) }), CFG));
+    await expect(cb.postToolUse({ tool_name: "Bash", tool_input: { command: "git commit -m x" }, tool_response: circular } as any))
+      .resolves.toEqual({});
   });
 });
 

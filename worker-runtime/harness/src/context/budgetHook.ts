@@ -22,19 +22,22 @@ export function isGitCommit(input: PostToolUseHookInput): boolean {
   if (input.tool_name !== "Bash") return false;
   const cmd = (input.tool_input as { command?: unknown } | null | undefined)?.command;
   if (typeof cmd !== "string" || /--dry-run/.test(cmd)) return false;
-  if (!/\bgit\b[^\n]*\bcommit\b/.test(cmd)) return false;
+  if (!/\bgit\b[^\n]*\bcommit\b(?!-)/.test(cmd)) return false; // (?!-) skips `commit-tree`/`commit-graph` plumbing
   return !bashFailed(input.tool_response);
 }
 
-/** Best-effort failure read of a Bash tool_response: an explicit error/interrupted flag, or a git no-op /
- *  hard-error marker in its text. Unknown/empty shape → treated as success (never suppress a real checkpoint). */
+const COMMIT_FAILED_RE = /nothing to commit|nothing added to commit|no changes added to commit|\bfatal:/i;
+/** Best-effort failure read of a Bash tool_response — THROW-PROOF (R23): inspect explicit flags and known
+ *  string fields only, and NEVER `JSON.stringify` an arbitrary `unknown` (a circular / BigInt / throwing-
+ *  `toJSON` value would throw and abort the turn). Unknown/empty shape → success (never suppress a checkpoint). */
 function bashFailed(resp: unknown): boolean {
+  if (typeof resp === "string") return COMMIT_FAILED_RE.test(resp);
   if (resp && typeof resp === "object") {
     const r = resp as Record<string, unknown>;
     if (r.is_error === true || r.isError === true || r.interrupted === true) return true;
+    for (const f of [r.stdout, r.stderr, r.output, r.content]) if (typeof f === "string" && COMMIT_FAILED_RE.test(f)) return true;
   }
-  const text = typeof resp === "string" ? resp : JSON.stringify(resp ?? "");
-  return /nothing to commit|nothing added to commit|no changes added to commit|\bfatal:/i.test(text);
+  return false;
 }
 
 function checkpointMsg(tokensUsed: number, percentUsed: number, cfg: ContextBudget): string {
@@ -56,17 +59,18 @@ export function buildContextBudgetHooks(holder: QueryHolder, cfg: ContextBudget)
   const state = { committed: false, nettedNudged: false };
 
   const flagCommit: HookCallback = async (input) => {
-    if (isGitCommit(input as PostToolUseHookInput)) state.committed = true;
+    try { if (isGitCommit(input as PostToolUseHookInput)) state.committed = true; }
+    catch { /* R23: a hook must never throw out of a turn (defense-in-depth; bashFailed is already throw-proof) */ }
     return {};
   };
 
   const inject: HookCallback = async () => {
     try {
       const raw = await holder.query?.getContextUsage();
-      if (!raw) return {};
+      if (!raw) return {};                                   // not readable this turn → keep flags, retry next turn
       const u = summarizeUsage(raw);
       if (u.tokensUsed < cfg.net) state.nettedNudged = false; // re-arm the net throttle once we drop back down
-      if (state.committed) {                                  // (1) checkpoint takes precedence over the net net
+      if (state.committed) {                                  // (1) checkpoint takes precedence over the high-water net
         state.committed = false;
         if (u.tokensUsed >= cfg.soft) {
           if (u.tokensUsed >= cfg.net) state.nettedNudged = true; // the checkpoint note already covered high-water
@@ -79,7 +83,7 @@ export function buildContextBudgetHooks(holder: QueryHolder, cfg: ContextBudget)
         return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: highWaterMsg(u.tokensUsed, u.percentUsed, cfg) } };
       }
       return {};
-    } catch { return {}; }                                    // a hook must NEVER break a turn
+    } catch { return {}; }  // never break a turn; a failed usage read keeps the flags for next turn (defer, not lose)
   };
 
   return mergeHooks(
