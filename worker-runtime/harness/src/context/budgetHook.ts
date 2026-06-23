@@ -14,19 +14,35 @@ import type { ContextBudget } from "./budget.js";
 /** "275000" → "275k" for prose. */
 const k = (n: number): string => `${Math.round(n / 1000)}k`;
 
-/** Best-effort: did this PostToolUse complete a git commit? Matching the Bash command is enough — a false
- *  positive only injects an advisory note (gated on ≥soft), so we don't parse tool_response for success. */
+/** Best-effort: did this PostToolUse complete a SUCCESSFUL git commit? Match the Bash command, then drop the
+ *  common failure signals so a failed commit ("nothing to commit", a `fatal:` error, an error/interrupted
+ *  tool_response) does not count as a clean checkpoint. A residual false positive only injects an advisory
+ *  note (gated on ≥soft) and never forces a compaction. */
 export function isGitCommit(input: PostToolUseHookInput): boolean {
   if (input.tool_name !== "Bash") return false;
   const cmd = (input.tool_input as { command?: unknown } | null | undefined)?.command;
   if (typeof cmd !== "string" || /--dry-run/.test(cmd)) return false;
-  return /\bgit\b[^\n]*\bcommit\b/.test(cmd);
+  if (!/\bgit\b[^\n]*\bcommit\b/.test(cmd)) return false;
+  return !bashFailed(input.tool_response);
+}
+
+/** Best-effort failure read of a Bash tool_response: an explicit error/interrupted flag, or a git no-op /
+ *  hard-error marker in its text. Unknown/empty shape → treated as success (never suppress a real checkpoint). */
+function bashFailed(resp: unknown): boolean {
+  if (resp && typeof resp === "object") {
+    const r = resp as Record<string, unknown>;
+    if (r.is_error === true || r.isError === true || r.interrupted === true) return true;
+  }
+  const text = typeof resp === "string" ? resp : JSON.stringify(resp ?? "");
+  return /nothing to commit|nothing added to commit|no changes added to commit|\bfatal:/i.test(text);
 }
 
 function checkpointMsg(tokensUsed: number, percentUsed: number, cfg: ContextBudget): string {
-  return `[context] You just hit a checkpoint (git commit). Current usage ~${k(tokensUsed)} tokens ` +
-    `(${percentUsed}%), past your ~${k(cfg.target)} target — per your context-budget policy this is a good ` +
-    `moment to call RequestCompaction before continuing. Keep working normally if you judge it premature.`;
+  // Honest at any ≥soft level: report the real number + the target and let the model compare — do NOT assert
+  // "past target" (the push fires from soft, which may be below target).
+  return `[context] You're at a clean checkpoint (git commit). Current usage ~${k(tokensUsed)} tokens ` +
+    `(${percentUsed}%); your compaction target is ~${k(cfg.target)}. Per your context-budget policy, if you ` +
+    `are at or past that target, call RequestCompaction before continuing — otherwise keep working.`;
 }
 function highWaterMsg(tokensUsed: number, percentUsed: number, cfg: ContextBudget): string {
   return `[context] Heads up: usage is ~${k(tokensUsed)} tokens (${percentUsed}%), past your ~${k(cfg.net)} ` +

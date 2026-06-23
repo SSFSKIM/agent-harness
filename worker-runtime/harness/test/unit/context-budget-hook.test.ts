@@ -51,6 +51,21 @@ describe("buildContextBudgetHooks — checkpoint push", () => {
     expect(text).toContain("500k");
     expect(text).toContain("RequestCompaction");
   });
+  it("checkpoint in the soft–target band reports actual usage + target, never falsely asserts 'past target'", async () => {
+    const cb = callbacks(buildContextBudgetHooks(holderAt({ raw: usage(350_000) }), CFG)); // ≥soft(275k), <target(500k)
+    await cb.postToolUse(commit);
+    const text = injected(await cb.userPromptSubmit(ups))!;
+    expect(text).toContain("350k");           // the REAL number, not an overstated threshold
+    expect(text).toContain("500k");           // the target, for the model to compare against
+    expect(text).toContain("RequestCompaction");
+    expect(text).not.toContain("past your");  // must not claim it's already past target when it isn't
+  });
+  it("a FAILED git commit (nothing to commit) does not arm a checkpoint", async () => {
+    const cb = callbacks(buildContextBudgetHooks(holderAt({ raw: usage(CFG.target) }), CFG));
+    await cb.postToolUse({ tool_name: "Bash", tool_input: { command: "git commit -m x" },
+      tool_response: { stdout: "nothing to commit, working tree clean" } } as any);
+    expect(injected(await cb.userPromptSubmit(ups))).toBeUndefined(); // not a real checkpoint, and 500k < net → quiet
+  });
   it("the checkpoint flag is one-shot: a second turn without a new commit does not re-fire", async () => {
     const cb = callbacks(buildContextBudgetHooks(holderAt({ raw: usage(CFG.target) }), CFG));
     await cb.postToolUse(commit);

@@ -221,5 +221,17 @@ Background a novice needs:
   `withContextTool`/`parseCompactOutcome` are not in the barrel), so the frozen value-export pin is untouched.
 
 ## Feedback (from completion gate)
+- (2026-06-24) Spec-compliance, round 1 — split verdict: harness `review-spec-compliance` SATISFIED
+  (structural: all milestones present, compaction model-only confirmed by grep); **Codex NOT-SATISFIED** with
+  two valid semantic findings the structural pass missed (Codex cited real lines, no confabulation):
+  - **F1 (`budgetHook.ts` checkpointMsg)** — message asserted "past your ~500k target" but the checkpoint push
+    fires at ≥soft (275k), so 275k–500k commits got a false "past target" claim. **Fixed:** message now reports
+    the actual usage + the target and lets the model compare ("if at or past that target … otherwise keep
+    working"); new test asserts the soft-band message names the real number and never says "past your".
+  - **F2 (`budgetHook.ts` isGitCommit)** — armed the checkpoint on any `git commit` command text, ignoring
+    `tool_response`; a failed commit (e.g. "nothing to commit") falsely counted as a checkpoint, contradicting
+    the plan's own success assumption. **Fixed:** added `bashFailed(tool_response)` (error/interrupted flag or
+    no-op/`fatal:` text marker) so a failed commit does not arm; new test covers it. Both fixes verified — hook
+    suite 14 green, full harness suite 454 green, gate GREEN. Re-review dispatched.
 
 ## Outcomes & retrospective
