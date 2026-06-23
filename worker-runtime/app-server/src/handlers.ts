@@ -65,6 +65,11 @@ export class AppServer {
     // allowedTools (same mechanism as withDynamicTools), so built-in tools stay available.
     cfg.contextTool = true;
     cfg.compactTool = true;
+    // Context-budget guidance: append the self-compaction persona (when/how to compact: checkpoint-first,
+    // 275k–650k band, anxiety-guard) AND the checkpoint/high-water usage-push hook so the worker proactively
+    // RequestCompaction()s at safe checkpoints instead of running blind into the SDK's native auto-compact.
+    // Compaction stays the model's call — the hook only injects advisory usage; `true` = default band.
+    cfg.contextBudget = true;
     // OS-level sandbox (Seatbelt/bubblewrap) for Bash + L3 credential-read deny rules,
     // translated from the Director's codex sandbox posture. Opt-out modes return {} (no change).
     const plan = resolveSandbox({

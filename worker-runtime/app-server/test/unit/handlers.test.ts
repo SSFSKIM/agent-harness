@@ -78,6 +78,7 @@ describe("self-introspection tool wiring (threadStart)", () => {
     // RequestCompaction in-process MCP tools so the agent can self-introspect/compact.
     expect(h.cfg().contextTool).toBe(true);
     expect(h.cfg().compactTool).toBe(true);
+    expect(h.cfg().contextBudget).toBe(true); // + the self-compaction persona/usage-push (cc-harness contextBudget)
   });
 
   it("keeps the self-introspection tools enabled alongside dynamic tools", () => {
