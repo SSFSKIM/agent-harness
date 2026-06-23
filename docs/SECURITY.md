@@ -139,16 +139,23 @@ Grounding document for the review-security persona. Threats are numbered.
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
 
-  **Worker-runtime caveat (`--worker claude`, 2026-06-23).** Boundary (1) — the OS
-  sandbox — is a property of the **codex** runtime, not the harness. The selectable
-  `claude` runtime (`cc-codex-appserver`; default-off, opt-in via `--worker claude`) is
-  **approval-gated but NOT OS-sandboxed**: the Director sends `sandbox=workspace-write`
-  (`director/worker/app_server.py:371`) but the adapter (`cc-harness-appserver`
-  `dist/handlers.js`/`dist/posture.js`) maps only `approvalPolicy`->`permissionMode` and
-  drops `sandbox`, so a Claude worker keeps the auto_review/approval round-trip (boundary
-  2) but none of codex's filesystem/network containment (boundary 1). Default stays
-  codex; treat `--worker claude` as approval-gated-only until the producer maps the
-  posture (tech-debt tracker).
+  **Worker-runtime caveat (`--worker claude`).** Boundary (1) — the OS sandbox — was
+  originally a property of the **codex** runtime only. The selectable `claude` runtime
+  (`cc-codex-appserver`; default-off, opt-in via `--worker claude`) initially mapped only
+  `approvalPolicy`->`permissionMode` (`cc-harness-appserver` `dist/handlers.js`/`dist/posture.js`)
+  and **dropped** the `sandbox=workspace-write` posture the Director sends
+  (`director/worker/app_server.py:371`) — approval-gated (boundary 2) but NOT OS-sandboxed
+  (boundary 1). **FIXED 2026-06-23 (producer PR #3 `0b7e205`, dogfood-confirmed):** the
+  adapter now applies an OS-level sandbox (Seatbelt/bubblewrap Bash isolation + an L3
+  credential-read deny), so boundary (1) holds for `--worker claude` too — confirmed live
+  in the LIN-27 dogfood, where the sandbox denied `test_director_dashboard`'s loopback
+  socket bind (worker correctly read it as an env artifact, not a regression). Two caveats
+  remain: (a) it is the **SDK's** sandbox profile, NOT byte-identical to codex's — e.g.
+  local listening-socket binds are denied under workspace-write (a real constraint for
+  port-binding tests, not a bug); and (b) the **T11 fs-wide-read + egress residual below
+  is SHARED** by both runtimes — write-containment + cred-read-deny is not an egress jail,
+  so a prompt-injected worker on either runtime can still exfil reachable on-disk secrets
+  while network is on (safe only with throwaway creds). Default stays codex by config.
   **Network ON for both modes is a human decision (2026-06-15):** the credential-exfil
   residual below applies to **both** watched and un-watched. The exfil threat has three
   channels; the first is closed, the other two are **deferred to the always-on/cloud
