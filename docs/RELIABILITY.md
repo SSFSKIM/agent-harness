@@ -189,3 +189,14 @@ cite them in findings.
   not by re-deriving it. Third instance of the pattern (D4 list-degradation → D11
   `isinstance` guards → D12 path/grammar totality, now generalized across all gate
   lints); generalizes R12/R8 to the gate surface.
+- **R23 — Worker-runtime SDK programmatic hooks fail open, never breaking a turn.**
+  A `cc-harness` hook (`worker-runtime/harness/src/hooks/` builders, or anything wired into the
+  SDK `options.hooks`) runs *inside* the agent's turn — an exception out of it aborts that turn.
+  So a hook that does real work (reads control-plane state, decides an injection) must own a
+  catch-all that degrades to a no-op `{}`. The context-budget push (`context/budgetHook.ts`) is
+  the live instance: `getContextUsage()` can reject, so the `UserPromptSubmit` injector wraps its
+  whole body in `try/catch → {}` (and treats a not-yet-bound query the same), proven by its
+  "holder throws → {}" unit test; advisory-only by design, so failing silent loses a nudge, never
+  a turn. The `observe` builder already bakes this in (swallow → `{}`); a hand-written hook adds it
+  explicitly. R6's "hooks fail open" carried into the worker runtime (cf. R14 for request threads)
+  — the turn boundary owns the catch, the worker keeps working.

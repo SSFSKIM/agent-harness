@@ -23,6 +23,15 @@ self-compaction at the end of the current turn). These let a worker manage its o
 on long multi-turn tickets. They are additive — only appended to `allowedTools`, so built-in
 tools stay available (live-tested in `test/live/appserver.e2e.test.ts`).
 
+`handlers.threadStart` also sets `contextBudget`, layering a **context-budget policy** on those
+tools: a system-prompt persona telling the worker WHEN to self-compact (checkpoint-first, a
+275k–650k token band, and an explicit guard against ending work early just to free space) plus a
+hook that pushes the worker's current usage at a clean checkpoint (a `git commit`) or a high-water
+crossing. Compaction stays the model's decision — the hook only injects advisory usage, never
+forces it (the SDK's native auto-compact remains the involuntary floor). See `cc-harness`
+`src/context/budget.ts` (persona) + `budgetHook.ts` (push), config-driven self-compaction
+live-tested in `harness/test/live/context-budget.test.ts`.
+
 ## Build (one-time, after clone)
 
 ```sh

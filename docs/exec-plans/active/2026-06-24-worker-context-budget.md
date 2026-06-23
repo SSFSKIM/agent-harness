@@ -191,7 +191,10 @@ Background a novice needs:
   assertion added; new gated `test/live/context-budget.test.ts` (config-driven self-compaction, skips clean
   keyless — verified). app-server typecheck + 51 unit tests green. Remaining: commit the two app-server files
   (shared with the human's uncommitted heartbeat — commit-boundary pending) + the keyed live run (controller).
-- [ ] M5 — docs (README/RELIABILITY) + completion gate.
+- [x] (2026-06-24) M5 (docs) — `worker-runtime/README.md` budget paragraph; `docs/RELIABILITY.md` R23
+  (worker-runtime SDK hooks fail open, generalizing R6). check.py GREEN.
+- [ ] Completion gate — behavioral check, self-review, QA + targeted reviews. **Review range = `c6d0746..HEAD`**
+  (the human's heartbeat commits 3fb7474+c6d0746 landed concurrently inside base..HEAD and are out-of-scope).
 
 ## Surprises & discoveries
 - (2026-06-24) `handlers.ts` + `translator.ts` carry the human's **uncommitted** usage-heartbeat work
