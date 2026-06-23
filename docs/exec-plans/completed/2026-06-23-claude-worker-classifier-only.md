@@ -1,6 +1,6 @@
 ---
-status: active
-last_verified: 2026-06-23
+status: completed
+last_verified: 2026-06-24
 owner: director (SSFSKIM)
 type: exec-plan
 description: Disable the claude worker's OS-level sandbox (PR3) — dispatch it classifier-only via a per-runtime sandbox posture override.
@@ -98,7 +98,9 @@ INFORMED-ACCEPTED in SECURITY.md + the tech-debt tracker.
   tracker PR3 row marked superseded-by-decision. Gate GREEN.
 - [x] (2026-06-24) completion reviews: spec-compliance (codex) SATISFIED; security
   (review-security) SATISFIED (0 P1); code-quality (codex) NOT-SATISFIED → 2 P2s
-  fix-forwarded (below), gate re-GREEN (70 tests).
+  fix-forwarded (`1b02b35`), gate re-GREEN (70 tests).
+- [x] (2026-06-24) code-quality RE-VERIFY (codex): both P2 claims RESOLVED, no remaining
+  findings → SATISFIED. All verdicts SATISFIED; plan completed + moved.
 
 ## Surprises & discoveries
 - The adapter's `danger-full-access → {}` short-circuit (`sandbox.ts:48`) means disabling
@@ -129,3 +131,27 @@ INFORMED-ACCEPTED in SECURITY.md + the tech-debt tracker.
   → tech-debt tracker.
 
 ## Outcomes & retrospective
+**Delivered (`6e90ffb` + `1b02b35`, both on master).** The `claude` worker runtime now
+dispatches classifier-only: `director.worker_runtime_sandbox` maps `claude →
+danger-full-access`, the adapter's `resolveSandbox` short-circuits to `{}` (no OS sandbox /
+deny rules / egress allowlist), leaving `permissionMode: auto` as the sole boundary. Codex
+is provably untouched (still `workspace-write`, verified by the security review through both
+drive paths). Mechanism is config-only — the vendored adapter stays in sync with the
+producer, and the decision reverses by deleting one config line.
+
+**Reviews:** spec-compliance (codex) SATISFIED; security SATISFIED (0 P1 — scoping + no
+collateral weakening confirmed against real code); code-quality (codex) NOT-SATISFIED → 2
+P2s fixed → re-verify SATISFIED. The two P2s (raw-TypeError-vs-named-ValueError; decoupled
+override keys) were both genuine fail-loud-hygiene gaps; the TypeError one was independently
+corroborated by the security reviewer (no confabulation).
+
+**Retrospective.** Behavioral QA: **N/A** — no live `--worker claude` daemon run was made
+for this change (it is a config/posture flip on a path already exercised end-to-end by the
+prior LIN-27 dogfood; the resolution + wiring is unit-tested, and the adapter short-circuit
+was read directly). The next real claude dogfood will observe the no-sandbox posture live.
+Key lesson reinforced: a security *decision* that silently fails to take effect (a typo'd
+override leaving the runtime sandboxed) is itself a bug — fail-loud beats fail-safe-silent;
+coupling the override keys to configured runtimes encodes that.
+
+**Follow-up (tracked):** SECURITY.md should name a per-runtime posture override as a Tier-0
+governed surface (review-security proposed rule; behavior already satisfied).
