@@ -179,9 +179,25 @@ Background a novice needs:
   per the execplan procedure.)
 
 ## Progress log
-- [ ] (2026-06-24) Plan created; base_commit 0c36fe3; review_level targeted. Next: M1.
+- [x] (2026-06-24) Plan created; base_commit 0c36fe3; review_level targeted.
+- [x] (2026-06-24) M1 — `src/context/budget.ts` (ContextBudget, resolveContextBudget,
+  contextBudgetSection, applyContextBudgetPersona) + `test/unit/context-budget.test.ts` (8 tests green).
+- [x] (2026-06-24) M2 — `src/context/budgetHook.ts` (buildContextBudgetHooks, withContextBudgetHooks,
+  isGitCommit) + `test/unit/context-budget-hook.test.ts` (12 tests green).
+- [x] (2026-06-24) M3 — wired `SessionOpts.contextBudget` (`src/session/session.ts`), `OpenSessionConfig`
+  passthrough (`src/session/index.ts`), type-only public exports (`src/index.ts`), `session.test.ts`
+  wiring tests. Full harness suite 452 green; typecheck + `npm run build` clean.
+- [ ] M4 — app-server enablement (`handlers.ts cfg.contextBudget = true`) + live proof. (done: code path
+  ready; remaining: enable in handlers + gated live test — see Surprises re: shared file.)
+- [ ] M5 — docs (README/RELIABILITY) + completion gate.
 
 ## Surprises & discoveries
+- (2026-06-24) `handlers.ts` + `translator.ts` carry the human's **uncommitted** usage-heartbeat work
+  (a Director-facing `thread/tokenUsage/updated` every ~30s — observability/keep-alive, complementary to
+  this plan's worker-facing push, no conflict). M4 edits `handlers.ts`, so the two changes share a file —
+  M1–M3 are committed harness-only (explicit path staging) to keep diffs clean; M4 sequencing handled then.
+- (2026-06-24) Component A (`cfg.contextTool/compactTool` in `handlers.threadStart`) is ALREADY committed
+  in HEAD (0c36fe3) — the plan's premise holds; M4 only adds `cfg.contextBudget`.
 
 ## Decision log
 - 2026-06-24: Chose Approach A (persona policy + checkpoint/high-water push) over persona-only
@@ -192,6 +208,12 @@ Background a novice needs:
   defaults; host-tunable thresholds via Director config deferred to tech-debt.
 - 2026-06-24: `review_level: targeted` (reliability + arch); security persona not applicable —
   in-worker SDK hooks, no Director exec surface or credential handling.
+- 2026-06-24: Put the hook in a **separate `src/context/budgetHook.ts`** (not "extend budget.ts" as the
+  plan's M2 wording said) — keeps `budget.ts` pure (policy + config, no SDK/Query imports) and the runtime
+  hook (imports `summarizeUsage`/`QueryHolder`/hooks) in its own focused module (harness "small modules" rule).
+- 2026-06-24: Public surface kept **minimal** — only the `contextBudget?` config field + the `ContextBudget`
+  /`ContextBudgetInput` *types* are exported; the persona/hook plumbing stays internal (mirrors how
+  `withContextTool`/`parseCompactOutcome` are not in the barrel), so the frozen value-export pin is untouched.
 
 ## Feedback (from completion gate)
 

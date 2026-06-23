@@ -4,9 +4,16 @@ import type { QueryFn } from "../swarm/types.js";
 import type { ControllableSession } from "../bridge/types.js";
 import { withContextTool, type QueryHolder, type RawContextUsage } from "../context/server.js";
 import { withCompactTool, parseCompactOutcome, type CompactHolder, type CompactOutcome } from "../compaction/server.js";
+import { applyContextBudgetPersona, resolveContextBudget, type ContextBudgetInput } from "../context/budget.js";
+import { withContextBudgetHooks } from "../context/budgetHook.js";
 
 export interface SessionDeps { query: QueryFn; }
-export interface SessionOpts { contextTool?: boolean; compactTool?: boolean; label?: string; now?: () => number; }
+export interface SessionOpts {
+  contextTool?: boolean; compactTool?: boolean; label?: string; now?: () => number;
+  // When set, append the context-budget persona + wire the checkpoint/high-water usage-push hook (it
+  // self-enables contextTool, since the push needs getContextUsage). `true` = default 275k/500k/600k/650k band.
+  contextBudget?: ContextBudgetInput;
+}
 
 function userTurn(text: string): SDKUserMessage {
   return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null } as SDKUserMessage;
@@ -37,6 +44,12 @@ export class Session implements ControllableSession {
     let compactHolder: CompactHolder | undefined;
     if (sessionOpts.contextTool) { ctxHolder = {}; opts = withContextTool(opts, ctxHolder); }
     if (sessionOpts.compactTool) { compactHolder = {}; opts = withCompactTool(opts, compactHolder); }
+    if (sessionOpts.contextBudget) {
+      if (!ctxHolder) { ctxHolder = {}; opts = withContextTool(opts, ctxHolder); } // the push hook needs getContextUsage
+      const bcfg = resolveContextBudget(sessionOpts.contextBudget);
+      applyContextBudgetPersona(opts, bcfg);                // Layer 1: standing policy in the system prompt
+      opts = withContextBudgetHooks(opts, ctxHolder, bcfg); // Layer 2: checkpoint/high-water usage push
+    }
     this.q = deps.query({ prompt: this.input, options: opts });
     if (ctxHolder) ctxHolder.query = this.q as unknown as { getContextUsage(): Promise<RawContextUsage> };
     if (compactHolder) compactHolder.request = () => this.requestCompaction();

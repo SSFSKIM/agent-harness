@@ -24,6 +24,7 @@ export { listSessions, getSessionMessages, getSessionInfo, forkSession, renameSe
 export type { ListSessionsOpts, GetMessagesOpts, GetInfoOpts, ForkSessionOpts, MutateSessionOpts } from "./sessions/index.js";
 export { createContextMcpServer, summarizeUsage, CONTEXT_TOOL } from "./context/index.js";
 export type { RawContextUsage, ContextUsageSummary } from "./context/index.js";
+export type { ContextBudget, ContextBudgetInput } from "./context/budget.js";
 export { createCompactMcpServer, COMPACT_TOOL } from "./compaction/index.js";
 export type { CompactOutcome } from "./compaction/index.js";
 export { openSession, resumeSession, Session } from "./session/index.js";

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Session } from "../../src/session/session.js";
+import { CONTEXT_TOOL } from "../../src/context/server.js";
 
 function fakeQuery({ prompt }: any) {
   return (async function* () {
@@ -177,5 +178,34 @@ describe("Session", () => {
     const s = new Session({ query: methodQuery({}) }, {}, { label: "lib-sess" });
     await s.dispose();
     await expect(s.usage()).rejects.toThrow(/lib-sess is not running/);
+  });
+});
+
+describe("Session — contextBudget wiring", () => {
+  it("contextBudget:true appends the persona, wires the push hook, and self-enables the cc-context tool", async () => {
+    const sink: any[] = [];
+    const s = new Session({ query: captureQuery(sink) }, {}, { contextBudget: true });
+    const opts = sink[0];
+    expect(opts.systemPrompt.append).toContain("Context-budget policy");
+    expect(opts.hooks.PostToolUse).toBeTruthy();
+    expect(opts.hooks.UserPromptSubmit).toBeTruthy();
+    expect(opts.allowedTools).toContain(CONTEXT_TOOL);       // push hook needs getContextUsage → cc-context auto-on
+    expect((opts.mcpServers as any)["cc-context"]).toBeTruthy();
+    await s.dispose();
+  });
+  it("composes with an explicit contextTool (cc-context allowed once) and honors a threshold override", async () => {
+    const sink: any[] = [];
+    const s = new Session({ query: captureQuery(sink) }, {}, { contextTool: true, contextBudget: { target: 480_000 } });
+    const opts = sink[0];
+    expect(opts.allowedTools.filter((t: string) => t === CONTEXT_TOOL).length).toBe(1); // deduped
+    expect(opts.systemPrompt.append).toContain("480k");      // override flowed into the persona prose
+    await s.dispose();
+  });
+  it("no contextBudget → no persona append and no budget hooks", async () => {
+    const sink: any[] = [];
+    const s = new Session({ query: captureQuery(sink) }, {}, {});
+    expect(sink[0].systemPrompt).toBeUndefined();
+    expect(sink[0].hooks).toBeUndefined();
+    await s.dispose();
   });
 });

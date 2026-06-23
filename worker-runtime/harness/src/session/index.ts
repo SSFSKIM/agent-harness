@@ -3,16 +3,21 @@ import { resolveOptions } from "../config/resolveOptions.js";
 import type { HarnessConfig } from "../config/types.js";
 import { validateHarnessConfig } from "../config/validate.js";
 import { Session, type SessionDeps } from "./session.js";
+import type { ContextBudgetInput } from "../context/budget.js";
 
-export interface OpenSessionConfig extends HarnessConfig { contextTool?: boolean; compactTool?: boolean; }
+export interface OpenSessionConfig extends HarnessConfig {
+  contextTool?: boolean; compactTool?: boolean; contextBudget?: ContextBudgetInput;
+}
 export interface SessionDepsInput { query?: SessionDeps["query"]; }
 
 /** Open a new interactive multi-turn session. Honors the full HarnessConfig (via resolveOptions).
- *  `contextTool`/`compactTool` are session-level booleans — they wire the in-process MCP tools, never SDK options. */
+ *  `contextTool`/`compactTool` are session-level booleans — they wire the in-process MCP tools, never SDK
+ *  options. `contextBudget` adds the self-compaction persona + checkpoint/high-water usage-push hook. */
 export function openSession(config: OpenSessionConfig = {}, deps: SessionDepsInput = {}): Session {
   validateHarnessConfig(config);
   const query = deps.query ?? sdkQuery;
-  return new Session({ query }, resolveOptions(config), { contextTool: config.contextTool, compactTool: config.compactTool });
+  return new Session({ query }, resolveOptions(config),
+    { contextTool: config.contextTool, compactTool: config.compactTool, contextBudget: config.contextBudget });
 }
 
 /** Resume a prior session by id. `resume` PRESERVES the session_id, so the returned Session's
