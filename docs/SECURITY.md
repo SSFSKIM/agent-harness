@@ -134,14 +134,19 @@ Grounding document for the review-security persona. Threats are numbered.
   (opt-in; default = **watched**) now changes exactly ONE thing: the **turn-end
   decider** (watched = inline Director answers each turn end; un-watched = code
   decider). Posture/network are identical. Boundaries (both modes): (1) Codex OS
-  sandbox = filesystem containment (workspace + `/tmp`; `.git`/`.codex`/`.agents`
-  forced read-only); (2) `auto_review` (fail-closed) on escalations; (3) **T10**
+  sandbox = filesystem containment — **writes** confined to the workspace tree + `/tmp`
+  (this INCLUDES the workspace's `.git`: live-probed codex-cli 0.139.0, an in-sandbox
+  `git commit` lands — the older "`.git`/`.codex`/`.agents` carved out read-only" claim
+  is **false** for workspace-write), while **reads** are filesystem-wide (the T11 residual
+  below — write-containment is not a read jail); (2) `auto_review` (fail-closed) on
+  escalations; (3) **T10**
   bounds the worker's `linear_graphql` host-key writes (deterministic default-deny —
   the one write surface outside Codex's sandbox).
 
   **Worker-runtime caveat (`--worker claude`).** Boundary (1) — the OS sandbox — was
   originally a property of the **codex** runtime only. The selectable `claude` runtime
-  (`cc-codex-appserver`; default-off, opt-in via `--worker claude`) initially mapped only
+  (`cc-codex-appserver`, now vendored in-repo at `worker-runtime/`; default-off, opt-in
+  via `--worker claude`) initially mapped only
   `approvalPolicy`->`permissionMode` (`cc-harness-appserver` `dist/handlers.js`/`dist/posture.js`)
   and **dropped** the `sandbox=workspace-write` posture the Director sends
   (`director/worker/app_server.py:371`) — approval-gated (boundary 2) but NOT OS-sandboxed

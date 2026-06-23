@@ -32,11 +32,13 @@ the **Director** stays here and reaches out.
 **Prerequisites (one-time).**
 - The **`codex` CLI** (the worker runtime) on PATH — `codex app-server` is the spawn
   (`director.codex_command`); each worker is a Codex app-server subprocess.
-- *(Optional)* the **`cc-codex-appserver`** Agent-SDK **Claude** runtime on PATH enables
-  `--worker claude` (default stays codex; declared in `director.worker_runtimes`). Caveat:
-  the Claude runtime is **approval-gated but not OS-sandboxed** — its adapter drops the
-  `sandbox` posture (see SECURITY T11), so prefer the default codex runtime for untrusted
-  work.
+- *(Optional)* the **Claude** Agent-SDK worker runtime — vendored **in-repo** at
+  `worker-runtime/` (subtree-absorbed cc-appserver), built once via
+  `worker-runtime/setup.sh` (Node + npm). Enables `--worker claude` (default stays
+  codex; declared in `director.worker_runtimes` via the `{harness_root}` placeholder
+  the Director expands to the repo root). It is now both **approval-gated AND
+  OS-sandboxed** (Seatbelt/bubblewrap Bash isolation + credential-read deny, SECURITY
+  T11) — at containment parity with codex. See `worker-runtime/README.md`.
 - **`gh` authenticated** for the target repo with a token that can open *and merge*
   PRs (the merger squash-merges). Export it as **`GH_TOKEN`** — the deny-by-default
   worker env forwards only the keys in `worker_policy.worker_env` (just `GH_TOKEN` by

@@ -291,6 +291,34 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(cfg.worker_runtimes["codex"], "codex app-server")   # still present
         self.assertEqual(cfg.worker_runtimes["claude"], "cc-codex-appserver app-server")
 
+    def test_worker_runtime_command_expands_harness_root_placeholder(self):
+        # The in-repo worker (subtree-absorbed cc-appserver) is referenced via a
+        # {harness_root} placeholder so the committed .harness.json stays machine-
+        # portable. The worker subprocess runs with cwd=workspace, so the path MUST
+        # resolve to an absolute path at config-load time (the only point that knows
+        # the harness root). Expansion happens in load_director_config (covers both
+        # run.py and orchestrator.py, which share it).
+        _write(self.root, {"director": {"worker_runtimes": {
+            "claude": "node {harness_root}/worker-runtime/app-server/dist/bin.js "
+                      "app-server"}}})
+        cfg = config.load_director_config(root=self.root)
+        cmd = config.resolve_worker_command(cfg, "claude")
+        self.assertNotIn("{harness_root}", cmd)
+        self.assertEqual(
+            cmd,
+            f"node {self.root.resolve()}/worker-runtime/app-server/dist/bin.js "
+            "app-server")
+
+    def test_harness_root_placeholder_only_expands_named_not_codex(self):
+        # The built-in codex runtime never carries the placeholder, and a host that
+        # never uses it is unaffected (no accidental rewriting).
+        _write(self.root, {"director": {"worker_runtimes": {
+            "claude": "cc-codex-appserver app-server"}}})  # no placeholder
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(config.resolve_worker_command(cfg, "claude"),
+                         "cc-codex-appserver app-server")
+        self.assertEqual(config.resolve_worker_command(cfg, "codex"), "codex app-server")
+
     def test_worker_runtime_selector_can_default_to_claude(self):
         _write(self.root, {"director": {
             "worker_runtime": "claude",

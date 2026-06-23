@@ -6,7 +6,7 @@
   },
   "director": {
     "worker_runtimes": {
-      "claude": "cc-codex-appserver app-server"
+      "claude": "node {harness_root}/worker-runtime/app-server/dist/bin.js app-server"
     },
     "worker": {
       "tools": "linear",

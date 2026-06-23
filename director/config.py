@@ -387,6 +387,21 @@ def defaults() -> DirectorConfig:
     return _build({})
 
 
+def _expand_harness_root(cfg: DirectorConfig, base: Path) -> DirectorConfig:
+    """Expand the `{harness_root}` placeholder in worker-runtime commands to the
+    absolute harness root. An in-repo worker (the subtree-absorbed cc-appserver) is
+    referenced as e.g. `node {harness_root}/worker-runtime/app-server/dist/bin.js
+    app-server`; the worker subprocess runs with cwd=the workspace, so a relative path
+    would mis-resolve — the path must be absolute. Expanded here, not in
+    `resolve_worker_command`, because this is the only seam that knows the root, and
+    both run.py and orchestrator.py funnel their lookups through it."""
+    root_abs = str(base.resolve())
+    for name, cmd in cfg.worker_runtimes.items():
+        if "{harness_root}" in cmd:
+            cfg.worker_runtimes[name] = cmd.replace("{harness_root}", root_abs)
+    return cfg
+
+
 def load_director_config(root=None, *, environ: Mapping | None = None) -> DirectorConfig:
     """Resolve the effective Director config from `<root>/.harness.json` `director`.
 
@@ -398,7 +413,7 @@ def load_director_config(root=None, *, environ: Mapping | None = None) -> Direct
     base = Path(root) if root is not None else policy.discover_root()
     cfg_path = base / ".harness.json"
     if not cfg_path.is_file():
-        return _build({})
+        return _expand_harness_root(_build({}), base)
     try:
         doc = json.loads(cfg_path.read_text(encoding="utf-8"))
     except (ValueError, UnicodeDecodeError) as exc:
@@ -409,10 +424,10 @@ def load_director_config(root=None, *, environ: Mapping | None = None) -> Direct
         raise ValueError(f"{cfg_path} top-level must be an object")
     block = doc.get("director")
     if block is None:
-        return _build({})
+        return _expand_harness_root(_build({}), base)
     if not isinstance(block, dict):
         raise ValueError(".harness.json director must be an object")
-    return _build(_resolve_env_deep(block, environ))
+    return _expand_harness_root(_build(_resolve_env_deep(block, environ)), base)
 
 
 def main(argv=None) -> int:
