@@ -37,6 +37,32 @@ describe("toUsageTotals", () => {
   });
 });
 
+describe("sandbox wiring (threadStart)", () => {
+  function captureCfg(deps: { autoReview?: boolean; network?: boolean }) {
+    let captured: any;
+    const peer = new Peer((_o) => {}, (m, p, id) => server.handleRequest(m, p, id), () => {});
+    const server = new AppServer(peer, { ...deps, open: (cfg) => { captured = cfg; return fakeSession(); } });
+    return { peer, server, cfg: () => captured };
+  }
+
+  it("translates a workspace-write posture into cfg.sandbox + credential deny settings", () => {
+    const h = captureCfg({ autoReview: true, network: true });
+    h.server.handleRequest("thread/start", { cwd: "/tmp/ws", sandbox: "workspace-write" }, 1);
+    expect(h.cfg().sandbox).toMatchObject({
+      enabled: true, autoAllowBashIfSandboxed: true, excludedCommands: ["gh *", "docker *"],
+      network: { allowedDomains: expect.arrayContaining(["github.com"]) },
+    });
+    expect(h.cfg().settings).toEqual({ permissions: { deny: expect.any(Array) } });
+  });
+
+  it("danger-full-access leaves the worker unsandboxed (no cfg.sandbox/settings)", () => {
+    const h = captureCfg({ autoReview: true, network: true });
+    h.server.handleRequest("thread/start", { cwd: "/tmp/ws", sandbox: "danger-full-access" }, 1);
+    expect(h.cfg().sandbox).toBeUndefined();
+    expect(h.cfg().settings).toBeUndefined();
+  });
+});
+
 describe("dynamic tool brokering", () => {
   it("relays a dynamic-tool call to the client via item/tool/call and feeds the reply back to the agent", async () => {
     const out: any[] = [];

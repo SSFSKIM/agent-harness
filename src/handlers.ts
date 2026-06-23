@@ -6,6 +6,7 @@ import { TurnTranslator } from "./translator.js";
 import { ERR, type DynamicToolSpec, type ThreadStartParams, type TurnStartParams, type UsageTotals } from "./protocol.js";
 import { ToolBroker, withDynamicTools } from "./broker.js";
 import { resolvePosture } from "./posture.js";
+import { resolveSandbox } from "./sandbox.js";
 
 /** Context handed to the session opener so a fake (test) session can drive the dynamic-tool broker
  *  directly; the real opener (openSession) ignores it — the SDK MCP server already closed over the broker. */
@@ -30,9 +31,11 @@ export class AppServer {
   private reg = new Registry();
   private open: OpenFn;
   private autoReview: boolean;
-  constructor(private peer: Peer, deps: { open?: OpenFn; autoReview?: boolean } = {}) {
+  private network: boolean;
+  constructor(private peer: Peer, deps: { open?: OpenFn; autoReview?: boolean; network?: boolean } = {}) {
     this.open = deps.open ?? ((cfg) => openSession(cfg));
     this.autoReview = deps.autoReview ?? false;
+    this.network = deps.network ?? false;
   }
 
   disposeAll(): Promise<void> { return this.reg.disposeAll(); }
@@ -50,6 +53,19 @@ export class AppServer {
   private threadStart(params: ThreadStartParams, id: number | string): void {
     const posture = resolvePosture({ approvalPolicy: params.approvalPolicy, autoReview: this.autoReview });
     let cfg: any = { cwd: params.cwd, model: params.model, permissionMode: posture.permissionMode };
+    // OS-level sandbox (Seatbelt/bubblewrap) for Bash + L3 credential-read deny rules,
+    // translated from the Director's codex sandbox posture. Opt-out modes return {} (no change).
+    const plan = resolveSandbox({
+      mode: params.sandbox,
+      autoReview: this.autoReview,
+      network: this.network,
+      strict: process.env.CC_APPSERVER_SANDBOX_STRICT === "1",
+      allowedDomains: process.env.CC_APPSERVER_SANDBOX_DOMAINS
+        ? process.env.CC_APPSERVER_SANDBOX_DOMAINS.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined,
+    });
+    if (plan.sandbox) cfg.sandbox = plan.sandbox;
+    if (plan.settings) cfg.settings = plan.settings;
     // Allocate a stable threadId so the broker/permission closures can reference it before open() is called.
     const threadId = this.reg.allocId();
     const turnIdOf = () => this.reg.get(threadId)?.currentTurnId ?? "";

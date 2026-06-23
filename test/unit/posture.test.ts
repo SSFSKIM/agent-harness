@@ -15,4 +15,8 @@ describe("posture", () => {
     expect(parseConfigFlags(["app-server", "-c", "approvals_reviewer=auto_review", "-c", "x=y"]).autoReview).toBe(true);
     expect(parseConfigFlags(["app-server"]).autoReview).toBe(false);
   });
+  it("parses -c sandbox_workspace_write.network_access=true from argv", () => {
+    expect(parseConfigFlags(["-c", "sandbox_workspace_write.network_access=true"]).network).toBe(true);
+    expect(parseConfigFlags(["app-server"]).network).toBe(false);
+  });
 });
