@@ -106,7 +106,9 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
     (→ summary `reconcile_error`), never raised (mirrors the board-write discipline). No
     PR fields → nothing queued. The workspace path (where the PR branch lives, for the
     land lane) is derived the same way `run._workspace_for` does, without a run.py edit.
-    Returns whether a mergeRequest was newly queued."""
+    Returns True when the PR-merge is queued for the merger (newly queued OR already
+    present — an at-least-once redelivery, e.g. crash-reattach, is still a successful
+    handoff); False only when there is no PR or the enqueue itself raised."""
     pr_url = outcome.get("pr_url")
     pr_branch = outcome.get("pr_branch")
     if not (pr_url or pr_branch):
@@ -118,10 +120,16 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
         # (R2c / ARCHITECTURE invariant 8) — was a re-derived `root/str(tid)`.
         ws = str(run.workspace_path(tid, workspace_root))
     try:
-        return dq.append_merge_request(tid, pr=pr_url, branch=pr_branch,
-                                       workspace_path=ws,
-                                       evidence=outcome.get("evidence"),
-                                       base=queue_base)
+        # True (newly queued) and False (already present — an at-least-once redelivery)
+        # BOTH mean the PR-merge is handed off to the merger; only an exception is a real
+        # failure. Returning True on dedup keeps a redelivered done PARKED in `merging`
+        # (R19: board-`Done` means merged-to-main) instead of landing Done early, and
+        # avoids a phantom "enqueue failed" misfire on the crash-reattach path.
+        dq.append_merge_request(tid, pr=pr_url, branch=pr_branch,
+                                workspace_path=ws,
+                                evidence=outcome.get("evidence"),
+                                base=queue_base)
+        return True
     except Exception as exc:
         errs.append(f"merge enqueue: {exc}")
         return False

@@ -913,6 +913,25 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertFalse(out["summary"]["merge_enqueued"])
         self.assertIn("misfire", out["summary"]["reconcile_error"])
 
+    def test_redelivered_pr_done_parks_not_misfires(self):
+        # at-least-once redelivery (crash-reattach, R19): the SAME PR-done reconciled twice.
+        # The second append dedupes (queue returns False), but the merge IS handed off — so
+        # it must still PARK in `merging` (not land Done early) and NOT record a misfire.
+        states = dict(self.states)
+        states["merging"] = "st_merge"
+        disp = self._done(pr_url="http://pr/7", pr_branch="feat/x")
+        out1 = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"}, disp, 1, states,
+                              1, queue_base=self.qbase, workspace_root=self.tmp / "wsr")
+        self.assertTrue(out1["summary"]["merge_enqueued"])
+        self.assertEqual(out1["summary"]["final_state"], "merging")
+        # second reconcile of the SAME attempt → dedup at the queue, still a handoff
+        out2 = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"}, disp, 1, states,
+                              1, queue_base=self.qbase, workspace_root=self.tmp / "wsr")
+        self.assertTrue(out2["summary"]["merge_enqueued"])           # dedup = still handed off
+        self.assertEqual(out2["summary"]["final_state"], "merging")  # parked, NOT Done early
+        self.assertNotIn("misfire", out2["summary"].get("reconcile_error", "") or "")
+        self.assertEqual(len(self._merge_reqs()), 1)                 # one queued (deduped)
+
     def test_done_enqueues_merge_before_terminal_transition(self):
         # act-before-consume (review-reliability P1): the PR-merge must be enqueued BEFORE
         # the `done` board write, so a crash between them never strands an un-enqueued PR
