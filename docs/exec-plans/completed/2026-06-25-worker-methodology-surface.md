@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-25
 owner: harness
 type: exec-plan
@@ -157,5 +157,36 @@ updated; `python3 plugin/scripts/check.py` GREEN.
   - Confirmed clean: no live consumer of the dropped fields; run↔orchestrator convergence real;
     AGENTS.md-autoload chain validated in `worker-runtime` source; `compose_worker_prompt`
     pass-through is a justified single seam. Gate GREEN (787). Re-review dispatched (arch + Codex).
+- (2026-06-25) Round 2 — **arch SATISFIED** (P1 docstring + both P2 stale-bodies confirmed
+  fixed; independently verified the craft-recording re-add restores all three obligations and
+  the registry test is strictly stronger). spec-compliance + code-quality stand SATISFIED.
+  **Codex round-2 could not run** — a wedged codex-companion resume job (dead process holding
+  the lock, frozen ~2h51m) rejected the dispatch; an infra stall, not a finding. Its one
+  substantive round-1 finding (the craft regression) was verified independently: a deterministic
+  old→new obligation diff confirms record/mirror-as-checkboxes/document are all present in the
+  rendered `WORKER_PROTOCOL`, and arch round-2 confirmed the same.
 
 ## Outcomes & retrospective
+**Delivered.** ADR 0005 is implemented: the five per-stage prompt templates are removed;
+`compose_worker_prompt` returns the raw ticket (converging `director.run` and the orchestrator);
+the implementation craft folded into `WORKER_PROTOCOL` host-agnostically (every recording
+obligation preserved); `ticket_type`/labels kept as dispatch/DAG metadata; AGENTS.md auto-load
+verified in the worker-runtime source (`settingSources` default includes `"project"` → CLAUDE.md
+→ AGENTS.md — no `frame_first_turn` fallback needed). Gate GREEN (787 tests). All three grounded
+personas SATISFIED; Codex round-1 caught the one real regression (the fold silently weakened
+record/mirror/document → capture/treat/revert) the green personas missed — fixed, self-verified,
+arch-confirmed.
+
+**Behavioral check.** N/A for app behavior. The observable — prompt parity (run + orchestrator
+send identical worker prompts) — is asserted by `test_orchestrator_and_run_compose_identically`
++ the raw-passthrough tests. The deeper "a worker thrives on `WORKER_PROTOCOL` alone" is exactly
+what the LIN-29 dogfood demonstrated (the evidence that motivated this ADR).
+
+**Retrospective.** Third consecutive instance of the pattern: the grounded Claude personas
+verify structure (arch even caught a stale docstring this round), but **Codex/model-diversity
+catches the substantive semantic regression**. Two reinforcements worth recording as harness
+findings: (1) the review-lens tech-debt row ("when a cross-cutting prompt/rule changes, grep
+EVERY sibling it governs") now has its 2nd+3rd occurrence — a strong "feedback-twice" signal to
+promote it to a written DESIGN.md rule; (2) **codex-companion fragility is a real reliability gap
+in the review loop** — a wedged resume job blocks re-reviews entirely, so when Codex can't run,
+deterministic self-verification + a Claude persona must corroborate (as here).
