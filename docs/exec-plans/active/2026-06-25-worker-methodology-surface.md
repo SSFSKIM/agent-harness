@@ -136,5 +136,26 @@ updated; `python3 plugin/scripts/check.py` GREEN.
   run/orchestrator divergence.
 
 ## Feedback (from completion gate)
+- (2026-06-25) Round 1 — spec-compliance + code-quality SATISFIED; arch NOT-SATISFIED (1 P1);
+  **Codex NOT-SATISFIED, and caught the substantive one** (the green personas missed it again):
+  - **Codex P2 (real craft regression, FIXED) — the fold weakened the recording obligations.**
+    Old `_IMPL_TEMPLATE` said *record* the reproduction in the doc, *mirror* acceptance as
+    non-negotiable *checkboxes*, and *document* the reverted proof edit. My generalization kept
+    the verbs but dropped the record/checklist/document obligations. Fixed: re-added "record it
+    in your working doc" / "mirror … as non-negotiable acceptance checkboxes" / "note it in your
+    working doc" (host-agnostic — "working doc", not "the ExecPlan"). `test_reproduce_sync_acceptance_revert`
+    strengthened to assert `working doc` + `checkboxes` (would now fail the weakened fold).
+  - **arch P1 = code-quality P2 = Codex P2 (consensus, FIXED) — stale `dispatch()` docstring.**
+    `director/orchestrator.py:81-83` still described template-wrapping on the very function that
+    calls the now-pass-through `compose_worker_prompt` (the DESIGN.md "retire = grep the surviving
+    bodies" rule — a second occurrence of the tech-debt-tracked review-lens). Repointed to ADR 0005.
+  - **arch P2 ×2 (FIXED) — more surviving bodies:** `.claude/DIRECTOR.md:449` §11 ("the dev-stage
+    templates … stays in code" → `WORKER_PROTOCOL`); `docs/adr/0002:37` ("enriched per-stage
+    templates" → noted removed by 0005, craft folded into WORKER_PROTOCOL).
+  - **Codex P2 (FIXED) — registry test too weak:** `test_each_entry_has_metadata_fields` now
+    asserts the EXACT key set `{label, stage, child_types}` (catches any of template/methodology_refs/output).
+  - Confirmed clean: no live consumer of the dropped fields; run↔orchestrator convergence real;
+    AGENTS.md-autoload chain validated in `worker-runtime` source; `compose_worker_prompt`
+    pass-through is a justified single seam. Gate GREEN (787). Re-review dispatched (arch + Codex).
 
 ## Outcomes & retrospective

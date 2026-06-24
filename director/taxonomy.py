@@ -109,13 +109,15 @@ context (capture the pass/fail signal, not the whole log). Re-sent context is th
 cost of a turn, so reading less IS working cheaper.
 - When you implement and open a PR (most purpose-unit tickets carry a build): \
 **Reproduce first** — before changing code, capture the current behavior/issue signal (a \
-command + its output, or a deterministic behavior) so the fix target is explicit. \
+command + its output, or a deterministic behavior) and record it in your working doc, so the \
+fix target is explicit. \
 **Sync before substantial work** — bring your base up to origin/main (the `pull` skill) and \
 record the result (merge source, clean/conflicts-resolved, resulting HEAD), so a stale base \
 doesn't surface conflicts late. **Mirror acceptance** — if the ticket carries \
-Validation/Test Plan/Testing sections, treat them as non-negotiable acceptance and run them \
-before done. **Revert proof edits** — temporary local edits to validate an assumption are \
-fine, but revert every one before commit. **Self-QA** (your responsibility, not a gate; the \
+Validation/Test Plan/Testing sections, mirror them into your working doc as non-negotiable \
+acceptance checkboxes and run them before done. **Revert proof edits** — temporary local \
+edits to validate an assumption are fine, but revert every one before commit and note it in \
+your working doc. **Self-QA** (your responsibility, not a gate; the \
 merger does only a thin integration check later): keep the host's gate/CI green (run the full \
 gate once near completion + after a real change, targeted checks while iterating — don't \
 re-burn the whole gate after every edit); self-review spec-compliance and code-quality; write \

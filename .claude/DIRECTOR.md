@@ -446,8 +446,8 @@ The orchestration's *deployment policy* — which `team` to poll, the logical→
 timeouts, paths, and merger knobs — lives in the repo-owned `<root>/.harness.json` under a
 `director` block (the Symphony `WORKFLOW.md` analog; spec
 `docs/product-specs/2026-06-16-director-declarative-config.md`). It sits beside
-`worker_policy` in the same file. *Methodology* (the dev-stage templates, the queue schema)
-stays in code — a host buys the harness's method, tunes only the deployment.
+`worker_policy` in the same file. *Methodology* (the `WORKER_PROTOCOL` operating contract, the
+queue schema) stays in code — a host buys the harness's method, tunes only the deployment.
 
 - **Read what a run is actually configured with** (read-only, like `director.status`):
   ```

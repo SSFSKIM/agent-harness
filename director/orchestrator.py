@@ -78,9 +78,9 @@ def dispatch(ticket: dict, **kwargs) -> dict:
     converting any crash into a {kind: failed} disposition so one bad worker never
     sinks the pool. A module-level function so tests can patch it deterministically.
 
-    The worker's prompt is composed via the dev-stage taxonomy (Phase 3b): a typed
-    ticket (a Linear stage label) gets its stage-workflow template wrapped around the
-    task; an untyped ticket passes through unchanged.
+    The worker's prompt is the ticket's own prompt, unchanged (ADR 0005 — the dev-stage
+    label is dispatch/DAG metadata, not a prompt-shaper); `frame_first_turn` in `run.drive`
+    adds the WORKER_PROTOCOL operating contract + the terminal contract.
 
     Returns a DISPOSITION (`{kind: terminal|escalate|stuck|failed, ...}`) — the
     worker's/Director's judgment of what the turns meant, NOT a turn-status. reconcile

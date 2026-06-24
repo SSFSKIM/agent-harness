@@ -105,10 +105,10 @@ class RegistryTest(unittest.TestCase):
         # ADR 0005: the registry is dispatch/DAG METADATA only — no `template` (and no
         # `methodology_refs`/`output`); the dev-stage label does not shape the prompt.
         for name, entry in tax.TAXONOMY.items():
-            for field in ("label", "stage", "child_types"):
-                self.assertIn(field, entry, f"{name} missing {field}")
+            # exact key set — asserts template/methodology_refs/output are ALL gone (ADR 0005)
+            self.assertEqual(set(entry), {"label", "stage", "child_types"},
+                             f"{name} has unexpected registry fields")
             self.assertEqual(entry["label"], name)  # label == type name (D-19)
-            self.assertNotIn("template", entry)      # no per-stage prompt template
 
     def test_child_types_describe_size_split_edge(self):
         # ADR 0004: decomposition is the EXCEPTION (a genuine size split), not a routine
@@ -178,6 +178,10 @@ class ImplCraftInProtocolTest(unittest.TestCase):
         self.assertIn("non-negotiable", self.low)
         self.assertIn("revert", self.low)               # temp proof revert
         self.assertIn("proof", self.low)
+        # the RECORDING obligations must survive the fold (codex P2): record reproduction,
+        # mirror acceptance as checkboxes, note the proof edit — all in the working doc.
+        self.assertIn("working doc", self.low)
+        self.assertIn("checkboxes", self.low)
         # host-agnostic: no baked-in methodology path
         self.assertNotIn("plugin/skills/execplan", self.raw)
         self.assertNotIn("check.py", self.raw)

@@ -34,8 +34,9 @@ parent decomposition per [[0001-recursive-decomposition]]):
    disciplines (single-workpad-as-source-of-truth, reproduction-first,
    acceptance-criteria mirroring, the **PR feedback sweep**, no-scope-creep,
    revert-proof-edits) into a shared worker-protocol preamble (sibling to
-   `taxonomy.TERMINAL_CONTRACT`) + enriched per-stage templates, PR-feedback-sweep
-   placed on the impl/rework path. **Do NOT port the file** — its lifecycle steps
+   `taxonomy.TERMINAL_CONTRACT`) + enriched per-stage templates (the templates were later
+   removed by [[0005-no-stage-prompt-templates]] — the craft folded into `WORKER_PROTOCOL`),
+   PR-feedback-sweep placed on the impl/rework path. **Do NOT port the file** — its lifecycle steps
    (worker moves the board, self-merges, never-asks-a-human) are welded to the two
    axes we reject; a line-by-line keep/adapt/reject triage is the spec's spine.
 2. **Selective-escalation decider + its two companions.** Three pieces that
