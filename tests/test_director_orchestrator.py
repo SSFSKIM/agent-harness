@@ -13,6 +13,7 @@ import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.run as run  # noqa: E402
 import director.status as ds  # noqa: E402
+import director.ticket_events as te  # noqa: E402
 
 MOCK = str(Path(run.__file__).resolve().parent / "worker" / "_mock_app_server.py")
 
@@ -338,6 +339,49 @@ class Layer2AccrualMarshalTest(unittest.TestCase):
                 self.assertEqual(snap["run"]["codex_totals"]["total"], 100)  # live, pre-terminal
             finally:
                 state.shutdown()
+
+
+class TicketEventCaptureWiringTest(unittest.TestCase):
+    """M2: the per-ticket on_event fan-out records the NORMALIZED play-by-play to the
+    event log AND still marshals usage — and a Noop writer leaves no trace (off-path)."""
+
+    def _state(self, status, events):
+        return orch._RunState(board=None, states={}, status=status, events=events,
+                              retry_budget=0, concurrency=1, queue_base=None, workspace_root=None)
+
+    def test_observe_event_records_normalized_events_and_marshals_usage(self):
+        d = tempfile.mkdtemp(prefix="te_wire_")
+        state = self._state(_RecordingStatus(), te.TicketEventWriter(d))
+        try:
+            state._observe_event("LIN-9", {"method": "turn/started", "params": {"turn": {"id": "u1"}}})
+            state._observe_event("LIN-9", {"method": "item/completed",
+                                           "params": {"item": {"type": "agentMessage", "text": "hi", "phase": "commentary"}}})
+            state._observe_event("LIN-9", _usage_event(100))   # also lands on the accrual queue
+            evs = te.read_events("LIN-9", base=d)
+            self.assertEqual([e["kind"] for e in evs], ["turn_started", "agent_message", "token_usage"])
+            self.assertEqual(state.accrual.get_nowait()[0], "LIN-9")  # usage still marshaled (R13)
+        finally:
+            state.shutdown()
+
+    def test_noop_event_writer_leaves_no_trace(self):
+        d = tempfile.mkdtemp(prefix="te_noop_")
+        state = self._state(_RecordingStatus(), te.NoopTicketEventWriter())
+        try:
+            state._observe_event("LIN-9", {"method": "turn/started", "params": {"turn": {"id": "u1"}}})
+            self.assertEqual(te.read_events("LIN-9", base=d), [])   # off-path: nothing written
+        finally:
+            state.shutdown()
+
+    def test_observe_event_exception_total_never_gates_turn(self):
+        # A raise in the event-record path must not propagate (it fires inside run_turn's
+        # read loop, like _enqueue_usage). Force record() to blow up → _observe_event swallows.
+        state = self._state(_RecordingStatus(), te.TicketEventWriter(tempfile.mkdtemp(prefix="te_x_")))
+        try:
+            with mock.patch.object(state.events, "record", side_effect=RuntimeError("boom")):
+                state._observe_event("LIN-9", _usage_event(100))   # must NOT raise
+            self.assertEqual(state.accrual.get_nowait()[0], "LIN-9")  # usage path still ran first
+        finally:
+            state.shutdown()
 
 
 class RunOnceConcurrencyTest(unittest.TestCase):

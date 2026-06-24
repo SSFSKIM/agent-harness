@@ -176,15 +176,36 @@ Grounding a novice needs:
 
 ## Progress log
 - [x] (2026-06-24) Spec authored + committed (3ca4062). ExecPlan created from template.
-- [ ] M1 producer module (done: —; remaining: all)
-- [ ] M2 orchestrator wiring + live proof
+- [x] (2026-06-24) M1 producer module + 22 unit tests GREEN, committed.
+- [x] (2026-06-24) M2 orchestrator wiring (fan-out `_observe_event`, events threaded
+  through run_once/until_drained/forever + main) + 3 wiring tests; DISCOVERED the
+  claude adapter dropped tool calls → extended `translator.ts` (+extractToolUses
+  +toolCall emit, 3 TS tests, 54 unit GREEN, dist rebuilt). Live probe: all five kinds
+  (turn_started/tool_call/agent_message/token_usage/turn_ended) captured from a real
+  claude Bash turn, telemetry derives `tools:{Bash:1}`. PASS.
 - [ ] M3 dashboard routes + sanitization
 - [ ] M4 drill-down UI + playwright
 - [ ] M5 cross-runtime proof + reviews
 
 ## Surprises & discoveries
+- 2026-06-24 (M2, live-probed): the **claude adapter never emitted tool calls**.
+  `worker-runtime/app-server/src/translator.ts onMessage` only forwarded assistant
+  TEXT (`extractAssistantText`); SDK `tool_use` blocks (Bash/Read/Edit — the bulk of a
+  ticket's play-by-play) were dropped, so the on_event firehose for a claude worker
+  carried only turn-lifecycle + agentMessages + tokenUsage. Confirmed by two live
+  probes: `raw item.types seen: ['agentMessage']` only. codex emits
+  `commandExecution`/`fileChange` natively (hence `APPROVAL_METHODS`), so the gap was
+  claude-only — but the user CHOSE the claude worker, so the spec's Goal ("watch its
+  tool calls") + R7 ("uniform across runtimes") require the adapter to emit them.
+  Decision: extend the translator to translate `tool_use` → `item/completed` (item.type
+  `toolCall`, which `normalize_event` already recognizes) — an in-scope addition, not a
+  deferral. The Python capture layer was already correct; the upstream adapter was the
+  missing half.
 
 ## Decision log
+- 2026-06-24: extend `translator.ts` to emit `toolCall` items (built-in SDK tool use) —
+  see Surprises. Bounded at capture: the Director clips the arg summary to SUMMARY_CLIP,
+  so a large tool INPUT (e.g. a Write body) never bloats the on-disk log.
 - 2026-06-24: Chose Approach A (in-orchestrator capture to per-ticket file) over the
   status.json-marshal (B) and in-memory-IPC (C) approaches — smallest blast radius,
   matches the producer grain, single-writer-per-file removes the marshal, keeps the

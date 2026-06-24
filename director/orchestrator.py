@@ -26,7 +26,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import director.queue as dq
-from director import config, decider, history, merger, run, status as status_mod, taxonomy
+from director import config, decider, history, merger, run, status as status_mod, taxonomy, ticket_events as events_mod
 from director.board import linear as board_linear
 from director.worker import app_server, autonomy
 
@@ -376,10 +376,17 @@ class _RunState:
     no lock and the StatusWriter stays a lock-free single writer (RELIABILITY R13)."""
 
     def __init__(self, *, board, states, status, retry_budget: int, concurrency: int,
-                 queue_base, workspace_root, retain_results: bool = True, **dispatch_kwargs):
+                 queue_base, workspace_root, retain_results: bool = True, events=None,
+                 **dispatch_kwargs):
         self.board = board
         self.states = states
         self.status = status or status_mod.NoopStatusWriter()
+        # Per-ticket session-event log (Phase 5 observability). NoopTicketEventWriter when
+        # the layer is off → orchestration byte-identical (the NoopStatusWriter precedent).
+        # Unlike `status`, this is written DIRECTLY from the worker-pool thread (no marshal):
+        # each ticket's file is single-writer — its `on_event` only fires on that ticket's
+        # dispatch thread, and a retry runs only after the prior future reaped.
+        self.events = events or events_mod.NoopTicketEventWriter()
         self.retry_budget = retry_budget
         self.queue_base = queue_base
         self.workspace_root = workspace_root
@@ -427,6 +434,18 @@ class _RunState:
         except Exception:
             pass  # telemetry side-channel: drop on any hiccup, never gate the observed turn
 
+    def _observe_event(self, tid, ev) -> None:
+        """The per-ticket `on_event` fan-out (worker-pool thread). Two consumers of the
+        same turn-stream notification: (1) the usage marshal → live token accrual in the
+        StatusWriter (main-thread, R13), and (2) the per-ticket session-event log
+        (written DIRECTLY here — single-writer per file, no marshal). Each consumer is
+        independently exception-total so one can never starve the other or gate the turn."""
+        self._enqueue_usage(tid, ev)
+        try:
+            self.events.record(tid, ev.get("method"), ev.get("params", {}))
+        except Exception:
+            pass  # session-event side-channel: drop on any hiccup, never gate the observed turn
+
     def drain_accrual(self) -> None:
         """Drain the accrual queue on the MAIN thread and apply live usage to the
         StatusWriter (R13). Coalesces to the LATEST usage per tid so a chatty turn
@@ -453,7 +472,7 @@ class _RunState:
         fut = self.pool.submit(
             dispatch, ticket, queue_base=self.queue_base, workspace_root=self.workspace_root,
             attempt=self.attempts.get(tid, 1), cancel_event=ev,
-            on_event=lambda ev_: self._enqueue_usage(tid, ev_),  # Layer-2: live usage marshal
+            on_event=lambda ev_: self._observe_event(tid, ev_),  # Layer-2 usage marshal + per-ticket event log
             **self._dispatch_kwargs)
         self.futures[fut] = ticket
         self.status.dispatched(ticket)
@@ -534,7 +553,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
                    workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                    tools=None, tool_executor=None, install_skills: bool = False,
                    read_timeout_s: float = 30.0, timeout_s: float = 300.0,
-                   status=None, wave: int = 1,
+                   status=None, events=None, wave: int = 1,
                    approval_policy: str = "untrusted",
                    sandbox: str = "workspace-write",
                    decide=decider.autonomous_decide,
@@ -555,7 +574,8 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
     dispatch → terminal transitions are recorded for the Director to read. The calls
     are pure side-channel — with the no-op writer the returned summaries are
     byte-identical, so visibility never changes dispatch behavior."""
-    state = _RunState(board=board, states=states, status=status, retry_budget=retry_budget,
+    state = _RunState(board=board, states=states, status=status, events=events,
+                      retry_budget=retry_budget,
                       concurrency=concurrency, queue_base=queue_base,
                       workspace_root=workspace_root, command=command, tools=tools,
                       tool_executor=tool_executor, install_skills=install_skills,
@@ -589,7 +609,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
 
 def run_once(board, command: list[str], *, team: str, states: dict,
              done_types=("completed",), dispatch_requires_label: bool = False,
-             status=None, **wave_kwargs) -> list[dict]:
+             status=None, events=None, **wave_kwargs) -> list[dict]:
     """One poll→filter→dispatch→reconcile pass. Polls ready tickets, keeps only the
     DAG-eligible ones (blockers all done), then dispatches+drains that wave. Returns
     a per-ticket summary list. The shared Director queue carries approvals to the
@@ -605,7 +625,7 @@ def run_once(board, command: list[str], *, team: str, states: dict,
     eligible = eligible_tickets(ready, done_types=done_types,
                                 require_label=dispatch_requires_label)
     summaries = list(_dispatch_wave(board, eligible, command=command, states=states,
-                                    status=status, **wave_kwargs).values())
+                                    status=status, events=events, **wave_kwargs).values())
     status.finished("pass_complete")
     return summaries
 
@@ -622,7 +642,7 @@ def _record_run_history(status, history_base) -> None:
 def run_until_drained(board, command: list[str], *, team: str, states: dict,
                       done_types=("completed",), dispatch_requires_label: bool = False,
                       max_passes: int = 50,
-                      max_dispatched: int = 200, status=None, history_base=None,
+                      max_dispatched: int = 200, status=None, events=None, history_base=None,
                       **wave_kwargs) -> dict:
     """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
 
@@ -677,7 +697,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
             stopped_reason = "max_dispatched"
             break
         wave_summaries = _dispatch_wave(board, eligible, command=command, states=states,
-                                        status=status, wave=passes, **wave_kwargs)
+                                        status=status, events=events, wave=passes, **wave_kwargs)
         # count only tickets that actually dispatched — a claim failure is not a dispatch,
         # so it must not consume the max_dispatched budget.
         dispatched_count += sum(1 for v in wave_summaries.values()
@@ -831,6 +851,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                 tools=None, tool_executor=None, install_skills: bool = False,
                 read_timeout_s: float = 30.0, timeout_s: float = 300.0, status=None,
+                events=None,
                 approval_policy: str = "untrusted", sandbox: str = "workspace-write",
                 decide=decider.autonomous_decide, max_turns: int = run.DEFAULT_MAX_TURNS,
                 reconcile_interval_s: float = config.DEFAULTS["reconcile_interval_s"],
@@ -864,7 +885,8 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     record lives in the bounded status.json, not an unbounded return dict)."""
     shutdown_event = shutdown_event if shutdown_event is not None else threading.Event()
     force_event = force_event if force_event is not None else threading.Event()
-    state = _RunState(board=board, states=states, status=status, retry_budget=retry_budget,
+    state = _RunState(board=board, states=states, status=status, events=events,
+                      retry_budget=retry_budget,
                       concurrency=concurrency, queue_base=queue_base,
                       workspace_root=workspace_root, retain_results=False, command=command,
                       tools=tools, tool_executor=tool_executor, install_skills=install_skills,
@@ -1290,6 +1312,13 @@ def main(argv=None, *, board=None) -> int:
               "install_skills": install_skills, "done_types": s["done_types"],
               "dispatch_requires_label": s["dispatch_requires_label"],
               "status": None if args.no_status else status_mod.StatusWriter(base=s["status_dir"]),
+              # Per-ticket session-event log shares the visibility switch (no separate knob —
+              # spec YAGNI). Lives in a sibling of the status dir so a custom --status-dir
+              # co-locates it; the dashboard's --events-dir default matches the bare default.
+              "events": (events_mod.NoopTicketEventWriter() if args.no_status
+                         else events_mod.TicketEventWriter(
+                             base=(Path(s["status_dir"]).parent / "director-events")
+                             if s["status_dir"] else None)),  # None → the writer's own default dir
               # Posture from the resolved config (a host may tighten it in
               # .harness.json director.worker); --autonomous differs only by the decider.
               "approval_policy": s["posture"].approval_policy,

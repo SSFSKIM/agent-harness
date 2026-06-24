@@ -10,6 +10,19 @@ export function extractAssistantText(m: any): string {
   return content.filter((b: any) => b?.type === "text" && typeof b.text === "string").map((b: any) => b.text).join("");
 }
 
+/** The SDK `tool_use` blocks of an assistant message — the built-in tool calls (Bash/Read/
+ *  Edit/…) the SDK runs in-process. Probe-pinned: a streamed assistant message carries them
+ *  as content[] entries with type==="tool_use" {id,name,input}. Surfacing these is what lets
+ *  the Director's per-ticket event stream show the play-by-play (not just assistant text). */
+export function extractToolUses(m: any): Array<{ id?: string; name: string; input: unknown }> {
+  if (m?.type !== "assistant") return [];
+  const content = m?.message?.content;
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((b: any) => b?.type === "tool_use" && typeof b.name === "string")
+    .map((b: any) => ({ id: b.id, name: b.name, input: b.input }));
+}
+
 export class TurnTranslator {
   private itemN = 0;
   private held: string | undefined;     // last assistant text, not yet emitted (buffered to suppress dup of final)
@@ -18,6 +31,12 @@ export class TurnTranslator {
   private nextItem(): string { return `item_${this.turnId}_${++this.itemN}`; }
   private agentMessage(text: string, phase: "commentary" | "final_answer"): object {
     return { method: "item/completed", params: { itemId: this.nextItem(), threadId: this.threadId, turnId: this.turnId, item: { type: "agentMessage", text, phase } } };
+  }
+  /** A built-in SDK tool call as an item/completed (item.type "toolCall", which the Director's
+   *  normalize_event maps to a `tool_call` event). Carries the tool name + its input as
+   *  `arguments`; the Director clips the arg summary, so a large input never bloats its log. */
+  private toolCall(t: { id?: string; name: string; input: unknown }): object {
+    return { method: "item/completed", params: { itemId: this.nextItem(), threadId: this.threadId, turnId: this.turnId, item: { type: "toolCall", id: t.id, tool: t.name, arguments: t.input } } };
   }
 
   /** A thread/tokenUsage/updated notification carrying the absolute CUMULATIVE totals.
@@ -28,11 +47,23 @@ export class TurnTranslator {
     return { method: "thread/tokenUsage/updated", params: { threadId: this.threadId, turnId: this.turnId, tokenUsage: { total: { totalTokens: usage.totalTokens, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens } } } };
   }
 
-  /** Wire notifications for ONE streamed (non-result) SDK message. */
+  /** Wire notifications for ONE streamed (non-result) SDK message. Emits the message's
+   *  tool calls (built-in SDK tool use) AND its assistant text. A message carrying a tool
+   *  call is never the turn's final answer, so its text flushes immediately as commentary
+   *  (and any prior held text first) and the tool calls follow — preserving timeline order;
+   *  the held-buffer (final-dup suppression) is reserved for text-only messages. */
   onMessage(m: any): object[] {
     const out: object[] = [];
     const text = extractAssistantText(m);
-    if (text) { if (this.held !== undefined) out.push(this.agentMessage(this.held, "commentary")); this.held = text; }
+    const tools = extractToolUses(m);
+    if (tools.length) {
+      if (this.held !== undefined) { out.push(this.agentMessage(this.held, "commentary")); this.held = undefined; }
+      if (text) out.push(this.agentMessage(text, "commentary"));
+      for (const t of tools) out.push(this.toolCall(t));
+    } else if (text) {
+      if (this.held !== undefined) out.push(this.agentMessage(this.held, "commentary"));
+      this.held = text;
+    }
     return out;
   }
 

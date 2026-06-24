@@ -1,12 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { TurnTranslator, extractAssistantText } from "../../src/translator.js";
+import { TurnTranslator, extractAssistantText, extractToolUses } from "../../src/translator.js";
 
 const asst = (text: string) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
+const toolUse = (name: string, input: unknown, id = "t1") =>
+  ({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
 
 describe("extractAssistantText", () => {
   it("pulls text blocks, ignores tool_use", () => {
     expect(extractAssistantText(asst("hi"))).toBe("hi");
     expect(extractAssistantText({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash" }] } })).toBe("");
+  });
+});
+
+describe("extractToolUses", () => {
+  it("pulls tool_use blocks {id,name,input}, ignores text", () => {
+    expect(extractToolUses(toolUse("Bash", { command: "ls" }))).toEqual([{ id: "t1", name: "Bash", input: { command: "ls" } }]);
+    expect(extractToolUses(asst("hi"))).toEqual([]);
+    expect(extractToolUses({ type: "user", message: { content: [] } })).toEqual([]);
   });
 });
 
@@ -40,6 +50,23 @@ describe("TurnTranslator", () => {
     const t = new TurnTranslator("thr_1", "turn_1");
     const fin = t.finalize({ text: "", isError: true });
     expect(fin).toEqual([{ method: "turn/failed", params: { turn: { id: "turn_1", status: "failed" } } }]);
+  });
+  it("emits a tool call (item/completed type=toolCall) for a built-in SDK tool_use", () => {
+    const t = new TurnTranslator("thr_1", "turn_1");
+    const out = t.onMessage(toolUse("Bash", { command: "echo hi" })) as any[];
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ method: "item/completed",
+      params: { item: { type: "toolCall", tool: "Bash", arguments: { command: "echo hi" } } } });
+  });
+  it("a text+tool_use message flushes prior held text, this text as commentary, then the tool", () => {
+    const t = new TurnTranslator("thr_1", "turn_1");
+    t.onMessage(asst("earlier"));                                   // held
+    const msg = { type: "assistant", message: { content: [
+      { type: "text", text: "I'll run it" }, { type: "tool_use", id: "t9", name: "Bash", input: { command: "ls" } }] } };
+    const out = t.onMessage(msg) as any[];
+    expect(out.map((o: any) => o.params.item.type)).toEqual(["agentMessage", "agentMessage", "toolCall"]);
+    expect(out.map((o: any) => o.params.item.text ?? o.params.item.tool)).toEqual(["earlier", "I'll run it", "Bash"]);
+    expect(out[1].params.item.phase).toBe("commentary");           // tool-bearing message text is never final
   });
   it("tokenUsage() emits the thread/tokenUsage/updated shape (the one contract reused by heartbeat + finalize)", () => {
     const t = new TurnTranslator("thr_1", "turn_1");
