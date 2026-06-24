@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-14
+last_verified: 2026-06-25
 owner: harness
 type: methodology
 tags: [execplan, planning, methodology]
@@ -127,7 +127,11 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
 - **Prose first.** Narrative sentences carry the plan — milestones included;
   checklists belong only in the Progress log.
 - **Unknowns get PoC milestones.** A milestone with significant unknowns is
-  first a toy implementation validating feasibility, then the real thing.
+  first a toy implementation validating feasibility, then the real thing. When
+  several unknowns stack up, spike each *independently* so one failure can't
+  mask another. For a risky migration, prefer a **parallel implementation** —
+  keep the old path beside the new (an adapter), validate both, then retire the
+  old one under test — over a big-bang swap.
 - **Resolve ambiguities autonomously.** Never stop to ask "what next?" — pick
   the reasonable path, record it in the Decision log, commit frequently.
   Escalate only true judgment calls (docs/PRODUCT_SENSE.md).
