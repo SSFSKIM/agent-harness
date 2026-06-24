@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-25
 owner: harness
 type: exec-plan
@@ -200,5 +200,39 @@ stays green; (e) `python3 plugin/scripts/check.py` is GREEN.
   - **Non-issues:** Codex flagged `status: active` (expected mid-gate — flips at completion) and
     "gate not green" (Codex's sandbox lacked a temp dir; the gate is GREEN here, 790 tests).
   Re-review dispatched after the fixes.
+- (2026-06-25) Round 2 — all four SATISFIED on substance: harness review-spec-compliance,
+  review-code-quality, review-arch all SATISFIED (no P1/P2; both round-1 P2s confirmed
+  resolved with genuine before/after test guards; the new `child_types` model verified
+  coherent recursive-decomposition with no runtime consumer). Codex confirmed the P1 fix and
+  both test-strength P2s; its only residual "blocker" was that the plan was still
+  `status: active` in `active/` — i.e. the completion move itself, performed now. Codex could
+  not independently confirm the gate GREEN (its sandbox lacked a temp dir); the gate is GREEN
+  here (790 tests) and the pre-commit hook re-runs it on every commit.
+- (2026-06-25) Folded spec-compliance's note into ADR 0004 Consequences — it now names
+  `_PLANNING_TEMPLATE` as a third template realigned (the ADR's first cut named only spec/design).
 
 ## Outcomes & retrospective
+**Delivered.** The worker prompt policy in `director/taxonomy.py` now encodes ADR 0004: a ticket
+is a purpose unit that carries the whole pipeline within it. `WORKER_PROTOCOL` carries the
+two-trigger self-contained ticket-issuance contract (genuine size split / surfaced deferred work
+incl. in-scope tech debt; every issued ticket = provenance + title + description + acceptance);
+`_SPEC_/_DESIGN_/_PLANNING_TEMPLATE` decompose only on a genuine size split (sub-projects, not
+stages), mirroring `_IMPL_TEMPLATE`; `_IMPL_TEMPLATE` gained sync-before-work and rework-reset
+(the two Symphony `WORKFLOW.md` gap-#5 divergences). The registry `child_types` was realigned to
+describe the size-split edge (and a pre-existing `impl: []`-but-splits drift fixed). 6 taxonomy
+tests added/strengthened; full gate GREEN (790); behavioral check N/A (prompt text — content is
+asserted by the unit tests).
+
+**Behavioral check: N/A.** The deliverable is worker prompt *text* with no runnable surface; its
+behavior is prompt content, fully covered by the M1–M3 unit assertions (recorded per PLANS.md).
+
+**Retrospective.** The headline lesson repeats the context-budget plan's: the three grounded Claude
+personas all returned SATISFIED, yet **Codex (model diversity) caught the one real bug** — the
+`_PLANNING_TEMPLATE` left contradicting the new `WORKER_PROTOCOL`. The root was a *spec* gap: ADR
+0004's Consequences named only spec/design, so the always-on spec-compliance check verified "did
+spec/design change?" (yes) and never asked "does any UNCHANGED template now contradict the new
+rule?" Worth promoting: a review lens — *"when a cross-cutting rule changes, grep every sibling
+that the rule now governs, not just the ones the plan edited"* (the prompt-policy analogue of
+DESIGN.md's "rename = grep the surviving bodies"). Recorded as a proposed rule; not yet a lint.
+The realignment is otherwise minimal and self-hosting: prompt text + an inert descriptive registry,
+no orchestrator/board/merger change, DAG sequencing untouched.

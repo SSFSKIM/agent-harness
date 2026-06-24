@@ -75,6 +75,10 @@ the two triggers above.
   - `_SPEC_TEMPLATE` (and the `_DESIGN_TEMPLATE` hand-off) continue forward through
     the pipeline in the same ticket, creating children only on the genuine-size
     trigger — mirroring `_IMPL_TEMPLATE`'s existing conditional.
+  - `_PLANNING_TEMPLATE` decomposes a large goal by **independently-shippable
+    sub-project** (trigger #1 itself), not by per-stage child — otherwise it would
+    contradict the protocol's "do not split by stage." (Caught in review: the first
+    cut realigned only spec/design and left planning splitting by stage.)
   - The `WORKER_PROTOCOL` no-scope-creep rule becomes the **two-trigger issuance +
     self-contained-ticket contract** (provenance + title + description + acceptance
     criteria), covering surfaced **in-scope** deferred work, not only out-of-scope.
