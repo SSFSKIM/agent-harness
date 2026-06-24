@@ -194,7 +194,15 @@ Grounding a novice needs:
   close button closes the ES. Playwright pass (captured): clicked LIN-7 → panel showed
   `turns 1 · tool calls 2 (Bash×1 Edit×1) · 70120 tok` + the 5-event timeline; appended a
   6th event live → panel updated 5→6 (`[5] ⏹ turn completed`) via SSE WITHOUT re-click.
-- [ ] M5 cross-runtime proof + reviews
+- [x] (2026-06-24) M5 cross-runtime + docs. R7 acceptance: the claude worker is
+  LIVE-proven end-to-end (M2 probe — all five kinds incl. tool_call from a real Bash turn,
+  after the adapter fix). codex is NORMALIZER-proven (`test_tool_call_both_runtimes` +
+  `test_token_usage_both_runtimes_identical` over codex-shaped fixtures) AND the codex
+  app-server natively emits `commandExecution`/`fileChange` item events (established —
+  why `APPROVAL_METHODS` lists them), which `_KNOWN_TOOL_TYPES` maps. No live codex run
+  performed (no codex binary wired this session) — recorded as unit+established-fact, not
+  fabricated. `.claude/DIRECTOR.md` dashboard section documents the routes + drill-down.
+- [ ] completion-gate reviews (spec-compliance → code-quality via codex; arch/reliability/security)
 
 ## Surprises & discoveries
 - 2026-06-24 (M2, live-probed): the **claude adapter never emitted tool calls**.

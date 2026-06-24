@@ -372,7 +372,7 @@ watches AND answers a run directly from a browser, without entering your session
 
 ```
 python3 -m director.dashboard            # http://127.0.0.1:8787/
-python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir> --history-dir <dir>
+python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir> --history-dir <dir> --events-dir <dir>
 ```
 
 **Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
@@ -394,6 +394,17 @@ run / torn snapshot → "no active run"; no history yet → an empty panel (visi
 > dashboard reads it via `GET /api/v1/history` (a slow 10s poll, independent of the live view).
 > The run aggregate (tokens, runtime) is exact; outcome counts derive from the bounded `recent`
 > tail. Rotation/multi-run aggregation are non-goals.
+
+> **Per-ticket session-event drill-down.** Clicking an in-flight or recent ticket row opens a
+> live panel (its own `EventSource` to `GET /api/v1/ticket/<id>/stream`) showing that ticket's
+> worker run *step by step* — turn boundaries, agent messages, **tool calls** (name + a clipped
+> arg summary), and token accrual — plus a derived telemetry strip (turns · tool-call counts ·
+> tokens). The orchestrator captures the worker turn-stream firehose into a per-ticket
+> append-only log (`director/ticket_events.py` → `<id>.jsonl` under `$DIRECTOR_EVENTS_DIR` /
+> `.claude/harness/director-events`, a sibling of the status dir), normalized so codex and claude
+> workers render identically; `GET /api/v1/ticket/<id>/events` is the history+telemetry snapshot.
+> Best-effort + bounded; the `<id>` is sanitized (no path traversal). Capturing full tool output
+> is a non-goal (a summary, not a transcript).
 
 > **Live token accrual (Layer-2).** The run total and each in-flight row's tokens update *during*
 > a turn, not just at its end: the orchestrator marshals per-event usage from worker-pool threads
