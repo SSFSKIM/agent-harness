@@ -8,6 +8,13 @@ description: A ticket is a purpose/feature unit that carries the whole research�
 ---
 # Ticket = purpose unit — pipeline within, decompose only on size or surfaced work
 
+> **Extended by [ADR 0005](0005-no-stage-prompt-templates.md) (2026-06-25).** This ADR's
+> *decision* (ticket = purpose unit; two-trigger self-contained issuance) stands and now
+> lives entirely in `WORKER_PROTOCOL`. Its **per-template edits** (the size-gated
+> `_SPEC_/_DESIGN_/_PLANNING_TEMPLATE` wording in Consequences) are **superseded** — 0005
+> removes the stage templates altogether, since the load-bearing logic already moved to
+> `WORKER_PROTOCOL` and the templates carried only host-coupled methodology pointers.
+
 ## Decision
 
 A ticket is a **purpose (feature) unit, not an action (stage) unit.** The default

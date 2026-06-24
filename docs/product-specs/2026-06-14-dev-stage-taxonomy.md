@@ -144,6 +144,14 @@ DAG 를 키우고, 3a 가 blocker 가 풀릴 때마다 다음 단계를 dispatch
 > decomposition is no longer the routine per-stage hand-off — a ticket carries the
 > whole pipeline within it, and a worker spawns a child ticket only on a genuine size
 > split or surfaced deferred work, each child self-contained. See the ADR.
+>
+> **Further superseded by [ADR 0005 — no stage prompt templates](../adr/0005-no-stage-prompt-templates.md)
+> (2026-06-25).** The per-stage prompt **templates** (R3's `compose_worker_prompt` template
+> wrapping, the `template` field, the methodology_refs/output pointers) are **removed** — the
+> worker's methodology surface is `WORKER_PROTOCOL` + the host's auto-loaded AGENTS.md +
+> invocable skills. `compose_worker_prompt` returns the raw ticket. The **label / `ticket_type`
+> registry stands** as dispatch + DAG metadata (R1/R2 type-resolution intact); only the
+> prompt-shaping templates (R3) are retired.
 
 - **D-18 full taxonomy 먼저.** (사람, 2026-06-14.) 5 stage 전부 type 으로 — 최소(spec→impl)
   대신 완전한 institutional 모델.

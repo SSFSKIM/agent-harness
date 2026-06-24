@@ -31,3 +31,10 @@ Decisions + why. Register every page here (lint D8).
   deferred work (incl. in-scope tech debt), and every issued ticket is self-contained
   (provenance + title + description + acceptance). Revises dev-stage-taxonomy D-18/D-20;
   realigns the taxonomy with 0001's recursive-decomposition.
+- [No per-stage prompt templates — WORKER_PROTOCOL + AGENTS.md is the whole methodology surface](0005-no-stage-prompt-templates.md)
+  — remove the planning/research/design/spec/impl prompt templates; the worker's operating
+  surface is `WORKER_PROTOCOL` (always injected, now carrying the impl craft) + the host's
+  auto-loaded AGENTS.md + invocable skills, which the worker calls by judgment.
+  `compose_worker_prompt` returns the raw ticket (converging the `director.run` and
+  orchestrator paths); the dev-stage label stays as dispatch/DAG metadata only. Completes
+  0004; supersedes its per-template edits and the dev-stage-taxonomy template layer.
