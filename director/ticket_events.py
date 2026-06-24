@@ -163,17 +163,33 @@ def normalize_event(method, params, *, seq=None, now=_utcnow) -> dict | None:
     return None
 
 
+def _elapsed_iso(start_iso, end_iso):
+    """Seconds between two ISO-8601 timestamps (clamped ≥0), or None if either is
+    missing/unparseable — telemetry is best-effort, so a bad timestamp drops that one
+    duration rather than raising (the `status._elapsed` posture)."""
+    try:
+        secs = (datetime.datetime.fromisoformat(end_iso)
+                - datetime.datetime.fromisoformat(start_iso)).total_seconds()
+    except (TypeError, ValueError):
+        return None
+    return round(max(0.0, secs), 3)
+
+
 def derive_timeseries(events) -> dict:
     """Per-ticket telemetry derived from the event log (R4) — PURE, no IO. The token
     timeseries (`token_series`) is the cumulative total at each `token_usage` point;
     `tokens` is the latest cumulative; `tools` counts tool calls by name; `turns`
-    counts `turn_started`. Tolerant: a None/garbage list yields a well-formed zero
-    record, never raises."""
+    counts `turn_started`; `turn_durations` is the per-turn wall-clock derived from each
+    `turn_started`→`turn_ended` pair's `ts` (a duration drops to None if a timestamp is
+    unparseable). Tolerant: a None/garbage list yields a well-formed zero record, never
+    raises."""
     events = events if isinstance(events, list) else []
     token_series: list[dict] = []
     tools: dict[str, int] = {}
     turns = 0
     last = {"input": 0, "output": 0, "total": 0}
+    turn_durations: list[dict] = []
+    open_turn = None     # (turn_id, ts) of the last turn_started awaiting its turn_ended
     for e in events:
         if not isinstance(e, dict):
             continue
@@ -188,8 +204,14 @@ def derive_timeseries(events) -> dict:
             tools[name] = tools.get(name, 0) + 1
         elif kind == "turn_started":
             turns += 1
+            open_turn = (e.get("turn_id"), e.get("ts"))
+        elif kind == "turn_ended":
+            if open_turn is not None:
+                turn_durations.append({"turn_id": open_turn[0], "status": e.get("status"),
+                                       "seconds": _elapsed_iso(open_turn[1], e.get("ts"))})
+                open_turn = None
     return {"turns": turns, "tool_calls": sum(tools.values()), "tools": tools,
-            "tokens": last, "token_series": token_series}
+            "tokens": last, "token_series": token_series, "turn_durations": turn_durations}
 
 
 def _root(base: Path | str | None = None) -> Path:

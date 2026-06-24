@@ -181,11 +181,25 @@ class DeriveTimeseriesTest(unittest.TestCase):
         self.assertEqual(ts["tokens"], {"input": 30, "output": 12, "total": 42})  # latest cumulative
         self.assertEqual([p["total"] for p in ts["token_series"]], [15, 42])      # the timeseries
 
+    def test_per_turn_wall_clock_from_timestamps(self):
+        # R4: turn_started→turn_ended pairs yield per-turn wall-clock from their ts.
+        events = [
+            {"kind": "turn_started", "seq": 0, "ts": "2026-06-24T00:00:00+00:00", "turn_id": "u1"},
+            {"kind": "turn_ended", "seq": 1, "ts": "2026-06-24T00:00:12+00:00", "status": "completed"},
+            {"kind": "turn_started", "seq": 2, "ts": "2026-06-24T00:00:20+00:00", "turn_id": "u2"},
+            {"kind": "turn_ended", "seq": 3, "ts": "bad-timestamp", "status": "failed"},
+        ]
+        ts = te.derive_timeseries(events)
+        self.assertEqual(ts["turn_durations"],
+                         [{"turn_id": "u1", "status": "completed", "seconds": 12.0},
+                          {"turn_id": "u2", "status": "failed", "seconds": None}])  # unparseable → None, not a raise
+
     def test_tolerates_empty_and_garbage(self):
         for bad in (None, [], "x", [1, "y", None]):
             ts = te.derive_timeseries(bad)
             self.assertEqual(ts["turns"], 0)
             self.assertEqual(ts["token_series"], [])
+            self.assertEqual(ts["turn_durations"], [])
 
 
 if __name__ == "__main__":
