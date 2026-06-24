@@ -70,6 +70,19 @@ class WorkerProtocolTest(unittest.TestCase):
         self.assertIn("once near", low)
         self.assertIn("check.py", out)               # the full gate is still named
 
+    def test_preamble_states_two_trigger_self_contained_issuance(self):
+        # ADR 0004: a ticket is a purpose unit; a worker issues a NEW ticket on exactly
+        # two triggers (genuine size split / surfaced deferred work incl. in-scope tech
+        # debt), and every issued ticket is self-contained (provenance + title + desc +
+        # acceptance) so a fresh worker can start from it alone.
+        low = tax.WORKER_PROTOCOL.lower()
+        self.assertIn("two triggers", low)
+        self.assertIn("independently shippable", low)   # the genuine-size trigger
+        self.assertIn("tech debt", low)                 # in-scope deferred work
+        self.assertIn("acceptance criteria", low)       # self-contained contract
+        self.assertIn("provenance", low)                # link parent + source doc
+        self.assertIn("self-contained", low)
+
     def test_frame_first_turn_carries_both_blocks_in_order(self):
         out = tax.frame_first_turn("do the thing")
         self.assertTrue(out.startswith("do the thing"))      # prompt comes first
@@ -136,10 +149,43 @@ class ComposePromptTest(unittest.TestCase):
         out = tax.compose_worker_prompt(ticket)
         self.assertIn("product-design", out)         # methodology ref
         self.assertIn("docs/product-specs/", out)    # output path
-        self.assertIn("impl", out)                   # decomposes into impl children
+        self.assertIn("impl", out)                   # names impl children (now conditional)
         self.assertIn("X-2", out)                    # blocked_by this ticket
         self.assertIn("auth spec", out)              # original task preserved
         self.assertIn("TASK:", out)
+
+    def test_spec_prompt_continues_in_ticket_not_mandatory_handoff(self):
+        # ADR 0004: a spec worker continues the build in the SAME ticket; it creates impl
+        # children only on a genuine size split, not as a mandatory per-stage hand-off.
+        out = tax.compose_worker_prompt({"identifier": "X-2", "prompt": "auth spec",
+                                         "labels": ["spec"]})
+        low = out.lower()
+        self.assertIn("continue in this same ticket", low)
+        self.assertIn("independently shippable", low)            # split only on genuine size
+        self.assertIn("execplan", low)                           # continues into the build
+        self.assertNotIn("then create impl child tickets", low)  # mandatory hand-off gone
+
+    def test_design_prompt_continues_in_ticket(self):
+        # ADR 0004 symmetry: the design worker also carries the pipeline forward in-ticket,
+        # spawning a spec child only when the design splits into shippable sub-projects.
+        out = tax.compose_worker_prompt({"identifier": "X-D", "prompt": "shape it",
+                                         "labels": ["design"]})
+        low = out.lower()
+        self.assertIn("continue in this same ticket", low)
+        self.assertIn("independently shippable", low)
+
+    def test_impl_prompt_syncs_base_and_resets_on_wrong_approach(self):
+        # ADR 0004 / Symphony WORKFLOW.md parity: sync the base to origin/main before
+        # substantial work (recorded evidence), and treat an approach-rejected rework as a
+        # RESET (close PR, fresh branch, fresh plan), not an incremental patch.
+        out = tax.compose_worker_prompt({"identifier": "X-9", "prompt": "build it",
+                                         "labels": ["impl"]})
+        low = out.lower()
+        self.assertIn("origin/main", out)        # sync-before-work + reset both target it
+        self.assertIn("sync", low)
+        self.assertIn("approach", low)           # approach-rejected rework
+        self.assertIn("reset", low)
+        self.assertIn("fresh", low)              # fresh branch / fresh plan
 
     def test_impl_prompt_references_execplan(self):
         out = tax.compose_worker_prompt({"identifier": "X-3", "prompt": "build it",

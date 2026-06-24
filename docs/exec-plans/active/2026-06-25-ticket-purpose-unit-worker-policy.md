@@ -146,12 +146,30 @@ stays green; (e) `python3 plugin/scripts/check.py` is GREEN.
 
 ## Progress log
 - [x] (2026-06-25) Plan created; base_commit f5b5280; review_level targeted. ADR 0004 committed (f5b5280).
+- [x] (2026-06-25) M1 — WORKER_PROTOCOL no-scope-creep bullet → two-trigger self-contained
+  issuance contract (genuine size split / surfaced deferred work incl. in-scope tech debt;
+  provenance + title + description + acceptance). New test `test_preamble_states_two_trigger_self_contained_issuance`.
+- [x] (2026-06-25) M2 — `_SPEC_TEMPLATE` + `_DESIGN_TEMPLATE` continue the pipeline in-ticket;
+  children only on a genuine size split (mirrors `_IMPL_TEMPLATE`). Updated the stale
+  "decomposes into impl children" comment; new tests `test_spec_prompt_continues_in_ticket_not_mandatory_handoff`
+  + `test_design_prompt_continues_in_ticket`.
+- [x] (2026-06-25) M3 — `_IMPL_TEMPLATE` rework path split (incremental sweep vs approach-reset:
+  close PR / fresh branch / fresh plan) + sync-before-work (`pull` to origin/main, recorded
+  evidence). New test `test_impl_prompt_syncs_base_and_resets_on_wrong_approach`.
+- [x] (2026-06-25) M4 — module docstring states the purpose-unit framing + ADR 0004. Full gate
+  GREEN (790 tests, +4). Taxonomy suite 26 green.
 
 ## Surprises & discoveries
+- (2026-06-25) `_SPEC_TEMPLATE` is a plain triple-quoted string (literal newlines), unlike
+  `WORKER_PROTOCOL` which uses `\`-continuations — so "independently shippable" wrapped across a
+  line and a naive substring assertion failed. Reflowed the line so the phrase stays intact
+  (the rendered prompt is unaffected; the assertion is now line-robust).
 
 ## Decision log
 - 2026-06-25: Approach A (prompt-text only) over a new pipeline-carrying type (B) — ADR 0004
   keeps the five types as start-points; `_IMPL_TEMPLATE`'s existing conditional proves the shape.
+- 2026-06-25: sync-before-work names the `pull` skill AND the recorded-evidence outcome, so it
+  works whether or not the skill name resolves in the workspace (matches WORKFLOW.md Step 1.9).
 
 ## Feedback (from completion gate)
 

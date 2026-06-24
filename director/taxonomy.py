@@ -12,6 +12,13 @@ and 3a's DAG sequences the result. See docs/product-specs/2026-06-14-dev-stage-t
 Beyond the per-stage template, every worker's FIRST-turn prompt is framed
 (`frame_first_turn`) with two stage-agnostic blocks: the `WORKER_PROTOCOL` operating
 disciplines and the `TERMINAL_CONTRACT` (graduated-autonomy slice 1, gap #5; ADR 0002).
+
+Per ADR 0004 (ticket = purpose unit) a ticket carries the WHOLE pipeline within it: the
+type label says where work STARTS, not "do one stage then hand off". So the non-leaf
+templates (spec/design) CONTINUE the pipeline in the same ticket and spawn children only
+on a genuine size split (mirroring impl's "only if too large"); decomposition is the
+exception, not the routine. `WORKER_PROTOCOL` carries the two-trigger, self-contained
+ticket-issuance contract that governs when a worker creates a new ticket at all.
 """
 from __future__ import annotations
 
@@ -32,14 +39,24 @@ further research is genuinely needed (labeled research, blocked_by {identifier})
 _DESIGN_TEMPLATE = """\
 You are a DESIGN worker for ticket {identifier}. Produce an architecture/design doc
 under docs/design-docs/, grounded in docs/design-docs/core-beliefs.md and
-ARCHITECTURE.md. Then, for each piece that needs a product-spec, create a child ticket
-labeled spec and blocked_by {identifier}, using the linear skill."""
+ARCHITECTURE.md. This ticket is one purpose unit: when the design resolves into one
+coherent build, CONTINUE in this same ticket through spec → ExecPlan → implementation →
+QA → PR (product-design then execplan) — do NOT hand off to a separate spec ticket. Only
+when the design reveals independently shippable sub-projects do you create one child
+ticket per piece (labeled spec, blocked_by {identifier}), each self-contained per the
+WORKER PROTOCOL, using the linear skill."""
 
 _SPEC_TEMPLATE = """\
 You are a SPEC worker for ticket {identifier}. Follow the product-design procedure in
-plugin/skills/product-design/SKILL.md (and the entry decision in docs/PLANS.md) to
-write a product-spec at docs/product-specs/YYYY-MM-DD-<slug>.md. Then create impl child
-tickets (labeled impl, blocked_by {identifier}) for the build, using the linear skill."""
+plugin/skills/product-design/SKILL.md (and the entry decision in docs/PLANS.md) to write
+a product-spec at docs/product-specs/YYYY-MM-DD-<slug>.md. This ticket is one purpose
+unit: when the spec describes one coherent build, CONTINUE in this same ticket into the
+ExecPlan + implementation + QA + PR (the execplan procedure in
+plugin/skills/execplan/SKILL.md) — do NOT hand the build off to a separate impl ticket.
+Only when the product-design scope check shows the work splits into
+independently shippable sub-projects do you create one child ticket per piece (labeled
+spec or impl, blocked_by {identifier}), each self-contained per the WORKER PROTOCOL,
+using the linear skill."""
 
 _IMPL_TEMPLATE = """\
 You are an IMPL worker for ticket {identifier}. Follow the execplan procedure in
@@ -52,9 +69,16 @@ edit just re-burns its output through context for no new signal. Split off addit
 impl child tickets (labeled impl, blocked_by {identifier}) only if the work is too large
 for one plan.
 
-If the ticket has a PR already attached when you start (rework/feedback loop), run the
-PR FEEDBACK SWEEP (below) FIRST and address it before any new feature work.
+If the ticket has a PR already attached when you start, first decide the rework path. For
+INCREMENTAL feedback (specific line/review comments), run the PR FEEDBACK SWEEP (below)
+FIRST and address it before any new feature work. But if the APPROACH itself was rejected
+(a reviewer or human asked for a different direction, not line edits), RESET instead of
+patching: close the existing PR, branch fresh from origin/main, write a fresh ExecPlan,
+and proceed as a new attempt.
 
+Sync first: before substantial implementation, sync your base to origin/main (the `pull`
+skill) and record the result (merge source, clean or conflicts-resolved, resulting HEAD
+short SHA) in the ExecPlan Notes — a stale base surfaces conflicts late, mid-sweep.
 Reproduction-first: before changing code, reproduce and capture the current
 behavior/issue signal (a command + its output, or a deterministic behavior) and record
 it in the ExecPlan Notes so the fix target is explicit. If the ticket carries
@@ -186,10 +210,17 @@ second narrative.
 states yourself (issueUpdate is not yours — it will be refused). Report your terminal \
 outcome with report_outcome (done/blocked/needs_human) and the orchestrator moves the \
 board.
-- No scope-creep. If you discover meaningful work outside this ticket's scope, do NOT \
-expand the ticket. File a separate typed child ticket (labeled with the right stage, \
-blocked_by/related to this one as appropriate) using the linear skill, note it, then \
-stay on the current scope.
+- A ticket is one purpose; keep the whole pipeline inside it. Do NOT split a ticket by \
+stage. You issue a NEW ticket on exactly two triggers, and otherwise stay on this one: \
+(1) genuine size — the work divides into independently shippable sub-projects/slices, \
+each its own spec→ExecPlan cycle, as a child ticket blocked_by this one; or (2) deferred \
+work surfaced while working — out of scope, OR in-scope tech debt / additional production \
+tests / hardening whose inline fix would break your momentum. Anything smaller stays in \
+this ticket's scope. Every ticket you issue must be self-contained: a clear title, a \
+description of the work, acceptance criteria, and provenance — link the parent ticket and \
+the source doc (spec / design / research) it derives from — so a fresh worker can start \
+from the ticket alone. Create it with the linear skill, labeled with the right stage and \
+blocked_by/related to this one, and note it.
 - Proportional context — orient only as much as THIS ticket needs. Do NOT survey the whole \
 repo for a focused change. Orientation is a tool, not a mandatory step: for a broad or \
 unfamiliar change the `docs-nav` skill (`nav.py map`/`catalog`/`tree`/`backlinks`) surfaces \
