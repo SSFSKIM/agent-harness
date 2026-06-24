@@ -187,7 +187,13 @@ Grounding a novice needs:
   + `/stream` (SSE tail, reusing `_stream_loop`), `events_dir` on the server + `--events-dir`,
   id sanitized before any path join. +6 dashboard tests (events view+telemetry, unknown→empty,
   SSE initial frame, every traversal id→404, malformed paths→404, POST→405). 50 GREEN.
-- [ ] M4 drill-down UI + playwright
+- [x] (2026-06-24) M4 drill-down UI: in-flight/recent rows are click-triggers (`.tk`),
+  each opens an independent panel in `#drill` (a container the main render never rebuilds,
+  so it survives the ~0.5s re-renders) with its OWN EventSource to `/ticket/<id>/stream`;
+  event timeline + derived-telemetry strip rendered via `textContent` only (XSS-safe);
+  close button closes the ES. Playwright pass (captured): clicked LIN-7 → panel showed
+  `turns 1 · tool calls 2 (Bash×1 Edit×1) · 70120 tok` + the 5-event timeline; appended a
+  6th event live → panel updated 5→6 (`[5] ⏹ turn completed`) via SSE WITHOUT re-click.
 - [ ] M5 cross-runtime proof + reviews
 
 ## Surprises & discoveries

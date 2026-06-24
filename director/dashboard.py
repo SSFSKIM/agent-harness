@@ -256,6 +256,11 @@ PAGE = """<!doctype html>
   .ctl textarea { background:#0b0e13; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; font:inherit; min-width:15rem; height:1.7rem; padding:.15rem .35rem; }
   button.act { background:#1b2230; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; padding:.12rem .55rem; cursor:pointer; font:inherit; }
   button.act:hover { background:#26304199; }
+  .tk { cursor:pointer; } .tk:hover { background:#161c26; }
+  .drill { border:1px solid #2a3343; border-radius:.4rem; margin:.4rem 0; padding:.3rem .5rem; background:#11161f; }
+  .drillhead { display:flex; gap:.4rem; align-items:center; margin-bottom:.2rem; }
+  .evt { padding:.1rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
+  .evt.tool { color:#9ecbff; } .evt.msg { color:#d6dde6; } .evt.tok { color:#7d8896; } .evt.turn { color:#6ee7a8; }
 </style></head><body>
 <h1>director dashboard <span id="updated" class="muted"></span></h1>
 <div id="run" class="run"></div>
@@ -264,6 +269,7 @@ PAGE = """<!doctype html>
 <h2>stuck</h2><div id="stuck"></div>
 <h2>recent</h2><div id="recent"></div>
 <h2>pending (director queue)</h2><div id="pending"></div>
+<h2>ticket detail (live — click an in-flight or recent ticket)</h2><div id="drill"></div>
 <h2>history (recent runs)</h2><div id="history"></div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -303,7 +309,14 @@ function fmtRateLimits(rl) {
 function fill(id, lines) {
   const box = $(id); box.innerHTML = "";
   if (!lines.length) { box.appendChild(el("div", "—", "muted")); return; }
-  for (const [text, cls] of lines) box.appendChild(el("div", text, cls || "item"));
+  // A 3rd element (ticket id) makes the row a click-trigger for the live drill-down.
+  // The row is rebuilt every frame (innerHTML reset above) — harmless, it is only a
+  // trigger; the drill panel itself lives in #drill, which this render never touches.
+  for (const [text, cls, tid] of lines) {
+    const d = el("div", text, (cls || "item") + (tid ? " tk" : ""));
+    if (tid) { d.title = "click to stream this ticket's events"; d.onclick = () => openDrill(tid); }
+    box.appendChild(d);
+  }
 }
 function render(v) {
   const run = v.run, h = $("run"); h.innerHTML = "";
@@ -322,13 +335,14 @@ function render(v) {
     + " · recent " + (c.recent||0) + " · pending " + (c.pending||0);
   fill("inflight", (v.in_flight||[]).map(e =>
     [(e.identifier||e.ticket_id) + " · " + e.phase + " · a" + e.attempt + "/w" + e.wave
-      + (e.tokens ? " · " + fmtTokens(e.tokens) : "")]));  // Layer-2: live mid-turn tokens
+      + (e.tokens ? " · " + fmtTokens(e.tokens) : ""),  // Layer-2: live mid-turn tokens
+     "item", e.ticket_id]));                            // 3rd: drill-down trigger
   fill("stuck", (v.stuck||[]).map(s =>
     [s.ticket + " ← " + (s.blocked_by||[]).map(b => b.id).join(", ")]));
   fill("recent", (v.recent||[]).map(r =>
     [(r.status === "completed" ? "✓ " : "✗ ") + (r.ticket||r.ticket_id)
       + " · " + fmtTokens(r.tokens) + (r.session_id ? " · " + r.session_id : ""),
-     r.status === "completed" ? "item ok" : "item bad"]));
+     r.status === "completed" ? "item ok" : "item bad", r.ticket_id]));
   renderPending(v.pending || []);
   $("updated").textContent = "· updated " + (v.generated_at || "");
 }
@@ -401,6 +415,64 @@ function fallbackPoll() {                  // the ~1s degradation path — idemp
   if (fallbackPoll.armed) return;
   fallbackPoll.armed = true;
   setInterval(poll, 1000); poll();
+}
+// ---- per-ticket live drill-down -------------------------------------------------
+// Each open ticket gets its OWN EventSource to /api/v1/ticket/<id>/stream and its own
+// panel in #drill (a container the main render never rebuilds — so the panel survives
+// the ~0.5s run-view re-renders). Every value is written via textContent (el()), so a
+// tool summary / agent message can never be parsed as markup.
+const drills = {};   // ticket_id -> { es, panel }
+function fmtTel(t) {
+  if (!t) return "";
+  const tools = Object.keys(t.tools||{}).map(k => k + "×" + t.tools[k]).join(" ");
+  return "turns " + (t.turns||0) + " · tool calls " + (t.tool_calls||0)
+    + (tools ? " (" + tools + ")" : "") + " · " + fmtTokens(t.tokens);
+}
+function evtLine(e) {                       // [text, cssClass] for one event, kind-tagged
+  const k = e.kind;
+  if (k === "agent_message") return ["💬 " + (e.phase||"") + ": " + (e.text||""), "evt msg"];
+  if (k === "tool_call") return ["🔧 " + (e.tool||"") + (e.summary ? " " + e.summary : ""), "evt tool"];
+  if (k === "token_usage") return ["📊 " + fmtTokens(e.tokens), "evt tok"];
+  if (k === "turn_started") return ["▶ turn started", "evt turn"];
+  if (k === "turn_ended") return ["⏹ turn " + (e.status||""), "evt turn"];
+  if (k === "truncated") return ["… " + (e.note||"truncated"), "evt tok"];
+  return [k + (e.item_type ? " " + e.item_type : ""), "evt"];
+}
+function openDrill(tid) {
+  if (!tid) return;
+  if (drills[tid]) { drills[tid].panel.scrollIntoView({ block: "nearest" }); return; }
+  const panel = el("div", null, "drill");
+  const head = el("div", null, "drillhead");
+  head.appendChild(el("span", "▾ " + tid, "tag"));
+  head.appendChild(btn("close", () => closeDrill(tid)));
+  const tel = el("div", "", "muted");
+  const list = el("div", null, "");
+  panel.appendChild(head); panel.appendChild(tel); panel.appendChild(list);
+  $("drill").appendChild(panel);
+  const render = (view) => {
+    tel.textContent = fmtTel(view.telemetry);
+    list.innerHTML = "";
+    for (const e of (view.events||[])) {
+      const [text, cls] = evtLine(e);
+      list.appendChild(el("div", "[" + (e.seq != null ? e.seq : "") + "] " + text, cls));
+    }
+  };
+  let es = null;
+  const u = "/api/v1/ticket/" + encodeURIComponent(tid);
+  if (window.EventSource) {
+    es = new EventSource(u + "/stream");
+    es.onmessage = (ev) => { try { render(JSON.parse(ev.data)); } catch (x) {} };
+    es.onerror = () => {};   // EventSource auto-reconnects; the live detail is best-effort
+  } else {
+    fetch(u + "/events").then(r => r.json()).then(render).catch(() => {});  // no-SSE fallback
+  }
+  drills[tid] = { es, panel };
+}
+function closeDrill(tid) {
+  const d = drills[tid]; if (!d) return;
+  if (d.es) d.es.close();
+  d.panel.remove();
+  delete drills[tid];
 }
 function startStream() {
   // Prefer server-push (SSE): render each pushed view. Fall back to polling when the
