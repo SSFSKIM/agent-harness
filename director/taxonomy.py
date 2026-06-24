@@ -1,164 +1,37 @@
-"""Dev-stage taxonomy (Phase 3b): ticket type -> harness doc-pipeline workflow.
+"""Dev-stage taxonomy: ticket label -> dispatch + DAG metadata (ADR 0005).
 
-A ticket's `type` (a Linear label) maps onto a stage of the harness's OWN methodology
-(AGENTS.md operating model: product-design -> spec, execplan -> plan+code). The
-`TAXONOMY` registry below is the institution-as-data: each type carries the
-methodology it follows (by repo path — self-hosting), the doc it emits, the child
-types it decomposes into, and the prompt template the orchestrator wraps a worker's
-ticket in. Routing is a pure function (`compose_worker_prompt`); decomposition is
-worker-driven (the template instructs the worker to create typed children — RV1) but,
-per ADR 0004, ONLY on a genuine size split (see below), and 3a's DAG sequences the
-result. See docs/product-specs/2026-06-14-dev-stage-taxonomy.md.
+A ticket's `type` (a Linear stage label) is **metadata only**: it gates dispatch
+(`dispatch_requires_label`) and types the `blocked_by` DAG for sequencing + observability.
+It does **not** shape the worker's prompt. Per ADR 0005 the worker's methodology surface is
+exactly `WORKER_PROTOCOL` (the single operating contract, always injected — the analog of
+Symphony's `WORKFLOW.md`, and it carries the implementation craft) PLUS the host's
+auto-loaded `AGENTS.md` and its invocable skills (product-design / execplan / …), which the
+worker consults and calls by its own judgment. There are **no per-stage prompt templates**:
+`compose_worker_prompt` returns the ticket's own prompt unchanged, identically on the
+orchestrator and `director.run` paths.
 
-Beyond the per-stage template, every worker's FIRST-turn prompt is framed
-(`frame_first_turn`) with two stage-agnostic blocks: the `WORKER_PROTOCOL` operating
-disciplines and the `TERMINAL_CONTRACT` (graduated-autonomy slice 1, gap #5; ADR 0002).
-
-Per ADR 0004 (ticket = purpose unit) a ticket carries the WHOLE pipeline within it: the
-type label says where work STARTS, not "do one stage then hand off". So the non-leaf
-templates (spec/design) CONTINUE the pipeline in the same ticket and spawn children only
-on a genuine size split (mirroring impl's "only if too large"); decomposition is the
-exception, not the routine. `WORKER_PROTOCOL` carries the two-trigger, self-contained
-ticket-issuance contract that governs when a worker creates a new ticket at all.
+Every worker's FIRST-turn prompt is framed (`frame_first_turn`) with two stage-agnostic
+blocks: `WORKER_PROTOCOL` (operating contract) then the `TERMINAL_CONTRACT` (report_outcome).
+See docs/adr/0005-no-stage-prompt-templates.md (completes 0004 — the purpose-unit decision
+now lives wholly in `WORKER_PROTOCOL`; 0002 gap #5 for the protocol's lineage).
 """
 from __future__ import annotations
 
-_PLANNING_TEMPLATE = """\
-You are a PLANNING worker for ticket {identifier}. The goal below is too large for one
-ticket — decompose it into INDEPENDENTLY SHIPPABLE sub-projects/slices, NOT into per-stage
-tickets. Each sub-project is its own purpose unit that carries its whole spec→ExecPlan
-pipeline; create one child ticket per sub-project (labeled spec, or planning if a
-sub-project is itself too large to plan in one pass), blocked_by {identifier}, each
-self-contained per the WORKER PROTOCOL, using the linear skill (linear_graphql). Follow
-the harness operating model in AGENTS.md and the entry decision in docs/PLANS.md. Leave a
-brief decomposition note (the pieces, how they relate, the order) — do NOT implement."""
-
-_RESEARCH_TEMPLATE = """\
-You are a RESEARCH worker for ticket {identifier}. Investigate the open question below
-and produce a research digest under docs/references/ following docs/references/index.md
-conventions; cite sources. This is usually a leaf — create a child ticket only if
-further research is genuinely needed (labeled research, blocked_by {identifier})."""
-
-_DESIGN_TEMPLATE = """\
-You are a DESIGN worker for ticket {identifier}. Produce an architecture/design doc
-under docs/design-docs/, grounded in docs/design-docs/core-beliefs.md and
-ARCHITECTURE.md. This ticket is one purpose unit: when the design resolves into one
-coherent build, CONTINUE in this same ticket through spec → ExecPlan → implementation →
-QA → PR (product-design then execplan) — do NOT hand off to a separate spec ticket. Only
-when the design reveals independently shippable sub-projects do you create one child
-ticket per piece (labeled spec, blocked_by {identifier}), each self-contained per the
-WORKER PROTOCOL, using the linear skill."""
-
-_SPEC_TEMPLATE = """\
-You are a SPEC worker for ticket {identifier}. Follow the product-design procedure in
-plugin/skills/product-design/SKILL.md (and the entry decision in docs/PLANS.md) to write
-a product-spec at docs/product-specs/YYYY-MM-DD-<slug>.md. This ticket is one purpose
-unit: when the spec describes one coherent build, CONTINUE in this same ticket into the
-ExecPlan + implementation + QA + PR (the execplan procedure in
-plugin/skills/execplan/SKILL.md) — do NOT hand the build off to a separate impl ticket.
-Only when the product-design scope check shows the work splits into
-independently shippable sub-projects do you create one child ticket per piece (labeled
-spec — each sub-project starts its own pipeline — blocked_by {identifier}), each
-self-contained per the WORKER PROTOCOL, using the linear skill."""
-
-_IMPL_TEMPLATE = """\
-You are an IMPL worker for ticket {identifier}. Follow the execplan procedure in
-plugin/skills/execplan/SKILL.md (and docs/PLANS.md, docs/DESIGN.md): write a living
-ExecPlan under docs/exec-plans/active/, implement it, and run the completion gate.
-Gate cadence (context hygiene): during iteration, validate with the TARGETED tests/lint
-for what you changed; run the FULL `python3 plugin/scripts/check.py` gate ONCE near
-completion (and again only after a real change) — re-running the whole gate after every
-edit just re-burns its output through context for no new signal. Split off additional
-impl child tickets (labeled impl, blocked_by {identifier}) only if the work is too large
-for one plan.
-
-If the ticket has a PR already attached when you start, first decide the rework path. For
-INCREMENTAL feedback (specific line/review comments), run the PR FEEDBACK SWEEP (below)
-FIRST and address it before any new feature work. But if the APPROACH itself was rejected
-(a reviewer or human asked for a different direction, not line edits), RESET instead of
-patching: close the existing PR, branch fresh from origin/main, write a fresh ExecPlan,
-and proceed as a new attempt.
-
-Sync first: before substantial implementation, sync your base to origin/main (the `pull`
-skill) and record the result (merge source, clean or conflicts-resolved, resulting HEAD
-short SHA) in the ExecPlan Notes — a stale base surfaces conflicts late, mid-sweep.
-Reproduction-first: before changing code, reproduce and capture the current
-behavior/issue signal (a command + its output, or a deterministic behavior) and record
-it in the ExecPlan Notes so the fix target is explicit. If the ticket carries
-`Validation`/`Test Plan`/`Testing` sections, mirror them into the ExecPlan as
-non-negotiable acceptance checkboxes and execute them before done. Temporary local proof
-edits to validate an assumption are fine, but revert every such proof edit before commit
-and document it in the ExecPlan.
-
-Before you finish — SELF-QA (your own responsibility; this is NOT a gate, and the
-PR-merger does only a thin integration check later): (1) keep the host gate GREEN;
-(2) self-review spec-compliance (does the build match the spec/ticket?) and code-quality;
-(3) write and run task-specific tests for what you built — smoke/unit always, plus
-end-to-end via `playwright`/`playwright-cli` for UI work (graceful fallback to smoke/unit
-where no browser is available); (4) open a PR with the `push` skill
-whose body states WHAT spec/feature you built, WHICH reviews you ran, and WHICH tests you
-wrote and their results — the PR-merger reads this; (5) PR FEEDBACK SWEEP — after opening
-the PR and before report_outcome(done), gather the PR's checks and every comment channel
-(top-level comments, inline review comments, bot reviews, review summaries via `gh`) and
-treat each actionable item as blocking until it is addressed by a code/test/docs change
-OR an explicit, justified pushback reply on that thread; re-run validation after changes
-and repeat the sweep until nothing actionable is outstanding and checks are green.
-Explicitly RESOLVE each review thread you address — a reply alone does not resolve it,
-and the merger refuses to land while threads are unresolved. Then call report_outcome(done)
-with the sweep's result as structured evidence: checks_state (the CI state you observed),
-unresolved_threads (0 when you resolved them all), and acceptance_verified (whether you ran
-the ticket's Validation/Test Plan acceptance). The merger RE-VERIFIES preservation + these
-independently before landing — they are your audit record, not a substitute for the work
-being truly clean."""
-
-# institution-as-data: type -> stage workflow. Under ADR 0004 a ticket carries the whole
-# pipeline in-ticket; child_types is descriptive of the EXCEPTIONAL size-split edge — a
-# split sub-project starts its own pipeline (spec), planning may recurse, impl splits into
-# impl — NOT a routine per-stage hand-off, and it has no runtime consumer.
+# institution-as-data: stage label -> DAG metadata (ADR 0005 — NO `template`; the label does
+# not shape the prompt). `child_types` describes the EXCEPTIONAL size-split edge (ADR 0004): a
+# split sub-project starts its own pipeline (spec), planning may recurse, impl splits into impl.
+# Metadata only — no runtime consumer beyond `ticket_type` (dispatch filter + DAG typing).
 TAXONOMY: dict[str, dict] = {
-    "planning": {
-        "label": "planning",
-        "stage": "decompose a large goal into independently shippable sub-project tickets",
-        "methodology_refs": ["AGENTS.md", "docs/PLANS.md"],
-        "output": "decomposition note + sub-project child tickets",
-        "child_types": ["spec", "planning"],
-        "template": _PLANNING_TEMPLATE,
-    },
-    "research": {
-        "label": "research",
-        "stage": "investigate an unknown",
-        "methodology_refs": ["docs/references/index.md"],
-        "output": "research digest (docs/references/)",
-        "child_types": [],
-        "template": _RESEARCH_TEMPLATE,
-    },
-    "design": {
-        "label": "design",
-        "stage": "architecture / high-low design",
-        "methodology_refs": ["docs/design-docs/core-beliefs.md", "ARCHITECTURE.md"],
-        "output": "design doc (docs/design-docs/)",
-        "child_types": ["spec"],
-        "template": _DESIGN_TEMPLATE,
-    },
-    "spec": {
-        "label": "spec",
-        "stage": "product design (the what)",
-        "methodology_refs": ["plugin/skills/product-design/SKILL.md", "docs/PLANS.md"],
-        "output": "product-spec (docs/product-specs/)",
-        "child_types": ["spec"],
-        "template": _SPEC_TEMPLATE,
-    },
-    "impl": {
-        "label": "impl",
-        "stage": "implementation (the build)",
-        "methodology_refs": ["plugin/skills/execplan/SKILL.md", "docs/PLANS.md", "docs/DESIGN.md"],
-        "output": "exec-plan (docs/exec-plans/) + code",
-        "child_types": ["impl"],  # only when a build is too large for one plan
-        "template": _IMPL_TEMPLATE,
-    },
+    "planning": {"label": "planning",
+                 "stage": "decompose a large goal into independently shippable sub-project tickets",
+                 "child_types": ["spec", "planning"]},
+    "research": {"label": "research", "stage": "investigate an unknown", "child_types": []},
+    "design": {"label": "design", "stage": "architecture / high-low design", "child_types": ["spec"]},
+    "spec": {"label": "spec", "stage": "product design (the what)", "child_types": ["spec"]},
+    "impl": {"label": "impl", "stage": "implementation (the build)", "child_types": ["impl"]},
 }
 
-# Most-specific-first: a ticket carrying several stage labels routes to the latest stage.
+# Most-specific-first: a ticket carrying several stage labels resolves to the latest stage.
 _PRIORITY = ["impl", "spec", "design", "research", "planning"]
 
 # The multi-turn TERMINAL CONTRACT injected into every worker's first-turn prompt
@@ -188,21 +61,21 @@ def with_terminal_contract(prompt: str) -> str:
     return f"{prompt}\n\n---\nTURN PROTOCOL\n{TERMINAL_CONTRACT}"
 
 
-# The stage-agnostic WORKER OPERATING PROTOCOL injected into every worker's first-turn
-# prompt (graduated-autonomy slice 1, gap #5). These disciplines hold for ALL five
-# stages (incl. proportional context / orient-only-as-needed — the F2 cost lever from the
-# use-all shakedown); the four impl-specific disciplines (reproduction-first, acceptance
-# mirroring, temp-proof revert, PR feedback sweep) live in _IMPL_TEMPLATE, not here. Harvested from
-# docs/symphony-original/WORKFLOW.md's stage-agnostic craft (NOT its lifecycle/board
-# steps — our orchestrator/merger own those). See docs/adr/0002-graduated-autonomy.md
-# + docs/product-specs/2026-06-17-worker-operating-protocol.md.
+# The WORKER OPERATING PROTOCOL — the single, always-injected operating contract (ADR 0005,
+# the analog of Symphony's WORKFLOW.md). It carries the stage-agnostic disciplines (gap #5 /
+# ADR 0002) AND the implementation craft (folded in from the retired `_IMPL_TEMPLATE` — ADR
+# 0005), phrased CONDITIONALLY ("when you implement / open a PR") since a purpose-unit ticket
+# (ADR 0004) normally includes the build. It is host-AGNOSTIC on purpose: it names disciplines
+# and the worker's own tools (`pull`/`push`/`gh`/`playwright`), never host methodology paths or
+# a specific gate command — routing to product-design vs an ExecPlan, and the host's gate, are
+# the host's AGENTS.md + skills (auto-loaded), the worker's judgment, NOT injected here.
 WORKER_PROTOCOL = """\
-These hold for every stage, on every turn:
-- Single living source of truth. Your stage's output doc (research digest, design doc, \
-product-spec, or ExecPlan) is the canonical home for your plan and progress narrative. \
-Maintain it in place as you work — check items off and record decisions and surprises \
-the moment they happen, and keep that single canonical progress note rather than \
-fragmenting it across many separate notes or comments.
+These hold on every turn:
+- Single living source of truth. Your working doc (whatever the host's methodology uses — a \
+research digest, design doc, product-spec, or ExecPlan) is the canonical home for your plan \
+and progress narrative. Maintain it in place as you work — check items off and record \
+decisions and surprises the moment they happen, and keep that single canonical progress note \
+rather than fragmenting it across many separate notes or comments.
 - One canonical board comment, mirroring that doc. So the human curating the board sees \
 your progress without opening repo docs, keep exactly ONE comment on this ticket as a \
 board-visible mirror of the source-of-truth narrative. Lead it with the exact marker \
@@ -233,12 +106,38 @@ repo structure and status on demand; for a small, well-scoped change skip the su
 straight to the work. And keep your working context lean — do not re-read files or re-run \
 commands whose output you already have, and never pull a large command/test log back into \
 context (capture the pass/fail signal, not the whole log). Re-sent context is the dominant \
-cost of a turn, so reading less IS working cheaper."""
+cost of a turn, so reading less IS working cheaper.
+- When you implement and open a PR (most purpose-unit tickets carry a build): \
+**Reproduce first** — before changing code, capture the current behavior/issue signal (a \
+command + its output, or a deterministic behavior) so the fix target is explicit. \
+**Sync before substantial work** — bring your base up to origin/main (the `pull` skill) and \
+record the result (merge source, clean/conflicts-resolved, resulting HEAD), so a stale base \
+doesn't surface conflicts late. **Mirror acceptance** — if the ticket carries \
+Validation/Test Plan/Testing sections, treat them as non-negotiable acceptance and run them \
+before done. **Revert proof edits** — temporary local edits to validate an assumption are \
+fine, but revert every one before commit. **Self-QA** (your responsibility, not a gate; the \
+merger does only a thin integration check later): keep the host's gate/CI green (run the full \
+gate once near completion + after a real change, targeted checks while iterating — don't \
+re-burn the whole gate after every edit); self-review spec-compliance and code-quality; write \
+and run task-specific tests (smoke/unit always, end-to-end via `playwright`/`playwright-cli` \
+for UI, graceful fallback where no browser exists). **Open the PR** with the `push` skill; its \
+body states WHAT you built, WHICH reviews you ran, and WHICH tests you wrote + their results. \
+**PR feedback sweep** before report_outcome(done): gather the PR's checks and every comment \
+channel (top-level, inline review, bot, summaries via `gh`); treat each actionable item as \
+blocking until addressed by a code/test/docs change OR a justified pushback reply; re-run \
+validation and repeat until nothing is outstanding and checks are green. Explicitly RESOLVE \
+each thread you address (a reply alone does not resolve it; the merger refuses to land with \
+unresolved threads). Report the sweep's result as structured report_outcome evidence — \
+checks_state, unresolved_threads (0 when resolved), acceptance_verified — which the merger \
+re-verifies independently. **Rework** — if a ticket arrives with a PR already attached: \
+incremental review feedback → run the sweep first; but if the APPROACH itself was rejected \
+(not line edits) → RESET, not patch: close the existing PR, branch fresh from origin/main, \
+write a fresh plan, proceed as a new attempt."""
 
 
 def frame_first_turn(prompt: str) -> str:
     """Frame a worker's FIRST-turn prompt with the two stage-agnostic protocol blocks
-    every dispatch path needs: the WORKER PROTOCOL (operating disciplines) then the TURN
+    every dispatch path needs: the WORKER PROTOCOL (operating contract) then the TURN
     PROTOCOL (terminal contract). Injected once in `run.drive`, so the orchestrator,
     run.main, and direct-drive callers all receive it via the single seam. Delegates the
     terminal block to `with_terminal_contract` (kept byte-stable)."""
@@ -248,7 +147,8 @@ def frame_first_turn(prompt: str) -> str:
 
 def ticket_type(ticket: dict) -> str | None:
     """The dev-stage type of a ticket from its labels, or None (untyped) if it carries
-    no stage label. Multiple stage labels resolve by _PRIORITY (most specific first)."""
+    no stage label. Multiple stage labels resolve by _PRIORITY (most specific first).
+    Used for dispatch gating + DAG typing — NOT for prompt composition (ADR 0005)."""
     labels = set(ticket.get("labels") or [])
     for t in _PRIORITY:
         if TAXONOMY[t]["label"] in labels:
@@ -257,13 +157,9 @@ def ticket_type(ticket: dict) -> str | None:
 
 
 def compose_worker_prompt(ticket: dict) -> str:
-    """The prompt a worker receives for this ticket: the type's stage-workflow template
-    (methodology refs + output path + typed-child-creation instruction) wrapped around
-    the ticket's own task. An untyped ticket gets its raw prompt unchanged (backward
-    compatible with the pre-3b orchestrator)."""
-    t = ticket_type(ticket)
-    base = ticket.get("prompt", "")
-    if t is None:
-        return base
-    identifier = ticket.get("identifier") or ticket.get("id") or "this ticket"
-    return TAXONOMY[t]["template"].format(identifier=identifier) + "\n\nTASK:\n" + base
+    """The prompt a worker receives = the ticket's own prompt, UNCHANGED (ADR 0005: there is
+    no per-stage prompt template). The dev-stage label is dispatch/DAG metadata, not a
+    prompt-shaper, so the orchestrator and `director.run` send identical worker prompts. The
+    operating contract + terminal contract are added once by `frame_first_turn` (in
+    `run.drive`); the methodology the worker follows comes from the host's AGENTS.md + skills."""
+    return ticket.get("prompt", "")

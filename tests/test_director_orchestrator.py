@@ -665,9 +665,10 @@ class RunUntilDrainedTest(unittest.TestCase):
 
 
 class TypeRoutingTest(unittest.TestCase):
-    """Phase 3b: dispatch composes the worker prompt from the ticket's dev-stage type."""
+    """ADR 0005: the dev-stage label types the DAG (sequencing) + gates dispatch, but does
+    NOT shape the prompt — dispatch passes the ticket's own prompt through, typed or not."""
 
-    def test_dispatch_composes_typed_prompt(self):
+    def test_dispatch_passes_typed_prompt_raw(self):
         captured = {}
 
         def fake_drive(ticket, **kw):
@@ -676,8 +677,8 @@ class TypeRoutingTest(unittest.TestCase):
 
         with mock.patch("director.orchestrator.run.drive", fake_drive):
             orch.dispatch(_issue("a", labels=["spec"]), command=["x"])
-        self.assertIn("product-design", captured["prompt"])  # spec template applied
-        self.assertIn("p-a", captured["prompt"])              # original task preserved
+        self.assertEqual(captured["prompt"], "p-a")           # raw, no template wrapping
+        self.assertNotIn("product-design", captured["prompt"])
 
     def test_dispatch_untyped_passes_raw_prompt(self):
         captured = {}
@@ -690,7 +691,9 @@ class TypeRoutingTest(unittest.TestCase):
             orch.dispatch(_issue("a"), command=["x"])  # no labels
         self.assertEqual(captured["prompt"], "p-a")  # unchanged (backward compat)
 
-    def test_typed_pipeline_sequenced_with_per_type_prompts(self):
+    def test_typed_pipeline_sequenced_by_dag(self):
+        # The label still types the DAG (blocked_by sequencing), but ADR 0005: it no longer
+        # shapes the prompt — each worker receives its ticket's raw prompt.
         board = orch.MockBoard([
             _issue("plan", labels=["planning"]),
             _issue("design", ["plan"], labels=["design"]),
@@ -705,12 +708,11 @@ class TypeRoutingTest(unittest.TestCase):
 
         with mock.patch("director.orchestrator.run.drive", fake_drive):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
-        self.assertEqual([s[0] for s in seen], ["plan", "design", "spec", "impl"])
+        self.assertEqual([s[0] for s in seen], ["plan", "design", "spec", "impl"])  # DAG order
         prompts = dict(seen)
-        self.assertIn("sub-project", prompts["plan"])       # planning template (ADR 0004)
-        self.assertIn("design-docs", prompts["design"])     # design template
-        self.assertIn("product-design", prompts["spec"])    # spec template
-        self.assertIn("execplan", prompts["impl"])          # impl template
+        for tid in ("plan", "design", "spec", "impl"):       # each prompt is raw (no template)
+            self.assertEqual(prompts[tid], f"p-{tid}")
+            self.assertNotIn("TASK:", prompts[tid])
         self.assertEqual(out["stopped_reason"], "drained")
 
 

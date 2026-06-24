@@ -108,9 +108,27 @@ updated; `python3 plugin/scripts/check.py` GREEN.
   removes a subsystem layer). Process P1/P2; complete + `git mv` to completed/.
 
 ## Progress log
-- [ ] (2026-06-25) Plan created. (base_commit stamped at commit.)
+- [x] (2026-06-25) Plan created (base_commit 6ef9d79; ADR 0005 + plan committed 604e48e).
+- [x] (2026-06-25) M1 — `WORKER_PROTOCOL` absorbs the impl craft as a conditional "when you
+  implement / open a PR" block (reproduction-first, sync-before-work, acceptance mirroring,
+  temp-proof revert, self-QA, gate cadence, PR self-description, PR-feedback sweep + resolve
+  threads + structured evidence, rework-reset) — host-AGNOSTIC (no `check.py`/execplan path).
+- [x] (2026-06-25) M2 — deleted all five stage templates; `compose_worker_prompt` returns the
+  raw ticket prompt; `TAXONOMY` trimmed to `label`/`stage`/`child_types` (dropped `template`/
+  `methodology_refs`/`output`; grep-confirmed no non-test consumer); `ticket_type` unchanged.
+- [x] (2026-06-25) M3 — `tests/test_director_taxonomy.py`: template-content tests → raw-passthrough
+  (`ComposePromptTest`) + impl-craft-in-`WORKER_PROTOCOL` (`ImplCraftInProtocolTest`); registry-
+  fields test trimmed; gate-cadence test moved to `WORKER_PROTOCOL`. `tests/test_director_orchestrator.py`
+  `TypeRoutingTest`: per-type prompt-content assertions → raw-passthrough + DAG-order. Both suites green.
+- [x] (2026-06-25) M4 — **AGENTS.md auto-load CONFIRMED**: worker `settingSources` defaults to
+  `["user","project","local"]` (SDK: `"project"` loads CLAUDE.md), app-server doesn't override →
+  CLAUDE.md auto-loads → points to AGENTS.md. **No `frame_first_turn` fallback needed.** Docs:
+  taxonomy docstring (M2) + DIRECTOR.md §14 worker-profile (first-turn prompt + AGENTS.md carrier).
 
 ## Surprises & discoveries
+- (2026-06-25) DIRECTOR.md §14 still cited `director/taxonomy.py:_IMPL_TEMPLATE` for the SELF-QA
+  discipline — a stale surviving body of the deletion (the rule I keep re-learning). Repointed to
+  `WORKER_PROTOCOL`. The grep for stale template refs across director/tests/plugin is part of M3.
 
 ## Decision log
 - 2026-06-25: Approach A (delete all five; fold impl craft into WORKER_PROTOCOL) over B

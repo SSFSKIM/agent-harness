@@ -59,16 +59,13 @@ class WorkerProtocolTest(unittest.TestCase):
         self.assertIn("docs-nav", low)               # nav offered as an on-demand tool
         self.assertIn("re-sent context", low)         # names the dominant cost
 
-    def test_impl_prompt_gates_once_not_repeatedly(self):
-        # F2 context hygiene: the impl worker runs the FULL gate once near completion and
-        # iterates with targeted checks — not the whole 685-test gate after every edit.
-        out = tax.compose_worker_prompt({"identifier": "X-8", "prompt": "build it",
-                                         "labels": ["impl"]})
-        low = out.lower()
-        self.assertIn("gate cadence", low)
+    def test_protocol_carries_gate_cadence(self):
+        # F2 context hygiene, now in WORKER_PROTOCOL (ADR 0005, host-AGNOSTIC — no hardcoded
+        # gate command): full gate once near completion, targeted checks while iterating.
+        low = tax.WORKER_PROTOCOL.lower()
+        self.assertIn("once near completion", low)
         self.assertIn("targeted", low)
-        self.assertIn("once near", low)
-        self.assertIn("check.py", out)               # the full gate is still named
+        self.assertIn("host's gate", low)            # generic, not a baked-in `check.py`
 
     def test_preamble_states_two_trigger_self_contained_issuance(self):
         # ADR 0004: a ticket is a purpose unit; a worker issues a NEW ticket on exactly
@@ -104,12 +101,14 @@ class RegistryTest(unittest.TestCase):
     def test_all_five_types_present(self):
         self.assertEqual(set(tax.TAXONOMY), {"planning", "research", "design", "spec", "impl"})
 
-    def test_each_entry_has_required_fields(self):
+    def test_each_entry_has_metadata_fields(self):
+        # ADR 0005: the registry is dispatch/DAG METADATA only — no `template` (and no
+        # `methodology_refs`/`output`); the dev-stage label does not shape the prompt.
         for name, entry in tax.TAXONOMY.items():
-            for field in ("label", "stage", "methodology_refs", "output",
-                          "child_types", "template"):
+            for field in ("label", "stage", "child_types"):
                 self.assertIn(field, entry, f"{name} missing {field}")
             self.assertEqual(entry["label"], name)  # label == type name (D-19)
+            self.assertNotIn("template", entry)      # no per-stage prompt template
 
     def test_child_types_describe_size_split_edge(self):
         # ADR 0004: decomposition is the EXCEPTION (a genuine size split), not a routine
@@ -142,121 +141,67 @@ class TicketTypeTest(unittest.TestCase):
 
 
 class ComposePromptTest(unittest.TestCase):
+    # ADR 0005: compose_worker_prompt returns the ticket's prompt UNCHANGED for every ticket
+    # (typed or not) — the dev-stage label is dispatch/DAG metadata, not a prompt-shaper.
     def test_untyped_returns_raw_prompt(self):
         ticket = {"identifier": "X-1", "prompt": "do the thing", "labels": []}
         self.assertEqual(tax.compose_worker_prompt(ticket), "do the thing")
 
-    def test_spec_prompt_references_product_design_and_children(self):
-        ticket = {"identifier": "X-2", "prompt": "auth spec", "labels": ["spec"]}
-        out = tax.compose_worker_prompt(ticket)
-        self.assertIn("product-design", out)         # methodology ref
-        self.assertIn("docs/product-specs/", out)    # output path
-        self.assertIn("impl", out)                   # names impl children (now conditional)
-        self.assertIn("X-2", out)                    # blocked_by this ticket
-        self.assertIn("auth spec", out)              # original task preserved
-        self.assertIn("TASK:", out)
+    def test_typed_ticket_also_returns_raw_prompt(self):
+        # the key ADR 0005 behavior: a stage label does NOT wrap the prompt in a template
+        for label in ("spec", "impl", "planning", "design", "research"):
+            ticket = {"identifier": "X-2", "prompt": "auth spec", "labels": [label]}
+            self.assertEqual(tax.compose_worker_prompt(ticket), "auth spec",
+                             f"a {label} ticket should pass its prompt through unchanged")
 
-    def test_spec_prompt_continues_in_ticket_not_mandatory_handoff(self):
-        # ADR 0004: a spec worker continues the build in the SAME ticket; it creates impl
-        # children only on a genuine size split, not as a mandatory per-stage hand-off.
-        out = tax.compose_worker_prompt({"identifier": "X-2", "prompt": "auth spec",
-                                         "labels": ["spec"]})
-        low = out.lower()
-        self.assertIn("continue in this same ticket", low)
-        self.assertIn("independently shippable", low)            # split only on genuine size
-        self.assertIn("execplan", low)                           # continues into the build
-        self.assertIn("only when", low)                          # child creation is gated
-        self.assertNotIn("then create impl child", low)          # mandatory hand-off gone
+    def test_orchestrator_and_run_compose_identically(self):
+        # compose is now a pure pass-through, so the orchestrator (which calls it) and
+        # director.run (which doesn't) send the same worker prompt for a ticket.
+        ticket = {"identifier": "X-2", "prompt": "build the thing", "labels": ["impl"]}
+        self.assertEqual(tax.compose_worker_prompt(ticket), ticket["prompt"])
+        self.assertNotIn("TASK:", tax.compose_worker_prompt(ticket))  # no template wrapper
 
-    def test_design_prompt_continues_in_ticket(self):
-        # ADR 0004 symmetry: the design worker also carries the pipeline forward in-ticket,
-        # spawning a spec child only when the design splits into shippable sub-projects.
-        out = tax.compose_worker_prompt({"identifier": "X-D", "prompt": "shape it",
-                                         "labels": ["design"]})
-        low = out.lower()
-        self.assertIn("continue in this same ticket", low)
-        self.assertIn("independently shippable", low)
 
-    def test_impl_prompt_syncs_base_and_resets_on_wrong_approach(self):
-        # ADR 0004 / Symphony WORKFLOW.md parity: sync the base to origin/main before
-        # substantial work (recorded evidence), and treat an approach-rejected rework as a
-        # RESET (close PR, fresh branch, fresh plan), not an incremental patch.
-        out = tax.compose_worker_prompt({"identifier": "X-9", "prompt": "build it",
-                                         "labels": ["impl"]})
-        low = out.lower()
-        self.assertIn("origin/main", out)        # sync-before-work + reset both target it
-        self.assertIn("sync", low)
-        self.assertIn("approach", low)           # approach-rejected rework
-        self.assertIn("reset", low)
-        self.assertIn("branch fresh", low)       # fresh branch from origin/main
-        self.assertIn("fresh execplan", low)     # and a fresh plan
+class ImplCraftInProtocolTest(unittest.TestCase):
+    """ADR 0005: the implementation craft folded from the retired _IMPL_TEMPLATE now lives in
+    WORKER_PROTOCOL (conditional 'when you implement'), so it reaches every worker via
+    frame_first_turn on both dispatch paths — host-AGNOSTIC (no execplan/check.py path)."""
 
-    def test_impl_prompt_references_execplan(self):
-        out = tax.compose_worker_prompt({"identifier": "X-3", "prompt": "build it",
-                                         "labels": ["impl"]})
-        self.assertIn("execplan", out)
-        self.assertIn("docs/exec-plans/", out)
-        self.assertIn("check.py", out)
+    def setUp(self):
+        self.raw = tax.WORKER_PROTOCOL
+        self.low = self.raw.lower()
 
-    def test_impl_prompt_includes_self_qa_and_pr_procedure(self):
-        # M1 (worker-qa) + Slice 4 R4.3: the impl worker still self-QAs INLINE (spec/code
-        # self-review + task-specific tests) and opens a PR with a self-description before
-        # done — a procedure, not a gate (spec R1/R2/D-46). The standalone `qa` workspace
-        # skill was RETIRED (redundant with the execplan completion gate the worker runs);
-        # the discipline stays inline, so the prompt no longer points at a separate qa skill.
-        out = tax.compose_worker_prompt({"identifier": "X-5", "prompt": "build it",
-                                         "labels": ["impl"]})
-        self.assertIn("SELF-QA", out)
-        self.assertIn("task-specific tests", out)  # the self-QA test discipline, inline
-        self.assertIn("PR", out)                    # open a PR with a self-description
-        self.assertIn("report_outcome(done)", out)
-        self.assertNotIn("`qa` skill", out)         # retired — no standalone qa-skill pointer
+    def test_reproduce_sync_acceptance_revert(self):
+        self.assertIn("reproduce", self.low)            # reproduction-first
+        self.assertIn("origin/main", self.raw)          # sync-before-work
+        self.assertIn("validation", self.low)           # acceptance mirroring (ticket section)
+        self.assertIn("non-negotiable", self.low)
+        self.assertIn("revert", self.low)               # temp proof revert
+        self.assertIn("proof", self.low)
+        # host-agnostic: no baked-in methodology path
+        self.assertNotIn("plugin/skills/execplan", self.raw)
+        self.assertNotIn("check.py", self.raw)
 
-    def test_impl_prompt_includes_the_four_operating_disciplines(self):
-        # M2 (slice 1, gap #5): the impl worker is guided through reproduction-first
-        # (R4), acceptance mirroring (R5), temp-proof revert (R6), and the PR feedback
-        # sweep — pre-handoff + on-arrival (R7).
-        out = tax.compose_worker_prompt({"identifier": "X-6", "prompt": "fix it",
-                                         "labels": ["impl"]})
-        low = out.lower()
-        self.assertIn("reproduce", low)                 # R4 reproduction-first
-        self.assertIn("validation", low)                # R5 ticket-provided section
-        self.assertIn("non-negotiable", low)            # R5 mirrored as non-negotiable
-        self.assertIn("revert", low)                    # R6 temp proof edits reverted
-        self.assertIn("proof", low)                     # R6
-        self.assertIn("feedback sweep", low)            # R7 PR feedback sweep
-        self.assertIn("inline", low)                    # R7 all channels incl. inline review
-        self.assertIn("already attached", low)          # R7 on-arrival path
-        # the existing self-QA + PR block must remain intact (worker-qa spec)
-        self.assertIn("SELF-QA", out)
-        self.assertIn("report_outcome(done)", out)
+    def test_self_qa_and_pr_self_description(self):
+        self.assertIn("self-qa", self.low)
+        self.assertIn("task-specific tests", self.low)
+        self.assertIn("push", self.low)                 # open the PR with the push skill
+        self.assertIn("report_outcome(done)", self.raw)
 
-    def test_impl_sweep_outputs_structured_evidence_and_resolves_threads(self):
-        # merge-preservation M1 (R4): the sweep step now instructs explicit thread
-        # resolution (a reply alone does not resolve) and ties report_outcome's structured
-        # evidence (checks_state / unresolved_threads / acceptance_verified) to the sweep's
-        # result, while flagging that the merger re-verifies independently.
-        out = tax.compose_worker_prompt({"identifier": "X-7", "prompt": "fix it",
-                                         "labels": ["impl"]})
-        low = out.lower()
-        self.assertIn("resolve each review thread", low)   # explicit thread resolution
-        self.assertIn("checks_state", out)                 # structured evidence fields
-        self.assertIn("unresolved_threads", out)
-        self.assertIn("acceptance_verified", out)
-        self.assertIn("re-verifies", low)                  # merger independently re-verifies
+    def test_pr_feedback_sweep_with_structured_evidence(self):
+        self.assertIn("feedback sweep", self.low)
+        self.assertIn("inline", self.low)               # all channels incl. inline review
+        self.assertIn("resolve", self.low)              # explicit thread resolution
+        self.assertIn("checks_state", self.raw)         # structured report_outcome evidence
+        self.assertIn("unresolved_threads", self.raw)
+        self.assertIn("acceptance_verified", self.raw)
+        self.assertIn("re-verifies", self.low)          # merger re-verifies independently
 
-    def test_planning_prompt_decomposes_into_subprojects(self):
-        # ADR 0004: planning decomposes a large goal into INDEPENDENTLY SHIPPABLE
-        # sub-projects (each its own pipeline), NOT into per-stage children — otherwise it
-        # would contradict WORKER_PROTOCOL's "do not split a ticket by stage".
-        out = tax.compose_worker_prompt({"identifier": "X-4", "prompt": "ship feature",
-                                         "labels": ["planning"]})
-        low = out.lower()
-        self.assertIn("decompose", low)
-        self.assertIn("independently shippable", low)   # by sub-project, not stage
-        self.assertIn("sub-project", low)
-        self.assertNotIn("right next stage", low)       # the old per-stage framing is gone
-        self.assertIn("AGENTS.md", out)
+    def test_rework_reset_path(self):
+        self.assertIn("approach", self.low)             # approach-rejected rework
+        self.assertIn("reset", self.low)
+        self.assertIn("branch fresh", self.low)         # fresh branch from origin/main
+        self.assertIn("already attached", self.low)     # on-arrival (PR already attached)
 
 
 if __name__ == "__main__":

@@ -613,6 +613,18 @@ the sandbox *only* because it is the lone key in `worker_policy.worker_env`), an
     today; making it work for a non-clone host repo — vendoring the grounding docs too — is
     deferred.)
 
-  The standalone `qa` skill was **retired**: an impl worker self-QAs *inline* (the SELF-QA
-  discipline in `director/taxonomy.py:_IMPL_TEMPLATE`) and through the execplan completion
+  The standalone `qa` skill was **retired**: a worker self-QAs *inline* (the SELF-QA
+  discipline now in `director/taxonomy.py:WORKER_PROTOCOL`) and through the host's completion
   gate it runs (spec-compliance + code-quality + behavioral) — not a separate skill.
+
+- **First-turn prompt → the raw ticket + `WORKER_PROTOCOL` + `TERMINAL_CONTRACT` (ADR 0005 —
+  no per-stage template).** `taxonomy.compose_worker_prompt` returns the ticket's prompt
+  unchanged; `frame_first_turn` (in `run.drive`) adds the operating contract + terminal
+  contract — identically on the orchestrator and `director.run` paths. The dev-stage **label
+  is dispatch/DAG metadata, not a prompt-shaper.** The *methodology* the worker follows
+  (product-design vs an ExecPlan vs a direct patch, the host's gate command, doc paths) comes
+  from the host's **`AGENTS.md`** — auto-loaded because the worker session's `settingSources`
+  includes `"project"` (loads `CLAUDE.md`, which points to `AGENTS.md`) — plus the installed
+  skills, applied by the worker's judgment. A Director-driven host is expected to carry both
+  halves (`WORKER_PROTOCOL` injected + `AGENTS.md` in-repo, via self-host or `harness-init`);
+  a bare repo with neither gives the worker only `WORKER_PROTOCOL` + its judgment.
