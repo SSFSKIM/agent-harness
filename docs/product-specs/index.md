@@ -281,3 +281,16 @@ owner: harness
   source each — no `agents/*` dirs; ⑤ clean + version-bump + re-describe the plugin
   manifests; ⑥ capstone: a checked-in, legacy-stripped, drift-checked base artifact +
   `SETUP.md`. Director stays centralized; no generator, no wizard, no README. draft.
+- [Per-ticket session-event stream (live drill-down + derived telemetry)](2026-06-24-per-ticket-session-event-stream.md)
+  — Phase 5 observability 트랙의 다음 consumer-richness 슬라이스. 워커 turn-stream firehose
+  (`AppServerClient.on_event` — 오늘은 token usage 만 빼가고 나머지 play-by-play 는 버려짐)를
+  runtime-agnostic 하게 normalize 해 **티켓별 append-only JSONL**(`.claude/harness/director-events/
+  <id>.jsonl`)로 영속 → 대시보드가 `GET /api/v1/ticket/{id}/events`(history + 파생 telemetry
+  timeseries) + `/stream`(라이브 SSE)로 서빙하고, in-flight/recent 행을 펼치면 그 티켓의 이벤트
+  타임라인이 라이브로 흐르는 drill-down UI. 핵심 설계: 티켓별 파일은 그 티켓의 pool 스레드만
+  쓰므로(retry 는 직렬) **single-writer → main-thread marshal 불필요**(토큰 누적 경로와 대비);
+  telemetry 는 별도 producer 가 아니라 이벤트 로그에서 **파생**(DRY). codex/claude 워커가 같은
+  vocabulary 를 emit 하므로 runtime 분기 0. id 는 `[A-Za-z0-9._-]+` 로 sanitize(traversal 0).
+  Additive — `status.py`/`history.py`/queue/decider/merger/guardrail/worker-protocol 불변.
+  Non-goals: full tool I/O 캡처·이벤트 로그 GC/rotation·신규 write 라우트·cross-ticket 집계.
+  observability-dashboard/-polish 후속. draft.
