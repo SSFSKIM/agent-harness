@@ -139,6 +139,12 @@ DAG 를 키우고, 3a 가 blocker 가 풀릴 때마다 다음 단계를 dispatch
 
 ## Decision Log (부모 D-1..D-7, 오케스트레이터 D-8..D-12, 3a D-13..D-17 이어서)
 
+> **Revised by [ADR 0004 — ticket = purpose unit](../adr/0004-ticket-purpose-unit.md)
+> (2026-06-25).** D-18/D-20 stand as the *type registry*, but inter-stage
+> decomposition is no longer the routine per-stage hand-off — a ticket carries the
+> whole pipeline within it, and a worker spawns a child ticket only on a genuine size
+> split or surfaced deferred work, each child self-contained. See the ADR.
+
 - **D-18 full taxonomy 먼저.** (사람, 2026-06-14.) 5 stage 전부 type 으로 — 최소(spec→impl)
   대신 완전한 institutional 모델.
 - **D-19 type = Linear 라벨**(라벨명 = type, 레지스트리가 라벨→type). 가장 단순; 라벨명은

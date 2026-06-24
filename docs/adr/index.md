@@ -24,3 +24,10 @@ Decisions + why. Register every page here (lint D8).
   taste-vs-mechanical (not reversibility), guardrails are the hard floor.
   Daemonized Claude Code runtime is a separate track; no-headless memory NOT
   superseded.
+- [Ticket = purpose unit — pipeline within, decompose only on size or surfaced work](0004-ticket-purpose-unit.md)
+  — a ticket is a purpose/feature unit carrying the whole research→spec→plan→exec→QA
+  pipeline within it (the `type` label says where work *starts*, not "one stage then
+  hand off"); a worker issues a new ticket only on a genuine size split or surfaced
+  deferred work (incl. in-scope tech debt), and every issued ticket is self-contained
+  (provenance + title + description + acceptance). Revises dev-stage-taxonomy D-18/D-20;
+  realigns the taxonomy with 0001's recursive-decomposition.
