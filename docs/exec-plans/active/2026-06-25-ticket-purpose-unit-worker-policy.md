@@ -172,5 +172,33 @@ stays green; (e) `python3 plugin/scripts/check.py` is GREEN.
   works whether or not the skill name resolves in the workspace (matches WORKFLOW.md Step 1.9).
 
 ## Feedback (from completion gate)
+- (2026-06-25) Round 1 — harness review-spec-compliance / code-quality / arch all SATISFIED;
+  **Codex NOT-SATISFIED with a real P1 the green personas missed** (the
+  [[codex-review-verdict-can-confabulate]] inverse — model diversity earning its keep, as in
+  the context-budget plan):
+  - **P1 (Codex, fixed) — `_PLANNING_TEMPLATE` contradicted `WORKER_PROTOCOL`.** Planning still
+    said "create a child ticket labeled with the right next stage (research/design/spec)" — i.e.
+    *split by stage* — while the new protocol says "Do NOT split a ticket by stage." A planning
+    worker reads both. Root: the ADR/plan named only spec/design for the rewrite, missing that
+    planning's decomposition axis was wrong too. **Fixed:** `_PLANNING_TEMPLATE` now decomposes a
+    large goal into INDEPENDENTLY SHIPPABLE sub-projects (each its own purpose unit / pipeline),
+    not per-stage children — which IS trigger #1 of the contract, so no contradiction. Registry
+    `stage`/`output`/`child_types` for planning realigned; `test_planning_prompt_decomposes_into_subprojects`
+    strengthened to assert the sub-project framing and the absence of "right next stage".
+  - **P2 (code-quality, fixed) — no-op negative assertion.** `assertNotIn("then create impl child
+    tickets")` never matched even at base (the old string wrapped a newline). Fixed to
+    `assertNotIn("then create impl child")` (line-robust) + added a positive `assertIn("only when")`.
+  - **P2 (code-quality, fixed) — `_SPEC_TEMPLATE` prose/data drift.** "labeled spec or impl" vs
+    `child_types: ["impl"]`. Fixed: a split sub-project starts its own pipeline → spec prose now
+    "labeled spec", and `child_types` realigned to the ADR-0004 size-split model (planning→[spec,
+    planning], spec→[spec], impl→[impl] — the last also fixes a PRE-EXISTING impl=[]-but-splits drift).
+  - **P2 (arch, fixed) — stale prose.** Module docstring (`:8-10`) + the registry comment narrated
+    per-stage decomposition as the routine; both reworded to "exception, only on a size split"
+    (DESIGN.md "grep the surviving bodies" rule).
+  - **P2 (Codex, fixed) — loose `assertIn("fresh")`.** Tightened to `assertIn("branch fresh")` +
+    `assertIn("fresh execplan")`.
+  - **Non-issues:** Codex flagged `status: active` (expected mid-gate — flips at completion) and
+    "gate not green" (Codex's sandbox lacked a temp dir; the gate is GREEN here, 790 tests).
+  Re-review dispatched after the fixes.
 
 ## Outcomes & retrospective

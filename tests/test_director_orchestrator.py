@@ -707,7 +707,7 @@ class TypeRoutingTest(unittest.TestCase):
             out = orch.run_until_drained(board, command=["x"], team="T", states=states)
         self.assertEqual([s[0] for s in seen], ["plan", "design", "spec", "impl"])
         prompts = dict(seen)
-        self.assertIn("Decompose", prompts["plan"])         # planning template
+        self.assertIn("sub-project", prompts["plan"])       # planning template (ADR 0004)
         self.assertIn("design-docs", prompts["design"])     # design template
         self.assertIn("product-design", prompts["spec"])    # spec template
         self.assertIn("execplan", prompts["impl"])          # impl template

@@ -111,14 +111,16 @@ class RegistryTest(unittest.TestCase):
                 self.assertIn(field, entry, f"{name} missing {field}")
             self.assertEqual(entry["label"], name)  # label == type name (D-19)
 
-    def test_child_types_form_pipeline(self):
-        # planning -> {research,design,spec}; design -> spec; spec -> impl; leaves are leaves
-        self.assertEqual(set(tax.TAXONOMY["planning"]["child_types"]),
-                         {"research", "design", "spec"})
+    def test_child_types_describe_size_split_edge(self):
+        # ADR 0004: decomposition is the EXCEPTION (a genuine size split), not a routine
+        # per-stage pipeline. child_types describes the size-split edge — a split
+        # sub-project starts its own pipeline (spec), planning may recurse, impl splits
+        # into impl (only when a build is too large for one plan).
+        self.assertEqual(tax.TAXONOMY["planning"]["child_types"], ["spec", "planning"])
         self.assertEqual(tax.TAXONOMY["design"]["child_types"], ["spec"])
-        self.assertEqual(tax.TAXONOMY["spec"]["child_types"], ["impl"])
+        self.assertEqual(tax.TAXONOMY["spec"]["child_types"], ["spec"])
         self.assertEqual(tax.TAXONOMY["research"]["child_types"], [])
-        self.assertEqual(tax.TAXONOMY["impl"]["child_types"], [])
+        self.assertEqual(tax.TAXONOMY["impl"]["child_types"], ["impl"])
         # every child type is itself a known type
         for entry in tax.TAXONOMY.values():
             for c in entry["child_types"]:
@@ -163,7 +165,8 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("continue in this same ticket", low)
         self.assertIn("independently shippable", low)            # split only on genuine size
         self.assertIn("execplan", low)                           # continues into the build
-        self.assertNotIn("then create impl child tickets", low)  # mandatory hand-off gone
+        self.assertIn("only when", low)                          # child creation is gated
+        self.assertNotIn("then create impl child", low)          # mandatory hand-off gone
 
     def test_design_prompt_continues_in_ticket(self):
         # ADR 0004 symmetry: the design worker also carries the pipeline forward in-ticket,
@@ -185,7 +188,8 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("sync", low)
         self.assertIn("approach", low)           # approach-rejected rework
         self.assertIn("reset", low)
-        self.assertIn("fresh", low)              # fresh branch / fresh plan
+        self.assertIn("branch fresh", low)       # fresh branch from origin/main
+        self.assertIn("fresh execplan", low)     # and a fresh plan
 
     def test_impl_prompt_references_execplan(self):
         out = tax.compose_worker_prompt({"identifier": "X-3", "prompt": "build it",
@@ -241,10 +245,17 @@ class ComposePromptTest(unittest.TestCase):
         self.assertIn("acceptance_verified", out)
         self.assertIn("re-verifies", low)                  # merger independently re-verifies
 
-    def test_planning_prompt_decomposes(self):
+    def test_planning_prompt_decomposes_into_subprojects(self):
+        # ADR 0004: planning decomposes a large goal into INDEPENDENTLY SHIPPABLE
+        # sub-projects (each its own pipeline), NOT into per-stage children — otherwise it
+        # would contradict WORKER_PROTOCOL's "do not split a ticket by stage".
         out = tax.compose_worker_prompt({"identifier": "X-4", "prompt": "ship feature",
                                          "labels": ["planning"]})
-        self.assertIn("Decompose", out)
+        low = out.lower()
+        self.assertIn("decompose", low)
+        self.assertIn("independently shippable", low)   # by sub-project, not stage
+        self.assertIn("sub-project", low)
+        self.assertNotIn("right next stage", low)       # the old per-stage framing is gone
         self.assertIn("AGENTS.md", out)
 
 

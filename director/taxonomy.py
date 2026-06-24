@@ -6,8 +6,9 @@ A ticket's `type` (a Linear label) maps onto a stage of the harness's OWN method
 methodology it follows (by repo path — self-hosting), the doc it emits, the child
 types it decomposes into, and the prompt template the orchestrator wraps a worker's
 ticket in. Routing is a pure function (`compose_worker_prompt`); decomposition is
-worker-driven (the template INSTRUCTS the worker to create typed children — RV1),
-and 3a's DAG sequences the result. See docs/product-specs/2026-06-14-dev-stage-taxonomy.md.
+worker-driven (the template instructs the worker to create typed children — RV1) but,
+per ADR 0004, ONLY on a genuine size split (see below), and 3a's DAG sequences the
+result. See docs/product-specs/2026-06-14-dev-stage-taxonomy.md.
 
 Beyond the per-stage template, every worker's FIRST-turn prompt is framed
 (`frame_first_turn`) with two stage-agnostic blocks: the `WORKER_PROTOCOL` operating
@@ -23,12 +24,14 @@ ticket-issuance contract that governs when a worker creates a new ticket at all.
 from __future__ import annotations
 
 _PLANNING_TEMPLATE = """\
-You are a PLANNING worker for ticket {identifier}. Decompose the goal below into a
-DAG of typed child tickets — do NOT implement. Follow the harness operating model in
-AGENTS.md and the entry decision in docs/PLANS.md. For each sub-piece, create a child
-ticket labeled with the right next stage (one of: research, design, spec) and
-blocked_by {identifier}, using the linear skill (linear_graphql). Leave a brief
-decomposition note on this ticket."""
+You are a PLANNING worker for ticket {identifier}. The goal below is too large for one
+ticket — decompose it into INDEPENDENTLY SHIPPABLE sub-projects/slices, NOT into per-stage
+tickets. Each sub-project is its own purpose unit that carries its whole spec→ExecPlan
+pipeline; create one child ticket per sub-project (labeled spec, or planning if a
+sub-project is itself too large to plan in one pass), blocked_by {identifier}, each
+self-contained per the WORKER PROTOCOL, using the linear skill (linear_graphql). Follow
+the harness operating model in AGENTS.md and the entry decision in docs/PLANS.md. Leave a
+brief decomposition note (the pieces, how they relate, the order) — do NOT implement."""
 
 _RESEARCH_TEMPLATE = """\
 You are a RESEARCH worker for ticket {identifier}. Investigate the open question below
@@ -55,8 +58,8 @@ ExecPlan + implementation + QA + PR (the execplan procedure in
 plugin/skills/execplan/SKILL.md) — do NOT hand the build off to a separate impl ticket.
 Only when the product-design scope check shows the work splits into
 independently shippable sub-projects do you create one child ticket per piece (labeled
-spec or impl, blocked_by {identifier}), each self-contained per the WORKER PROTOCOL,
-using the linear skill."""
+spec — each sub-project starts its own pipeline — blocked_by {identifier}), each
+self-contained per the WORKER PROTOCOL, using the linear skill."""
 
 _IMPL_TEMPLATE = """\
 You are an IMPL worker for ticket {identifier}. Follow the execplan procedure in
@@ -108,15 +111,17 @@ the ticket's Validation/Test Plan acceptance). The merger RE-VERIFIES preservati
 independently before landing — they are your audit record, not a substitute for the work
 being truly clean."""
 
-# institution-as-data: type -> stage workflow. child_types encodes the decomposition
-# policy (the pipeline planning -> {research,design} -> spec -> impl).
+# institution-as-data: type -> stage workflow. Under ADR 0004 a ticket carries the whole
+# pipeline in-ticket; child_types is descriptive of the EXCEPTIONAL size-split edge — a
+# split sub-project starts its own pipeline (spec), planning may recurse, impl splits into
+# impl — NOT a routine per-stage hand-off, and it has no runtime consumer.
 TAXONOMY: dict[str, dict] = {
     "planning": {
         "label": "planning",
-        "stage": "decompose a goal into a typed ticket DAG",
+        "stage": "decompose a large goal into independently shippable sub-project tickets",
         "methodology_refs": ["AGENTS.md", "docs/PLANS.md"],
-        "output": "decomposition note + typed child tickets",
-        "child_types": ["research", "design", "spec"],
+        "output": "decomposition note + sub-project child tickets",
+        "child_types": ["spec", "planning"],
         "template": _PLANNING_TEMPLATE,
     },
     "research": {
@@ -140,7 +145,7 @@ TAXONOMY: dict[str, dict] = {
         "stage": "product design (the what)",
         "methodology_refs": ["plugin/skills/product-design/SKILL.md", "docs/PLANS.md"],
         "output": "product-spec (docs/product-specs/)",
-        "child_types": ["impl"],
+        "child_types": ["spec"],
         "template": _SPEC_TEMPLATE,
     },
     "impl": {
@@ -148,7 +153,7 @@ TAXONOMY: dict[str, dict] = {
         "stage": "implementation (the build)",
         "methodology_refs": ["plugin/skills/execplan/SKILL.md", "docs/PLANS.md", "docs/DESIGN.md"],
         "output": "exec-plan (docs/exec-plans/) + code",
-        "child_types": [],  # leaf by default; may split into more impl
+        "child_types": ["impl"],  # only when a build is too large for one plan
         "template": _IMPL_TEMPLATE,
     },
 }
