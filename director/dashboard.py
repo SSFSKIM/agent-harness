@@ -37,6 +37,7 @@ import director.queue as dq
 from director import director_min as dm
 from director import history
 from director import status
+from director import ticket_events
 
 # The single versioned, read-only data route (Symphony §13.7 alignment).
 _STATE_PATH = "/api/v1/state"
@@ -46,6 +47,9 @@ _STREAM_PATH = "/api/v1/stream"
 _HISTORY_PATH = "/api/v1/history"
 # The single write route — answer a pending Director-queue request (operator console).
 _ANSWER_PATH = "/api/v1/answer"
+# Per-ticket session-event drill-down: GET /api/v1/ticket/<id>/events (history+telemetry)
+# and /stream (live SSE tail). The <id> segment is sanitized before any path join (R5).
+_TICKET_PREFIX = "/api/v1/ticket/"
 _DEFAULT_PORT = 8787
 
 # SSE cadence: re-read the (file-backed) snapshot this often server-side and push only a
@@ -477,6 +481,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _route(self):
         path = self.path.split("?", 1)[0]
+        if path.startswith(_TICKET_PREFIX):       # dynamic per-ticket routes (sanitized below)
+            return self._ticket_route(path)
         allowed = self._ROUTES.get(path)
         if allowed is None:
             return self._error(404, f"no such route: {path}")          # undefined → 404
@@ -515,6 +521,48 @@ class _Handler(BaseHTTPRequestHandler):
                      lambda: build_view(self.server.status_dir, self.server.queue_dir),
                      sleep=time.sleep, now=time.monotonic,
                      should_run=self.server.serving.is_set,  # ends promptly on shutdown()
+                     heartbeat_s=_STREAM_HEARTBEAT_S, poll_s=_STREAM_POLL_S)
+
+    def _ticket_route(self, path: str) -> None:
+        """Dispatch GET /api/v1/ticket/<id>/(events|stream). The <id> is the ONLY
+        request-derived component and is sanitized to `[A-Za-z0-9._-]+` before any path
+        join (R5: no separator / `..` can escape `events_dir`); `events_dir` itself comes
+        from the SERVER. Reads only — no fence (like the other GET routes)."""
+        if self.command != "GET":
+            return self._error(405, f"method not allowed: {self.command}")
+        parts = path[len(_TICKET_PREFIX):].split("/")    # ["<id>", "events"|"stream"] — exactly 2
+        if len(parts) != 2 or parts[1] not in ("events", "stream"):
+            return self._error(404, f"no such route: {path}")
+        sid = ticket_events.sanitize_id(parts[0])
+        if sid is None:
+            return self._error(404, "invalid ticket id")
+        return self._ticket_events(sid) if parts[1] == "events" else self._ticket_stream(sid)
+
+    def _ticket_view(self, sid: str) -> dict:
+        """The per-ticket drill-down view: the bounded event log + its derived telemetry
+        (R3/R4). Pure read over `events_dir`; tolerant (read_events never raises)."""
+        events = ticket_events.read_events(sid, base=self.server.events_dir)
+        return {"ticket_id": sid, "events": events,
+                "telemetry": ticket_events.derive_timeseries(events), "count": len(events)}
+
+    def _ticket_events(self, sid: str) -> None:
+        return self._send(200, json.dumps(self._ticket_view(sid)).encode("utf-8"), "application/json")
+
+    def _ticket_stream(self, sid: str) -> None:
+        """SSE tail of one ticket's event view — pushes a frame whenever the log grows
+        (the same `_stream_loop` change-detect + heartbeat + fail-soft as the run stream)."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        def write(chunk: bytes) -> None:
+            self.wfile.write(chunk)
+            self.wfile.flush()
+
+        _stream_loop(write, lambda: self._ticket_view(sid),
+                     sleep=time.sleep, now=time.monotonic,
+                     should_run=self.server.serving.is_set,
                      heartbeat_s=_STREAM_HEARTBEAT_S, poll_s=_STREAM_POLL_S)
 
     def _answer(self) -> None:
@@ -634,11 +682,12 @@ class _DashboardServer(ThreadingHTTPServer):
     never per-request) — an explicit field instead of a monkey-attribute."""
 
     def __init__(self, addr, handler, *, status_dir=None, queue_dir=None,
-                 history_dir=None, token=None):
+                 history_dir=None, events_dir=None, token=None):
         super().__init__(addr, handler)
         self.status_dir = status_dir
         self.queue_dir = queue_dir
         self.history_dir = history_dir   # the cross-run history store the /api/v1/history route reads
+        self.events_dir = events_dir     # the per-ticket session-event store the /api/v1/ticket/* routes read
         # Per-server CSRF token: minted once, embedded in the served page, required on
         # every write (POST). A foreign page in the browser cannot read it (same-origin)
         # so cannot forge a write to localhost. `token=` is injectable for tests.
@@ -655,12 +704,12 @@ class _DashboardServer(ThreadingHTTPServer):
 
 
 def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None,
-          history_dir=None) -> _DashboardServer:
+          history_dir=None, events_dir=None) -> _DashboardServer:
     """Bind a read-only dashboard server on 127.0.0.1 (LAN never exposed, D-5). A bind
     failure (e.g. port in use) propagates immediately — no retry loop. Caller runs
     serve_forever(); tests bind port 0 and drive it over urllib."""
     return _DashboardServer(("127.0.0.1", port), _Handler, status_dir=status_dir,
-                            queue_dir=queue_dir, history_dir=history_dir)
+                            queue_dir=queue_dir, history_dir=history_dir, events_dir=events_dir)
 
 
 def main(argv=None) -> int:
@@ -671,8 +720,9 @@ def main(argv=None) -> int:
     ap.add_argument("--status-dir", default=None, help="status dir override")
     ap.add_argument("--queue-dir", default=None, help="queue dir override")
     ap.add_argument("--history-dir", default=None, help="cross-run history dir override")
+    ap.add_argument("--events-dir", default=None, help="per-ticket session-event dir override")
     args = ap.parse_args(argv)
-    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir)
+    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir, args.events_dir)
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"director.dashboard: http://{host}:{port}/  (read-only; Ctrl-C to stop)")
     try:

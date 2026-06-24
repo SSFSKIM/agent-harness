@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import director.dashboard as dash  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.status as ds  # noqa: E402
+import director.ticket_events as te  # noqa: E402
 
 _FIXED_NOW = "2026-06-16T00:00:00+00:00"
 _PATH_STATE = "/api/v1/state"  # the versioned read-only data route (asserted as a literal)
@@ -623,6 +624,81 @@ class AnswerRouteTest(unittest.TestCase):
         # server still serves a good GET afterward (fail-soft, R7)
         resp = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/api/v1/state", timeout=2)
         self.assertEqual(resp.status, 200)
+
+
+class TicketRouteTest(unittest.TestCase):
+    """M3: the per-ticket drill-down routes — events (history+telemetry), stream (SSE),
+    and the id-sanitization traversal fence."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.events_dir = Path(self.tmp) / "director-events"
+        w = te.TicketEventWriter(self.events_dir)
+        w.record("LIN-7", "turn/started", {"turn": {"id": "u1"}})
+        w.record("LIN-7", "item/completed", {"item": {"type": "toolCall", "tool": "Bash", "arguments": {"command": "ls"}}})
+        w.record("LIN-7", "thread/tokenUsage/updated",
+                 {"tokenUsage": {"total": {"totalTokens": 30, "inputTokens": 20, "outputTokens": 10}}})
+        self.httpd = dash.serve(0, events_dir=self.events_dir)
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _req(self, path, method="GET"):
+        url = f"http://127.0.0.1:{self.port}{path}"
+        try:
+            resp = urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=2)
+            return resp.status, resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def test_events_route_returns_log_and_derived_telemetry(self):
+        code, body = self._req("/api/v1/ticket/LIN-7/events")
+        self.assertEqual(code, 200)
+        data = json.loads(body)
+        self.assertEqual(data["ticket_id"], "LIN-7")
+        self.assertEqual([e["kind"] for e in data["events"]], ["turn_started", "tool_call", "token_usage"])
+        self.assertEqual(data["count"], 3)
+        self.assertEqual(data["telemetry"]["tools"], {"Bash": 1})
+        self.assertEqual(data["telemetry"]["tokens"]["total"], 30)
+
+    def test_events_route_unknown_ticket_is_empty_not_error(self):
+        code, body = self._req("/api/v1/ticket/LIN-999/events")
+        self.assertEqual(code, 200)                       # absent log → empty view, never 404
+        self.assertEqual(json.loads(body)["count"], 0)
+
+    def test_stream_route_pushes_initial_frame(self):
+        url = f"http://127.0.0.1:{self.port}/api/v1/ticket/LIN-7/stream"
+        resp = urllib.request.urlopen(url, timeout=2)
+        self.assertIn("text/event-stream", resp.headers.get("Content-Type"))
+        data = None
+        for _ in range(10):
+            line = resp.readline().decode("utf-8")
+            if line.startswith("data:"):
+                data = line[len("data:"):].strip()
+                break
+        resp.close()
+        self.assertIsNotNone(data)
+        self.assertEqual(json.loads(data)["count"], 3)
+
+    def test_traversal_shaped_ids_are_404(self):
+        # R5: a request-derived id can never escape events_dir. Every separator/`..` form → 404.
+        for bad in ("..%2f..%2fetc%2fpasswd", "..", "a%2fb", "..%2f..%2f..%2fetc",
+                    "%2e%2e", "foo%00bar"):
+            code, _ = self._req(f"/api/v1/ticket/{bad}/events")
+            self.assertEqual(code, 404, bad)
+
+    def test_malformed_ticket_paths_are_404(self):
+        for path in ("/api/v1/ticket/", "/api/v1/ticket/LIN-7",          # no action
+                     "/api/v1/ticket/LIN-7/bogus", "/api/v1/ticket/LIN-7/events/extra"):
+            self.assertEqual(self._req(path)[0], 404, path)
+
+    def test_post_to_ticket_route_is_405(self):
+        self.assertEqual(self._req("/api/v1/ticket/LIN-7/events", method="POST")[0], 405)
 
 
 if __name__ == "__main__":

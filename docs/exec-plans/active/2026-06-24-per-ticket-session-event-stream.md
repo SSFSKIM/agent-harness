@@ -183,7 +183,10 @@ Grounding a novice needs:
   +toolCall emit, 3 TS tests, 54 unit GREEN, dist rebuilt). Live probe: all five kinds
   (turn_started/tool_call/agent_message/token_usage/turn_ended) captured from a real
   claude Bash turn, telemetry derives `tools:{Bash:1}`. PASS.
-- [ ] M3 dashboard routes + sanitization
+- [x] (2026-06-24) M3 dashboard routes: `/api/v1/ticket/{id}/events` (history+telemetry)
+  + `/stream` (SSE tail, reusing `_stream_loop`), `events_dir` on the server + `--events-dir`,
+  id sanitized before any path join. +6 dashboard tests (events view+telemetry, unknown→empty,
+  SSE initial frame, every traversal id→404, malformed paths→404, POST→405). 50 GREEN.
 - [ ] M4 drill-down UI + playwright
 - [ ] M5 cross-runtime proof + reviews
 
