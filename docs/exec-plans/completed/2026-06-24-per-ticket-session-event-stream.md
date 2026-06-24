@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-24
 owner: harness
 type: exec-plan
@@ -202,7 +202,10 @@ Grounding a novice needs:
   why `APPROVAL_METHODS` lists them), which `_KNOWN_TOOL_TYPES` maps. No live codex run
   performed (no codex binary wired this session) — recorded as unit+established-fact, not
   fabricated. `.claude/DIRECTOR.md` dashboard section documents the routes + drill-down.
-- [ ] completion-gate reviews (spec-compliance → code-quality via codex; arch/reliability/security)
+- [x] (2026-06-24) completion-gate reviews ALL SATISFIED. spec-compliance (codex) found 1
+  P1 (R4 per-turn wall-clock missing) → FIXED (`5ae6e22`) → re-review SATISFIED. code-quality
+  (codex) SATISFIED + 2 P2. review-arch/reliability/security (Claude) all SATISFIED + 3 P2 /
+  doc-suggestions. All 5 P2s → tracker + Feedback below. Gate GREEN (184 py + 56 TS).
 
 ## Surprises & discoveries
 - 2026-06-24 (M2, live-probed): the **claude adapter never emitted tool calls**.
@@ -232,5 +235,36 @@ Grounding a novice needs:
   budget alongside the always-on QA reviews + arch/reliability.
 
 ## Feedback (from completion gate)
+All five reviews SATISFIED (1 P1 found + fixed in-gate; 5 P2s tracked, none blocking).
+P1 (FIXED `5ae6e22`): spec-compliance — R4 per-turn wall-clock was missing from
+`derive_timeseries`; added `turn_durations`. P2s (→ tech-debt-tracker, fix-forward):
+1. translator.ts intra-message text/tool ordering (rare `tool_use,text` shape) — code-quality.
+2. soft-cap sentinel repeats once per process restart — code-quality.
+3. `TicketEventWriter.last_error` is process-wide, not per-sid — review-arch.
+4. `_count_existing` full-file slurp at first-touch (bounded by soft-cap) — review-reliability.
+5. doc-completeness: propose SECURITY.md T16 (GET route → request-derived path) + a written
+   `director/` lock-free-per-key-bookkeeping invariant — review-security/arch/reliability.
 
 ## Outcomes & retrospective
+**Delivered (Goal met).** A person watching the dashboard can expand any in-flight/recent
+ticket and watch its worker run step-by-step live (turn boundaries, agent messages, tool
+calls, token accrual) + a derived telemetry strip — proven live via playwright (panel
+updated 5→6 events over SSE without re-click). New `director/ticket_events.py` (normalize
+taxonomy + best-effort single-writer per-ticket JSONL + tolerant bounded read + derived
+timeseries), a one-point orchestrator fan-out, two dashboard routes + the drill-down UI, all
+additive (Noop off-path byte-identical; worker-protocol/decider/merger untouched).
+
+**Biggest discovery (M2).** The claude adapter was dropping ALL tool calls — `translator.ts`
+only forwarded assistant text. The spec's R7 ("uniform across runtimes") + Goal forced it
+into the open: for the user's chosen claude worker the drill-down would have shown no tool
+steps. Fixed at the source (tool_use → `item/completed` toolCall) — an in-scope addition, not
+a deferral. Lesson: a cross-runtime parity requirement is worth its weight precisely because
+it surfaces the half of the system you didn't write.
+
+**Architecture dividend.** The per-ticket file is single-writer (one dispatch thread per
+ticket, retries serialized after reap), so the writer appends directly with NO main-thread
+marshal — strictly simpler than the token-accrual path that shares one StatusWriter. The
+reviewers verified this against the actual reap path rather than taking the claim.
+
+**Cost.** ~5 commits, gate GREEN throughout; spec→execplan→5 milestones; reviews caught 1
+real P1 (R4) the self-review missed — the always-on spec-compliance pass earned its place.
