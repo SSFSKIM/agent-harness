@@ -153,6 +153,30 @@ green + all completion-gate reviews SATISFIED.
 - [ ] M4 completion gate
 
 ## Surprises & discoveries
+- **(M3) Runbook dir paths were wrong.** The real run-state dirs default to
+  `.claude/harness/director-{status,queue,events}` (confirmed via the module source),
+  NOT the `.harness/director-*` the runbook's §6/§7 examples and §10 cleanup used. A
+  reader following §10's `rm -rf .harness` would clean nothing and carry stale state.
+  → fix: runbook examples should omit the dir flags (rely on defaults) or use the real
+  `.claude/harness/...` paths; cleanup must target `.claude/harness/`.
+- **(M3) Stale queue is not GC'd across runs.** The runner's `.claude/harness/
+  director-queue` still held a `mergeRequest` + `turnReview` from the 2026-06-20/23
+  dogfood (PR #2, LIN-28). They showed as `pending` and the stale `mergeRequest` would
+  have made `merger --once` act on an already-merged PR. → a fresh run MUST clean
+  `.claude/harness/{queue,status,events,workspaces}` first; runbook §10 needs the right path.
+- **(M3) Default dashboard port 8787 collided** with an unrelated `bun` process already
+  bound to it on this host (not even a Director dashboard). → runbook §7 should note the
+  default port may be taken and how to pick another (`--port`).
+- **(M3) The dogfood `gh push` safe-fence step trips the auto-mode exfil classifier.**
+  Force-pushing the whole private tree to the disposable shakedown repo was denied as
+  "bulk relocation to a non-trusted destination." It is also usually unnecessary — an
+  existing shakedown repo already carries a valid checkout. → runbook §2 should mark the
+  initial canonical→shakedown push as a one-time, possibly-approval-gated step, and note
+  reuse avoids it.
+- **(M3) Worktree note confirmed live:** several *parallel* codex sessions were running
+  (`knowledge-format`, `codex_somersault`, `obs-polish`) — broad `pkill codex` would have
+  killed them. Stopping a run must target the orchestrator + its worker codex **by PID/cwd**,
+  never by name. The runbook troubleshooting row on this is correct; reinforced.
 
 ## Decision log
 - 2026-06-25: Runbook in `docs/` not `.claude/` — `.claude/` is outside the docs-nav

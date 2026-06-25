@@ -87,8 +87,14 @@ git push https://x-access-token:${GH_TOKEN}@github.com/<owner>/<project>-shakedo
 gh repo edit <owner>/<project>-shakedown --default-branch main   # land skill + merger target `main`
 ```
 
-> Reuse one if it already exists — the `gh` token often lacks `delete_repo` scope, so old
-> shakedown repos persist (that's a feature here). To enable delete-on-cleanup:
+> **One-time, and may need a human OK.** That `git push` of the whole tree to an external
+> repo can trip an agent's auto-mode **data-exfiltration guard** ("bulk relocation to a
+> non-trusted destination") even though the destination is your own private disposable
+> repo — approve it explicitly if you hit the block. **Reuse avoids it entirely:** if the
+> shakedown repo already exists with a valid checkout, skip the push — the worker just
+> needs *a* valid base, not the latest canonical (the `before_run` hook re-syncs the
+> workspace to its `main` each ticket). The `gh` token often lacks `delete_repo` scope, so
+> old shakedown repos persist (a feature here); enable delete-on-cleanup with
 > `gh auth refresh -h github.com -s delete_repo`.
 
 **(b) A separate runner clone** — run the orchestrator from a clone *other* than your
@@ -124,7 +130,6 @@ reference.
     "concurrency": 2,
     "dispatch_requires_label": true,      // only claim tickets carrying a dev-stage label
     "worker": { "tools": "linear", "install_skills": true },
-    "paths": { "workspace_root": ".harness/workspaces" },
     "workspace": {
       "hooks": {
         "after_create": "git clone https://x-access-token:${GH_TOKEN}@github.com/<owner>/<repo>-shakedown.git .",
@@ -192,6 +197,14 @@ Here a worker turn-end **event-wakes you**; you answer it on the human's behalf 
 worker continues. You do not poll. (The *judgment* — what to answer — is
 [DIRECTOR.md §1–§4](../.claude/DIRECTOR.md); this is the *mechanics*.)
 
+> **Run-state lives under `.claude/harness/` (relative to the runner cwd).** With no
+> `paths` override, the orchestrator writes to `.claude/harness/director-status`,
+> `…/director-queue`, `…/director-events`, `…/director-history`, and
+> `…/director-workspaces`. The `--status-dir` / `--queue-dir` / `--events-dir` /
+> `--history-dir` flags only *override* these — run `director.watch` / `director.status`
+> / `director.dashboard` **from the runner cwd with no dir flags** and they all resolve
+> to the same defaults. (A stale run leaves state here — see §10 cleanup.)
+
 **1. Launch the orchestrator (watched), in the background:**
 
 ```bash
@@ -211,7 +224,7 @@ per run-level terminal, so each becomes a session notification (the polling live
 subprocess, not on you):
 
 ```bash
-python3 -m director.watch --kinds turnReview,mergeReview,runReport --status-dir .harness/director-status
+python3 -m director.watch --kinds turnReview,mergeReview,runReport   # default dirs (run from runner cwd)
 ```
 
 **3. On each event, read the picture before answering** (read-only; never mutates):
@@ -229,8 +242,8 @@ whether the *situation around it* changes the answer ([DIRECTOR.md §1/§3](../.
 ```python
 import director.director_min as dm
 
-# read what is pending
-dm.pending(base=".harness/director-queue")          # list of pending requests
+# read what is pending (default queue dir = .claude/harness/director-queue from runner cwd)
+dm.pending()                                        # list of pending requests
 
 # continue / decide (the default for a non-terminal turn-end) — content-bearing:
 dm.answer_turn("<request_id>", {"kind": "reply", "reply": "continue"})         # or a directive
@@ -253,13 +266,15 @@ expected.
 For a human to watch AND answer without attaching to the session:
 
 ```bash
-python3 -m director.dashboard --port 8787 \
-  --status-dir   .harness/director-status \
-  --queue-dir    .harness/director-queue \
-  --history-dir  .harness/director-history \
-  --events-dir   .harness/director-events
+python3 -m director.dashboard            # default dirs (.claude/harness/director-*) from runner cwd
 # -> http://127.0.0.1:8787/
+# --port 8790                             # 8787 is the default; pick another if it is taken
 ```
+
+> The default port **8787 may already be bound** (another dashboard, or any unrelated dev
+> server) — startup fails with `OSError: Address already in use`. Pass `--port <N>` to pick
+> a free one. The `--status-dir`/`--queue-dir`/`--events-dir`/`--history-dir` flags override
+> the `.claude/harness/director-*` defaults (omit them when running from the runner cwd).
 
 - **Watch:** the live run header (cumulative **tokens** climbing mid-turn, runtime,
   rate-limit headroom), in-flight tickets, what's stuck, recent outcomes, the pending
@@ -278,7 +293,7 @@ python3 -m director.dashboard --port 8787 \
 
 ```bash
 export DIRECTOR_WEBHOOK_URL=https://hooks.slack.com/...   # keep in .env, never committed
-python3 -m director.notify --queue-dir .harness/director-queue   # or --webhook <url>
+python3 -m director.notify                               # default queue dir; or --webhook <url>
 ```
 
 Fires your webhook once per new human-bound pending request; fail-soft.
@@ -330,14 +345,23 @@ python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --daemon --poll-interva
 ## 10. Cleanup after a run
 
 ```bash
-# stop the background processes (orchestrator / watch / dashboard / notify)
+# 1. stop the background processes — by PID, NEVER `pkill -f codex` (you may have other
+#    codex/Claude sessions running; killing by name takes them down too):
+kill <orchestrator_pid>; pkill -f "director.dashboard --port <N>"; pkill -f director.watch
+
+# 2. clear the run-state so the NEXT run starts pristine (the queue is NOT GC'd — a stale
+#    mergeRequest here would make the next `merger --once` act on an already-merged PR):
+rm -rf ../agent-harness-runner/.claude/harness/director-{queue,status,events,workspaces}
+#    (keep .../director-history to preserve cross-run history; delete it too for a full reset)
+
+# 3. (optional) delete the disposable repo + cancel the shakedown tickets:
 gh repo delete <owner>/<project>-shakedown          # needs delete_repo scope (gh auth refresh -s delete_repo)
-# cancel/close the shakedown tickets on the test board
-rm -rf ../agent-harness-runner/.harness             # workspaces + status/queue/events dirs
 ```
 
 If the token lacks `delete_repo`, leave the shakedown repo (it's disposable) and just reset
-its `main` next time via the `before_run` sync.
+its `main` next time via the `before_run` sync. **Note the path: run-state lives under
+`.claude/harness/`, not `.harness/`** — clearing the wrong one leaves stale queue/status
+behind (a `pending` ghost from a prior run will show on the next dashboard).
 
 ---
 
