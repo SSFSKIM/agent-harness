@@ -149,8 +149,17 @@ green + all completion-gate reviews SATISFIED.
 - [x] (2026-06-25) Discovery folded into the runbook: tech-debt row 21 (single-ticket
   `director.run` path is un-observable — no on_event/status) → added a ⚠ caveat in runbook §5
   + a troubleshooting row, so the runbook doesn't send a reader to a blank dashboard.
-- [ ] M3 live codex validation
-- [ ] M4 completion gate
+- [x] (2026-06-25) M3 — **live codex run complete, full loop proven** (LIN-30 → PR #4 →
+  merger squash → landed on shakedown `main` `bf15aa21`). Reused the runner clone (synced
+  to ee743a6) + `agent-harness-shakedown` repo + Lingu board. Validated: dispatch, hooks,
+  codex worker, **per-ticket event observability live on codex**, live token accrual, the
+  **watched turnReview loop** (worker escalated → I answered as Director → resumed), and the
+  **merger** (real tripwire+hygiene+squash). Surfaced 8 runbook gaps (all fixed) + 2 real
+  findings (codex read_timeout 180s; needs_human→reply→done doesn't land the PR). Used
+  `director.watch` as the Monitor per runbook §6 (after a course-correct from hand-rolled
+  Bash poll-loops). Run cost ~2.96M tokens (mostly cached, F2 pattern); codex rate window
+  hit 100% on the weekly secondary by the end.
+- [ ] M4 completion gate (reviews + land plan)
 
 ## Surprises & discoveries
 - **(M3) Runbook dir paths were wrong.** The real run-state dirs default to
@@ -177,6 +186,46 @@ green + all completion-gate reviews SATISFIED.
   (`knowledge-format`, `codex_somersault`, `obs-polish`) — broad `pkill codex` would have
   killed them. Stopping a run must target the orchestrator + its worker codex **by PID/cwd**,
   never by name. The runbook troubleshooting row on this is correct; reinforced.
+- **(M3) codex read_timeout stayed at 180s** while the runner config bumped only
+  `claude→1200` (`worker_runtime_read_timeout`). LIN-30 attempt 1 ran ~16 min then
+  **failed and re-dispatched** (orch.log shows `before_run` twice; events show 2
+  `turn_started`, no `turn_ended`) — the retry's `before_run` (`git reset --hard +
+  git clean -fd`) **WIPED the uncommitted `runtime-glossary.md`**, so attempt 2 redid it.
+  This is the **same class as the 2026-06-20 F3 finding** (read_timeout too short for a
+  real worker). Actionable: set `worker_runtime_read_timeout.codex` generously (e.g. 600–1200)
+  for heavyweight workers; the runbook troubleshooting row already flags the symptom but
+  should name the per-runtime knob. NOT a regression in the harness; a config-tuning gap.
+- **(M3, SIGNIFICANT) `needs_human` → reply-continue → `done`+PR never lands the PR.**
+  The decider maps `report_outcome(status="needs_human")` → an `escalate` disposition
+  (orchestrator.py:230) → ticket marked `escalated`/`started` (`:236-238`). I answered that
+  turnReview with `{kind: reply}` ("continue"); the worker resumed and finished with
+  `report_outcome(status="done", pr_url=PR#4)` — but **no terminal turnReview was posted
+  for the final done, and `_maybe_enqueue_merge` never ran**, so LIN-30 stayed `escalated`
+  with a clean open PR that would never auto-land. Observed live: queue had exactly 1
+  turnReview (the needs_human), `run.stopped_reason=pass_complete`, `recent=[(LIN-30,
+  escalated)]`, `last_message`=the done+PR message — a status/outcome mismatch. I landed
+  PR #4 by manually calling `dq.append_merge_request(...)` (what the orchestrator would
+  have done) + `merger --once --mock`. **This is a real orchestration hole** — a worker
+  that escalates then completes is stranded. → tech-debt row (Important); runbook §11 row
+  added so an operator knows to manually enqueue. Root-cause/fix is a separate plan.
+- **(M3) FULL LOOP PROVEN end-to-end on codex.** dispatch → clone/sync hooks → codex worker
+  (live per-ticket events: 295 events, 3 turn_starts, telemetry; live token accrual 2.96M)
+  → attempt-1 read-timeout retry → `needs_human` escalation → **Director answers the
+  turnReview** (reply) → worker resumes, writes `docs/references/runtime-glossary.md` +
+  registers index, gate GREEN (694 tests), pushes, opens **PR #4** → merger's REAL
+  preservation tripwire + hygiene gate (`sweep_evidence_consistent`, `verified_result:
+  merged`, `misfire:false`) + code-issued squash → **landed on shakedown `main`**
+  (`bf15aa21 docs(references): add runtime glossary (#4)`). Closes the codex live-proof gap
+  from the per-ticket-event-stream work.
+- **(M3) The worker CAUGHT a flawed ticket spec — exactly right.** My LIN-30 spec demanded
+  the exact path `RUNTIME_GLOSSARY.md` (uppercase) **and** "do not modify anything else" —
+  both impossible against the repo's own docs gate: D6 requires lowercase-kebab for
+  non-top-level docs, and D8 requires registering a new `references/` page in `index.md`.
+  The worker verified the baseline gate GREEN, made **zero** repo changes, and escalated
+  `needs_human` with precise citations (`KNOWLEDGE_FORMAT.md:136`, `lint_docs.py:219`)
+  rather than shipping a broken PR. Validates the worker's judgment + the watched turnReview
+  seam end-to-end on codex. Lesson for ticket authors (and the runbook §4 example): a
+  too-prescriptive ticket can be self-contradictory against the host's gate.
 
 ## Decision log
 - 2026-06-25: Runbook in `docs/` not `.claude/` — `.claude/` is outside the docs-nav
@@ -187,6 +236,13 @@ green + all completion-gate reviews SATISFIED.
 - 2026-06-25: Validate in a separate runner clone, not this checkout — keeps shakedown
   team/hooks out of the canonical committed `.harness.json` (true isolation per the
   worktrees-don't-isolate lesson).
+- 2026-06-25: Skipped the canonical→shakedown force-push — the shakedown repo already had
+  a valid (5-day-old) checkout, and the orchestration flow the runbook documents is
+  snapshot-independent; also the push tripped the exfil classifier. Reuse > re-push.
+- 2026-06-25: Answered LIN-30's `needs_human` turn-end as a `reply` (HANDLE inline, §2),
+  not an escalate — the conflict was mechanical (the repo's own D6/D8 conventions decide
+  it), so I directed: use lowercase `runtime-glossary.md` + register it in the index +
+  open the PR. No taste fork to surface to the human.
 
 ## Feedback (from completion gate)
 
