@@ -44,10 +44,25 @@ NAV_REQUIRED = ("type", "description")
 PHASE_REQUIRED_TYPES = ("product-spec",)
 # LINK / staleness now live in harness_lib (the one definition shared with
 # nav.py) — see hl.links_in / hl.is_stale.
+# D13 (WARN, non-blocking) — an unfilled harness-init seed marker. A REAL marker is
+# a raw HTML comment `<!-- FILL: ... -->`; DOCUMENTATION of the marker wraps it in
+# backticks (`<!-- FILL: -->`), as this very repo's KNOWLEDGE_FORMAT/tracker do. So
+# match the colon-bearing opener only when it is NOT backtick-preceded — the
+# negative lookbehind is what keeps the rule from firing on prose that cites itself
+# (a bare-word `grep FILL`, or even a plain colon match, false-fires; the
+# strict-base-docs plan learned the first half of this lesson). WARN not FAIL: a
+# fresh scaffold is GREEN-with-markers by design (minimal blocking gates; step-8's
+# manual grep is the authoritative zero) — this is the visible safety net for a
+# `scaffold → commit` adopter who skips that grep.
+FILL_RE = re.compile(r"(?<!`)<!-- FILL:")
 
 
 def _fail(errors, rule, path, problem, fix):
     errors.append(f"FAIL {rule} {path}: {problem} FIX: {fix}")
+
+
+def _warn(warnings, rule, path, problem, fix):
+    warnings.append(f"WARN {rule} {path}: {problem} FIX: {fix}")
 
 
 def _rel(p, root):
@@ -288,6 +303,34 @@ def check_machine_refs(root, errors):
                   "Seed it: run scaffold.py (harness-init skill), or create the page from its template in the skill's templates/.")
 
 
+def check_fill_markers(root, warnings, host=()):
+    """D13 (WARN) — surface unfilled `<!-- FILL: -->` template markers.
+
+    Scope mirrors check_links: every non-exempt `docs/` page plus root `AGENTS.md`
+    + `ARCHITECTURE.md` — the files harness-init seeds with markers. Total: a doc
+    that won't decode as UTF-8 is skipped, never crashing the gate (an advisory
+    must not escalate to a failure — RELIABILITY R22). Governance-blind on purpose:
+    `<!-- FILL:` is unambiguously a template placeholder, so flag it wherever it
+    survives, even in a host's otherwise host-owned doc.
+    """
+    docs = root / "docs"
+    targets = [p for p in hl.iter_md(docs)
+               if not _exempt(p, docs, FM_EXEMPT + host)]
+    for name in ("AGENTS.md", "ARCHITECTURE.md"):
+        if (root / name).exists():
+            targets.append(root / name)
+    for p in targets:
+        try:
+            n = len(FILL_RE.findall(p.read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError):
+            continue
+        if n:
+            _warn(warnings, "D13", _rel(p, root),
+                  f"{n} unfilled `<!-- FILL: -->` template marker(s).",
+                  "Replace each with real content (harness-init step 3/8), "
+                  "or delete the marker if it does not apply to this host.")
+
+
 def _int_or(value, default):
     # bool is an int subclass — exclude it so `true` in JSON can't pass as 1.
     return value if isinstance(value, int) and not isinstance(value, bool) else default
@@ -299,6 +342,7 @@ def main():
     cfg = hl.gate_config(root)  # per-repo threshold overrides (.harness.json)
     stale_days = _int_or(cfg.get("stale_days"), STALE_DAYS)
     errors = []
+    warnings = []
     check_entrypoints(root, errors)
     check_machine_refs(root, errors)
     check_frontmatter(root, errors, host, stale_days, cfg)
@@ -306,10 +350,18 @@ def main():
     check_naming(root, errors, host, cfg)
     check_indexes(root, errors, cfg)
     check_coverage(root, errors, hl.plugin_root(), cfg)
+    check_fill_markers(root, warnings, host)  # D13 — non-blocking
     for e in errors:
         print(e)
-    print(f"lint_docs: {'OK' if not errors else str(len(errors)) + ' FAIL'}")
-    sys.exit(1 if errors else 0)
+    for w in warnings:
+        print(w)
+    if errors:
+        print(f"lint_docs: {len(errors)} FAIL")
+    elif warnings:
+        print(f"lint_docs: OK — {len(warnings)} warning(s)")
+    else:
+        print("lint_docs: OK")
+    sys.exit(1 if errors else 0)  # warnings never block — exit on errors only
 
 
 if __name__ == "__main__":

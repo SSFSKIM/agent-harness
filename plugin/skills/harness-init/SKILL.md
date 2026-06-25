@@ -140,7 +140,10 @@ Iterate on FAILs — every message carries its own FIX (`harness-lint` skill).
 Then confirm no template marker survived: `grep -rn --include="*.md" "FILL"
 <host-root>/AGENTS.md <host-root>/ARCHITECTURE.md <host-root>/docs/` must print
 nothing. (Scope to `*.md` — markers only live in markdown; a bare grep also
-hits data files like CSV/JSON that legitimately contain the substring.)
+hits data files like CSV/JSON that legitimately contain the substring.) The gate
+itself now flags surviving markers as a **`WARN D13`** (non-blocking — a fresh
+scaffold is GREEN-with-markers by design), so an adopter who skips this grep still
+sees them in the check output; this grep stays the authoritative zero-check.
 Tests: with no `tests/` dir the step is skipped; a host with its own suite
 wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
 -q" python3 ... check.py`) — the default only understands unittest discovery.

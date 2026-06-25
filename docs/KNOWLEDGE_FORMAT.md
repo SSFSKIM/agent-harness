@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-20
+last_verified: 2026-06-26
 owner: harness
 type: methodology
 tags: [knowledge-format, frontmatter, lint]
@@ -178,8 +178,11 @@ Each is enforced by `plugin/scripts/lint_docs.py` and surfaced by the
 | **D8** | Indexed categories have an `index.md`, and every page is registered in it. |
 | **D11** | Navigation core (KF v2.0): non-empty `type` + `description` on every governed content page; `phase` on every `product-spec`. (Reserved spine `index.md` exempt.) |
 | **D12** | Validate-if-present: a repo-path `resource` exists, each `supersedes` target resolves, and `phase` is well-formed. |
+| **D13** *(advisory WARN — never fails the gate)* | No unfilled `<!-- FILL: -->` harness-init seed marker survives in a governed `docs/` page, `AGENTS.md`, or `ARCHITECTURE.md`. Surfaces an unfinished bootstrap so a `scaffold → commit` adopter who skipped step-8's grep sees the markers; a fresh scaffold is GREEN-with-markers by design. Matches the colon-bearing opener only, so prose that cites `<!-- FILL -->` as an example does not trip it. |
 
-The remaining keys (`tags`, `title`) stay **outside** conformance — a page is no
+D13 is the lone **non-blocking** rule: it emits `WARN`, leaves the exit code GREEN,
+and does not bear on conformance (a page with an unfilled marker is unfinished, not
+malformed). The remaining keys (`tags`, `title`) stay **outside** conformance — a page is no
 less conformant for omitting them. Note the v2.0 shift: the load-bearing
 navigation keys are no longer "optional" — KF deliberately promoted them once they
 proved load-bearing in daily use (the corpus repeatedly lost navigability when

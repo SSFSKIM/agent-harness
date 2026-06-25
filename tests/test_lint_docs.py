@@ -128,6 +128,41 @@ class TestLintDocs(unittest.TestCase):
         (sk / "SKILL.md").write_text("---\nname: mystery\ndescription: d\n---\n")
         self.assertTrue(any("D9" in e and "mystery" in e for e in run_all(self.root, plugin)))
 
+    def test_d13_unfilled_marker_warns_never_fails(self):
+        p = self.root / "docs" / "design-docs" / "core-beliefs.md"
+        p.write_text(fm() + "# Beliefs\n<!-- FILL: real content here -->\n")
+        # D13 is non-blocking: it must NEVER appear in the FAIL/error path.
+        self.assertFalse(any("D13" in e for e in run_all(self.root)), "D13 must not be a FAIL")
+        warnings = []
+        lint_docs.check_fill_markers(self.root, warnings)
+        self.assertTrue(any("D13" in w and "core-beliefs.md" in w for w in warnings), warnings)
+
+    def test_d13_prose_mention_of_marker_does_not_warn(self):
+        # A doc that DOCUMENTS the marker must stay quiet, both forms: `<!-- FILL -->`
+        # (no colon, as completed plans write it) AND the backtick-wrapped full form
+        # `<!-- FILL: -->` (as KNOWLEDGE_FORMAT/the tracker write it — this exact case
+        # false-fired a naive colon match). A real marker is a RAW HTML comment, never
+        # backtick-wrapped; the negative lookbehind is the discriminator.
+        p = self.root / "docs" / "design-docs" / "core-beliefs.md"
+        p.write_text(fm() + "# Beliefs\nThe seed leaves a `<!-- FILL -->` placeholder,\n"
+                     "documented as `<!-- FILL: instruction -->` in the format spec.\n")
+        warnings = []
+        lint_docs.check_fill_markers(self.root, warnings)
+        self.assertEqual(warnings, [], warnings)
+
+    def test_d13_scans_root_agents_and_architecture(self):
+        (self.root / "AGENTS.md").write_text("# map\n<!-- FILL: what this repo is -->\n")
+        (self.root / "ARCHITECTURE.md").write_text("# arch\n<!-- FILL: the codemap -->\n")
+        warnings = []
+        lint_docs.check_fill_markers(self.root, warnings)
+        self.assertTrue(any("AGENTS.md" in w for w in warnings), warnings)
+        self.assertTrue(any("ARCHITECTURE.md" in w for w in warnings), warnings)
+
+    def test_d13_clean_repo_has_no_warnings(self):
+        warnings = []
+        lint_docs.check_fill_markers(self.root, warnings)
+        self.assertEqual(warnings, [], warnings)
+
     def test_d5_anchored_broken_link_fails(self):
         (self.root / "AGENTS.md").write_text("[gone](docs/nope.md#section)\n")
         self.assertTrue(any("D5" in e for e in run_all(self.root)))
