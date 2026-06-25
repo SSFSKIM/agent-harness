@@ -294,3 +294,18 @@ owner: harness
   Additive — `status.py`/`history.py`/queue/decider/merger/guardrail/worker-protocol 불변.
   Non-goals: full tool I/O 캡처·이벤트 로그 GC/rotation·신규 write 라우트·cross-ticket 집계.
   observability-dashboard/-polish 후속. draft.
+- [Project dependency-graph view (whole-board DAG + live session overlay)](2026-06-26-project-dependency-graph-view.md)
+  — Phase 5 observability 트랙의 다음 슬라이스: run-스코프 평면 리스트를 넘어 **프로젝트 전체**를
+  dependency 모양으로 보는 렌즈. 오케스트레이터가 **보드 전체**(모든 state의 티켓 + `blockers`
+  DAG)를 poll cadence로 `board.json`(`.claude/harness/director-board/`)에 atomic 영속 →
+  대시보드가 **layered DAG**로 렌더(layer = wave → 같은 layer=병렬, 다음 layer=직렬; 스케줄러의
+  자기 모델을 그대로 그림). 노드 lifecycle/telemetry는 `status.json` live 오버레이로 칠하고, 노드
+  클릭 → 기존 per-ticket SSE 오버레이를 그래프 노드에 재-anchor(in-flight=라이브, terminal=기록
+  재생). 순수 `build_board_view`가 topological layer(cycle/orphan-safe)를 부여(invariant 4),
+  렌더/pan/zoom/collapse는 **단일 vendored offline 그래프 라이브러리**(Cytoscape+dagre+expand-collapse,
+  `director/assets/`, 고정 라우트·CDN 0)가 담당 — Python stdlib-only invariant은 불변, JS-asset
+  grain 완화는 **ADR 0006**로 범위 좁혀 기록. 기존 flat 리스트/operator console은 collapsible
+  side rail로 이동(그래프=지도, rail=결정 inbox). Additive — `board_snapshot.py` 신규 + orchestrator
+  poll-tick 1지점 + 신규 read 라우트; worker/decider/merger/status/ticket_events 불변. Non-goals:
+  그래프에서 보드 편집·multi-team·board history/time-travel·신규 write 라우트·2번째 라이브러리.
+  observability-dashboard/-polish/per-ticket-stream 후속. draft.
