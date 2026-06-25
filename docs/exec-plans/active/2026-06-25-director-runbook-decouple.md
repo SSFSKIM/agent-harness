@@ -133,8 +133,13 @@ green + all completion-gate reviews SATISFIED.
 - [x] (2026-06-25) Grounded: CLI flags, gate cmd, base_commit dcb3d08, `.env`/`.harness.json`
   config, runner clone present, shakedown repos extant, codex 0.142.0 + claude runtime built.
   Confirmed `.claude/` is outside docs-nav corpus → runbook goes in `docs/`. Plan authored.
-- [ ] M1 draft runbook (done: —; remaining: author + register + gate)
-- [ ] M2 decouple DIRECTOR.md
+- [x] (2026-06-25) M1 — authored `docs/DIRECTOR_RUNBOOK.md` (12 sections, command-first,
+  every CLI verified against source at base_commit: run/orchestrator/watch/merger/notify/
+  status/config/dashboard flags + the `director_min` answer API). Cross-links to
+  `.claude/DIRECTOR.md`, ADR 0003 (`0003-lights-out-director.md`), PLANS.md all resolve.
+  Gate GREEN. (remaining for discoverability: AGENTS.md/README pointers — folded into M2.)
+- [ ] M2 decouple DIRECTOR.md (move §0 + command bits of §10–§12 → runbook; add pointers;
+  fix cross-refs; add AGENTS.md/README discoverability links)
 - [ ] M3 live codex validation
 - [ ] M4 completion gate
 
