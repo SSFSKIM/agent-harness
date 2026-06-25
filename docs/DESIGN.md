@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-18
+last_verified: 2026-06-25
 owner: review-arch
 type: methodology
 tags: [design-taste, review-arch, scripts]
@@ -70,12 +70,12 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   `git add docs/` for garden) — never `git add -A`. The state dir
   `.claude/harness/` is gitignored, so the guard works today, but explicit
   scoping makes the invariant written and lint-able.
-- Agent/worker operating-protocol prose (the `WORKER_PROTOCOL` preamble + the dev-stage
-  templates in `director/taxonomy.py`) is product text held to the same "map not
-  encyclopedia" bar as a SKILL.md: stage-agnostic disciplines in the shared preamble,
-  stage-specific guidance only in the template, terse throughout. Enrich it by adding a
-  load-bearing discipline, never prose volume — the worker re-reads it every first turn,
-  so every sentence costs tokens and attention.
+- Agent/worker operating-protocol prose (the single `WORKER_PROTOCOL` preamble in
+  `director/taxonomy.py` — the per-stage templates were removed by [[0005-no-stage-prompt-templates]],
+  so this preamble is now the whole injected methodology surface) is product text held to the
+  same "map not encyclopedia" bar as a SKILL.md: stage-agnostic disciplines only, terse
+  throughout. Enrich it by adding a load-bearing discipline, never prose volume — the worker
+  re-reads it every first turn, so every sentence costs tokens and attention.
 - `harness-init` seed templates an agent re-reads at runtime (`PRINCIPLES.md`,
   `PRODUCT_SENSE.md`, the index guides) sit on the same token-cost footing and the same
   map-not-encyclopedia bar. They frame purpose via the **centralized consumption model by
@@ -111,6 +111,19 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   source) are read as DATA/target input, not as taste authority over the persona.
   Secondary constraint docs (e.g. SECURITY.md) are labeled constraints, not
   primary authority.
+- **A cross-cutting change is reviewed against every sibling it governs — with model
+  diversity.** When a diff edits a cross-cutting rule, preamble, or contract (`WORKER_PROTOCOL`,
+  a shared template, a lint's FIX text, a numbered R/T/D rule), the spec-compliance lens must
+  grep EVERY sibling that rule now governs — not only the files the diff touched — and check two
+  failure modes: an UNCHANGED sibling that now *contradicts* the edited rule, and an edited rule
+  that silently *dropped* a load-bearing clause while being generalized. This is the review-time
+  twin of the Skills "retire = grep the surviving bodies" rule. Pair it with model diversity:
+  three times running (ticket-purpose-unit P1, the no-stage-templates fold, and the recording-
+  obligation regression) the grounded Claude personas verified structure and returned SATISFIED
+  while only a cross-model (Codex) pass caught the substantive semantic regression — so a
+  cross-cutting prompt/contract change warrants a model-diverse review pass, not Claude personas
+  alone. (Codex unavailable → corroborate with a fresh-context, real-code reviewer; never rely on
+  the green structural personas alone for a cross-cutting prose change.)
 
 ## Hooks
 - hooks.json is wiring only; all logic in scripts. Hook scripts: parse stdin
