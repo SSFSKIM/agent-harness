@@ -5,7 +5,8 @@ describe("resolveOptions", () => {
   it("produces CC-faithful defaults", () => {
     const o: any = resolveOptions({});
     expect(o.settingSources).toEqual(["user", "project", "local"]);
-    expect(o.systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
+    expect(o.systemPrompt.type).toBe("preset");          // fork advertisement lives in .append by default
+    expect(o.systemPrompt.append).toContain("fork");
     expect(o.tools).toEqual({ type: "preset", preset: "claude_code" });
     expect(o.enableFileCheckpointing).toBe(true);
     expect(o.agents["Explore"].disallowedTools).toContain("Write");
@@ -60,8 +61,20 @@ describe("resolveOptions", () => {
     expect(o.env.PATH).toBe(process.env.PATH);
   });
   it("does not set env (inherits process.env) when there are no overrides", () => {
-    const o: any = resolveOptions({});
+    // forkSubagent default-on sets a subprocess env flag, so opt out to assert the bare-inherit path.
+    const o: any = resolveOptions({ forkSubagent: false });
     expect(o.env).toBeUndefined();
+  });
+  it("enables fork-subagent by default: env flag + system-prompt advertisement, process.env preserved", () => {
+    const o: any = resolveOptions({});
+    expect(o.env.CLAUDE_CODE_FORK_SUBAGENT).toBe("1");
+    expect(o.env.PATH).toBe(process.env.PATH);                       // process.env still spread, not erased
+    expect(o.systemPrompt.append).toContain('subagent_type "fork"'); // advertised so the model picks it (33d)
+  });
+  it("forkSubagent:false omits the env flag and the advertisement (clean defaults restored)", () => {
+    const o: any = resolveOptions({ forkSubagent: false });
+    expect(o.env).toBeUndefined();
+    expect(o.systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
   });
   it("threads resume and sessionStore when set, omits them otherwise", () => {
     const store = { append: async () => {}, load: async () => null } as any;

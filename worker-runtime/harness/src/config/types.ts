@@ -57,6 +57,11 @@ export interface HarnessConfig {
   // agents
   agents?: Record<string, AgentDefinition>;
   includeBuiltinAgents?: boolean;          // default true
+  // fork subagent (probes 33/33d): model-triggered, transcript-INHERITING subagent via subagent_type:"fork".
+  // default ON → sets CLAUDE_CODE_FORK_SUBAGENT=1 AND advertises "fork" in the system prompt. BOTH are
+  // required: 33d proved the env var alone is inert — the model never picks fork unless told it exists.
+  // Cost when the model chooses fork: the child inherits the FULL parent transcript (more tokens).
+  forkSubagent?: boolean;                  // default true
   // checkpointing / mcp / plugins
   enableFileCheckpointing?: boolean;       // default true
   // session persistence — the SDK persists transcripts to ~/.claude/projects by default
@@ -86,6 +91,7 @@ export interface HarnessConfig {
 export const DEFAULTS = {
   settingSources: ["user", "project", "local"] as SettingSource[],
   includeBuiltinAgents: true,
+  forkSubagent: true,                       // model can autonomously spawn a transcript-inheriting fork subagent
   enableFileCheckpointing: true,
   toolPreset: "claude_code" as const,
   provider: "anthropic" as const,

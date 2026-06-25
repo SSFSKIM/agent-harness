@@ -15,6 +15,8 @@ export function resolveOptions(config: HarnessConfig): Record<string, unknown> {
   const tools = resolveTools(config);
   const sandbox = resolveSandbox(config);
   const env = resolveProviderEnv(config);
+  // Unlock the native fork subagent (paired with the FORK_SUBAGENT_NOTE in systemPrompt — both required, 33d).
+  if (config.forkSubagent ?? DEFAULTS.forkSubagent) env.CLAUDE_CODE_FORK_SUBAGENT = "1";
   const agents = resolveAgents(config);
 
   const options: Record<string, unknown> = {

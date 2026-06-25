@@ -54,7 +54,8 @@ describe("supervisor permission wiring", () => {
     const cap: any[] = [];
     const sup = new DaemonSupervisor({ query: captureQuery(cap) }, { dir: tmp(), now: () => 0, idleTimeoutMs: 0 });
     sup.spawn({});                                                // no model, no mode → harness defaults
-    expect(cap[0].systemPrompt).toEqual({ type: "preset", preset: "claude_code" });
+    expect(cap[0].systemPrompt.type).toBe("preset");              // fork advertisement appended by default
+    expect(cap[0].systemPrompt.append).toContain("fork");
     expect(cap[0].settingSources).toEqual(["user", "project", "local"]);
     expect(cap[0].tools).toEqual({ type: "preset", preset: "claude_code" });
     expect(cap[0].model).toBe("claude-opus-4-8");
