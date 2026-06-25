@@ -1,110 +1,46 @@
 ---
 status: stable
-last_verified: 2026-06-23
+last_verified: 2026-06-25
 owner: harness
 type: methodology
-tags: [director, orchestration, operating-manual]
-description: The operating manual for running the harness as the Director, the watched session that oversees a run and communicates with the human.
+tags: [director, orchestration, behavioral-guide]
+description: The behavioral guide for operating as the Director — how the watched session judges (taste-vs-handle), answers turn/merge reviews, reports up, and runs lights-out. The how-to-type companion is docs/DIRECTOR_RUNBOOK.md.
 ---
-# DIRECTOR.md — the Director operating manual
+# DIRECTOR.md — the Director behavioral guide
 
 `AGENTS.md` is how you operate when you **build** this harness. This is how you
-operate when you **run** it as the Director. They are different activities; a
-session adopts this manual only when it enters Director mode — **reading this
-file is what makes you the Director** (there is no separate launcher skill;
-`AGENTS.md` §0 points here). You don't become the Director by accident.
+operate when you **run** it as the Director: the judgment — what to answer, when to
+escalate, how to read the picture. They are different activities; a session adopts
+this manual only when it enters Director mode — **reading this file is what makes you
+the Director** (there is no separate launcher skill; `AGENTS.md` §0 points here). You
+don't become the Director by accident.
 
-## 0. Standing up the Director against a project (first time)
+> **Want to *run* it — stand-up, launch commands, the full prod-run loop, cleanup?**
+> That is the **runbook**, not this file: **[`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md)**.
+> This guide is *how the Director judges*; the runbook is *what to type*. Come here to
+> decide a call; go there to run a test. Section pointers below (§-references) link the
+> two: where a command used to live here, you will find a pointer into the runbook.
 
-> Already running? Skip to §1. This is the Day-0 path for aiming the Director at a
-> project for the first time — the rest of this manual assumes you are past it.
+## 0. Standing up the Director → the runbook
 
-**The consumption model — the Director is centralized, not ported.** You do not copy
-`director/` into your project. You run it **from this repo** (the agent-harness
-checkout *is* the orchestrator) and aim it at *your* project: its Linear board and
-its git repo. Workers clone your repo into a scratch workspace (the `workspace.hooks`
-below), do the work there, and open PRs against it. The *development method*
-(ExecPlans, lints, review personas) is the other half of the harness — that half
+> **The Day-0 stand-up — prerequisites, the `.harness.json` `director` block, the
+> disposable-repo safe fence, and the launch commands — now lives in the runbook:
+> [`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §1–§6.** It is the
+> command-first companion to this guide. Skim the model below, then go there to run.
+
+**The consumption model — the Director is centralized, not ported** (the one piece of
+*conceptual* framing you need before the runbook). You do not copy `director/` into your
+project. You run it **from this repo** (the agent-harness checkout *is* the orchestrator)
+and aim it at *your* project: its Linear board and its git repo. Workers clone your repo
+into a scratch workspace, do the work there, and open PRs against it. The *development
+method* (ExecPlans, lints, review personas) is the other half of the harness — that half
 **does** travel into your repo, separately, via the `harness-init` skill (AGENTS.md
-"Porting"). Two halves, two distribution models: the **method** travels to the host;
-the **Director** stays here and reaches out.
+"Porting"). Two halves, two distribution models: the **method** travels to the host; the
+**Director** stays here and reaches out.
 
-**Prerequisites (one-time).**
-- The **`codex` CLI** (the worker runtime) on PATH — `codex app-server` is the spawn
-  (`director.codex_command`); each worker is a Codex app-server subprocess.
-- *(Optional)* the **Claude** Agent-SDK worker runtime — vendored **in-repo** at
-  `worker-runtime/` (subtree-absorbed cc-appserver), built once via
-  `worker-runtime/setup.sh` (Node + npm). Enables `--worker claude` (default stays
-  codex; declared in `director.worker_runtimes` via the `{harness_root}` placeholder
-  the Director expands to the repo root). It is now both **approval-gated AND
-  OS-sandboxed** (Seatbelt/bubblewrap Bash isolation + credential-read deny, SECURITY
-  T11) — at containment parity with codex. See `worker-runtime/README.md`.
-- **`gh` authenticated** for the target repo with a token that can open *and merge*
-  PRs (the merger squash-merges). Export it as **`GH_TOKEN`** — the deny-by-default
-  worker env forwards only the keys in `worker_policy.worker_env` (just `GH_TOKEN` by
-  default), so nothing else leaks into the sandbox.
-- The **Linear MCP** connected in *this* Director session (it reads/writes the board),
-  plus **`LINEAR_API_KEY`** in your environment.
-- Secrets live in `.env` / `$VAR`, **never committed**; `.harness.json` references them
-  by `$NAME` indirection (§11).
-
-**Configure the run** — add a `director` block to this repo's `.harness.json` (§11 is
-the full knob reference; this is the minimum to aim at a project):
-
-```jsonc
-{
-  "director": {
-    "team": "$DIRECTOR_TEAM",          // the Linear team/board UUID to poll
-    "states": {                         // logical state -> YOUR board's column names
-      "ready":   "Todo",
-      "started": "In Progress",
-      "done":    "Done",
-      "merging": "In Review"            // present -> enables merge-gated landing (§7)
-    },
-    "concurrency": 2,
-    "dispatch_requires_label": true,    // only claim tickets tagged with a dev-stage label
-    "worker": { "tools": "linear", "install_skills": true },
-    "paths": { "workspace_root": ".harness/workspaces" },
-    "workspace": {
-      "hooks": {
-        "after_create": "git clone https://x-access-token:${GH_TOKEN}@github.com/<owner>/<repo>.git .",
-        "before_run":   "git fetch origin && git checkout main && git reset --hard origin/main && git clean -fd"
-      }
-    }
-  }
-}
-```
-
-> **The workspace hooks are what put your code in front of the worker.** Without an
-> `after_create` clone the workspace is an **empty directory** (that is why `--mock`
-> runs need no hooks). `after_create` runs once when the workspace is created;
-> `before_run` re-syncs it to `origin/main` before each ticket, so a child builds on
-> its parent's *landed* base, never a stale tree (§7 merge-gated). The land skill and
-> the merger target **`main`** — set your repo's default branch to `main`. The literal
-> `${GH_TOKEN}` survives config's `$VAR` resolver (only a value that is *entirely*
-> `$NAME` is substituted), so the token is injected at hook-exec time, not baked into
-> the resolved config.
-
-**Prepare the board (one-time).** Create the dev-stage labels on the team —
-`planning` / `spec` / `design` / `research` / `impl` — and tag each ticket with the
-one stage it should run (`impl` routes the full ExecPlan methodology). With
-`dispatch_requires_label: true` an unlabelled ticket is never claimed, so onboarding
-and stray issues are ignored rather than dispatched as workers.
-
-**Launch.** Start the watched orchestrator as a background task and arm the
-queue Monitor so each worker turn-end event-wakes you (§5):
-
-```
-python3 -m director.orchestrator --team $DIRECTOR_TEAM                 # watched, background
-python3 -m director.watch --kinds turnReview,mergeReview,runReport     # Monitor
-```
-
-From here you **are** the Director — operate under §1 onward.
-
-**Validate safely first.** Real workers open real PRs and the merger really
-squash-merges, so never first-run against a repo whose `main` you care about. Dry-run
-against a **disposable copy repo** + a throwaway board, or bound it hard with
-`python3 -m director.run --linear <ID>` (drives ONE ticket, never polls the board).
+Everything else about standing up — binaries, the env contract, the config block, the
+board labels, the safe fence, the launch sequence — is in the runbook. Already running?
+Read on: §1 onward is the behavioral guide.
 
 ## Identity
 
@@ -231,24 +167,15 @@ technical choice you answer with a `reply`. A product-direction/irreversible for
 
 ## 5. Running as an event-woken Director (the watched loop)
 
-You do not poll. Stand up the loop once, then let worker turn-ends **event-wake** you:
+You do not poll. You stand up the loop once — the watched orchestrator + a queue Monitor
+(`director.watch`) — then let worker turn-ends **event-wake** you. The launch commands
+are in the runbook ([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §6); the
+*behavior* — your actual job in the loop — is this:
 
-1. **Start the orchestrator (watched) as a background task** — it dispatches workers
-   and blocks each on its turn-end until you answer:
-   ```
-   python3 -m director.orchestrator --team <id>        # run_in_background
-   ```
-2. **Arm a persistent Monitor on the queue + status snapshot** — `director.watch` emits
-   one line per newly-pending request AND one `runReport` per run-level terminal, so each
-   becomes a session notification (no timer poll on you; the polling lives in this
-   subprocess). Watch turn-ends, merge escalations, and run-level reports:
-   ```
-   python3 -m director.watch --kinds turnReview,mergeReview,runReport --status-dir <dir>   # Monitor, persistent
-   ```
-3. **On each event**, read it + the `--request` join, then act: a `turnReview` →
+1. **On each event**, read it + the `--request` join, then act: a `turnReview` →
    `answer_turn` per §4 (reply / terminal / escalate); a `mergeReview` → handle per §7;
    a `runReport` → report per §9. The blocked worker resumes (or the escalation/run is handled).
-4. **Surface genuine taste to the human via `PushNotification`** — that pulls the
+2. **Surface genuine taste to the human via `PushNotification`** — that pulls the
    *human's* attention; everything non-taste you answer yourself.
 
 This makes a real Director answer every turn end without a human watching and without a
@@ -368,12 +295,10 @@ pull, so no `runReport` is acted on (the run's outcome is read from `director.st
 ## 10. Watching — and answering — a run live (the operator console)
 
 §1/§8 are how *you* read the picture (`director.status`, on demand). This is how a **human**
-watches AND answers a run directly from a browser, without entering your session:
-
-```
-python3 -m director.dashboard            # http://127.0.0.1:8787/
-python3 -m director.dashboard --port 9000 --status-dir <dir> --queue-dir <dir> --history-dir <dir> --events-dir <dir>
-```
+watches AND answers a run directly from a browser, without entering your session. The
+launch command (`python3 -m director.dashboard …`) is in the runbook
+([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §7); what it *is* — your
+oversight surface, and a second place the Director's answers can come from — is here:
 
 **Watch.** It serves the **same snapshot** §1/§8 read from (`build_view` = `director.status`
 + `director.queue` pending), **server-pushed** over SSE (`GET /api/v1/stream` emits a frame the
@@ -426,15 +351,9 @@ localhost `Origin`/`Host` — so no other page in your browser can forge a write
 unfenced; no auth, no LAN bind. Bad/absent token → `403`, already-answered → `409`, malformed
 body → `400`; fail-soft, never a gate on a run.
 
-**Get pinged when a run parks.** A console only helps if you know to open it — so run the park
-notifier alongside the orchestrator:
-
-```
-export DIRECTOR_WEBHOOK_URL=https://hooks.slack.com/...   # kept in .env, never committed
-python3 -m director.notify                                # or: --webhook <url> --queue-dir <dir>
-```
-
-It tails the queue and fires your webhook **once** per new human-bound pending request
+**Get pinged when a run parks.** A console only helps if you know to open it — so the park
+notifier (`python3 -m director.notify`, runbook §7) runs alongside the orchestrator: it
+tails the queue and fires your webhook **once** per new human-bound pending request
 (`turnReview` / approval / `mergeReview`) — the lights-out "you're needed" ping (§13). It is
 fail-soft (a dead URL retries a few times, then abandons — never crashes) and reuses the same
 dedup as `director.watch`; the network egress is isolated here, not in the watch emitter.
@@ -468,12 +387,10 @@ queue schema) stays in code — a host buys the harness's method, tunes only the
 
 The default run (`run_until_drained`) and `--once` are **batch**: they drain the board's
 ready work and **exit**. `--daemon` is the third mode — the always-on service (Symphony's
-identity; spec `docs/product-specs/2026-06-17-continuous-daemon-loop.md`):
-
-```
-python3 -m director.orchestrator --team <id> --daemon
-python3 -m director.orchestrator --team <id> --daemon --poll-interval 10   # board-poll cadence (s)
-```
+identity; spec `docs/product-specs/2026-06-17-continuous-daemon-loop.md`). The launch
+command (`--daemon [--poll-interval N]`) is in the runbook
+([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §9); the *semantics* you must
+understand to operate it are here:
 
 - **It never exits on a drained board.** When the board empties it keeps polling every
   `poll_interval_s` (config `director.poll_interval_s`, default 10), picking up a ticket the

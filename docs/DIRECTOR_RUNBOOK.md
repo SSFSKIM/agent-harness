@@ -177,6 +177,13 @@ Prints a JSON disposition (`{"ticket": "...", "kind": "terminal", ...}`). It ope
 PR on the shakedown repo. Exit 0 = terminal; non-zero = stuck. This path **skips** the
 turn-review judgment seam and the merger — use §6 for the full loop.
 
+> **⚠ This path is un-observable on the dashboard.** `director.run` wires no `on_event`
+> and writes no status/queue, so `director.status`, `director.watch`, and the console
+> drill-down (§7) show **nothing** for a single-ticket run — you watch it by **tailing the
+> worker log**, not the dashboard. If you want the live per-ticket drill-down, use the
+> **watched orchestrator** (§6), which captures the event stream. (Tracked: tech-debt
+> "single-ticket path is un-observable".)
+
 ---
 
 ## 6. Full watched loop — you are the Director
@@ -344,6 +351,7 @@ its `main` next time via the `before_run` sync.
 | Worker silently dies after ~30s on a real task | old default read-timeout (fixed: now 180s) | ensure you're on current `master`; `--read-timeout 180` to override |
 | Worker returns empty turns (0 messages/calls) | Codex/Claude **rate window** exhausted | check the rollout's `rate_limits`; wait for reset (DIRECTOR.md §13 park) |
 | Merger won't land; `mergeReview` posted | hygiene gate (red CI / unresolved thread) or preservation tripwire | resolve + `dm.requeue_merge(review, note=...)` (DIRECTOR.md §7) |
+| Dashboard/`director.status` blank during a `director.run --linear` run | the single-ticket path wires no `on_event`/status (§5) | tail the **worker log**, or use the watched orchestrator (§6) for the live drill-down |
 | `git mv` / "cannot lock ref" mid-run | a concurrent session shares the same `.git` | use a separate **clone** as the runner, not a worktree (§2) |
 | Headline token count looks enormous (~M/turn) | agentic loop re-sends growing transcript; ~97% prompt-cache hits | read the rollout (`~/.codex/sessions/.../rollout-*.jsonl`, `token_count` events) for *real* compute before trusting it |
 

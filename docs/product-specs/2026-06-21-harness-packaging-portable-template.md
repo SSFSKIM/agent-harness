@@ -196,7 +196,7 @@ existing components.
   sync with its source (the seed-template set + the referenced plugin component list), so
   manual sync stays honest. Advisory or blocking — decided in the slice's ExecPlan.
 - **R6.3 — `SETUP.md`** in the base: guided "bring this instance alive + point the
-  central Director at it" (reuses DIRECTOR.md §0).
+  central Director at it" (reuses the runbook `docs/DIRECTOR_RUNBOOK.md`).
 - **R6.4 — Legacy strip from the base.** Exclude `docs/symphony-original/`, `EDUCATION.md`,
   `docs/superpowers/`, `docs/generated/`, and the **self-host instance** design-docs
   (`okf-comparison.md`, `symphony-parity-gap.md`, and the *filled* self-host

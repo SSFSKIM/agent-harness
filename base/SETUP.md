@@ -70,8 +70,9 @@ git repo: Codex workers clone your repo into a scratch workspace, do the work, a
 open PRs against it. Two halves, two distribution models — the method (above)
 travels to your repo; the Director stays central and reaches out.
 
-To stand it up, follow **`.claude/DIRECTOR.md` §0 ("Standing up the Director against
-a project")** in the agent-harness repo. In short: install the `codex` CLI and an
+To stand it up, follow the **runbook `docs/DIRECTOR_RUNBOOK.md`** in the agent-harness
+repo (its command-first stand-up; `.claude/DIRECTOR.md` is the behavioral half — how the
+Director judges). In short: install the `codex` CLI and an
 authenticated `gh` (`GH_TOKEN`); connect the Linear MCP + `LINEAR_API_KEY`; add a
 `director` block to *that repo's* `.harness.json` aiming at your team
 (`"team": "$DIRECTOR_TEAM"`), your board's column names, and a workspace

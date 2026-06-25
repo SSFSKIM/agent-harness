@@ -138,8 +138,17 @@ green + all completion-gate reviews SATISFIED.
   status/config/dashboard flags + the `director_min` answer API). Cross-links to
   `.claude/DIRECTOR.md`, ADR 0003 (`0003-lights-out-director.md`), PLANS.md all resolve.
   Gate GREEN. (remaining for discoverability: AGENTS.md/README pointers — folded into M2.)
-- [ ] M2 decouple DIRECTOR.md (move §0 + command bits of §10–§12 → runbook; add pointers;
-  fix cross-refs; add AGENTS.md/README discoverability links)
+- [x] (2026-06-25) M2 — decoupled DIRECTOR.md to the behavioral guide: retitled
+  "behavioral guide" + top pointer to the runbook; §0 stand-up recipe → pointer (kept only
+  the consumption-model framing); slimmed the launch-command blocks in §5/§10/§12 to runbook
+  pointers (kept all judgment/semantics prose); §1–§14 numbering untouched (no renumber → all
+  code/ADR/PRINCIPLES §N refs hold). Repointed the 4 live §0 refs → runbook: AGENTS.md
+  (doc table + Porting), harness-init/SKILL.md, harness-packaging spec R6.3, base/SETUP.md.
+  Decided the decoupling line: **DIRECTOR.md keeps only read-only `director.status`/
+  `director.config`; every launch/run command lives in the runbook.** Gate GREEN.
+- [x] (2026-06-25) Discovery folded into the runbook: tech-debt row 21 (single-ticket
+  `director.run` path is un-observable — no on_event/status) → added a ⚠ caveat in runbook §5
+  + a troubleshooting row, so the runbook doesn't send a reader to a blank dashboard.
 - [ ] M3 live codex validation
 - [ ] M4 completion gate
 
