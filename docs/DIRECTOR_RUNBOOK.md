@@ -19,7 +19,8 @@ DIRECTOR.md section that owns it.
 > agent-harness checkout *is* the Director) and aim it at *your* project — its Linear
 > board + its git repo. Workers clone your repo into a scratch workspace, do the work,
 > and open PRs; a separate serialized **merger** lands them on `main`. See
-> [DIRECTOR.md §0](../.claude/DIRECTOR.md) for the *why* of this consumption model.
+> [DIRECTOR.md §0 — *the consumption model*](../.claude/DIRECTOR.md) for the *why* (that
+> paragraph, not another redirect).
 
 ---
 
@@ -69,8 +70,10 @@ set -a; . ./.env; set +a          # export every key in .env into this shell
 ```
 
 > The worker runs **deny-by-default**: only the keys listed in
-> `worker_policy.worker_env` (default `GH_TOKEN`; add `CLAUDE_CODE_OAUTH_TOKEN` for the
-> claude runtime) are forwarded into the sandbox. Nothing else in your env leaks. See
+> `worker_policy.worker_env` are forwarded into the sandbox — and the *code* default is an
+> **empty** allowlist (no config → nothing forwarded). This repo's reference `.harness.json`
+> grants `GH_TOKEN` (plus `CLAUDE_CODE_OAUTH_TOKEN` for the claude runtime), so a host must
+> opt a key in explicitly; nothing else in your env leaks. See
 > [DIRECTOR.md §14](../.claude/DIRECTOR.md) for the full worker/Director config map.
 
 ---
@@ -308,8 +311,10 @@ PR-bearing ticket reaches `merging`:
 
 ```bash
 python3 -m director.merger --once
-#   --mock         # run the REAL preservation tripwire + hygiene gate + code-issued squash
-#                  # merge with a no-op land lane (cheap back-half validation for a clean PR)
+#   --mock   # NOT a dry run: still issues a REAL `gh pr merge --squash` against `main`.
+#            # --mock only fakes the *land-lane worker* (the prepare step), which is a
+#            # no-op for a conflict-free PR anyway — so the tripwire + hygiene gate + squash
+#            # are all REAL. Use it to land a clean PR without spawning a codex land worker.
 ```
 
 The merger runs a **code-owned gate** — a preservation tripwire (did the PR's change
@@ -384,9 +389,10 @@ behind (a `pending` ghost from a prior run will show on the next dashboard).
 
 ## 12. See also
 
-- [`.claude/DIRECTOR.md`](../.claude/DIRECTOR.md) — the behavioral guide (Identity, §1–§4
-  judgment, §6 modes, §7 merge handling, §8/§9 reporting, §11 config reference, §12 daemon
-  semantics, §13 lights-out, §14 the config map). **Come here to run; go there to decide.**
+- [`.claude/DIRECTOR.md`](../.claude/DIRECTOR.md) — the behavioral guide: identity,
+  taste-vs-handle judgment, answering turn/merge reviews, the modes, reporting, lights-out,
+  and the config map. **Come here to run; go there to decide.** (Section numbers intentionally
+  not mirrored here — see DIRECTOR.md's own table of contents.)
 - [`docs/adr/0003-lights-out-director.md`](adr/0003-lights-out-director.md) —
   the attended / lights-out / no-agent modes and the guardrail safety floor.
 - [`docs/PLANS.md`](PLANS.md) — the ExecPlan methodology the `impl`-labelled workers run.

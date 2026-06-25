@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-25
 owner: harness
 type: exec-plan
@@ -245,5 +245,64 @@ green + all completion-gate reviews SATISFIED.
   open the PR. No taste fork to surface to the human.
 
 ## Feedback (from completion gate)
+All five reviews **SATISFIED**, zero P1. (spec-compliance → code-quality always-on;
+targeted risk personas review-security + review-arch.) P2s:
+- **FIXED inline** (cheap doc improvements, not deferred):
+  - (security) runbook §1 `worker_env` said "default `GH_TOKEN`" but the *code* default is
+    an **empty** allowlist — reworded to "deny-by-default (empty in code); the reference
+    `.harness.json` grants `GH_TOKEN`."
+  - (code-quality) runbook §8 `--mock` comment now states unmissably it is **NOT a dry run**
+    — it still issues a REAL `gh pr merge --squash` against `main`; only the land-lane worker
+    is faked.
+  - (code-quality) runbook §12 "See also" no longer hand-mirrors DIRECTOR.md's §-number map
+    (a rot vector D5 can't catch) — trimmed to a genre statement.
+  - (arch) runbook:22 `§0` pointer reworded to land on the *consumption-model paragraph*, not
+    look like a redirect-to-a-redirect.
+  - (spec-compliance) tracker row 21's stale "`DIRECTOR.md §0` recommends the safe path"
+    citation repointed to runbook §5.
+- **→ tech-debt-tracker (deferred, fix-forward):**
+  - **(Important)** `needs_human` → reply-continue → `done`+PR strands the open PR (never
+    enqueued for the merger) — the M3 orchestration finding; root-cause + fix is a separate
+    orchestrator plan.
+  - (spec-compliance) the runbook's "(tracked tech-debt)" claim is now true — the row above
+    was added in this gate.
+- **Noted, not actioned (out of scope / recurrence-gated):**
+  - (security) codex pinned `0.142.0` in the runbook vs SECURITY.md's `0.139.0` live-probe
+    evidence — a SECURITY.md staleness, not a runbook defect; align on a future SECURITY pass.
+  - (arch, proposed rule) promote the genre-boundary line ("a command to type → runbook; a
+    decision to make → DIRECTOR.md") into ARCHITECTURE.md invariant 5 / DESIGN.md so the two
+    docs don't re-merge over time — track; promote on a 2nd occurrence.
+  - (code-quality, proposed rule) a convention that cross-doc pointers cite a *named* section,
+    never a re-typed copy of the partner's §-numbers — track; promote on a 2nd occurrence.
 
 ## Outcomes & retrospective
+**Delivered, all verified.** (1) `docs/DIRECTOR_RUNBOOK.md` — a command-first, copy-pasteable
+zero→live-run runbook, every command checked against source and **proven by a real codex run**.
+(2) `.claude/DIRECTOR.md` decoupled to a pure behavioral guide (−144 lines; only read-only
+`director.status`/`director.config` remain, every launch recipe → a runbook pointer), §1–§14
+numbering preserved so all code/ADR/PRINCIPLES `§N` cross-refs still resolve; the 4 live `§0`
+references repointed (AGENTS.md, base/SETUP.md, harness-init, packaging spec). (3) Discoverable:
+in `docs/` (nav-indexed), linked from AGENTS.md's doc table + Porting block.
+
+**The live codex dogfood (LIN-30) was the behavioral check — full loop proven:** dispatch →
+clone/sync hooks → codex worker (live per-ticket events + token accrual) → attempt-1 read-timeout
+retry → `needs_human` escalation → **Director answered the turnReview** → worker opened PR #4
+(gate GREEN) → merger's REAL tripwire + hygiene gate + squash → **landed on shakedown `main`
+(`bf15aa21`)**. Closed the codex live-proof gap for the per-ticket-event observability; used
+`director.watch` as the Monitor per the runbook's own §6 (after a user-prompted course-correct
+from hand-rolled poll loops — the runbook step *should* be dogfooded, not bypassed).
+
+**Why this beat writing the runbook from memory:** executing the draft surfaced **8 concrete
+gaps** that a recollection would have shipped wrong — wrong run-state dir paths
+(`.claude/harness/…` not `.harness/…`), no cross-run queue GC, a default-port collision, the
+canonical→shakedown push tripping the exfil classifier, kill-by-PID-not-name — plus **2 real
+findings** (codex `read_timeout` 180s too short → retry wipes uncommitted work; the
+`needs_human`→reply→done orchestration hole). All gaps fixed in the runbook; findings tracked.
+
+**Retrospective.** Two process lessons worth carrying: (a) when *validating* a documented
+procedure, **dogfood the procedure's own tooling** (`director.watch`) rather than a convenient
+substitute — the substitute doesn't test the doc. (b) A too-prescriptive ticket can be
+*self-contradictory* against the host's gate (my LIN-30 demanded an uppercase path + "don't
+modify anything else", both impossible under D6/D8) — the worker correctly caught it and
+escalated, which is the system working as designed. The single largest cost driver was worker
+over-orientation (~2.96M tokens, mostly cached — the F2 pattern) on a trivial docs task.
