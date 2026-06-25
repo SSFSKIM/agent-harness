@@ -203,7 +203,21 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   navigable; capture the transcript/screenshots into Outcomes.
 
 ## Progress log
-- [ ] (2026-06-26) Plan authored; spec committed (8bc18d8); base_commit 9fc404d. Build not yet started.
+- [x] (2026-06-26) Plan authored; spec committed (8bc18d8); base_commit 9fc404d.
+- [x] (2026-06-26) **M1 done.** `director/board_snapshot.py` (pure `build_board_view`
+  with Kahn longest-path layering + cycle/orphan/dangling-safe `in_cycle`,
+  `BoardWriter`/`NoopBoardWriter` atomic write, tolerant `read_board`, `main()` read
+  surface) + `tests/test_board_snapshot.py` (18 tests: chain/diamond/parallel layering,
+  cycle-no-hang, self-block, descendant-of-cycle, dangling-drop, projection, garbage
+  tolerance, writer round-trip, torn/absent read, Noop off-path). `pytest` 18/18 GREEN;
+  `main()` smoke correct (a→b edge, b@layer1); full gate GREEN.
+- [ ] **M2 — CHECKPOINT (awaiting human go).** Library feasibility spike: vendor
+  Cytoscape+dagre+expand-collapse offline, fixed asset route, `/api/v1/board`, ADR 0006
+  + ARCHITECTURE invariant-1 note. This is where the vendoring + invariant relaxation
+  materialize — paused here per the agreed M1→M2 checkpoint.
+- [ ] M3 — orchestrator poll-tick wiring + `board_snapshot_interval_s` knob + live proof.
+- [ ] M4 — graph-view UI restructure + node painting + re-homed session overlay.
+- [ ] M5 — scale/collapse + playwright behavioral + cross-runtime pass.
 
 ## Surprises & discoveries
 
