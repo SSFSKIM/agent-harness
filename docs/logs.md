@@ -18,6 +18,34 @@ description: Append-only, milestone-grained project log — how the docs system 
 > mechanical change is in git history. This file is the human-readable "how did we
 > get here" that those three don't tell on their own.
 
+## 2026-06-25 — Packaging maturity test: clean-repo bootstrap dogfood
+
+Bootstrapped the harness from zero onto two scratch hosts — a blank `git init`
+repo and a small existing Node app carrying its own `CLAUDE.md` + `docs/` — to
+test whether the *packaging* (scaffold + `harness-init` skill) actually delivers a
+working, GREEN, coherent harness with no manual fixups beyond the documented FILL
+work. **The deterministic half passed cleanly:** `scaffold.py` produced the 24-file
+seed tree on both, was idempotent on re-run, and `check.py` reported **GREEN on a
+fresh scaffold before any judgment work** — the central packaging promise holds.
+The existing-host path also behaved: the host's `CLAUDE.md` was preserved (SKIP),
+the `.claude`-blanket-ignore NOTE fired, and the host's ungoverned `docs/notes.md`
+was correctly host-owned under relaxed governance.
+
+The gaps were in the **handoff and enforcement coverage**, not the scaffold. The
+headline one (fixed this pass): the porting handoff (`harness-init` step 9) wired a
+new host only the *session-only* `claude --plugin-dir` flag, so a session that
+forgets it loses every harness skill the scaffolded `AGENTS.md` references — and
+loses them **silently**, because the gate hook runs `check.py` by absolute path and
+stays GREEN. The self-host had long since solved persistence (`.claude/settings.json`
+`enabledPlugins` + `extraKnownMarketplaces`) but the porting toolchain never
+propagated that pattern (a core-belief-13 miss). Step 9 now wires a durable form
+(published-marketplace install, or a `directory`-source `.claude/settings.json`
+mirroring self-host) and demotes `--plugin-dir` to the fallback. Three smaller
+enforcement-coverage findings (FILL markers commit GREEN; the "Always" verify-skill
+is unenforced; the `--root` flag contract is inconsistent across scripts) plus a
+D5 mechanization idea (scaffold writing the host's plugin wiring) are logged to the
+[tech-debt tracker](exec-plans/tech-debt-tracker.md) for the doc-gardener.
+
 ## 2026-06-21 — R5.3 DONE: the plugin is published (repo public, MIT)
 
 The packaging initiative's last deferred item — R5.3's public republish, held as a

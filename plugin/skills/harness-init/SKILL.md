@@ -151,6 +151,20 @@ wires it via the `HARNESS_TEST_CMD` env var (e.g. `HARNESS_TEST_CMD="pytest
   `docs/logs.md` and any known landmines as `docs/exec-plans/tech-debt-tracker.md`
   rows.
 - Commit the scaffold + migration as its own commit before substantive work.
-- Hand off: the next session starts in the host root with
-  `claude --plugin-dir "$PLUGIN"` — Claude Code's native memory is the continuity
-  store; durable knowledge lives in `docs/adr/` + `docs/logs.md`.
+- Hand off — make the plugin load **persistently** so harness skills are always
+  present. The gate survives without it (the `.git/hooks/pre-commit` hook runs
+  `check.py` by absolute path, no plugin needed), so a session that forgets the
+  flag stays GREEN while every skill the map references silently vanishes — wire
+  one durable form, don't rely on the per-session flag:
+  - **Published harness** → register its marketplace and enable the plugin once:
+    `/plugin marketplace add <owner>/agent-harness` then
+    `/plugin install agent-harness@agent-harness`.
+  - **Local harness checkout** (this repo lives on the same machine) → add to the
+    host's `.claude/settings.json` a `directory`-source marketplace plus
+    `enabledPlugins` — the shape this repo self-hosts, with the path made absolute
+    (machine-local, like the gate hook): `{"extraKnownMarketplaces":
+    {"agent-harness": {"source": {"source": "directory", "path": "<abs path to the
+    harness repo>"}}}, "enabledPlugins": {"agent-harness@agent-harness": true}}`.
+  - `claude --plugin-dir "$PLUGIN"` stays the ephemeral, session-only fallback.
+  Claude Code's native memory is the continuity store; durable knowledge lives in
+  `docs/adr/` + `docs/logs.md`.
