@@ -6,7 +6,7 @@ This file is a **map, not an encyclopedia**. Keep it short; the default line
 cap is host-overridable when the map genuinely needs more room.
 Deep truth lives in `docs/` — follow the pointers.
 
-## Operating model — every session, in order
+## Operating model — every session
 
 1. **Orient — proportionally.** Orientation is a tool, not a forced first step.
    For a broad or unfamiliar change, anchor on intent: read
@@ -18,24 +18,19 @@ Deep truth lives in `docs/` — follow the pointers.
    Session continuity uses Claude Code's **native memory** — the harness ships no
    feeder/imprint loop; durable knowledge lives in `docs/` (decisions in
    `docs/adr/`, evolution in `docs/logs.md`).
-2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
-   throwaway in-conversation plan for small work; **Product Design** (write a
-   spec in `docs/product-specs/` via the `product-design` skill) when the *what*
-   must be settled before the *how*; otherwise a living ExecPlan in
-   `docs/exec-plans/active/` (execplan skill). No ceremony when risk is low.
-3. **Implement.** Match existing style. New knowledge pages: placement table
-   in [the harness page](docs/design-docs/agent-harness.md). Find existing docs
-   by querying — the `docs-nav` skill (`nav.py`: map/tree/catalog/backlinks/…)
-   — not by bulk-reading.
-4. **Validate.** The harness lint gate must be GREEN before every commit —
-   exact command in [the harness page](docs/design-docs/agent-harness.md).
-5. **Review.** Two QA reviews (spec-compliance then code-quality) run at *every*
-   ExecPlan completion; `review_level` governs only the additional risk personas
-   dispatched at the level the plan calls for. Always self-review (execplan skill).
-6. **Write back.** Session continuity uses Claude Code's native memory — no
-   write-back step. Durable knowledge goes into `docs/` as you make it: decisions
-   in `docs/adr/`, deferred work in `docs/exec-plans/tech-debt-tracker.md`,
-   evolution in `docs/logs.md` (on-demand, milestone-grained).
+2. **Pick a mode, then let the skill drive.** Entry decision (method:
+   `docs/PLANS.md`): a throwaway in-conversation plan for small work;
+   **product-design** (spec in `docs/product-specs/` via the `product-design`
+   skill) when the *what* must be settled before the *how*; otherwise a living
+   ExecPlan in `docs/exec-plans/active/` (execplan skill). The chosen skill owns
+   the rest of the lifecycle — implement → validate → review. No ceremony when
+   risk is low.
+
+   While implementing, match existing style and place new knowledge pages via the
+   placement table in [the harness page](docs/design-docs/agent-harness.md)
+   (`docs-nav`'s `nav.py` queries the corpus — query, don't bulk-read); the
+   harness lint gate must be GREEN before every commit (exact command in
+   [the harness page](docs/design-docs/agent-harness.md)).
 
 ## Map
 

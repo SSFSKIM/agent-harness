@@ -4,7 +4,7 @@ Self-hosting AI-native harness for big software development on local Claude Code
 This file is a **map, not an encyclopedia**.
 Deep truth lives in `docs/` — follow the pointers.
 
-## Operating model — every session, in order
+## Operating model — every session
 
 1. **Orient — proportionally.** Orientation is a tool, not a forced first step.
    For a broad or unfamiliar change, anchor on intent before the session drifts:
@@ -17,25 +17,18 @@ Deep truth lives in `docs/` — follow the pointers.
    whenever a task actually needs it. Session continuity uses Claude Code's
    **native memory** — the harness ships no feeder/imprint loop; durable knowledge
    lives in `docs/` (decisions in `docs/adr/`, evolution in `docs/logs.md`).
-2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
-   throwaway in-conversation plan for small work; **Product Design** (write a
-   spec in `docs/product-specs/` via the `product-design` skill) when the *what*
-   must be settled; otherwise a mid-size task that doesn't need dedicated feature Spec proceeds with living ExecPlan in
-   `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
-3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
-   style. New knowledge pages: the `docs-tree` skill decides where they live; the
-   `docs-nav` skill (`nav.py`) queries existing docs — `map`/`tree` for the
-   picture and relationships, `catalog`/`backlinks` to find and pre-check — query,
-   don't bulk-read.
-4. **Validate.** `python3 plugin/scripts/check.py` must be GREEN before every
-   commit (`harness-lint` skill interprets failures).
-5. **Review.** Always self-review. A conditional **behavioral check** (run the plan's
-   acceptance + a smoke/E2E pass for any runnable surface; web → `playwright-cli`)
-   precedes the reviews. Two QA reviews — **spec-compliance** then **code-quality** —
-   run at *every* ExecPlan completion (always-on, regardless of `review_level`);
-   `review_level` governs only the additional *risk personas* (arch/reliability/security)
-   dispatched at the level the plan calls for (`execplan`). Security review is reserved
-   for the live exec surface.
+2. **Pick a mode, then let the skill drive.** Entry decision (method:
+   `docs/PLANS.md`): a throwaway in-conversation plan for small work;
+   **product-design** (spec in `docs/product-specs/` via the `product-design`
+   skill) when the *what* must be settled; otherwise a mid-size task that doesn't
+   need a dedicated feature spec proceeds with a living ExecPlan in
+   `docs/exec-plans/active/` (`execplan` skill). The chosen skill owns the rest of
+   the lifecycle — implement → validate → review. No ceremony when risk is low.
+
+   While implementing, respect the layer law (`ARCHITECTURE.md`), match existing
+   style, and route new knowledge pages through `docs-tree` (`docs-nav` queries
+   the corpus — query, don't bulk-read); `check.py` GREEN gates every commit
+   (`harness-lint` interprets failures; see Laws).
 
 ## Map
 
