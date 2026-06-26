@@ -32,6 +32,21 @@ Method and template live in `docs/PLANS.md` — read it first.
    frontmatter (`none`, `targeted`, `standard`, or `full`), run the gate
    (command in `docs/design-docs/agent-harness.md`), commit.
 
+## Execute (per milestone)
+Read the plan's `execution:` field (PLANS.md "Execution mode").
+- **`inline`** (default): implement each milestone yourself in this session.
+- **`fork`**: dispatch each milestone M_k as `subagent_type:"fork"` (Agent/Task
+  tool) when your runtime supports it (Claude Director / Claude worker). The fork
+  inherits this session's full context, so the dispatch is one line — "implement
+  milestone M_k per the active ExecPlan: TDD, run its acceptance, commit, update the
+  plan's Progress/Decision/Surprises log, then return a short summary (what exists /
+  key decisions / what the next milestone needs / test evidence / commit SHAs)".
+  Between forks stay a thin orchestrator: receive the summary, dispatch the next, do
+  no other work (it pollutes the next fork's inheritance). If your runtime has no
+  fork subagent (Codex worker), run inline. Either way the durable plan doc + commits
+  are the continuity backbone, and completion-gate reviews are always fresh
+  subagents — never forks.
+
 ## Maintain (as you work, not after)
 - Append to Progress log each working block; record Surprises & discoveries
   and Decision log entries the moment they happen.
