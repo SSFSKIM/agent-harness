@@ -10,7 +10,7 @@ Deep truth lives in `docs/` — follow the pointers.
 
 1. **Orient — proportionally.** Orientation is a tool, not a forced first step.
    For a broad or unfamiliar change, anchor on intent: read
-   [the charter](docs/CHARTER.md) (mission, design philosophy, locked assumptions)
+   [the charter](docs/CHARTER.md) (mission, core axioms, design philosophy)
    and run the `docs-nav` skill's `nav.py map`. For a small, well-scoped change,
    skip the survey and go straight to the work — over-orienting a focused ticket
    just burns context. The `docs-nav` skill (`nav.py`) is the on-demand way to
@@ -42,7 +42,7 @@ Deep truth lives in `docs/` — follow the pointers.
 | Path | What it is |
 |---|---|
 <!-- FILL: rows for this repo's real source layout (src/, build, test cmds). -->
-| `docs/CHARTER.md` | Top-level intent: mission, design philosophy, locked assumptions — the Orient anchor |
+| `docs/CHARTER.md` | Top-level intent: mission, core axioms, design philosophy — the Orient anchor |
 | `docs/design-docs/core-beliefs.md` | Golden rules (agent-first operating principles) |
 | `docs/design-docs/agent-harness.md` | The installed harness: components, native memory, gate |
 | `docs/exec-plans/` | Living plans: `active/`, `completed/`, `tech-debt-tracker.md` |

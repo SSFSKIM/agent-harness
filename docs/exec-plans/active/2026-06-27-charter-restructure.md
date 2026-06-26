@@ -110,19 +110,43 @@ tightly-coupled docs edit with no independent parallelism.
   grep; expect no output.
 
 ## Progress log
-- [ ] M1 — rewrite self-host CHARTER.md
-- [ ] M2 — rewrite template + base seed (byte-identical)
-- [ ] M3 — sweep live reference sites
+- [x] M1 — rewrote self-host `docs/CHARTER.md` to 4 sections (Mission absorbs the
+  three jobs; Core Axioms with reversal test; doneness deleted).
+- [x] M2 — rewrote `templates/charter.md` + copied to `base/docs/CHARTER.md`;
+  `diff` empty (byte-identical ✓).
+- [x] M3 — swept the live reference sites AND the two missed seed templates (see
+  Surprises); `lint_base: OK`, full gate GREEN.
 
 ## Surprises & discoveries
+- **Missed a whole reference dimension: the seed templates.** My blast-radius
+  grep was scoped to `docs/ base/` and missed
+  `plugin/skills/harness-init/templates/{agents-md.md,knowledge-format.md}` —
+  the *seeds* that `base/AGENTS.md` and `base/docs/KNOWLEDGE_FORMAT.md` are
+  **rendered from** (`harness_lib.SEEDS` + `hl.render`; `base/{dest}` must be
+  byte-equal to `render(seed)`, enforced by `lint_base` B2 + `test_real_base_in_sync`).
+  Editing `base/` *directly* (M3 first pass) created drift and FAILED the gate.
+  Fix: edit the **seeds** (the source) — which also corrects the bootstrap
+  templates a new host gets — and `base/` re-syncs. The gate caught exactly the
+  portable-layer inconsistency core-belief-13 warns about. Lesson: a "reference
+  sweep" on this repo must include `templates/` (the portable source), not just
+  the rendered `base/` mirror.
+- **Concurrency:** a parallel session's sweeping commit (`69fda1d "reframe
+  agents.md"`) absorbed this plan file into its commit (landed intact, wrong
+  message — left as-is per repo concurrency practice), and its AGENTS.md edit
+  (a different section) invalidated my cached read, failing two M3 edits until
+  re-read. No content collision.
 
 ## Decision log
 - 2026-06-27: `review_level: none` — docs/methodology change, no exec surface; the
   always-on spec-compliance + code-quality reviews are the appropriate gate.
-- 2026-06-27: AC4 interpreted precisely — live corpus clean of the old terms;
-  historical records (2026-06-19 spec + execplan + their index entry) keep them.
-  M3 neutralizes the index entry so the live grep is literally empty.
+- 2026-06-27: AC4 interpreted precisely — live *reference* docs clean of the old
+  terms; historical records (2026-06-19 spec + execplan + their index entry) and
+  *descriptive* mentions (this spec/plan, the new index entry naming "Locked
+  assumptions → Core Axioms") legitimately keep them.
 - 2026-06-27: inline execution (tightly-coupled prose, no parallelism to exploit).
+- 2026-06-27: seed-as-source — fixed `templates/{agents-md,knowledge-format}.md`
+  (not the rendered `base/` files) so the portable layer is the source of truth;
+  spec file-table amended to include them.
 
 ## Feedback (from completion gate)
 

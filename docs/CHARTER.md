@@ -1,10 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-19
+last_verified: 2026-06-27
 owner: harness
 type: charter
 tags: [charter, intent, mission]
-description: The harness's top-level intent — mission, design philosophy (기획의도), and locked assumptions — the Orient anchor every session re-reads to resist long-session intent-drift.
+description: The harness's top-level intent — mission (the ambition it steers by), core axioms, and design philosophy (기획의도) — the Orient anchor every session re-reads to resist long-session intent-drift.
 ---
 # CHARTER — agent-harness
 
@@ -17,25 +17,44 @@ roadmap` (a derived view, never hand-maintained).
 
 ## Mission
 
-A **portable agentic harness**: a substrate any repo can adopt so that AI agents
-run long, self-correcting software development — planning, implementing,
-reviewing, remembering — with the **minimum possible human touch**
-([`PRODUCT_SENSE.md`](PRODUCT_SENSE.md)).
+*The ambition we steer by — and the lens for which work belongs.*
 
-## What "done" looks like
+Software development becomes something humans **govern by intent and taste**, not
+by typing. The agent-harness is the portable substrate that gets there: any repo
+can adopt it so an agent collective carries work from idea to landed change —
+planning, implementing, reviewing, remembering — across many sessions, surfacing
+only the genuine forks of human judgment. *You can tell it is working when* a
+developer runs `harness-init` against any repo and agents drive multi-session
+development end to end — picking the entry mode, writing the spec/plan,
+implementing in-style, gating and reviewing themselves, carrying memory forward —
+with the human touching only taste. **Every proposed workstream is measured
+against this:** does it move us toward *govern-by-intent,
+human-touches-only-forks*? ([`PRODUCT_SENSE.md`](PRODUCT_SENSE.md))
 
-A developer runs `harness-init` against any repo and agents can drive
-multi-session development end to end: choosing the entry mode and writing the
-spec/plan, implementing in-style, gating and reviewing themselves, and carrying
-memory forward — the human touching only genuine taste/product forks. The
-corpus stays **fresh** (gate GREEN) and **self-navigable** (`nav.py` answers
-"what exists, what depends on what, where are we") without bulk-reading.
+## Core Axioms
+
+*The few immovable claims the project is built on.* Test before locking one:
+**reverse it — would this still be the same project?** No → it is an axiom; Yes →
+it is a Design-philosophy strand (it can mature) or just an ADR. **Lock as few as
+possible** — every axiom is a thing we have chosen not to re-examine, so the bar
+is identity-defining, not merely "currently true". An axiom does not move, so it
+never appears in the evolution view.
+
+- **Agents write everything.** Humans contribute prompts, reviews, and docs
+  feedback — never code. → [core belief 1](design-docs/core-beliefs.md).
+- **Not in the repo = does not exist.** Decisions made in chat or heads are
+  invisible; encode them as versioned repo artifacts. → [core belief 2](design-docs/core-beliefs.md).
+- **General by identity.** This self-hosting repo is the harness's *first host*,
+  not its destination; any change to how the harness works lands in the portable
+  layer (`plugin/` + `harness-init` templates + `scaffold.py`). → [core belief 13](design-docs/core-beliefs.md).
 
 ## Design philosophy (기획의도)
 
 *Why the product is shaped this way.* Chosen reasoning we believe in — it can
 mature, and when it does the pivot shows in `nav.py roadmap` (the evolution
-view). Each strand → the doc that elaborates it.
+view). Each strand → the doc that elaborates it. (Distinct from the axioms above:
+a strand can move; if you find yourself re-arguing an axiom, it was really a
+strand.)
 
 - **Minimal blocking gates, fix-forward.** Only the deterministic `check.py`
   blocks a commit; everything else is risk-budgeted or fix-forward. Cheap fixes
@@ -48,20 +67,6 @@ view). Each strand → the doc that elaborates it.
   lights-out without losing a safety floor. → [ADR 0002](adr/0002-graduated-autonomy.md); the Director manual (`.claude/DIRECTOR.md`, central-agent config).
 - **Map, not encyclopedia.** Entry points stay short and stable; depth lives
   behind pointers (progressive disclosure). → [core belief 3](design-docs/core-beliefs.md).
-
-## Locked assumptions
-
-*Fixed axioms — taken as given and not re-litigated.* (Distinct from the
-philosophy above: an axiom does not move, so it never appears in the evolution
-view. If we find ourselves re-arguing one, it was really a philosophy strand.)
-
-- **Agents write everything.** Humans contribute prompts, reviews, and docs
-  feedback — never code. → [core belief 1](design-docs/core-beliefs.md).
-- **Not in the repo = does not exist.** Decisions made in chat or heads are
-  invisible; encode them as versioned repo artifacts. → [core belief 2](design-docs/core-beliefs.md).
-- **General by identity.** This self-hosting repo is the harness's *first host*,
-  not its destination; any change to how the harness works lands in the portable
-  layer (`plugin/` + `harness-init` templates + `scaffold.py`). → [core belief 13](design-docs/core-beliefs.md).
 
 ## Initiatives
 

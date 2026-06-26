@@ -78,11 +78,17 @@ Three observable problems:
   belong*; the Core Axioms FILL comment carries the reversal test and the
   lock-as-few rule. (Verify: read the FILL comments.)
 - **R7.** Every **prose reference site** that names the old section set is
-  updated to the new one — `AGENTS.md` and `base/AGENTS.md`, `docs/KNOWLEDGE_FORMAT.md`
-  and `base/docs/KNOWLEDGE_FORMAT.md`, `docs/product-specs/index.md`, and the
-  `description` frontmatter of each charter copy. (Verify: grep for "locked
-  assumption" / "what \"done\"" across `docs/`, `base/`, `*.md` at root returns
-  only historical records.)
+  updated to the new one. These are: the self-host `AGENTS.md` and
+  `docs/KNOWLEDGE_FORMAT.md`; the **seed templates**
+  `plugin/skills/harness-init/templates/{agents-md.md,knowledge-format.md}` (the
+  *portable source*); `docs/product-specs/index.md`; and the `description`
+  frontmatter of each charter copy. **`base/AGENTS.md` and
+  `base/docs/KNOWLEDGE_FORMAT.md` are NOT edited directly — they are rendered
+  from the seed templates** (`harness_lib.SEEDS` + `hl.render`; `lint_base` B2 /
+  `test_real_base_in_sync` enforce `base/{dest}` byte-equals `render(seed)`), so
+  fixing the seed re-syncs `base/`. (Verify: grep for "locked assumption" / "what
+  \"done\"" across the live *reference* docs returns only historical records and
+  descriptive mentions; `lint_base` is OK.)
 - **R8.** The historical records of the v1 charter design — this file aside —
   are **not** rewritten: `2026-06-19-charter-and-progress-map.md` (spec) and its
   completed ExecPlan stay as the v1 record. (Verify: they are untouched except an
@@ -185,8 +191,11 @@ and the new spec, link integrity for the new cross-links.
 | `docs/CHARTER.md` | Rewrite to 4 sections; new Mission; Core Axioms; drop doneness; update `description` frontmatter |
 | `plugin/skills/harness-init/templates/charter.md` | Same shape, FILL comments (R6) |
 | `base/docs/CHARTER.md` | Byte-identical to the template (R5) |
-| `AGENTS.md`, `base/AGENTS.md` | Update the "(mission, design philosophy, locked assumptions)" references → new section set |
-| `docs/KNOWLEDGE_FORMAT.md`, `base/docs/KNOWLEDGE_FORMAT.md` | Update the `charter` type-table description |
+| `AGENTS.md` (self-host) | Update the "(mission, design philosophy, locked assumptions)" references → new section set |
+| `plugin/skills/harness-init/templates/agents-md.md` | Seed for `base/AGENTS.md` — same reference update (source of truth; `base/` re-renders) |
+| `docs/KNOWLEDGE_FORMAT.md` (self-host) | Update the `charter` type-table description |
+| `plugin/skills/harness-init/templates/knowledge-format.md` | Seed for `base/docs/KNOWLEDGE_FORMAT.md` — same `charter` row update |
+| `base/AGENTS.md`, `base/docs/KNOWLEDGE_FORMAT.md` | NOT hand-edited — rendered from the seeds above (`lint_base` enforces) |
 | `docs/product-specs/index.md` | Update the Korean charter description; register this spec |
 | `docs/product-specs/2026-06-19-charter-and-progress-map.md` | Optional forward cross-link only (R8) |
 

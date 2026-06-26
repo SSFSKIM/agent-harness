@@ -8,8 +8,8 @@ Deep truth lives in `docs/` — follow the pointers.
 
 1. **Orient — proportionally.** Orientation is a tool, not a forced first step.
    For a broad or unfamiliar change, anchor on intent before the session drifts:
-   read [the charter](docs/CHARTER.md) (mission, design philosophy (기획의도),
-   locked assumptions) and run `python3 plugin/scripts/nav.py map` (charter →
+   read [the charter](docs/CHARTER.md) (mission, core axioms, design
+   philosophy (기획의도)) and run `python3 plugin/scripts/nav.py map` (charter →
    initiatives → phases → status). For a small, well-scoped change, skip the
    survey and go straight to the work — over-orienting a focused ticket just burns
    context. The `docs-nav` skill (`nav.py` — `map`/`catalog`/`tree`/`backlinks`) is
@@ -41,7 +41,7 @@ Deep truth lives in `docs/` — follow the pointers.
 
 | Path | What it is |
 |---|---|
-| `docs/CHARTER.md` | Top-level intent: mission, design philosophy (기획의도), locked assumptions — the Orient anchor |
+| `docs/CHARTER.md` | Top-level intent: mission, core axioms, design philosophy (기획의도) — the Orient anchor |
 | `ARCHITECTURE.md` | Codemap, layer law, invariants, data flows |
 | `docs/KNOWLEDGE_FORMAT.md` | The knowledge format (KF v2.0): frontmatter schema, optional keys (`type`/`tags`/`resource`/`phase`/`supersedes`/`title`/`description`), conformance↔D-rule map |
 | `docs/design-docs/core-beliefs.md` | Golden rules + agent-first operating principles |

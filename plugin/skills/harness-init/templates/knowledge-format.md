@@ -103,7 +103,7 @@ directory-implicit taxonomy into the field:
 | `exec-plan` | `exec-plans/**` |
 | `reference` | `references/*` — external-API digests |
 | `methodology` | top-level machine docs (PLANS, DESIGN, …) |
-| `charter` | `CHARTER.md` — top-level intent: mission, design philosophy, locked assumptions |
+| `charter` | `CHARTER.md` — top-level intent: mission, core axioms, design philosophy |
 | `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log (also absorbs open questions + limitations) |
 | `log` | `logs.md` — milestone-grained project/docs-evolution narrative |
 
