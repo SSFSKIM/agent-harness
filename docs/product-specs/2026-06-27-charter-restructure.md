@@ -75,8 +75,11 @@ Three observable problems:
 - **R6.** Template/seed **FILL guidance** is rewritten so a host's human is
   directed correctly: the Mission FILL comment says *write at the most ambitious
   altitude; this is the human's to set; it is the lens for which workstreams
-  belong*; the Core Axioms FILL comment carries the reversal test and the
-  lock-as-few rule. (Verify: read the FILL comments.)
+  belong*; the Core Axioms section carries the reversal test and the lock-as-few
+  rule in its **rendered preamble prose** (visible in the host's filled charter,
+  consistent with how Design philosophy / Initiatives carry their guidance), with
+  the FILL comment naming what to write. (Verify: read the Core Axioms preamble +
+  FILL comment.)
 - **R7.** Every **prose reference site** that names the old section set is
   updated to the new one. These are: the self-host `AGENTS.md` and
   `docs/KNOWLEDGE_FORMAT.md`; the **seed templates**
@@ -219,8 +222,11 @@ and the new spec, link integrity for the new cross-links.
 3. The self-host Mission contains the ambition, the observable clause, and the
    filter sentence (R2); Core Axioms preamble contains the reversal test + the
    lock-as-few rule (R3).
-4. `grep -rni "locked assumption\|what \"done\"" docs/ base/ *.md` returns only
-   the historical `2026-06-19-*` records.
+4. `grep -rni "locked assumption\|what \"done\""` over the **live reference
+   docs** (the three charter copies, `AGENTS.md`, `docs/KNOWLEDGE_FORMAT.md`, the
+   two seed templates) is empty; remaining matches elsewhere are only historical
+   records (the 2026-06-19 spec + execplan) and descriptive mentions (this
+   spec/plan, the new index registration entry) — per R7. `lint_base` is OK.
 5. `python3 plugin/scripts/check.py` is GREEN.
 
 ## Open factors — triage & resolution

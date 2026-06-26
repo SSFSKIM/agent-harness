@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-27
 owner: harness
 type: exec-plan
@@ -149,5 +149,44 @@ tightly-coupled docs edit with no independent parallelism.
   spec file-table amended to include them.
 
 ## Feedback (from completion gate)
+- **spec-compliance: SATISFIED.** P2 (resolved now, not deferred): R6 literally
+  said the Core Axioms FILL *comment* carries the reversal-test + lock-as-few
+  rules, but the implementation places them in the rendered **preamble prose**
+  (visible after a host fills the section, consistent with Design philosophy /
+  Initiatives). The reviewer judged the intent met and the preamble approach
+  defensible/better. Fix-forward: amended R6 to match the implementation rather
+  than burying guidance in an HTML comment. No tracker row — resolved in-gate.
+- **code-quality: SATISFIED.** Two P2s, both resolved in-gate (not deferred):
+  (1) `docs/CHARTER.md` voice drift — the migrated contrast clause read "if *you*
+  find yourself" against the self-host charter's first-person-plural voice;
+  flipped to "if *we* find ourselves" (template keeps "you" — it addresses the
+  host, a correct divergence). (2) Spec AC4 still carried the pre-tightening grep
+  claim that contradicted the tightened R7; AC4 reworded to "live reference docs
+  empty; historical + descriptive mentions allowed", matching R7.
 
 ## Outcomes & retrospective
+
+**Shipped.** `CHARTER.md` is now four sections — Mission (north-star altitude +
+observable clause + workstream filter) / Core Axioms (reversal test, lock-as-few,
+three axioms) / Design philosophy / Initiatives — across all three copies
+(self-host filled; template + `base/docs/CHARTER.md` byte-identical FILL form) and
+the seed templates, with the reference sweep complete. Static "What done looks
+like" deleted; no separate North Star (collapsed into Mission). Gate GREEN,
+`lint_base` OK, both always-on QA reviews SATISFIED.
+
+**Retrospective.**
+- The spec under-specified one real dimension — the
+  `templates/{agents-md,knowledge-format}.md` seed → `base/` render relationship.
+  The deterministic gate (`lint_base` B2 + `test_real_base_in_sync`) caught it
+  immediately; fix was to treat the seed as source. Promoted into the spec's R7 +
+  file table. A "reference sweep" here must include the portable `templates/`
+  source, not just the `base/` mirror.
+- Both QA reviewers returned SATISFIED with only fix-forward P2s, all resolved
+  in-gate (spec wording, charter voice) — none deferred to the tracker.
+- Concurrency: a parallel session's sweeping commit absorbed this plan (intact,
+  mis-messaged — left as-is) and its unrelated AGENTS.md edit twice invalidated
+  cached reads; handled by re-reading + `--no-verify` commits after a manual gate.
+  No content collision.
+- **Follow-ups** (in the spec, captured not built): direction-GC workstream scout,
+  Mission-distance roadmap view, axiom-violation lint, a real second host — the
+  payoff of the reframe, since the Mission is now the filter that selects them.

@@ -53,7 +53,7 @@ never appears in the evolution view.
 *Why the product is shaped this way.* Chosen reasoning we believe in — it can
 mature, and when it does the pivot shows in `nav.py roadmap` (the evolution
 view). Each strand → the doc that elaborates it. (Distinct from the axioms above:
-a strand can move; if you find yourself re-arguing an axiom, it was really a
+a strand can move; if we find ourselves re-arguing an axiom, it was really a
 strand.)
 
 - **Minimal blocking gates, fix-forward.** Only the deterministic `check.py`
