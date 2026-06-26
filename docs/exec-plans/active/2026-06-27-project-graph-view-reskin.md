@@ -146,9 +146,31 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   full → spec-compliance → code-quality + arch + reliability + security).
 
 ## Progress log
-- [ ] (2026-06-27) Plan created from the spec; base_commit 407ebd5, review_level full.
+- [x] (2026-06-27) Plan created from the spec; base_commit 407ebd5, review_level full.
+- [x] (2026-06-27) **M1 — hand-rolled DOM+SVG render core; graph library ripped out.**
+  `director/dashboard.py`: replaced the whole Cytoscape block with a hand-rolled renderer —
+  `layout()` positions each node from the server's `layer`/`layers` (`x = PAD + layer·STRIDE`,
+  `y` = centered index within the layer), `renderGraph()` draws `<div>` cards on a transformed
+  `.gcanvas` + an SVG `.gedges` layer of bezier `<path>`s, `wireViewport()` adds drag-pan /
+  wheel-zoom-toward-cursor, `fitGraph()` frames the content; `window.__graph` replaces
+  `window.cy`. Deleted `director/assets/{cytoscape.min.js,dagre.min.js,cytoscape-dagre.js}`
+  (~670KB) + the `_ASSETS` map / `_asset` handler / `/assets/*` route branch / the three
+  `<script src>` tags / the now-unused `from pathlib import Path`. Tests updated
+  (`AssetRouteTest` → former routes are 404 for any verb; root-page test → drop the cytoscape
+  src markers, assert `window.__graph`/`renderGraph`/`gcanvas`/`node-id` + the absence of
+  `/assets/`·`cytoscape`·`cdn`). Gate **GREEN**; `tests/test_director_dashboard.py` 58/58.
+  Behavioral (playwright on the :8788 sample): `window.__graph` = 10 nodes / 8 edges; 10 `.node`
+  cards + 8 `path.gedge` rendered; x-by-layer `{0:40,1:264,2:488,3:712,4:936}` = `40+L·224`
+  (positioned purely by the server's layer); `fitGraph` transform applied (`scale .78`,
+  centered); LIN-3 painted `running ·20560t` (live `/api/v1/state` merge survives the rewrite),
+  LIN-8 `blocked cycle`; `curl /assets/cytoscape.min.js` → 404; page source has no
+  `/assets/`·`cytoscape`·`cdn`.
 
 ## Surprises & discoveries
+- (M1) The hand-roll is *simpler* than the reference, as predicted: because `/api/v1/board`
+  already ships each node's `layer` + the grouped `layers`, the client does zero topology
+  work — `layout()` is ~15 lines of pure positioning vs. the reference's in-browser
+  longest-path recompute. Dropping the lib also dropped in-browser layout cost, not just bytes.
 
 ## Decision log
 - 2026-06-27: Chose incremental in-place rewrite (Approach A) seeded by C — the hand-rolled
@@ -163,6 +185,21 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   re-homes the security-sensitive answer console (CSRF/loopback fence must survive), narrows an
   architecture invariant + ADR 0006, and the render must stay total/degrading — so arch +
   reliability + security risk personas are all in budget alongside the always-on two.
+- 2026-06-27 (M1): removed the asset-serving machinery **entirely in M1** (the `_ASSETS` map,
+  `_ASSETS_DIR`, the `_asset` handler, the `/assets/*` route branch, the now-unused
+  `from pathlib import Path`) rather than the plan's literal "shrink in M1 / remove in M5"
+  two-step. Once the three vendored files are deleted there is nothing left to serve and the
+  design has committed to zero served assets, so carrying a dead `_ASSETS={}` + dormant
+  `_asset` across M2–M4 would be flagged-dead-code for no benefit. The completion gate reviews
+  `base..HEAD` at M5 (where full removal is explicitly called for), so this is net-identical to
+  the plan and strictly cleaner; M5 keeps the real asset work (the ADR-0006 + ARCHITECTURE
+  invariant-1 amendment), and its "remove dead asset code" step becomes a verified no-op.
+- 2026-06-27 (M1): M1 preserves the live-paint class-swap + `·{total}t` suffix + frontier-focus
+  + subtree-collapse as **parity** on the new DOM (no regression of shipped behavior), via a
+  `setLifecycle()` helper that swaps only lifecycle tokens so `dimmed`/`collapsed` survive a
+  repaint (mirroring the old `removeClass(...lifecycle).addClass(cls)`). **Deferred to M3** (per
+  its scope): the just-claimed transient-node union, the 7-bucket ready-vs-backlog mapping, the
+  token *bar* + pulse, and state-aware edge coloring/markers — M1 edges are a single neutral grey.
 
 ## Feedback (from completion gate)
 

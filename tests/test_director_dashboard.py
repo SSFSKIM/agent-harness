@@ -758,19 +758,19 @@ class BoardRouteTest(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
-    def test_root_page_is_the_project_graph_referencing_local_assets(self):
-        # M4: the graph is the `/` centerpiece (the `/graph` spike page is retired). The
-        # page loads the vendored libs from the LOCAL /assets/* routes — never a CDN — and
-        # wires the graph machinery (board topology + live paint + collapse).
+    def test_root_page_is_the_hand_rolled_project_graph(self):
+        # M1 re-skin: the graph is the `/` centerpiece, rendered HAND-ROLLED in the page
+        # (DOM cards + an SVG edge layer) — the vendored Cytoscape/dagre library is gone, so
+        # the page references NO /assets/* script and no CDN, yet still wires the graph
+        # machinery (board topology + live paint + collapse) and the new introspection hook.
         code, body = self._req("/")
         self.assertEqual(code, 200)
         html = body.decode("utf-8")
-        self.assertIn('src="/assets/cytoscape.min.js"', html)
-        self.assertIn('src="/assets/dagre.min.js"', html)
-        self.assertIn('src="/assets/cytoscape-dagre.js"', html)
+        self.assertNotIn("/assets/", html)             # graph lib dropped → no vendored asset reference
+        self.assertNotIn("cytoscape", html.lower())    # no graph library at all
         self.assertNotIn("cdn", html.lower())
-        for marker in ('id="cy"', "loadBoard", "paintGraph", "/api/v1/board",
-                       "toggleCollapse", 'id="rail"'):
+        for marker in ('id="cy"', "window.__graph", "renderGraph", "loadBoard", "paintGraph",
+                       "/api/v1/board", "toggleCollapse", "gcanvas", "node-id", 'id="rail"'):
             self.assertIn(marker, html)
 
     def test_page_shows_labeled_empty_state_when_no_board(self):
@@ -786,8 +786,10 @@ class BoardRouteTest(unittest.TestCase):
 
 
 class AssetRouteTest(unittest.TestCase):
-    """M2: the fixed vendored-asset route — only the allowlisted keys serve (R6); the
-    constant filename map means there is no request-derived path (zero traversal)."""
+    """M1 re-skin: the vendored graph-library assets are GONE (the graph is hand-rolled in
+    the page), so the former `/assets/*` routes no longer exist. Every shape — a former
+    asset key, an unknown name, a traversal — is a plain 404 for any verb; the dashboard
+    now serves ZERO request-derived bytes, so there is no asset-serving code left to fence."""
 
     def setUp(self):
         self.httpd = dash.serve(0)
@@ -808,23 +810,19 @@ class AssetRouteTest(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, e.headers.get("Content-Type"), e.read()
 
-    def test_each_vendored_asset_is_served_with_js_ctype(self):
-        for path in dash._ASSETS:                      # the allowlist is the contract
-            code, ctype, body = self._req(path)
-            self.assertEqual(code, 200, path)
-            self.assertIn("javascript", ctype, path)
-            self.assertGreater(len(body), 1000, path)  # a real vendored bundle, not a stub
-
-    def test_unknown_and_traversal_asset_paths_are_404(self):
-        # only the fixed keys serve; anything else (incl. a traversal shape) → 404. The
-        # filename comes from the constant `_ASSETS` map, never the request, so a path
-        # join can never escape director/assets/ — the allowlist IS the fence.
-        for path in ("/assets/nope.js", "/assets/", "/assets/dashboard.py",
-                     "/assets/cytoscape.min.js/../dashboard.py", "/assets/..%2fdashboard.py"):
+    def test_retired_asset_routes_are_404(self):
+        # the graph lib was dropped in the re-skin → its routes are gone; a former asset key
+        # and any traversal shape are now just undefined routes (no asset-serving code remains).
+        for path in ("/assets/cytoscape.min.js", "/assets/dagre.min.js",
+                     "/assets/cytoscape-dagre.js", "/assets/nope.js", "/assets/",
+                     "/assets/dashboard.py", "/assets/cytoscape.min.js/../dashboard.py",
+                     "/assets/..%2fdashboard.py"):
             self.assertEqual(self._req(path)[0], 404, path)
 
-    def test_post_to_asset_is_405(self):
-        self.assertEqual(self._req("/assets/cytoscape.min.js", method="POST")[0], 405)
+    def test_post_to_retired_asset_route_is_404(self):
+        # an undefined route 404s for ANY verb (the 405 method-fence only guards a route that
+        # exists); the asset route no longer exists, so even a POST is a 404, not a 405.
+        self.assertEqual(self._req("/assets/cytoscape.min.js", method="POST")[0], 404)
 
 
 if __name__ == "__main__":

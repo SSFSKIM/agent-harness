@@ -31,7 +31,6 @@ import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import urlparse
 
 import director.queue as dq
@@ -54,17 +53,10 @@ _ANSWER_PATH = "/api/v1/answer"
 _TICKET_PREFIX = "/api/v1/ticket/"
 # Whole-board layered-DAG view (project graph): the derived board_snapshot view.
 _BOARD_PATH = "/api/v1/board"
-# Fixed vendored-asset map (R6): the ONLY servable asset paths. A request can name only
-# one of these constant keys — the value is a fixed filename under director/assets/, so
-# there is ZERO request-derived path (ARCHITECTURE invariant 3: zero traversal). Offline:
-# served from the local checked-in file, never a CDN. `text/javascript` per WHATWG.
-_JS = "text/javascript; charset=utf-8"
-_ASSETS = {
-    "/assets/cytoscape.min.js": ("cytoscape.min.js", _JS),
-    "/assets/dagre.min.js": ("dagre.min.js", _JS),
-    "/assets/cytoscape-dagre.js": ("cytoscape-dagre.js", _JS),
-}
-_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+# The project graph is rendered hand-rolled in the page (DOM + SVG) — there is NO vendored
+# graph library, so the dashboard serves ZERO request-derived bytes and there is NO
+# `/assets/*` route (ARCHITECTURE invariant 3 holds trivially; ADR 0006's relaxation is
+# narrowed/retired — see M5). Any `/assets/*` request falls through to the 404 path.
 _DEFAULT_PORT = 8787
 
 # SSE cadence: re-read the (file-backed) snapshot this often server-side and push only a
@@ -282,8 +274,28 @@ PAGE = """<!doctype html>
   #bar h1 { margin-right:.2rem; }
   .legend span { margin-right:.5rem; } .dot { font-size:14px; vertical-align:-1px; }
   #main { position:absolute; top:2.5rem; left:0; right:0; bottom:0; display:flex; }
-  #cy { flex:1; min-width:0; height:100%; }
+  #cy { flex:1; min-width:0; height:100%; position:relative; overflow:hidden; cursor:grab; }
+  #cy.grabbing { cursor:grabbing; }
   #cy .empty { display:flex; align-items:center; justify-content:center; height:100%; color:#7d8896; font-size:.85rem; }
+  /* hand-rolled graph: a transformed inner canvas holds absolutely-positioned cards + an SVG edge layer */
+  .gcanvas { position:absolute; top:0; left:0; transform-origin:0 0; }
+  .gedges { position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
+  .gedge { stroke:#39414f; stroke-width:1.5; }
+  .gedge.dimmed { opacity:.18; }
+  .node { position:absolute; box-sizing:border-box; width:168px; min-height:74px; padding:.3rem .45rem;
+          background:#11161f; border:1px solid #39414f; border-radius:.45rem; cursor:pointer; overflow:hidden; }
+  .node:hover { border-color:#46506180; }
+  .node .node-id { font-weight:600; color:#d6dde6; }
+  .node .node-title { color:#7d8896; font-size:.78rem; margin-top:.15rem; display:-webkit-box;
+          -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .node.running { border-color:#9ecbff; }
+  .node.done { border-color:#6ee7a8; }
+  .node.failed { border-color:#ff9b9b; }
+  .node.blocked { border-color:#e3b341; }
+  .node.cancelled { color:#7d8896; }
+  .node.cycle { border-color:#ff9b9b; border-style:double; border-width:3px; }
+  .node.collapsed { border-style:dashed; border-color:#e3b341; }
+  .node.dimmed { opacity:.28; }
   #rail { width:23rem; overflow:auto; border-left:1px solid #1b2230; padding:.2rem .7rem .8rem; }
   #rail.hidden { display:none; }
   #drill { position:absolute; right:24rem; top:3rem; width:23rem; max-height:74%; overflow:auto; z-index:5; }
@@ -317,9 +329,6 @@ PAGE = """<!doctype html>
   </div>
 </div>
 <div id="drill"></div>
-<script src="/assets/cytoscape.min.js"></script>
-<script src="/assets/dagre.min.js"></script>
-<script src="/assets/cytoscape-dagre.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 function el(tag, text, cls) {
@@ -546,15 +555,20 @@ function startStream() {
     if (!outage) outage = setTimeout(() => { es.close(); fallbackPoll(); }, 30000);
   };
 }
-// ---- M4: project dependency graph (centerpiece) --------------------------------
+// ---- project dependency graph — hand-rolled DOM+SVG render ----------------------
 // The graph is the topology from /api/v1/board (slow-changing) PAINTED by the live run
-// state (/api/v1/state, which the SSE/poll already delivers to render()). Node lifecycle
-// merges board state (backlog/done/...) with the live overlay (running/blocked/done/
-// failed), live override winning. Tap a node → the existing per-ticket session overlay
-// (openDrill); double-tap → collapse its DAG subtree. cytoscape-dagre gives the layered
-// (crossing-minimized) layout; the server already computed the semantic layer = wave.
-try { if (window.cytoscapeDagre) cytoscape.use(window.cytoscapeDagre); } catch (e) {}
-let cy = null, boardSig = "", lastState = null;
+// state (/api/v1/state, delivered to render() by the SSE/poll). NO graph library: nodes
+// are absolutely-positioned <div> cards on a transformed inner canvas, edges are SVG
+// bezier <path>s. Positions come PURELY from the server's per-node `layer` (= scheduler
+// wave) and grouped `layers` — the client computes no topology (ARCHITECTURE invariant 4).
+// Tap a card → the per-ticket session overlay (openDrill); double-tap → collapse its
+// subtree. `window.__graph` is the introspection hook (debug + behavioral test), replacing
+// the old `window.cy`. (M1 is minimal styling; the design tokens land in M2.)
+const SVGNS = "http://www.w3.org/2000/svg";
+const NODE_W = 168, NODE_H = 74, H_GAP = 56, V_GAP = 16, PAD = 40;
+const STRIDE = NODE_W + H_GAP, ROW = NODE_H + V_GAP;
+const G = { nodes: [], byId: {}, edges: [], scale: 1, tx: 0, ty: 0,
+            boardSig: "", lastState: null, canvas: null, svg: null };
 function lifecycleFromState(s) {                 // board Linear state name -> a base lifecycle class
   s = (s || "").toLowerCase();
   if (s.includes("done") || s.includes("complete") || s.includes("merged")) return "done";
@@ -563,111 +577,187 @@ function lifecycleFromState(s) {                 // board Linear state name -> a
   if (s.includes("block")) return "blocked";
   return "todo";                                 // backlog / todo / ready / open / unknown
 }
-function nodeStyle() {
-  return [
-    { selector: "node", style: { "label": "data(label)", "color": "#d6dde6", "font-size": 9,
-      "background-color": "#262d39", "shape": "round-rectangle", "width": "label", "height": 15,
-      "padding": "5px", "text-valign": "center", "text-halign": "center", "border-width": 1, "border-color": "#39414f" } },
-    { selector: "node.running", style: { "background-color": "#16314d", "border-color": "#9ecbff", "border-width": 2 } },
-    { selector: "node.done", style: { "background-color": "#16301f", "border-color": "#6ee7a8" } },
-    { selector: "node.failed", style: { "background-color": "#3a1d1d", "border-color": "#ff9b9b", "border-width": 2 } },
-    { selector: "node.blocked", style: { "background-color": "#322610", "border-color": "#e3b341", "border-width": 2 } },
-    { selector: "node.cancelled", style: { "color": "#7d8896", "border-color": "#39414f" } },
-    { selector: "node.cycle", style: { "border-color": "#ff9b9b", "border-style": "double", "border-width": 3 } },
-    { selector: "node.transient", style: { "border-style": "dashed" } },
-    { selector: "node.collapsed", style: { "border-style": "dashed", "border-color": "#e3b341" } },
-    { selector: "node.dimmed", style: { "opacity": .28 } },           // frontier focus: settled nodes recede
-    { selector: "edge", style: { "width": 1, "line-color": "#2a3343", "target-arrow-color": "#2a3343",
-      "target-arrow-shape": "triangle", "arrow-scale": .7, "curve-style": "bezier" } },
-    { selector: "edge.dimmed", style: { "opacity": .2 } },
-  ];
+function layout(view) {
+  // Position each node from the server's layer/layers (no client topology): x by layer
+  // (the scheduler wave), y by the node's centered index within its layer's column.
+  const nodes = view.nodes || [], layers = view.layers || [];
+  const rowOf = {}, rowsIn = {};
+  layers.forEach(function (ids, li) {
+    rowsIn[li] = ids.length;
+    ids.forEach(function (id, ri) { rowOf[id] = ri; });
+  });
+  let maxRows = 1;
+  for (const li in rowsIn) maxRows = Math.max(maxRows, rowsIn[li]);
+  return nodes.map(function (n) {
+    const layer = n.layer || 0, ri = rowOf[n.id] || 0, rows = rowsIn[layer] || 1;
+    const yOff = (maxRows - rows) * ROW / 2;       // center each column against the tallest
+    return { id: n.id, layer: layer, ident: n.identifier || n.id, title: n.title || "",
+             bstate: n.state || "", inCycle: !!n.in_cycle, cls: lifecycleFromState(n.state),
+             label: n.identifier || n.id, collapsed: false, dom: null,
+             x: PAD + layer * STRIDE, y: PAD + yOff + ri * ROW };
+  });
+}
+function edgePath(a, b) {                          // left-to-right cubic bezier, card edge to card edge
+  const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
+  const dx = Math.max(40, (x2 - x1) * 0.5);
+  return "M" + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1
+       + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2;
+}
+function extent() {
+  let w = 0, h = 0;
+  for (const n of G.nodes) { w = Math.max(w, n.x + NODE_W); h = Math.max(h, n.y + NODE_H); }
+  return { w: w + PAD, h: h + PAD };
+}
+function setLifecycle(card, cls) {                // swap ONLY lifecycle tokens (keep node/dimmed/collapsed)
+  card.classList.remove("running", "done", "failed", "blocked", "cancelled", "todo", "cycle");
+  for (const c of cls.split(" ")) if (c) card.classList.add(c);
+}
+function renderGraph() {
+  // (Re)build the DOM: a transformed inner canvas holding the SVG edge layer + the cards.
+  const host = $("cy"); host.textContent = "";
+  if (!G.nodes.length) {                           // no board snapshot yet → labeled empty-state (rail still works)
+    host.appendChild(el("div", "no board snapshot yet — the side rail shows live run state", "empty"));
+    G.canvas = G.svg = null; return;
+  }
+  const canvas = el("div", null, "gcanvas");
+  const svg = document.createElementNS(SVGNS, "svg"); svg.setAttribute("class", "gedges");
+  canvas.appendChild(svg);
+  for (const e of G.edges) {                       // edges first (painted behind the cards)
+    const a = G.byId[e.from], b = G.byId[e.to]; if (!a || !b) continue;
+    const p = document.createElementNS(SVGNS, "path");
+    p.setAttribute("d", edgePath(a, b)); p.setAttribute("class", "gedge"); p.setAttribute("fill", "none");
+    e.dom = p; svg.appendChild(p);
+  }
+  for (const n of G.nodes) {
+    const card = el("div", null, "node " + n.cls); card.dataset.id = n.id;
+    card.style.left = n.x + "px"; card.style.top = n.y + "px";
+    card.appendChild(el("div", n.label, "node-id"));
+    card.appendChild(el("div", n.title, "node-title"));
+    card.title = "click to stream this ticket's events";
+    card.onclick = function () { openDrill(n.id); };
+    card.ondblclick = function () { toggleCollapse(n); };
+    n.dom = card; canvas.appendChild(card);
+  }
+  host.appendChild(canvas); G.canvas = canvas; G.svg = svg;
+  const ext = extent();
+  svg.setAttribute("width", ext.w); svg.setAttribute("height", ext.h);
+  svg.style.width = ext.w + "px"; svg.style.height = ext.h + "px";
+  applyTransform();
+}
+function applyTransform() {
+  if (G.canvas) G.canvas.style.transform =
+    "translate(" + G.tx + "px," + G.ty + "px) scale(" + G.scale + ")";
+}
+function fitGraph() {                              // frame the whole graph centered in the viewport
+  const host = $("cy"); if (!host || !G.nodes.length) return;
+  const ext = extent(), vw = host.clientWidth, vh = host.clientHeight;
+  G.scale = Math.max(0.2, Math.min(1.5, Math.min(vw / ext.w, vh / ext.h) || 1));
+  G.tx = (vw - ext.w * G.scale) / 2; G.ty = (vh - ext.h * G.scale) / 2;
+  applyTransform();
+}
+function wireViewport() {                          // hand-rolled pan (drag) + zoom (wheel toward the cursor)
+  const host = $("cy"); let drag = null;
+  host.addEventListener("mousedown", function (e) {
+    if (e.target.closest(".node")) return;         // a card press is a drill/collapse, not a pan
+    drag = { x: e.clientX, y: e.clientY, tx: G.tx, ty: G.ty }; host.classList.add("grabbing");
+  });
+  window.addEventListener("mousemove", function (e) {
+    if (!drag) return;
+    G.tx = drag.tx + (e.clientX - drag.x); G.ty = drag.ty + (e.clientY - drag.y); applyTransform();
+  });
+  window.addEventListener("mouseup", function () { drag = null; host.classList.remove("grabbing"); });
+  host.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    const rect = host.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const ns = Math.max(0.2, Math.min(3, G.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    G.tx = mx - (mx - G.tx) * (ns / G.scale); G.ty = my - (my - G.ty) * (ns / G.scale);
+    G.scale = ns; applyTransform();
+  }, { passive: false });
 }
 function paintGraph(v) {
-  // Merge the live run-state view onto the graph nodes. Called from render() every state
-  // tick; a no-op until loadBoard() has built `cy`. Stashes the latest state so a fresh
-  // graph (after a topology rebuild) can paint immediately.
-  if (v) lastState = v;
-  if (!cy || !lastState) return;
-  const st = lastState, inflight = {}, recent = {}, stuck = {};
+  // Merge the live run-state view onto the existing cards. Called from render() every state
+  // tick; a no-op until loadBoard() has built the cards. Stashes the latest state so a fresh
+  // render (after a topology rebuild) can paint immediately. M1 keeps the parity class-swap;
+  // the richer 7-bucket mapping / token bar / state-aware edges land in M3.
+  if (v) G.lastState = v;
+  if (!G.nodes.length || !G.lastState) return;
+  const st = G.lastState, inflight = {}, recent = {}, stuck = {};
   for (const e of (st.in_flight || [])) inflight[e.ticket_id] = e;
   for (const r of (st.recent || [])) recent[r.ticket_id] = r;
   for (const s of (st.stuck || [])) stuck[s.ticket || s.ticket_id] = s;
-  cy.batch(function () {
-    cy.nodes().forEach(function (n) {
-      const id = n.data("id");
-      let cls = lifecycleFromState(n.data("bstate")), suffix = "";
-      if (inflight[id]) { cls = "running"; const t = inflight[id].tokens; if (t && t.total != null) suffix = " ·" + t.total + "t"; }
-      else if (recent[id]) cls = (recent[id].status === "completed") ? "done" : "failed";
-      else if (stuck[id]) cls = "blocked";
-      if (n.data("inCycle")) cls += " cycle";
-      // swap ONLY the lifecycle classes (not dimmed/collapsed/transient, which n.classes()
-      // would wipe every tick) so focus + collapse survive a live repaint.
-      n.removeClass("running done failed blocked cancelled todo cycle");
-      n.addClass(cls);
-      n.data("label", (n.data("ident") || id) + suffix);
-    });
-    for (const id in inflight) {                 // union: a just-claimed ticket not yet in the board snapshot
-      if (cy.getElementById(id).empty()) {
-        const ident = inflight[id].identifier || id;
-        cy.add({ group: "nodes", data: { id: id, label: ident, ident: ident }, classes: "running transient" });
-      }
-    }
-  });
-  if (focusOn) applyFocus();                      // re-dim settled nodes after the repaint
+  for (const n of G.nodes) {
+    if (!n.dom) continue;
+    let cls = lifecycleFromState(n.bstate), suffix = "";
+    if (inflight[n.id]) { cls = "running"; const t = inflight[n.id].tokens;
+      if (t && t.total != null) suffix = " ·" + t.total + "t"; }
+    else if (recent[n.id]) cls = (recent[n.id].status === "completed") ? "done" : "failed";
+    else if (stuck[n.id]) cls = "blocked";
+    if (n.inCycle) cls += " cycle";
+    setLifecycle(n.dom, cls);                       // preserves dimmed/collapsed across a repaint
+    const idEl = n.dom.querySelector(".node-id");
+    if (idEl) idEl.textContent = n.ident + suffix;
+  }
+  if (focusOn) applyFocus();                        // re-dim settled nodes after the repaint
 }
 async function loadBoard() {
-  // Fetch the board topology and (re)build the graph only when the node/edge set changed
+  // Fetch the board topology and (re)build the render only when the node/edge set changed
   // — the live PAINT rides the state stream (paintGraph), so a steady board never relays out.
   let view;
   try { view = await (await fetch("/api/v1/board")).json(); } catch (e) { return; }
   const nodes = view.nodes || [], edges = view.edges || [];
   const sig = nodes.map(n => n.id).sort().join(",") + "|" + edges.map(e => e.from + ">" + e.to).sort().join(",");
-  if (sig === boardSig && cy) return;            // topology unchanged → keep the graph (paint already live)
-  boardSig = sig;
-  if (cy) { cy.destroy(); cy = null; }
-  if (!nodes.length) {                           // no board snapshot yet → labeled empty-state (rail still works)
-    $("cy").textContent = "";
-    $("cy").appendChild(el("div", "no board snapshot yet — the side rail shows live run state", "empty"));
-    return;
-  }
-  const els = [];
-  for (const n of nodes) els.push({ data: { id: n.id, label: (n.identifier || n.id),
-    ident: (n.identifier || n.id), bstate: n.state, inCycle: !!n.in_cycle } });
-  for (const e of edges) els.push({ data: { id: e.from + "__" + e.to, source: e.from, target: e.to } });
-  cy = cytoscape({ container: $("cy"), elements: els, wheelSensitivity: 0.2, style: nodeStyle(),
-    layout: { name: "dagre", rankDir: "LR", nodeSep: 16, rankSep: 55, fit: true, padding: 20 } });
-  cy.on("tap", "node", function (ev) { openDrill(ev.target.data("id")); });
-  cy.on("dbltap", "node", function (ev) { toggleCollapse(ev.target); });
-  window.cy = cy;                                // introspection hook (debug + behavioral test)
-  paintGraph(null);                              // apply the latest known state to the fresh graph
-  if (focusOn) applyFocus();                     // keep the frontier-focus across a topology rebuild
+  if (sig === G.boardSig && G.canvas) return;       // topology unchanged → keep render (paint already live)
+  const firstBuild = !G.canvas;
+  G.boardSig = sig;
+  G.nodes = layout(view);
+  G.byId = {}; for (const n of G.nodes) G.byId[n.id] = n;
+  G.edges = edges.map(e => ({ from: e.from, to: e.to, dom: null }));
+  renderGraph();
+  window.__graph = {                                // introspection hook (replaces window.cy)
+    nodes: G.nodes.map(n => ({ id: n.id, layer: n.layer, cls: n.cls, label: n.label })),
+    edges: G.edges.map(e => ({ from: e.from, to: e.to })) };
+  if (firstBuild) fitGraph();                       // frame once; don't fight the user's pan on a refresh
+  paintGraph(null);                                 // apply the latest known state to the fresh render
 }
-// Frontier focus (R8): on a large board, dim the settled (done/cancelled) nodes so the
-// active frontier stands out — non-destructive (dim, not hide; the picture stays whole),
-// toggleable, and re-applied after a rebuild. A `.dimmed` class lowers node+edge opacity.
+// Frontier focus (R8): dim the settled (done/cancelled) nodes so the active frontier
+// stands out — non-destructive (dim, not hide), toggleable, re-applied after a repaint.
+// Collapse hides a node's descendant subtree (dbl-click). Both are minimal here; M3 hardens
+// the opt-in semantics + repaint-survival and adds the state-aware edge coloring.
 let focusOn = false;
 function applyFocus() {
-  if (!cy) return;
-  cy.batch(function () {
-    cy.elements().removeClass("dimmed");
-    if (!focusOn) return;
-    const settled = cy.nodes().filter(function (n) {
-      return n.hasClass("done") || n.hasClass("cancelled");
-    });
-    settled.addClass("dimmed");
-    settled.connectedEdges().addClass("dimmed");
-  });
+  for (const n of G.nodes) {
+    if (!n.dom) continue;
+    const settled = n.dom.classList.contains("done") || n.dom.classList.contains("cancelled");
+    n.dom.classList.toggle("dimmed", focusOn && settled);
+  }
+  for (const e of G.edges) {
+    if (!e.dom) continue;
+    const a = G.byId[e.from], b = G.byId[e.to];
+    const dim = focusOn && a && b && a.dom && b.dom
+      && (a.dom.classList.contains("dimmed") || b.dom.classList.contains("dimmed"));
+    e.dom.classList.toggle("dimmed", !!dim);
+  }
 }
 function toggleFocus() { focusOn = !focusOn; applyFocus(); }
-function fitGraph() { if (cy) cy.fit(undefined, 20); }
-function toggleCollapse(node) {                  // manual DAG-subtree collapse (descendant-hide)
-  const c = node.hasClass("collapsed");
-  node.successors("node").style("display", c ? "element" : "none");
-  node[c ? "removeClass" : "addClass"]("collapsed");
+function descendants(id) {                          // node ids reachable from `id` over the edges
+  const adj = {};
+  for (const e of G.edges) (adj[e.from] = adj[e.from] || []).push(e.to);
+  const seen = {}, stack = (adj[id] || []).slice();
+  while (stack.length) { const x = stack.pop(); if (seen[x]) continue; seen[x] = 1;
+    for (const y of (adj[x] || [])) stack.push(y); }
+  return seen;
+}
+function toggleCollapse(n) {                         // manual DAG-subtree collapse (descendant-hide)
+  n.collapsed = !n.collapsed;
+  if (n.dom) n.dom.classList.toggle("collapsed", n.collapsed);
+  const desc = descendants(n.id);
+  for (const m of G.nodes) if (desc[m.id] && m.dom) m.dom.style.display = n.collapsed ? "none" : "";
+  for (const e of G.edges) if (e.dom && (desc[e.to] || desc[e.from])) e.dom.style.display = n.collapsed ? "none" : "";
 }
 function toggleRail() { $("rail").classList.toggle("hidden"); $("drill").classList.toggle("railhidden"); }
 startStream();
 loadHistory(); setInterval(loadHistory, 10000);  // cross-run history (slow, independent of the live view)
+wireViewport();
 loadBoard(); setInterval(loadBoard, 5000);       // board topology (slow); live paint rides the state stream
 </script></body></html>"""
 
@@ -727,8 +817,6 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path.startswith(_TICKET_PREFIX):       # dynamic per-ticket routes (sanitized below)
             return self._ticket_route(path)
-        if path in _ASSETS:                        # fixed vendored-asset map (zero traversal)
-            return self._asset(path)
         allowed = self._ROUTES.get(path)
         if allowed is None:
             return self._error(404, f"no such route: {path}")          # undefined → 404
@@ -751,20 +839,6 @@ class _Handler(BaseHTTPRequestHandler):
             runs = history.read_history(base=self.server.history_dir)
             return self._send(200, json.dumps(runs).encode("utf-8"), "application/json")
         return self._answer()  # _ANSWER_PATH + POST
-
-    def _asset(self, path: str) -> None:
-        """Serve one vendored, checked-in JS asset (R6). `path` is a key of the FIXED
-        `_ASSETS` map (matched in `_route`), so the filename is a constant, never
-        request-derived — zero traversal (invariant 3). GET-only; a missing file (a
-        broken vendor checkout) is a 404, never a traceback (fail-soft)."""
-        if self.command != "GET":
-            return self._error(405, f"method not allowed: {self.command}")
-        filename, ctype = _ASSETS[path]
-        try:
-            body = (_ASSETS_DIR / filename).read_bytes()
-        except OSError:
-            return self._error(404, f"asset not vendored: {filename}")
-        return self._send(200, body, ctype)
 
     def _stream(self) -> None:
         """Server-push the view as SSE (R4): hold the connection open and emit a frame
