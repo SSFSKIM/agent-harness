@@ -20,7 +20,7 @@ Deep truth lives in `docs/` — follow the pointers.
 2. **Plan.** Pick the entry mode (method: `docs/PLANS.md` entry decision): a
    throwaway in-conversation plan for small work; **Product Design** (write a
    spec in `docs/product-specs/` via the `product-design` skill) when the *what*
-   must be settled before the *how*; otherwise a living ExecPlan in
+   must be settled; otherwise a mid-size task that doesn't need dedicated feature Spec proceeds with living ExecPlan in
    `docs/exec-plans/active/` (`execplan` skill). No ceremony when risk is low.
 3. **Implement.** Respect the layer law in `ARCHITECTURE.md`. Match existing
    style. New knowledge pages: the `docs-tree` skill decides where they live; the
