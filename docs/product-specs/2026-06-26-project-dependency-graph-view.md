@@ -385,3 +385,11 @@ check. `review_level: full` — the dashboard is the live exec surface, the diff
 new asset-serving route and **relaxes an architecture invariant**, so **review-arch**
 (the relaxation) and **review-security** (the new served-asset route) are in budget
 alongside the always-on spec-compliance + code-quality and the reliability persona.
+
+**Successor (frontend re-skin):** the backend shipped here (the `board.json` producer,
+`/api/v1/board`, `/assets/*`, the per-ticket SSE) is reused unchanged by
+[2026-06-27-project-graph-view-reskin](2026-06-27-project-graph-view-reskin.md), which
+adopts a higher-fidelity design language for the PAGE render and **drops the vendored
+graph library** (hand-rolled DOM+SVG off the server's `layer`/`edges`) — narrowing the
+ADR 0006 relaxation this spec introduced. This spec's design stays the data/route/SSE
+contract; only the visual render is superseded there.

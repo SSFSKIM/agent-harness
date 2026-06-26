@@ -309,6 +309,16 @@ owner: harness
   poll-tick 1지점 + 신규 read 라우트; worker/decider/merger/status/ticket_events 불변. Non-goals:
   그래프에서 보드 편집·multi-team·board history/time-travel·신규 write 라우트·2번째 라이브러리.
   observability-dashboard/-polish/per-ticket-stream 후속. draft.
+- [Project-graph view — design re-skin (drop the graph lib, keep the backend)](2026-06-27-project-graph-view-reskin.md)
+  — `2026-06-26-project-dependency-graph-view` 의 **프론트 재디자인** 후속(백엔드는 그대로 유지).
+  더 높은 fidelity의 디자인 언어를 채택: 캔버스 mini-label → **HTML 노드-카드**(identifier+state
+  뱃지+2줄 제목+token bar), **wave N 라벨**, 헤더 **done/total** 진행 바 + active/blocked/failed
+  카운트(이전 spec의 정성적 AC3 갭 해소), **state-aware SVG bezier 엣지**, telemetry strip + 타입별
+  이벤트의 **리치 세션 오버레이**. 핵심 결정: **수제 렌더로 전환하며 vendored 그래프 라이브러리
+  (Cytoscape+dagre ≈670KB)를 제거** — 서버가 이미 `layer`/`edges`를 계산하므로 클라는 위치만 계산
+  (invariant 4), ADR 0006 완화는 *좁아짐/은퇴*. React/Vite 스택은 채택 안 함(invariant 1·ADR 0006);
+  `board.json` producer·라우트·SSE·answer 콘솔·history 백엔드는 **전부 재사용**(behaviorally 불변).
+  Non-goals: 프레임워크/빌드 스텝·백엔드 변경·context-fraction 바·아이콘/폰트 의존성·픽셀 클론. draft.
 - [Charter restructure — 4 sections, generative axioms, a Mission that steers](2026-06-27-charter-restructure.md)
   — `2026-06-19-charter-and-progress-map` 의 **구조** 후속(의도 레이어 존재는 유지). CHARTER 를
   5 섹션 → **4**: (1) **Mission** 을 north-star 고도로 올려 — 가장 야심찬 end-state + 관측가능한
