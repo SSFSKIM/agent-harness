@@ -241,9 +241,24 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   throttle/exception-total/Noop; config default/override/malformed; run_once + run_until_drained
   persist the whole board incl. blocker DAG; Noop off-path writes nothing). 274/274 suite GREEN;
   `--mock --once` smoke writes a real `board.json`. Off-path proven byte-identical.
-- [ ] **M4 — next.** graph-view UI restructure (promote graph to `/`) + live `/api/v1/board`×
-  `/api/v1/state` node painting + re-homed session overlay + side rail.
-- [ ] M5 — scale/collapse + playwright behavioral + cross-runtime pass.
+- [x] (2026-06-26) **M4 done — graph is the `/` centerpiece, live-painted.** `dashboard.py`
+  PAGE restructured: graph canvas (`#cy`) centerpiece + collapsible side rail (the existing
+  in-flight/stuck/recent/pending/history sections + operator console, all renderers preserved
+  verbatim) + a floating `#drill` session overlay. New graph machinery: `loadBoard` (topology
+  from `/api/v1/board`, signature-guarded rebuild — relays out only when the node/edge set
+  changes), `paintGraph` (merges the live `/api/v1/state` onto nodes every state tick —
+  lifecycle running/done/failed/blocked/cycle/todo, live override > board base; live token
+  suffix; **unions** status-only just-claimed tickets), node `tap` → re-homed `openDrill`
+  session overlay, `dbltap` → subtree collapse, rail toggle. The M2 `/graph` spike page +
+  `GRAPH_PAGE` **retired** (promoted to `/`). All PAGE contract markers preserved (SSE/poll-
+  fallback/answer-console/history/token); 58/58 dashboard tests GREEN (incl. new `/`-references-
+  local-assets + graph-markers tests + `/graph`→404). **Live playwright proof (single-eval,
+  per the flakiness memory):** `/` renders `window.cy` 8 nodes/7 edges; live paint exact —
+  node2=[running]+"LIN-2 ·1204t", node1=[done], node7=[blocked,cycle], node4=[todo]; rail's
+  in-flight list intact; node2 tap opened the session overlay streaming its events
+  ("▶ turn started", "💬 commentary: …"). Full gate GREEN.
+- [ ] **M5 — next.** scale/collapse-by-default + frontier focus + the full `playwright-cli`
+  behavioral + cross-runtime (`--worker claude`) pass on a real daemon run.
 
 ## Surprises & discoveries
 - 2026-06-26 (M2): **`cytoscape-expand-collapse` is the wrong tool.** It collapses
@@ -289,6 +304,18 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   poll/reconcile) — a deployment-tuning knob, not a per-invocation one; `None` tracks
   `poll_interval_s` so a host that retunes the poll cadence gets matching snapshot cadence
   for free. Shares the `--no-status` visibility switch (no separate disable knob, YAGNI).
+- 2026-06-26 (M4): Retired the M2 `/graph` spike page + `GRAPH_PAGE` rather than keep two
+  graph surfaces — the spike's job (prove the offline render) was done, and `/` now IS the
+  graph (the planned "promote the spike to centerpiece"). No dead surface.
+- 2026-06-26 (M4): **Topology (rebuild) and paint (live) are decoupled.** `loadBoard`
+  rebuilds the cytoscape graph ONLY when the node/edge signature changes (every 5s poll);
+  `paintGraph` repaints node lifecycle every state-stream tick without a relayout. So a
+  steady board never thrashes the layout while live status flows — the producer/store/
+  consumer split mirrored on the client (slow topology × fast paint).
+- 2026-06-26 (M4): Preserved every existing PAGE JS function verbatim and added the graph
+  via hoisted function declarations (so `render()`'s new `paintGraph(v)` call resolves even
+  though defined later) — a low-risk restructure that keeps all SSE/answer-console/history
+  contract markers (and their tests) intact rather than a wholesale rewrite.
 - 2026-06-26: Library feasibility front-loaded as an M2 spike against a static fixture —
   the offline no-bundler stacked-UMD render is the dominant unknown, retired before the
   producer wiring and full UI invest (Approach B). Keepers (asset, route, ADR) survive

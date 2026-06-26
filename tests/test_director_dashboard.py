@@ -758,15 +758,23 @@ class BoardRouteTest(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
-    def test_graph_page_served_and_references_local_assets(self):
-        code, body = self._req("/graph")
+    def test_root_page_is_the_project_graph_referencing_local_assets(self):
+        # M4: the graph is the `/` centerpiece (the `/graph` spike page is retired). The
+        # page loads the vendored libs from the LOCAL /assets/* routes — never a CDN — and
+        # wires the graph machinery (board topology + live paint + collapse).
+        code, body = self._req("/")
         self.assertEqual(code, 200)
         html = body.decode("utf-8")
-        # the page loads the vendored libs from the LOCAL /assets/* routes — never a CDN
         self.assertIn('src="/assets/cytoscape.min.js"', html)
         self.assertIn('src="/assets/dagre.min.js"', html)
+        self.assertIn('src="/assets/cytoscape-dagre.js"', html)
         self.assertNotIn("cdn", html.lower())
-        self.assertIn("/api/v1/board", html)
+        for marker in ('id="cy"', "loadBoard", "paintGraph", "/api/v1/board",
+                       "toggleCollapse", 'id="rail"'):
+            self.assertIn(marker, html)
+
+    def test_graph_spike_route_retired(self):
+        self.assertEqual(self._req("/graph")[0], 404)   # promoted to `/` (M4)
 
     def test_post_to_board_route_is_405(self):
         self.assertEqual(self._req("/api/v1/board", method="POST")[0], 405)

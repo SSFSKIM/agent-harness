@@ -54,9 +54,6 @@ _ANSWER_PATH = "/api/v1/answer"
 _TICKET_PREFIX = "/api/v1/ticket/"
 # Whole-board layered-DAG view (project graph): the derived board_snapshot view.
 _BOARD_PATH = "/api/v1/board"
-# The graph page (M2 spike): a SECOND page that renders /api/v1/board as a layered DAG
-# via the vendored library. The flat-list `/` page is untouched; M4 promotes this to `/`.
-_GRAPH_PATH = "/graph"
 # Fixed vendored-asset map (R6): the ONLY servable asset paths. A request can name only
 # one of these constant keys — the value is a fixed filename under director/assets/, so
 # there is ZERO request-derived path (ARCHITECTURE invariant 3: zero traversal). Offline:
@@ -260,8 +257,9 @@ PAGE = """<!doctype html>
 <title>director dashboard</title>
 <meta name="director-token" content="__DIRECTOR_TOKEN__">
 <style>
-  body { background:#0e1116; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:1.2rem; }
-  h1 { font-size:15px; font-weight:600; margin:0 0 .6rem; }
+  html,body { height:100%; }
+  body { background:#0e1116; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:0; }
+  h1 { font-size:14px; font-weight:600; margin:0; }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#7d8896; margin:1.1rem 0 .3rem; }
   .muted { color:#7d8896; }
   .run { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.2rem; }
@@ -279,16 +277,46 @@ PAGE = """<!doctype html>
   .drillhead { display:flex; gap:.4rem; align-items:center; margin-bottom:.2rem; }
   .evt { padding:.1rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
   .evt.tool { color:#9ecbff; } .evt.msg { color:#d6dde6; } .evt.tok { color:#7d8896; } .evt.turn { color:#6ee7a8; }
+  /* M4 layout: graph centerpiece + collapsible side rail + floating session overlay */
+  #bar { display:flex; gap:.7rem; align-items:center; flex-wrap:wrap; padding:.4rem .8rem; border-bottom:1px solid #1b2230; }
+  #bar h1 { margin-right:.2rem; }
+  .legend span { margin-right:.5rem; } .dot { font-size:14px; vertical-align:-1px; }
+  #main { position:absolute; top:2.5rem; left:0; right:0; bottom:0; display:flex; }
+  #cy { flex:1; min-width:0; height:100%; }
+  #rail { width:23rem; overflow:auto; border-left:1px solid #1b2230; padding:.2rem .7rem .8rem; }
+  #rail.hidden { display:none; }
+  #drill { position:absolute; right:24rem; top:3rem; width:23rem; max-height:74%; overflow:auto; z-index:5; }
+  #drill.railhidden { right:1rem; }
 </style></head><body>
-<h1>director dashboard <span id="updated" class="muted"></span></h1>
-<div id="run" class="run"></div>
-<div id="counts" class="muted"></div>
-<h2>in-flight</h2><div id="inflight"></div>
-<h2>stuck</h2><div id="stuck"></div>
-<h2>recent</h2><div id="recent"></div>
-<h2>pending (director queue)</h2><div id="pending"></div>
-<h2>ticket detail (live — click an in-flight or recent ticket)</h2><div id="drill"></div>
-<h2>history (recent runs)</h2><div id="history"></div>
+<div id="bar">
+  <h1>director · project graph</h1>
+  <span id="updated" class="muted"></span>
+  <span id="counts" class="muted"></span>
+  <span class="legend muted">
+    <span><span class="dot" style="color:#9ecbff">●</span>running</span>
+    <span><span class="dot" style="color:#6ee7a8">●</span>done</span>
+    <span><span class="dot" style="color:#ff9b9b">●</span>failed/cycle</span>
+    <span><span class="dot" style="color:#e3b341">●</span>blocked</span>
+    <span><span class="dot" style="color:#7d8896">●</span>todo/backlog</span>
+  </span>
+  <button class="act" onclick="toggleRail()">toggle rail</button>
+  <span class="muted">tap node = session · dbl-tap = collapse</span>
+</div>
+<div id="main">
+  <div id="cy"></div>
+  <div id="rail">
+    <div id="run" class="run"></div>
+    <h2>in-flight</h2><div id="inflight"></div>
+    <h2>stuck</h2><div id="stuck"></div>
+    <h2>recent</h2><div id="recent"></div>
+    <h2>pending (director queue)</h2><div id="pending"></div>
+    <h2>history (recent runs)</h2><div id="history"></div>
+  </div>
+</div>
+<div id="drill"></div>
+<script src="/assets/cytoscape.min.js"></script>
+<script src="/assets/dagre.min.js"></script>
+<script src="/assets/cytoscape-dagre.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 function el(tag, text, cls) {
@@ -362,6 +390,7 @@ function render(v) {
       + " · " + fmtTokens(r.tokens) + (r.session_id ? " · " + r.session_id : ""),
      r.status === "completed" ? "item ok" : "item bad", r.ticket_id]));
   renderPending(v.pending || []);
+  paintGraph(v);   // M4: merge the live run state onto the project graph's nodes
   $("updated").textContent = "· updated " + (v.generated_at || "");
 }
 function btn(label, onclick) { const b = el("button", label, "act"); b.onclick = onclick; return b; }
@@ -514,8 +543,100 @@ function startStream() {
     if (!outage) outage = setTimeout(() => { es.close(); fallbackPoll(); }, 30000);
   };
 }
+// ---- M4: project dependency graph (centerpiece) --------------------------------
+// The graph is the topology from /api/v1/board (slow-changing) PAINTED by the live run
+// state (/api/v1/state, which the SSE/poll already delivers to render()). Node lifecycle
+// merges board state (backlog/done/...) with the live overlay (running/blocked/done/
+// failed), live override winning. Tap a node → the existing per-ticket session overlay
+// (openDrill); double-tap → collapse its DAG subtree. cytoscape-dagre gives the layered
+// (crossing-minimized) layout; the server already computed the semantic layer = wave.
+try { if (window.cytoscapeDagre) cytoscape.use(window.cytoscapeDagre); } catch (e) {}
+let cy = null, boardSig = "", lastState = null;
+function lifecycleFromState(s) {                 // board Linear state name -> a base lifecycle class
+  s = (s || "").toLowerCase();
+  if (s.includes("done") || s.includes("complete") || s.includes("merged")) return "done";
+  if (s.includes("cancel")) return "cancelled";
+  if (s.includes("progress") || s.includes("review")) return "running";
+  if (s.includes("block")) return "blocked";
+  return "todo";                                 // backlog / todo / ready / open / unknown
+}
+function nodeStyle() {
+  return [
+    { selector: "node", style: { "label": "data(label)", "color": "#d6dde6", "font-size": 9,
+      "background-color": "#262d39", "shape": "round-rectangle", "width": "label", "height": 15,
+      "padding": "5px", "text-valign": "center", "text-halign": "center", "border-width": 1, "border-color": "#39414f" } },
+    { selector: "node.running", style: { "background-color": "#16314d", "border-color": "#9ecbff", "border-width": 2 } },
+    { selector: "node.done", style: { "background-color": "#16301f", "border-color": "#6ee7a8" } },
+    { selector: "node.failed", style: { "background-color": "#3a1d1d", "border-color": "#ff9b9b", "border-width": 2 } },
+    { selector: "node.blocked", style: { "background-color": "#322610", "border-color": "#e3b341", "border-width": 2 } },
+    { selector: "node.cancelled", style: { "color": "#7d8896", "border-color": "#39414f" } },
+    { selector: "node.cycle", style: { "border-color": "#ff9b9b", "border-style": "double", "border-width": 3 } },
+    { selector: "node.transient", style: { "border-style": "dashed" } },
+    { selector: "node.collapsed", style: { "border-style": "dashed", "border-color": "#e3b341" } },
+    { selector: "edge", style: { "width": 1, "line-color": "#2a3343", "target-arrow-color": "#2a3343",
+      "target-arrow-shape": "triangle", "arrow-scale": .7, "curve-style": "bezier" } },
+  ];
+}
+function paintGraph(v) {
+  // Merge the live run-state view onto the graph nodes. Called from render() every state
+  // tick; a no-op until loadBoard() has built `cy`. Stashes the latest state so a fresh
+  // graph (after a topology rebuild) can paint immediately.
+  if (v) lastState = v;
+  if (!cy || !lastState) return;
+  const st = lastState, inflight = {}, recent = {}, stuck = {};
+  for (const e of (st.in_flight || [])) inflight[e.ticket_id] = e;
+  for (const r of (st.recent || [])) recent[r.ticket_id] = r;
+  for (const s of (st.stuck || [])) stuck[s.ticket || s.ticket_id] = s;
+  cy.batch(function () {
+    cy.nodes().forEach(function (n) {
+      const id = n.data("id");
+      let cls = lifecycleFromState(n.data("bstate")), suffix = "";
+      if (inflight[id]) { cls = "running"; const t = inflight[id].tokens; if (t && t.total != null) suffix = " ·" + t.total + "t"; }
+      else if (recent[id]) cls = (recent[id].status === "completed") ? "done" : "failed";
+      else if (stuck[id]) cls = "blocked";
+      if (n.data("inCycle")) cls += " cycle";
+      n.classes(cls);
+      n.data("label", (n.data("ident") || id) + suffix);
+    });
+    for (const id in inflight) {                 // union: a just-claimed ticket not yet in the board snapshot
+      if (cy.getElementById(id).empty()) {
+        const ident = inflight[id].identifier || id;
+        cy.add({ group: "nodes", data: { id: id, label: ident, ident: ident }, classes: "running transient" });
+      }
+    }
+  });
+}
+async function loadBoard() {
+  // Fetch the board topology and (re)build the graph only when the node/edge set changed
+  // — the live PAINT rides the state stream (paintGraph), so a steady board never relays out.
+  let view;
+  try { view = await (await fetch("/api/v1/board")).json(); } catch (e) { return; }
+  const nodes = view.nodes || [], edges = view.edges || [];
+  const sig = nodes.map(n => n.id).sort().join(",") + "|" + edges.map(e => e.from + ">" + e.to).sort().join(",");
+  if (sig === boardSig && cy) return;            // topology unchanged → keep the graph (paint already live)
+  boardSig = sig;
+  if (cy) { cy.destroy(); cy = null; }
+  if (!nodes.length) { $("cy").textContent = ""; return; }  // no board snapshot yet → blank (rail still works)
+  const els = [];
+  for (const n of nodes) els.push({ data: { id: n.id, label: (n.identifier || n.id),
+    ident: (n.identifier || n.id), bstate: n.state, inCycle: !!n.in_cycle } });
+  for (const e of edges) els.push({ data: { id: e.from + "__" + e.to, source: e.from, target: e.to } });
+  cy = cytoscape({ container: $("cy"), elements: els, wheelSensitivity: 0.2, style: nodeStyle(),
+    layout: { name: "dagre", rankDir: "LR", nodeSep: 16, rankSep: 55 } });
+  cy.on("tap", "node", function (ev) { openDrill(ev.target.data("id")); });
+  cy.on("dbltap", "node", function (ev) { toggleCollapse(ev.target); });
+  window.cy = cy;                                // introspection hook (debug + behavioral test)
+  paintGraph(null);                              // apply the latest known state to the fresh graph
+}
+function toggleCollapse(node) {                  // manual DAG-subtree collapse (descendant-hide)
+  const c = node.hasClass("collapsed");
+  node.successors("node").style("display", c ? "element" : "none");
+  node[c ? "removeClass" : "addClass"]("collapsed");
+}
+function toggleRail() { $("rail").classList.toggle("hidden"); $("drill").classList.toggle("railhidden"); }
 startStream();
 loadHistory(); setInterval(loadHistory, 10000);  // cross-run history (slow, independent of the live view)
+loadBoard(); setInterval(loadBoard, 5000);       // board topology (slow); live paint rides the state stream
 </script></body></html>"""
 
 
@@ -524,111 +645,6 @@ def PAGE_html(token: str) -> str:
     `<meta name="director-token">`. The token is url-safe (`secrets.token_urlsafe`),
     so it is safe inside the attribute value (no quote/markup escaping needed)."""
     return PAGE.replace("__DIRECTOR_TOKEN__", token)
-
-
-# The project-graph page (M2 spike). A SECOND, self-contained page (the flat-list `/`
-# is untouched; M4 promotes this to `/`). It loads the vendored libs from the local
-# /assets/* routes (offline — no CDN), fetches GET /api/v1/board, and renders the
-# whole board as a layered DAG (dagre, rankDir LR — crossing-minimized; the server
-# already computed the semantic layer=wave, this is the visual layout). A node tap
-# opens a session overlay over the existing /api/v1/ticket/<id>/events route; a
-# double-tap toggles a manual descendant-hide (DAG subtree collapse — cytoscape-
-# expand-collapse is compound-only, the wrong tool, so collapse is hand-rolled).
-# Every overlay value is written via textContent (producer text never parsed as markup).
-GRAPH_PAGE = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>director · project graph</title>
-<style>
-  html,body { margin:0; height:100%; background:#0e1116; color:#d6dde6; font:13px ui-monospace,Menlo,monospace; }
-  #bar { position:absolute; top:0; left:0; right:0; height:2rem; padding:.3rem .8rem; box-sizing:border-box;
-         border-bottom:1px solid #1b2230; display:flex; gap:.9rem; align-items:center; }
-  #bar a { color:#9ecbff; text-decoration:none; }
-  #status, .muted { color:#7d8896; }
-  .legend span { margin-right:.5rem; }
-  #cy { position:absolute; top:2.6rem; left:0; right:0; bottom:0; }
-  #ov { position:absolute; right:1rem; top:3rem; width:24rem; max-height:72%; overflow:auto;
-        background:#11161f; border:1px solid #2a3343; border-radius:.5rem; padding:.5rem .7rem; display:none; z-index:5; }
-  #ov h3 { margin:.1rem 0 .4rem; font-size:13px; }
-  #ov .evt { padding:.12rem 0; border-bottom:1px solid #161c26; white-space:pre-wrap; }
-  #ov .x { float:right; cursor:pointer; color:#7d8896; }
-</style></head><body>
-<div id="bar">
-  <strong>director · project graph</strong>
-  <span id="status">loading…</span>
-  <span class="legend"><span style="color:#6ee7a8">●done</span><span style="color:#9ecbff">●in&nbsp;progress</span><span style="color:#7d8896">●other</span><span style="color:#ff9b9b">●cycle</span></span>
-  <a href="/">← flat view</a>
-  <span class="muted">tap node = session · dbl-tap = collapse subtree</span>
-</div>
-<div id="cy"></div>
-<div id="ov"><span class="x" onclick="document.getElementById('ov').style.display='none'">✕ close</span><h3 id="ovh"></h3><div id="ovb"></div></div>
-<script src="/assets/cytoscape.min.js"></script>
-<script src="/assets/dagre.min.js"></script>
-<script src="/assets/cytoscape-dagre.js"></script>
-<script>
-try { if (window.cytoscapeDagre) cytoscape.use(window.cytoscapeDagre); } catch (e) {}
-const $ = (id) => document.getElementById(id);
-function nodeClass(n) {
-  if (n.in_cycle) return 'cycle';
-  const s = (n.state || '').toLowerCase();
-  if (s.includes('done') || s.includes('complete')) return 'done';
-  if (s.includes('progress') || s.includes('flight')) return 'prog';
-  return 'other';
-}
-async function load() {
-  let view;
-  try { view = await (await fetch('/api/v1/board')).json(); }
-  catch (e) { $('status').textContent = 'board fetch error: ' + e; return; }
-  const nodes = view.nodes || [], edges = view.edges || [];
-  if (!nodes.length) { $('status').textContent = 'no board snapshot yet'; return; }
-  const els = [];
-  for (const n of nodes) els.push({ data: { id: n.id, label: n.identifier || n.id,
-      layer: n.layer, state: n.state }, classes: nodeClass(n) });
-  for (const e of edges) els.push({ data: { id: e.from + '__' + e.to, source: e.from, target: e.to } });
-  const cy = cytoscape({
-    container: $('cy'), elements: els, wheelSensitivity: 0.2,
-    style: [
-      { selector: 'node', style: { 'label': 'data(label)', 'color': '#d6dde6', 'font-size': 10,
-        'background-color': '#39414f', 'shape': 'round-rectangle', 'width': 'label', 'height': 16,
-        'padding': '6px', 'text-valign': 'center', 'text-halign': 'center' } },
-      { selector: 'node.done', style: { 'background-color': '#1f3d2c', 'border-color': '#6ee7a8', 'border-width': 1 } },
-      { selector: 'node.prog', style: { 'background-color': '#16314d', 'border-color': '#9ecbff', 'border-width': 2 } },
-      { selector: 'node.cycle', style: { 'border-color': '#ff9b9b', 'border-width': 2 } },
-      { selector: 'node.collapsed', style: { 'border-style': 'dashed', 'border-color': '#e3b341', 'border-width': 2 } },
-      { selector: 'edge', style: { 'width': 1, 'line-color': '#2a3343', 'target-arrow-color': '#2a3343',
-        'target-arrow-shape': 'triangle', 'arrow-scale': .7, 'curve-style': 'bezier' } },
-    ],
-    layout: { name: 'dagre', rankDir: 'LR', nodeSep: 18, rankSep: 60 },
-  });
-  $('status').textContent = nodes.length + ' tickets · ' + edges.length + ' deps · '
-    + (view.layers ? view.layers.length : 0) + ' waves';
-  cy.on('tap', 'node', (ev) => openOverlay(ev.target));
-  cy.on('dbltap', 'node', (ev) => toggleCollapse(ev.target));
-  window.cy = cy;   // introspection hook (debug + behavioral test): window.cy.nodes(), emit('tap')
-}
-function toggleCollapse(node) {                       // manual DAG-subtree collapse (descendant-hide)
-  const collapsed = node.hasClass('collapsed');
-  node.successors('node').style('display', collapsed ? 'element' : 'none');
-  node[collapsed ? 'removeClass' : 'addClass']('collapsed');
-}
-async function openOverlay(node) {
-  const id = node.data('id');
-  $('ov').style.display = 'block';
-  $('ovh').textContent = node.data('label') + ' — ' + (node.data('state') || '');
-  $('ovb').textContent = 'loading…';
-  let v;
-  try { v = await (await fetch('/api/v1/ticket/' + encodeURIComponent(id) + '/events')).json(); }
-  catch (e) { $('ovb').textContent = 'events fetch error: ' + e; return; }
-  $('ovb').textContent = '';
-  const evs = v.events || [];
-  if (!evs.length) { $('ovb').textContent = 'no session events recorded for this ticket'; return; }
-  for (const e of evs) {
-    const d = document.createElement('div'); d.className = 'evt';
-    d.textContent = '[' + (e.seq != null ? e.seq : '') + '] ' + (e.kind || '')
-      + (e.text ? ': ' + e.text : '') + (e.tool ? ' ' + e.tool : '');
-    $('ovb').appendChild(d);
-  }
-}
-load();
-</script></body></html>"""
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -672,7 +688,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
     _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _STREAM_PATH: {"GET"},
-               _HISTORY_PATH: {"GET"}, _BOARD_PATH: {"GET"}, _GRAPH_PATH: {"GET"},
+               _HISTORY_PATH: {"GET"}, _BOARD_PATH: {"GET"},
                _ANSWER_PATH: {"POST"}}
 
     def _route(self):
@@ -689,8 +705,6 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             return self._send(200, PAGE_html(self.server.token).encode("utf-8"),
                               "text/html; charset=utf-8")
-        if path == _GRAPH_PATH:
-            return self._send(200, GRAPH_PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if path == _STATE_PATH:
             view = build_view(self.server.status_dir, self.server.queue_dir)
             return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
