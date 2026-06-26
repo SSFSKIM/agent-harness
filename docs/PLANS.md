@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-26
+last_verified: 2026-06-25
 owner: harness
 type: methodology
 tags: [execplan, planning, methodology]
@@ -59,41 +59,6 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
 - `standard` — + review-arch and review-reliability.
 - `full` — + all relevant personas, including review-security.
 
-## Execution mode (how each milestone runs)
-A plan-level dial like `review_level`. Default **`inline`** — the controller
-implements every milestone itself, so context accumulates across M1..MN in one
-session. Set **`execution: fork`** for the context-efficient mode: run each
-milestone in a transcript-inheriting **fork subagent**. Only the
-milestone-execution step changes — the plan, the gate, and the reviews are
-identical to inline.
-
-In fork mode the controller dispatches each milestone M_k as
-`subagent_type:"fork"` (Agent/Task tool). The fork **inherits the full session
-transcript** — the plan and every prior milestone summary — so its prompt is one
-line ("implement M_k per the active plan"); you construct no task-brief and paste
-no history (the opposite of a fresh subagent, which needs all of that built for
-it — that handoff machinery is what fork deletes). The fork implements (TDD), runs
-the milestone's acceptance, commits, updates the plan's Progress/Decision/Surprises
-log, and returns a short structured summary — what now exists, key decisions, what
-M_(k+1) needs, test evidence, commit SHAs. That summary is all that reaches the
-controller; the fork's working noise stays in the fork.
-
-- **Controller stays a thin orchestrator.** Dispatch → receive summary → dispatch
-  the next. Do no real work between forks (file reads, command runs, long
-  reasoning) — it pollutes every later fork's inherited context and diverges its
-  snapshot.
-- **The durable backbone is authoritative; inheritance is a bonus.** The plan doc +
-  git commits carry continuity (the fork writes them). Fork inheritance only adds
-  the unwritten conversational context on top — so the mode degrades safely when it
-  is absent (see fallback).
-- **Runtime fallback (required).** `subagent_type:"fork"` is a Claude-family
-  capability (the Director session and the Claude worker runtime). On a runtime
-  without it (the Codex worker) `execution: fork` runs **inline** — same plan, same
-  gate. Never fail a plan because the runtime cannot fork.
-- **Reviews are never forks.** The completion-gate personas are dispatched fresh on
-  the diff — a reviewer that inherited the implementer's context loses adversarial
-  independence.
-
 ## Template (copy into docs/exec-plans/active/YYYY-MM-DD-<slug>.md)
 
     ---
@@ -104,7 +69,6 @@ controller; the fork's working noise stays in the fork.
     description: <one line — what this plan builds, observably>
     base_commit: <git rev-parse HEAD at plan creation>
     review_level: targeted
-    execution: inline   # inline (default) | fork — see "Execution mode"
     ---
     # <Title>
     ## Goal

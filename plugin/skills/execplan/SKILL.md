@@ -32,20 +32,26 @@ Method and template live in `docs/PLANS.md` — read it first.
    frontmatter (`none`, `targeted`, `standard`, or `full`), run the gate
    (command in `docs/design-docs/agent-harness.md`), commit.
 
-## Execute (per milestone)
-Read the plan's `execution:` field (PLANS.md "Execution mode").
-- **`inline`** (default): implement each milestone yourself in this session.
-- **`fork`**: dispatch each milestone M_k as `subagent_type:"fork"` (Agent/Task
-  tool) when your runtime supports it (Claude Director / Claude worker). The fork
-  inherits this session's full context, so the dispatch is one line — "implement
-  milestone M_k per the active ExecPlan: TDD, run its acceptance, commit, update the
-  plan's Progress/Decision/Surprises log, then return a short summary (what exists /
-  key decisions / what the next milestone needs / test evidence / commit SHAs)".
-  Between forks stay a thin orchestrator: receive the summary, dispatch the next, do
-  no other work (it pollutes the next fork's inheritance). If your runtime has no
-  fork subagent (Codex worker), run inline. Either way the durable plan doc + commits
-  are the continuity backbone, and completion-gate reviews are always fresh
-  subagents — never forks.
+## Execute (per milestone) — inline or fork
+Two ways to run the plan's milestones; choose per session (fork only where the
+runtime supports it):
+- **inline** (default): implement each milestone yourself in this session, as the
+  plan is written. Working context accumulates across M1..MN.
+- **fork** (context-efficient; Claude Director / Claude worker only): dispatch each
+  milestone M_k as `subagent_type:"fork"` (Agent/Task tool) instead of implementing
+  it inline. The fork inherits this session's full context, so the dispatch is one
+  line — "implement milestone M_k per the active ExecPlan: TDD, run its acceptance,
+  commit, update the plan's Progress/Decision/Surprises log, then return a short
+  summary (what exists / key decisions / what the next milestone needs / test
+  evidence / commit SHAs)". Only that summary returns to you — the fork's working
+  noise stays in the fork, so your context stays lean. Between forks stay a thin
+  orchestrator: receive the summary, dispatch the next, do no other work (it pollutes
+  the next fork's inherited context). A runtime without fork subagents (the Codex
+  worker) runs inline.
+
+Either way the durable plan doc + commits are the continuity backbone, and
+completion-gate reviews are always dispatched as fresh subagents — never forks (a
+reviewer that inherited the implementer's context loses adversarial independence).
 
 ## Maintain (as you work, not after)
 - Append to Progress log each working block; record Surprises & discoveries
