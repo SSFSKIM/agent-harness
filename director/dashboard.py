@@ -299,6 +299,8 @@ PAGE = """<!doctype html>
     <span><span class="dot" style="color:#e3b341">●</span>blocked</span>
     <span><span class="dot" style="color:#7d8896">●</span>todo/backlog</span>
   </span>
+  <button class="act" onclick="fitGraph()">fit</button>
+  <button class="act" onclick="toggleFocus()">focus frontier</button>
   <button class="act" onclick="toggleRail()">toggle rail</button>
   <span class="muted">tap node = session · dbl-tap = collapse</span>
 </div>
@@ -573,8 +575,10 @@ function nodeStyle() {
     { selector: "node.cycle", style: { "border-color": "#ff9b9b", "border-style": "double", "border-width": 3 } },
     { selector: "node.transient", style: { "border-style": "dashed" } },
     { selector: "node.collapsed", style: { "border-style": "dashed", "border-color": "#e3b341" } },
+    { selector: "node.dimmed", style: { "opacity": .28 } },           // frontier focus: settled nodes recede
     { selector: "edge", style: { "width": 1, "line-color": "#2a3343", "target-arrow-color": "#2a3343",
       "target-arrow-shape": "triangle", "arrow-scale": .7, "curve-style": "bezier" } },
+    { selector: "edge.dimmed", style: { "opacity": .2 } },
   ];
 }
 function paintGraph(v) {
@@ -595,7 +599,10 @@ function paintGraph(v) {
       else if (recent[id]) cls = (recent[id].status === "completed") ? "done" : "failed";
       else if (stuck[id]) cls = "blocked";
       if (n.data("inCycle")) cls += " cycle";
-      n.classes(cls);
+      // swap ONLY the lifecycle classes (not dimmed/collapsed/transient, which n.classes()
+      // would wipe every tick) so focus + collapse survive a live repaint.
+      n.removeClass("running done failed blocked cancelled todo cycle");
+      n.addClass(cls);
       n.data("label", (n.data("ident") || id) + suffix);
     });
     for (const id in inflight) {                 // union: a just-claimed ticket not yet in the board snapshot
@@ -605,6 +612,7 @@ function paintGraph(v) {
       }
     }
   });
+  if (focusOn) applyFocus();                      // re-dim settled nodes after the repaint
 }
 async function loadBoard() {
   // Fetch the board topology and (re)build the graph only when the node/edge set changed
@@ -622,12 +630,31 @@ async function loadBoard() {
     ident: (n.identifier || n.id), bstate: n.state, inCycle: !!n.in_cycle } });
   for (const e of edges) els.push({ data: { id: e.from + "__" + e.to, source: e.from, target: e.to } });
   cy = cytoscape({ container: $("cy"), elements: els, wheelSensitivity: 0.2, style: nodeStyle(),
-    layout: { name: "dagre", rankDir: "LR", nodeSep: 16, rankSep: 55 } });
+    layout: { name: "dagre", rankDir: "LR", nodeSep: 16, rankSep: 55, fit: true, padding: 20 } });
   cy.on("tap", "node", function (ev) { openDrill(ev.target.data("id")); });
   cy.on("dbltap", "node", function (ev) { toggleCollapse(ev.target); });
   window.cy = cy;                                // introspection hook (debug + behavioral test)
   paintGraph(null);                              // apply the latest known state to the fresh graph
+  if (focusOn) applyFocus();                     // keep the frontier-focus across a topology rebuild
 }
+// Frontier focus (R8): on a large board, dim the settled (done/cancelled) nodes so the
+// active frontier stands out — non-destructive (dim, not hide; the picture stays whole),
+// toggleable, and re-applied after a rebuild. A `.dimmed` class lowers node+edge opacity.
+let focusOn = false;
+function applyFocus() {
+  if (!cy) return;
+  cy.batch(function () {
+    cy.elements().removeClass("dimmed");
+    if (!focusOn) return;
+    const settled = cy.nodes().filter(function (n) {
+      return n.hasClass("done") || n.hasClass("cancelled");
+    });
+    settled.addClass("dimmed");
+    settled.connectedEdges().addClass("dimmed");
+  });
+}
+function toggleFocus() { focusOn = !focusOn; applyFocus(); }
+function fitGraph() { if (cy) cy.fit(undefined, 20); }
 function toggleCollapse(node) {                  // manual DAG-subtree collapse (descendant-hide)
   const c = node.hasClass("collapsed");
   node.successors("node").style("display", c ? "element" : "none");

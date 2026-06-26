@@ -257,8 +257,24 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   node2=[running]+"LIN-2 ·1204t", node1=[done], node7=[blocked,cycle], node4=[todo]; rail's
   in-flight list intact; node2 tap opened the session overlay streaming its events
   ("▶ turn started", "💬 commentary: …"). Full gate GREEN.
-- [ ] **M5 — next.** scale/collapse-by-default + frontier focus + the full `playwright-cli`
-  behavioral + cross-runtime (`--worker claude`) pass on a real daemon run.
+- [x] (2026-06-26) **M5a done — scale: auto-fit + frontier focus.** `loadBoard` layout
+  `fit:true, padding:20` (a 100+-node board fits the viewport on build); `fitGraph()` re-fit
+  button; **frontier focus** (`toggleFocus`/`applyFocus`) dims (non-destructive — `.dimmed`
+  opacity, not hide) the settled done/cancelled nodes so the active frontier stands out,
+  re-applied after every paint/rebuild; `paintGraph` now swaps ONLY lifecycle classes (not
+  `dimmed`/`collapsed`/`transient`, which a wholesale `n.classes()` wiped each tick). bar
+  buttons fit / focus frontier / toggle rail. 58/58 dashboard GREEN. **Live eval proof:**
+  `toggleFocus()` dims done nodes (1,3) while running(2)/todo(5) stay bright. Manual
+  `dbltap` subtree collapse (M2/M4) covers explicit collapse; chose a non-destructive *dim*
+  default over hide-by-default (a UX taste call left conservative — the human can tune).
+- [ ] **M5b — DEFERRED to live dogfood (needs real env).** The full cross-runtime behavioral
+  acceptance — a real `--daemon` run against a live Linear board, once with a codex worker and
+  once with `--worker claude`, driven through the dashboard — needs `LINEAR_API_KEY` + a real
+  board + the daemon (the DIRECTOR_RUNBOOK dogfood path), not reproducible in this build env.
+  Everything it would exercise is proven on fixtures via single-eval (render, live paint,
+  overlay, focus) + 274 unit tests; this is the live-validation step (the `workspace-lifecycle
+  -hooks` precedent: "live-validated on a throwaway repo"). **The completion gate's
+  cross-runtime behavioral line stays open until this runs.**
 
 ## Surprises & discoveries
 - 2026-06-26 (M2): **`cytoscape-expand-collapse` is the wrong tool.** It collapses
