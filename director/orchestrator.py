@@ -1352,9 +1352,20 @@ def main(argv=None, *, board=None) -> int:
     else:
         _team = s["team"]
         _board_dir = (Path(s["status_dir"]).parent / "director-board") if s["status_dir"] else None
+        # The all-state-id set is near-static; resolve it ONCE (lazily, on the first
+        # snapshot) and reuse — not per tick. Lazy (not an eager startup fetch) so a
+        # workflow_states failure is swallowed by `maybe_snapshot` and retried next
+        # interval, never an extra crash path at startup. `_state_ids` is a list so the
+        # closure can fill it in place; empty until the first successful resolve.
+        _state_ids: list = []
+
+        def _fetch_board() -> list:
+            if not _state_ids:
+                _state_ids.extend(v["id"] for v in board.workflow_states(_team).values())
+            return board.fetch_issues_by_states(_team, _state_ids)
+
         board_snapshotter = board_snapshot_mod.BoardSnapshotter(
-            fetch=lambda: board.fetch_issues_by_states(
-                _team, [v["id"] for v in board.workflow_states(_team).values()]),
+            fetch=_fetch_board,
             writer=board_snapshot_mod.BoardWriter(base=_board_dir),
             interval_s=s["board_snapshot_interval_s"] or s["poll_interval_s"])
     kwargs["board_snapshotter"] = board_snapshotter

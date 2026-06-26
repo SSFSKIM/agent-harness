@@ -1905,6 +1905,21 @@ class BoardSnapshotWiringTest(unittest.TestCase):
             assert snap is not None
         self.assertEqual({n["id"] for n in snap["nodes"]}, {"a", "b"})
 
+    def test_run_forever_snapshots_each_tick(self):
+        # the daemon loop also persists the board (the `:950` call site, inside `if not
+        # draining:`) — guards a refactor from silently dropping the daemon snapshot.
+        board = self._board()
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as tmp:
+            board_dir = Path(tmp) / "director-board"
+            orch.run_forever(board, command=["x"], team="T", states=states,
+                             queue_base=Path(tmp) / "q", workspace_root=Path(tmp) / "ws",
+                             concurrency=0, max_ticks=1, install_signals=False,
+                             board_snapshotter=self._snapshotter(board, board_dir))
+            snap = bs.read_board(base=board_dir)
+            assert snap is not None
+        self.assertEqual({n["id"] for n in snap["nodes"]}, {"a", "b"})
+
 
 if __name__ == "__main__":
     unittest.main()

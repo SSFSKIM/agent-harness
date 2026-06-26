@@ -283,6 +283,7 @@ PAGE = """<!doctype html>
   .legend span { margin-right:.5rem; } .dot { font-size:14px; vertical-align:-1px; }
   #main { position:absolute; top:2.5rem; left:0; right:0; bottom:0; display:flex; }
   #cy { flex:1; min-width:0; height:100%; }
+  #cy .empty { display:flex; align-items:center; justify-content:center; height:100%; color:#7d8896; font-size:.85rem; }
   #rail { width:23rem; overflow:auto; border-left:1px solid #1b2230; padding:.2rem .7rem .8rem; }
   #rail.hidden { display:none; }
   #drill { position:absolute; right:24rem; top:3rem; width:23rem; max-height:74%; overflow:auto; z-index:5; }
@@ -624,7 +625,11 @@ async function loadBoard() {
   if (sig === boardSig && cy) return;            // topology unchanged → keep the graph (paint already live)
   boardSig = sig;
   if (cy) { cy.destroy(); cy = null; }
-  if (!nodes.length) { $("cy").textContent = ""; return; }  // no board snapshot yet → blank (rail still works)
+  if (!nodes.length) {                           // no board snapshot yet → labeled empty-state (rail still works)
+    $("cy").textContent = "";
+    $("cy").appendChild(el("div", "no board snapshot yet — the side rail shows live run state", "empty"));
+    return;
+  }
   const els = [];
   for (const n of nodes) els.push({ data: { id: n.id, label: (n.identifier || n.id),
     ident: (n.identifier || n.id), bstate: n.state, inCycle: !!n.in_cycle } });

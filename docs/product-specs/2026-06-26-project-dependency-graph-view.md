@@ -59,8 +59,10 @@ Each is independently verifiable (a human can check it).
 - **R1 — Whole-board snapshot producer (best-effort, atomic).** The orchestrator
   persists the **entire configured board** (not just the run's working set) as an
   atomic snapshot `board.json`, refreshed at poll cadence. Each node carries
-  `{id, identifier, title, state, state_type, labels, blockers:[{id,state_type}]}` —
-  the shape `_normalize_candidate` already produces. The snapshot is produced by
+  `{id, identifier, title, state, state_id, labels, blockers:[{id,state_type}]}` —
+  the shape `_normalize_candidate` already produces (the ticket's own lifecycle is the
+  human-readable `state` name + its `state_id`; `state_type` rides each blocker edge).
+  The snapshot is produced by
   fetching every workflow state's issues (reusing `board.fetch_issues_by_states`
   with the full state-id set the orchestrator already resolved at startup via
   `workflow_states`). Atomic temp+`os.replace` (the `status.py` grain, RELIABILITY
@@ -134,8 +136,10 @@ Each is independently verifiable (a human can check it).
   pointing at the ADR. ("Not in the repo = does not exist.")
 
 - **R8 — Scales to a real board + degrades cleanly.** The view is usable on a
-  100+-node board: completed subtrees collapse by default, the active frontier is
-  focused, pan/zoom navigate the rest. If `board.json` is absent/torn the page
+  100+-node board: it auto-fits on load and pan/zoom navigate the rest, with
+  subtree-collapse and active-frontier focus **available, off by default** (a
+  deliberate taste call — the full graph is shown first, the operator opts into
+  clutter-reduction; M5a). If `board.json` is absent/torn the page
   **degrades to the existing side-rail lists** ("no board snapshot yet") and the live
   `status` overlay still works — the graph is additive, never a gate (R3 posture). The
   view also works **pre-run** (board snapshot exists from the first poll, even with no
@@ -268,7 +272,7 @@ keeps the key Director-side).
   server-held dir; the overlay reuses the already-sanitized `/ticket/{id}/*` routes —
   zero new request→path mapping beyond a vetted-fixed asset name (invariant 3).
 - **Volume.** Board nodes are small dicts; hundreds are a small payload. The render
-  cost is bounded by collapse-completed-by-default + frontier-focus + pan/zoom (R8).
+  cost is bounded by auto-fit + pan/zoom, with opt-in subtree-collapse + frontier-focus (R8).
 - **Read-only.** No new write/act route. The only writes remain the existing fenced
   operator-console answers in the side rail (invariant 3).
 
@@ -310,7 +314,7 @@ keeps the key Director-side).
    = serial), survives a fixture **cycle without hanging**, and places an orphan at
    layer 0. (Unit test over fixtures.)
 2. `curl -s http://127.0.0.1:<port>/api/v1/board | jq` returns
-   `{nodes:[{id,identifier,state,state_type,labels,blockers,layer,in_cycle}], edges,
+   `{nodes:[{id,identifier,title,state,state_id,labels,blockers,layer,in_cycle}], edges,
    layers, generated_at}`.
 3. Driving the dashboard with `playwright-cli`: `/` renders the project DAG; done
    nodes are dimmed, in-flight nodes are lit with a live token fill, blocked/cycle

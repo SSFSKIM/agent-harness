@@ -342,7 +342,91 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
 - 2026-06-26: `board.json` stores the raw `{nodes, generated_at}`; the layer/edge
   derivation runs on read (`build_board_view`), keeping the stored artifact close to
   source (matches the spec R3 contract fix).
+- 2026-06-26 (completion gate): ran the `review_level: full` panel on the path-scoped diff
+  `9fc404d..32b354e` — all 5 reviewers SATISFIED, **0 P1**. Fixed the correctness/contract/
+  affordance P2s inline (edge-dedup hard-crash guard, `read_board` UTF-8 totality, memoized
+  `_fetch_board`, spec `state_id`/R8 corrections, labeled empty-state) + 4 new tests;
+  deferred the doc/test-gap P2s (runbook section, JS test harness, 3 proposed grounding-doc
+  rules) to the tech-debt tracker. See Feedback section.
+- 2026-06-26 (completion gate): **superseded the M3 "re-resolve the all-state-id set each
+  snapshot" decision** — review-arch + review-reliability flagged the per-tick
+  `workflow_states()` call as avoidable read-amplification vs the spec's "resolved at
+  startup". Now memoized in a lazy `_fetch_board` closure (resolve once on first success,
+  reuse). Kept it LAZY (not an eager startup fetch) so a `workflow_states` failure is still
+  swallowed by `maybe_snapshot` and retried next interval — the naive eager hoist would have
+  introduced a startup-crash path, a worse reliability trade than the redundant call.
+- 2026-06-26 (completion gate): plan stays **`active`** — every reviewer verdict is SATISFIED
+  and the code is fully unit/fixture-verified, but the Goal defines done as "acceptance
+  criteria 1–10 demonstrably pass", and AC8 (+ the live half of AC3/AC5) is demonstrated only
+  by the M5b live cross-runtime daemon dogfood, which is env-gated (the operator's
+  DIRECTOR_RUNBOOK run). Completion is a one-step flip once M5b runs.
 
 ## Feedback (from completion gate)
+
+**Completion-gate review panel (2026-06-26, `review_level: full`)** — diff range
+`9fc404d..32b354e` path-scoped to this plan's files (HEAD had drifted past M5a with
+unrelated `execplan` fork-mode commits + a sync-merge that pulled in concurrent
+`6973d3e`; those were excluded). Gate GREEN, 279 tests pass.
+
+| Reviewer | Verdict | P1 | P2 |
+|---|---|---|---|
+| review-spec-compliance (gate) | SATISFIED | 0 | 4 |
+| review-code-quality | SATISFIED | 0 | 2 |
+| review-arch | SATISFIED | 0 | 1 |
+| review-reliability | SATISFIED | 0 | 3 |
+| review-security | SATISFIED | 0 | 0 |
+
+**No P1 across the panel.** P2s processed below — the correctness/contract/affordance
+ones fixed inline this gate (cheap, in the tested core); the doc/test-gap ones deferred
+to `docs/exec-plans/tech-debt-tracker.md`.
+
+P2s **fixed inline** (commit follows this gate):
+- **[code-quality, Important] duplicate-edge hard render-break** — a repeated Linear
+  `blocks` relation produced a duplicate `edges` entry; the browser builds element ids
+  `from__to` and `cytoscape()` throws on a dup id *outside* the `loadBoard` try, hard-breaking
+  the whole graph. Fixed in the pure `build_board_view` (`director/board_snapshot.py` edge
+  loop: skip `bid in preds[nid]`). New test `test_duplicate_blocker_edge_is_deduped`.
+- **[reliability] `read_board` non-UTF-8 escapes totality** — `read_text("utf-8")` raises
+  `UnicodeDecodeError` (not `OSError`/`JSONDecodeError`) on corrupt bytes → would 500 the
+  dashboard instead of degrading. Widened the `except` (`director/board_snapshot.py:217`).
+  New test `test_read_non_utf8_is_none`.
+- **[arch + reliability] per-snapshot `workflow_states()` re-fetch** — the `main()` fetch
+  thunk re-resolved the all-state-id set every tick (vs spec R1 "resolved at startup").
+  Replaced the lambda with a memoized lazy closure `_fetch_board` (`director/orchestrator.py`):
+  resolves once on first success, reused thereafter; lazy (not eager) so a `workflow_states`
+  failure stays swallowed by `maybe_snapshot` and retried, never a new startup-crash path.
+- **[spec-compliance] node-contract `state_type`→`state_id` inconsistency** — the spec
+  R1/AC2 listed a top-level `state_type` field that `_normalize_candidate` never emits (it
+  emits `state`+`state_id`; `state_type` rides each *blocker* edge). Corrected the spec
+  (R1 line ~62, AC2 line ~313) to match the as-built/source shape.
+- **[spec-compliance] R8 "collapse/frontier by default"** — the deliberate M5a taste call
+  ships these as opt-in (full graph shown first). Corrected R8 + the Design "Volume" note
+  to "available, off by default".
+- **[spec-compliance] missing "(no board snapshot yet)" empty-state** — the canvas blanked
+  silently. Added a labeled empty-state in `loadBoard` via the XSS-safe `el()` helper +
+  a `.empty` style. New test `test_page_shows_labeled_empty_state_when_no_board`.
+- **[reliability] `run_forever` snapshot wiring untested** — added
+  `test_run_forever_snapshots_each_tick` (the `:950` daemon call site was correct by
+  inspection but unguarded by a regression test).
+
+P2s **deferred** to `docs/exec-plans/tech-debt-tracker.md`:
+- **[spec-compliance] runbook dashboard-section docs** — `DIRECTOR_RUNBOOK.md`/`DIRECTOR.md`
+  don't yet describe the graph view + new routes (net-new docs, not a fix).
+- **[code-quality] in-page-JS unit-test gap** — `lifecycleFromState`/`paintGraph`/
+  `toggleCollapse` have only PAGE-marker assertions (design-accepted: load-bearing
+  serial/parallel logic lives in the tested Python `build_board_view`, invariant 4; the
+  `window.cy` hook covers live behavioral checks). Plus the test-only `_req` helper
+  duplication across dashboard test classes.
+
+**Reviewer-proposed rule additions (not findings; noted for the docs):** a SECURITY threat
+note for the fixed-map asset route (T16-style); a DESIGN note that a producer serving a
+graph must emit a unique edge set; a RELIABILITY clause that an observer's own fetch budget
+must be bounded/shared with the primary poll. Tracked as candidate doc edits, not gating.
+
+**Remaining open gate:** M5b — the live cross-runtime daemon dogfood (codex + `--worker
+claude`) against a real Linear board, which alone demonstrates AC8 (and the live half of
+AC3/AC5). Env-gated (needs `LINEAR_API_KEY` + a real board + a running daemon — the
+DIRECTOR_RUNBOOK path, the operator's environment). The plan stays `active` until this runs;
+everything else is verified by 279 unit/fixture tests + a live single-eval dashboard render.
 
 ## Outcomes & retrospective

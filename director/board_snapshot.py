@@ -115,8 +115,11 @@ def build_board_view(nodes, *, now: Callable[[], str] = _utcnow) -> dict:
     for nid, node in by_id.items():
         for b in node.get("blockers") or []:
             bid = b.get("id") if isinstance(b, dict) else None
-            if not isinstance(bid, str) or bid not in ids:
-                continue                       # dangling blocker — outside the board
+            if not isinstance(bid, str) or bid not in ids or bid in preds[nid]:
+                continue                       # dangling (outside board) OR a duplicate
+                                               # blocker entry — Linear may repeat a
+                                               # `blocks` relation; one edge per pair so
+                                               # the renderer never sees a dup element id.
             preds[nid].add(bid)                # self included (cycle-of-1 detection)
             if bid != nid:
                 edges.append({"from": bid, "to": nid})   # no degenerate self-edge render
@@ -214,8 +217,8 @@ def read_board(base: Path | str | None = None) -> dict | None:
         return None
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None  # torn/garbled/non-UTF-8 → "no board"; never raise (R12 totality)
 
 
 class BoardSnapshotter:

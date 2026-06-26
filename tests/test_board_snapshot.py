@@ -101,6 +101,13 @@ class BuildBoardViewTest(unittest.TestCase):
         view = bs.build_board_view([node("a", title="first"), node("a", title="second")], now=_T)
         self.assertEqual(len(view["nodes"]), 1)
 
+    def test_duplicate_blocker_edge_is_deduped(self):
+        # Linear can repeat a `blocks` relation -> two blocker entries for the same pair;
+        # the view emits ONE edge so the renderer never sees a duplicate element id.
+        view = bs.build_board_view([node("a"), node("b", ["a", "a"])], now=_T)
+        self.assertEqual(view["edges"], [{"from": "a", "to": "b"}])
+        self.assertEqual(layer_of(view, "b"), 1)   # still serial after a, not double-counted
+
 
 class BoardWriterTest(unittest.TestCase):
     def test_write_roundtrips_through_read(self):
@@ -132,6 +139,13 @@ class BoardWriterTest(unittest.TestCase):
     def test_read_torn_is_none(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "board.json").write_text('{"nodes": [{"id": "a"', encoding="utf-8")
+            self.assertIsNone(bs.read_board(base=d))
+
+    def test_read_non_utf8_is_none(self):
+        # external corruption / bit-rot -> invalid UTF-8 bytes must yield None, not raise
+        # (R12 totality; the dashboard degrades to its rail rather than 500ing).
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "board.json").write_bytes(b"\xff\xfe not utf-8")
             self.assertIsNone(bs.read_board(base=d))
 
     def test_atomic_no_tmp_left_behind(self):

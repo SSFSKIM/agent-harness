@@ -773,6 +773,11 @@ class BoardRouteTest(unittest.TestCase):
                        "toggleCollapse", 'id="rail"'):
             self.assertIn(marker, html)
 
+    def test_page_shows_labeled_empty_state_when_no_board(self):
+        # AC7: an absent/empty board snapshot degrades to a LABELED empty-state in #cy
+        # (not a silent blank), while the side rail stays live.
+        self.assertIn("no board snapshot yet", self._req("/")[1].decode("utf-8"))
+
     def test_graph_spike_route_retired(self):
         self.assertEqual(self._req("/graph")[0], 404)   # promoted to `/` (M4)
 
