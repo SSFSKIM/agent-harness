@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import director.board_snapshot as bs  # noqa: E402
 import director.dashboard as dash  # noqa: E402
 import director.queue as dq  # noqa: E402
 import director.status as ds  # noqa: E402
@@ -699,6 +700,118 @@ class TicketRouteTest(unittest.TestCase):
 
     def test_post_to_ticket_route_is_405(self):
         self.assertEqual(self._req("/api/v1/ticket/LIN-7/events", method="POST")[0], 405)
+
+
+class BoardRouteTest(unittest.TestCase):
+    """M2: the whole-board layered-DAG route + the graph page (project graph view)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.board_dir = Path(self.tmp) / "director-board"
+        bs.BoardWriter(self.board_dir).write([
+            {"id": "a", "identifier": "LIN-1", "title": "design", "state": "Done",
+             "description": "x" * 5000, "labels": [], "blockers": []},
+            {"id": "b", "identifier": "LIN-2", "title": "impl", "state": "In Progress",
+             "labels": ["impl"], "blockers": [{"id": "a", "state_type": "completed"}]},
+        ])
+        self.httpd = dash.serve(0, board_dir=self.board_dir)
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _req(self, path, method="GET"):
+        url = f"http://127.0.0.1:{self.port}{path}"
+        try:
+            resp = urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=2)
+            return resp.status, resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def test_board_route_returns_layered_view(self):
+        code, body = self._req("/api/v1/board")
+        self.assertEqual(code, 200)
+        v = json.loads(body)
+        self.assertEqual({n["id"] for n in v["nodes"]}, {"a", "b"})
+        self.assertEqual(next(n["layer"] for n in v["nodes"] if n["id"] == "b"), 1)  # serial after a
+        self.assertEqual([(e["from"], e["to"]) for e in v["edges"]], [("a", "b")])
+        self.assertEqual(len(v["layers"]), 2)
+        # the served view is the PROJECTION — bloat dropped, graph fields kept
+        node_a = next(n for n in v["nodes"] if n["id"] == "a")
+        self.assertNotIn("description", node_a)
+        self.assertEqual(node_a["identifier"], "LIN-1")
+
+    def test_board_route_absent_is_empty_not_error(self):
+        httpd = dash.serve(0, board_dir=Path(tempfile.mkdtemp()) / "missing")
+        port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/v1/board", timeout=2) as r:
+                v = json.loads(r.read())
+            self.assertEqual(v["nodes"], [])           # no snapshot → empty, well-formed, never 500
+            self.assertEqual(v["edges"], [])
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def test_graph_page_served_and_references_local_assets(self):
+        code, body = self._req("/graph")
+        self.assertEqual(code, 200)
+        html = body.decode("utf-8")
+        # the page loads the vendored libs from the LOCAL /assets/* routes — never a CDN
+        self.assertIn('src="/assets/cytoscape.min.js"', html)
+        self.assertIn('src="/assets/dagre.min.js"', html)
+        self.assertNotIn("cdn", html.lower())
+        self.assertIn("/api/v1/board", html)
+
+    def test_post_to_board_route_is_405(self):
+        self.assertEqual(self._req("/api/v1/board", method="POST")[0], 405)
+
+
+class AssetRouteTest(unittest.TestCase):
+    """M2: the fixed vendored-asset route — only the allowlisted keys serve (R6); the
+    constant filename map means there is no request-derived path (zero traversal)."""
+
+    def setUp(self):
+        self.httpd = dash.serve(0)
+        self.port = self.httpd.server_address[1]
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=2)
+
+    def _req(self, path, method="GET"):
+        url = f"http://127.0.0.1:{self.port}{path}"
+        try:
+            resp = urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=2)
+            return resp.status, resp.headers.get("Content-Type"), resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.headers.get("Content-Type"), e.read()
+
+    def test_each_vendored_asset_is_served_with_js_ctype(self):
+        for path in dash._ASSETS:                      # the allowlist is the contract
+            code, ctype, body = self._req(path)
+            self.assertEqual(code, 200, path)
+            self.assertIn("javascript", ctype, path)
+            self.assertGreater(len(body), 1000, path)  # a real vendored bundle, not a stub
+
+    def test_unknown_and_traversal_asset_paths_are_404(self):
+        # only the fixed keys serve; anything else (incl. a traversal shape) → 404. The
+        # filename comes from the constant `_ASSETS` map, never the request, so a path
+        # join can never escape director/assets/ — the allowlist IS the fence.
+        for path in ("/assets/nope.js", "/assets/", "/assets/dashboard.py",
+                     "/assets/cytoscape.min.js/../dashboard.py", "/assets/..%2fdashboard.py"):
+            self.assertEqual(self._req(path)[0], 404, path)
+
+    def test_post_to_asset_is_405(self):
+        self.assertEqual(self._req("/assets/cytoscape.min.js", method="POST")[0], 405)
 
 
 if __name__ == "__main__":

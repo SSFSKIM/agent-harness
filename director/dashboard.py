@@ -31,9 +31,11 @@ import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
 
 import director.queue as dq
+from director import board_snapshot
 from director import director_min as dm
 from director import history
 from director import status
@@ -50,6 +52,22 @@ _ANSWER_PATH = "/api/v1/answer"
 # Per-ticket session-event drill-down: GET /api/v1/ticket/<id>/events (history+telemetry)
 # and /stream (live SSE tail). The <id> segment is sanitized before any path join (R5).
 _TICKET_PREFIX = "/api/v1/ticket/"
+# Whole-board layered-DAG view (project graph): the derived board_snapshot view.
+_BOARD_PATH = "/api/v1/board"
+# The graph page (M2 spike): a SECOND page that renders /api/v1/board as a layered DAG
+# via the vendored library. The flat-list `/` page is untouched; M4 promotes this to `/`.
+_GRAPH_PATH = "/graph"
+# Fixed vendored-asset map (R6): the ONLY servable asset paths. A request can name only
+# one of these constant keys — the value is a fixed filename under director/assets/, so
+# there is ZERO request-derived path (ARCHITECTURE invariant 3: zero traversal). Offline:
+# served from the local checked-in file, never a CDN. `text/javascript` per WHATWG.
+_JS = "text/javascript; charset=utf-8"
+_ASSETS = {
+    "/assets/cytoscape.min.js": ("cytoscape.min.js", _JS),
+    "/assets/dagre.min.js": ("dagre.min.js", _JS),
+    "/assets/cytoscape-dagre.js": ("cytoscape-dagre.js", _JS),
+}
+_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 _DEFAULT_PORT = 8787
 
 # SSE cadence: re-read the (file-backed) snapshot this often server-side and push only a
@@ -508,6 +526,111 @@ def PAGE_html(token: str) -> str:
     return PAGE.replace("__DIRECTOR_TOKEN__", token)
 
 
+# The project-graph page (M2 spike). A SECOND, self-contained page (the flat-list `/`
+# is untouched; M4 promotes this to `/`). It loads the vendored libs from the local
+# /assets/* routes (offline — no CDN), fetches GET /api/v1/board, and renders the
+# whole board as a layered DAG (dagre, rankDir LR — crossing-minimized; the server
+# already computed the semantic layer=wave, this is the visual layout). A node tap
+# opens a session overlay over the existing /api/v1/ticket/<id>/events route; a
+# double-tap toggles a manual descendant-hide (DAG subtree collapse — cytoscape-
+# expand-collapse is compound-only, the wrong tool, so collapse is hand-rolled).
+# Every overlay value is written via textContent (producer text never parsed as markup).
+GRAPH_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>director · project graph</title>
+<style>
+  html,body { margin:0; height:100%; background:#0e1116; color:#d6dde6; font:13px ui-monospace,Menlo,monospace; }
+  #bar { position:absolute; top:0; left:0; right:0; height:2rem; padding:.3rem .8rem; box-sizing:border-box;
+         border-bottom:1px solid #1b2230; display:flex; gap:.9rem; align-items:center; }
+  #bar a { color:#9ecbff; text-decoration:none; }
+  #status, .muted { color:#7d8896; }
+  .legend span { margin-right:.5rem; }
+  #cy { position:absolute; top:2.6rem; left:0; right:0; bottom:0; }
+  #ov { position:absolute; right:1rem; top:3rem; width:24rem; max-height:72%; overflow:auto;
+        background:#11161f; border:1px solid #2a3343; border-radius:.5rem; padding:.5rem .7rem; display:none; z-index:5; }
+  #ov h3 { margin:.1rem 0 .4rem; font-size:13px; }
+  #ov .evt { padding:.12rem 0; border-bottom:1px solid #161c26; white-space:pre-wrap; }
+  #ov .x { float:right; cursor:pointer; color:#7d8896; }
+</style></head><body>
+<div id="bar">
+  <strong>director · project graph</strong>
+  <span id="status">loading…</span>
+  <span class="legend"><span style="color:#6ee7a8">●done</span><span style="color:#9ecbff">●in&nbsp;progress</span><span style="color:#7d8896">●other</span><span style="color:#ff9b9b">●cycle</span></span>
+  <a href="/">← flat view</a>
+  <span class="muted">tap node = session · dbl-tap = collapse subtree</span>
+</div>
+<div id="cy"></div>
+<div id="ov"><span class="x" onclick="document.getElementById('ov').style.display='none'">✕ close</span><h3 id="ovh"></h3><div id="ovb"></div></div>
+<script src="/assets/cytoscape.min.js"></script>
+<script src="/assets/dagre.min.js"></script>
+<script src="/assets/cytoscape-dagre.js"></script>
+<script>
+try { if (window.cytoscapeDagre) cytoscape.use(window.cytoscapeDagre); } catch (e) {}
+const $ = (id) => document.getElementById(id);
+function nodeClass(n) {
+  if (n.in_cycle) return 'cycle';
+  const s = (n.state || '').toLowerCase();
+  if (s.includes('done') || s.includes('complete')) return 'done';
+  if (s.includes('progress') || s.includes('flight')) return 'prog';
+  return 'other';
+}
+async function load() {
+  let view;
+  try { view = await (await fetch('/api/v1/board')).json(); }
+  catch (e) { $('status').textContent = 'board fetch error: ' + e; return; }
+  const nodes = view.nodes || [], edges = view.edges || [];
+  if (!nodes.length) { $('status').textContent = 'no board snapshot yet'; return; }
+  const els = [];
+  for (const n of nodes) els.push({ data: { id: n.id, label: n.identifier || n.id,
+      layer: n.layer, state: n.state }, classes: nodeClass(n) });
+  for (const e of edges) els.push({ data: { id: e.from + '__' + e.to, source: e.from, target: e.to } });
+  const cy = cytoscape({
+    container: $('cy'), elements: els, wheelSensitivity: 0.2,
+    style: [
+      { selector: 'node', style: { 'label': 'data(label)', 'color': '#d6dde6', 'font-size': 10,
+        'background-color': '#39414f', 'shape': 'round-rectangle', 'width': 'label', 'height': 16,
+        'padding': '6px', 'text-valign': 'center', 'text-halign': 'center' } },
+      { selector: 'node.done', style: { 'background-color': '#1f3d2c', 'border-color': '#6ee7a8', 'border-width': 1 } },
+      { selector: 'node.prog', style: { 'background-color': '#16314d', 'border-color': '#9ecbff', 'border-width': 2 } },
+      { selector: 'node.cycle', style: { 'border-color': '#ff9b9b', 'border-width': 2 } },
+      { selector: 'node.collapsed', style: { 'border-style': 'dashed', 'border-color': '#e3b341', 'border-width': 2 } },
+      { selector: 'edge', style: { 'width': 1, 'line-color': '#2a3343', 'target-arrow-color': '#2a3343',
+        'target-arrow-shape': 'triangle', 'arrow-scale': .7, 'curve-style': 'bezier' } },
+    ],
+    layout: { name: 'dagre', rankDir: 'LR', nodeSep: 18, rankSep: 60 },
+  });
+  $('status').textContent = nodes.length + ' tickets · ' + edges.length + ' deps · '
+    + (view.layers ? view.layers.length : 0) + ' waves';
+  cy.on('tap', 'node', (ev) => openOverlay(ev.target));
+  cy.on('dbltap', 'node', (ev) => toggleCollapse(ev.target));
+  window.cy = cy;   // introspection hook (debug + behavioral test): window.cy.nodes(), emit('tap')
+}
+function toggleCollapse(node) {                       // manual DAG-subtree collapse (descendant-hide)
+  const collapsed = node.hasClass('collapsed');
+  node.successors('node').style('display', collapsed ? 'element' : 'none');
+  node[collapsed ? 'removeClass' : 'addClass']('collapsed');
+}
+async function openOverlay(node) {
+  const id = node.data('id');
+  $('ov').style.display = 'block';
+  $('ovh').textContent = node.data('label') + ' — ' + (node.data('state') || '');
+  $('ovb').textContent = 'loading…';
+  let v;
+  try { v = await (await fetch('/api/v1/ticket/' + encodeURIComponent(id) + '/events')).json(); }
+  catch (e) { $('ovb').textContent = 'events fetch error: ' + e; return; }
+  $('ovb').textContent = '';
+  const evs = v.events || [];
+  if (!evs.length) { $('ovb').textContent = 'no session events recorded for this ticket'; return; }
+  for (const e of evs) {
+    const d = document.createElement('div'); d.className = 'evt';
+    d.textContent = '[' + (e.seq != null ? e.seq : '') + '] ' + (e.kind || '')
+      + (e.text ? ': ' + e.text : '') + (e.tool ? ' ' + e.tool : '');
+    $('ovb').appendChild(d);
+  }
+}
+load();
+</script></body></html>"""
+
+
 class _Handler(BaseHTTPRequestHandler):
     """Thin shim over build_view. Two defined GET routes; everything else is an
     error envelope. status_dir/queue_dir come from the SERVER (set in serve), never
@@ -549,12 +672,15 @@ class _Handler(BaseHTTPRequestHandler):
 
     # route → allowed verbs. GET reads (unfenced); the one POST write is token-fenced.
     _ROUTES = {"/": {"GET"}, _STATE_PATH: {"GET"}, _STREAM_PATH: {"GET"},
-               _HISTORY_PATH: {"GET"}, _ANSWER_PATH: {"POST"}}
+               _HISTORY_PATH: {"GET"}, _BOARD_PATH: {"GET"}, _GRAPH_PATH: {"GET"},
+               _ANSWER_PATH: {"POST"}}
 
     def _route(self):
         path = self.path.split("?", 1)[0]
         if path.startswith(_TICKET_PREFIX):       # dynamic per-ticket routes (sanitized below)
             return self._ticket_route(path)
+        if path in _ASSETS:                        # fixed vendored-asset map (zero traversal)
+            return self._asset(path)
         allowed = self._ROUTES.get(path)
         if allowed is None:
             return self._error(404, f"no such route: {path}")          # undefined → 404
@@ -563,8 +689,15 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/":
             return self._send(200, PAGE_html(self.server.token).encode("utf-8"),
                               "text/html; charset=utf-8")
+        if path == _GRAPH_PATH:
+            return self._send(200, GRAPH_PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if path == _STATE_PATH:
             view = build_view(self.server.status_dir, self.server.queue_dir)
+            return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
+        if path == _BOARD_PATH:
+            snap = board_snapshot.read_board(base=self.server.board_dir) or {}
+            nodes = snap.get("nodes", []) if isinstance(snap, dict) else []
+            view = board_snapshot.build_board_view(nodes)
             return self._send(200, json.dumps(view).encode("utf-8"), "application/json")
         if path == _STREAM_PATH:
             return self._stream()
@@ -572,6 +705,20 @@ class _Handler(BaseHTTPRequestHandler):
             runs = history.read_history(base=self.server.history_dir)
             return self._send(200, json.dumps(runs).encode("utf-8"), "application/json")
         return self._answer()  # _ANSWER_PATH + POST
+
+    def _asset(self, path: str) -> None:
+        """Serve one vendored, checked-in JS asset (R6). `path` is a key of the FIXED
+        `_ASSETS` map (matched in `_route`), so the filename is a constant, never
+        request-derived — zero traversal (invariant 3). GET-only; a missing file (a
+        broken vendor checkout) is a 404, never a traceback (fail-soft)."""
+        if self.command != "GET":
+            return self._error(405, f"method not allowed: {self.command}")
+        filename, ctype = _ASSETS[path]
+        try:
+            body = (_ASSETS_DIR / filename).read_bytes()
+        except OSError:
+            return self._error(404, f"asset not vendored: {filename}")
+        return self._send(200, body, ctype)
 
     def _stream(self) -> None:
         """Server-push the view as SSE (R4): hold the connection open and emit a frame
@@ -754,12 +901,13 @@ class _DashboardServer(ThreadingHTTPServer):
     never per-request) — an explicit field instead of a monkey-attribute."""
 
     def __init__(self, addr, handler, *, status_dir=None, queue_dir=None,
-                 history_dir=None, events_dir=None, token=None):
+                 history_dir=None, events_dir=None, board_dir=None, token=None):
         super().__init__(addr, handler)
         self.status_dir = status_dir
         self.queue_dir = queue_dir
         self.history_dir = history_dir   # the cross-run history store the /api/v1/history route reads
         self.events_dir = events_dir     # the per-ticket session-event store the /api/v1/ticket/* routes read
+        self.board_dir = board_dir       # the whole-board snapshot store the /api/v1/board route reads
         # Per-server CSRF token: minted once, embedded in the served page, required on
         # every write (POST). A foreign page in the browser cannot read it (same-origin)
         # so cannot forge a write to localhost. `token=` is injectable for tests.
@@ -776,12 +924,13 @@ class _DashboardServer(ThreadingHTTPServer):
 
 
 def serve(port: int = _DEFAULT_PORT, status_dir=None, queue_dir=None,
-          history_dir=None, events_dir=None) -> _DashboardServer:
+          history_dir=None, events_dir=None, board_dir=None) -> _DashboardServer:
     """Bind a read-only dashboard server on 127.0.0.1 (LAN never exposed, D-5). A bind
     failure (e.g. port in use) propagates immediately — no retry loop. Caller runs
     serve_forever(); tests bind port 0 and drive it over urllib."""
     return _DashboardServer(("127.0.0.1", port), _Handler, status_dir=status_dir,
-                            queue_dir=queue_dir, history_dir=history_dir, events_dir=events_dir)
+                            queue_dir=queue_dir, history_dir=history_dir, events_dir=events_dir,
+                            board_dir=board_dir)
 
 
 def main(argv=None) -> int:
@@ -793,8 +942,10 @@ def main(argv=None) -> int:
     ap.add_argument("--queue-dir", default=None, help="queue dir override")
     ap.add_argument("--history-dir", default=None, help="cross-run history dir override")
     ap.add_argument("--events-dir", default=None, help="per-ticket session-event dir override")
+    ap.add_argument("--board-dir", default=None, help="whole-board snapshot dir override")
     args = ap.parse_args(argv)
-    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir, args.events_dir)
+    httpd = serve(args.port, args.status_dir, args.queue_dir, args.history_dir, args.events_dir,
+                  args.board_dir)
     host, port = httpd.server_address[0], httpd.server_address[1]
     print(f"director.dashboard: http://{host}:{port}/  (read-only; Ctrl-C to stop)")
     try:

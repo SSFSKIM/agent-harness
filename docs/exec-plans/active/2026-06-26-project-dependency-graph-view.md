@@ -211,20 +211,60 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   cycle-no-hang, self-block, descendant-of-cycle, dangling-drop, projection, garbage
   tolerance, writer round-trip, torn/absent read, Noop off-path). `pytest` 18/18 GREEN;
   `main()` smoke correct (a→b edge, b@layer1); full gate GREEN.
-- [ ] **M2 — CHECKPOINT (awaiting human go).** Library feasibility spike: vendor
-  Cytoscape+dagre+expand-collapse offline, fixed asset route, `/api/v1/board`, ADR 0006
-  + ARCHITECTURE invariant-1 note. This is where the vendoring + invariant relaxation
-  materialize — paused here per the agreed M1→M2 checkpoint.
-- [ ] M3 — orchestrator poll-tick wiring + `board_snapshot_interval_s` knob + live proof.
+- [x] (2026-06-26) **M2 done — library feasibility RETIRED (the dominant unknown).**
+  Vendored `director/assets/{cytoscape.min.js, dagre.min.js, cytoscape-dagre.js}`
+  (pinned, offline). `dashboard.py`: fixed `_ASSETS` route + `_asset` handler,
+  `GET /api/v1/board` (build_board_view over read_board), `/graph` spike page (loads
+  the libs from local /assets, renders the layered DAG, node tap → session overlay
+  over the existing /ticket/<id>/events route, dbltap → manual descendant-hide collapse),
+  `window.cy` introspection hook, `--board-dir`. ADR 0006 + ARCHITECTURE invariant-1
+  scope note + adr/index registered. **9 new dashboard tests** (board route shape,
+  graph page references LOCAL assets + no "cdn", each vendored asset served as JS,
+  unknown/traversal asset → 404, POST → 405) — 75/75 dashboard+board tests GREEN.
+  **Live playwright proof (offline):** `window.cy.nodes()===8 / edges===7`, status
+  "8 tickets · 7 deps · 4 waves", dagre layered layout offline (L1=20 < L2=119 < L4=217
+  — serial deepens rightward, diamond apex furthest right), in_cycle=[LIN-7,LIN-8],
+  console shows assets+board served from 127.0.0.1 (only error = favicon 404, benign),
+  **no CDN/external request**. Render + offline + routes = PROVEN; interactive tap/
+  collapse capture was blocked by playwright env flakiness (page reset between calls) —
+  handlers are wired + the consumed events route is unit-tested; the full interactive
+  behavioral pass is M5's scope.
+- [ ] **M3 — next.** orchestrator poll-tick wiring + `board_snapshot_interval_s` knob + live proof.
 - [ ] M4 — graph-view UI restructure + node painting + re-homed session overlay.
 - [ ] M5 — scale/collapse + playwright behavioral + cross-runtime pass.
 
 ## Surprises & discoveries
+- 2026-06-26 (M2): **`cytoscape-expand-collapse` is the wrong tool.** It collapses
+  *compound* (parent/child nesting) nodes, not DAG-successor subtrees — so "collapse a
+  completed subtree" can't use it. DAG subtree collapse is a one-liner manual
+  descendant-hide (`node.successors('node').style('display', …)`). Dropped the library
+  (−31 KB vendor weight); the spike corrected the spec's R6 library list. Vendor set is
+  now the minimum for a crossing-minimized layered layout: cytoscape + dagre +
+  cytoscape-dagre.
+- 2026-06-26 (M2): **`cytoscape-dagre` registered + laid out OFFLINE on the first try**
+  from local `/assets/*` UMD bundles in a no-bundler single page — the dominant unknown,
+  retired. dagre's ranks matched the server's longest-path layers (L1<L2<L4).
+- 2026-06-26 (M2): **playwright env is flaky here** — the page intermittently reset to
+  blank between separate `playwright-cli` invocations (`body.innerHTML.length===0`), and
+  a screenshot captured a blank frame. Render was proven authoritatively via the live
+  cytoscape instance state (`window.cy.nodes().length===8`, dagre positions) instead;
+  per the playwright-cli skill ("stop after 2–3 failed browser attempts") the interactive
+  tap/collapse live-capture is deferred to M5's behavioral pass (handlers are wired; the
+  events route they call is unit-tested). Not a product defect — a harness/env artifact.
 
 ## Decision log
 - 2026-06-26: Layer math is server-side and pure (`build_board_view`), not browser-
   computed — the layer *is* the scheduler's wave, a product semantic that must be tested
   (Approach A; invariant 4).
+- 2026-06-26 (M2): Vendor set reduced to **3** (cytoscape + dagre + cytoscape-dagre);
+  `cytoscape-expand-collapse` dropped (compound-only, wrong for DAG subtree collapse →
+  manual descendant-hide). Recorded in ADR 0006.
+- 2026-06-26 (M2): M2 is an additive **`/graph` spike page** — the flat-list `/` is
+  untouched; M4 promotes the graph to `/`. Keeps M2 low-risk (no disturbance to the
+  shipped page) and the keepers (assets/route/board-route/ADR) survive into M4.
+- 2026-06-26 (M2): Exposed `window.cy` on the graph page — an introspection hook for
+  debugging and the behavioral test (`window.cy.nodes()`, `emit('tap')`); harmless on a
+  read-only localhost instrument.
 - 2026-06-26: Library feasibility front-loaded as an M2 spike against a static fixture —
   the offline no-bundler stacked-UMD render is the dominant unknown, retired before the
   producer wiring and full UI invest (Approach B). Keepers (asset, route, ADR) survive
