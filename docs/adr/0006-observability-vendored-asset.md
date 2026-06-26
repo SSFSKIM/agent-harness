@@ -69,7 +69,7 @@ that delivers a crossing-minimized layered layout.
   stdlib-only rule is Python-scoped; the dashboard may serve a fixed set of offline,
   checked-in JS assets under `director/assets/` (this ADR).
 - **Implemented by**
-  [project-dependency-graph-view ExecPlan](../exec-plans/active/2026-06-26-project-dependency-graph-view.md)
+  [project-dependency-graph-view ExecPlan](../exec-plans/completed/2026-06-26-project-dependency-graph-view.md)
   M2: `director/assets/` (the three pinned bundles), the fixed `_ASSETS` route + `_asset`
   handler, and the `/graph` page that loads them locally. A dashboard test asserts the
   allowlist serves and any non-key/traversal-shaped asset path is a 404.

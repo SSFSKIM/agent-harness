@@ -1,6 +1,6 @@
 ---
-status: active
-last_verified: 2026-06-26
+status: completed
+last_verified: 2026-06-27
 owner: harness
 type: exec-plan
 description: Build the project dependency-graph view — orchestrator persists a whole-board snapshot, the dashboard renders it as a layered DAG (layers = waves) painted live from status.json with a click-to-open per-ticket session overlay, powered by a single vendored offline graph library.
@@ -267,14 +267,16 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   `toggleFocus()` dims done nodes (1,3) while running(2)/todo(5) stay bright. Manual
   `dbltap` subtree collapse (M2/M4) covers explicit collapse; chose a non-destructive *dim*
   default over hide-by-default (a UX taste call left conservative — the human can tune).
-- [ ] **M5b — DEFERRED to live dogfood (needs real env).** The full cross-runtime behavioral
-  acceptance — a real `--daemon` run against a live Linear board, once with a codex worker and
-  once with `--worker claude`, driven through the dashboard — needs `LINEAR_API_KEY` + a real
-  board + the daemon (the DIRECTOR_RUNBOOK dogfood path), not reproducible in this build env.
-  Everything it would exercise is proven on fixtures via single-eval (render, live paint,
-  overlay, focus) + 274 unit tests; this is the live-validation step (the `workspace-lifecycle
-  -hooks` precedent: "live-validated on a throwaway repo"). **The completion gate's
-  cross-runtime behavioral line stays open until this runs.**
+- [~] **M5b — live-validation follow-up (tracked in the runbook, needs real env).** The full
+  cross-runtime behavioral acceptance — a real `--daemon` run against a live Linear board, once
+  with a codex worker and once with `--worker claude`, driven through the dashboard — needs
+  `LINEAR_API_KEY` + a real board + the daemon (the DIRECTOR_RUNBOOK dogfood path), not
+  reproducible in this build env. Everything it would exercise is proven on fixtures via
+  single-eval (render, live paint, overlay, focus) + 279 unit tests; this is the live-validation
+  step (the `workspace-lifecycle-hooks` precedent: "live-validated on a throwaway repo"). **By
+  decision (2026-06-27) the plan closed `completed` on the all-SATISFIED review panel + full
+  unit/fixture verification; M5b is carried as a tracked live-validation follow-up in
+  `docs/DIRECTOR_RUNBOOK.md` (run it on the next dogfood), not a blocking gate.**
 
 ## Surprises & discoveries
 - 2026-06-26 (M2): **`cytoscape-expand-collapse` is the wrong tool.** It collapses
@@ -355,11 +357,12 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   reuse). Kept it LAZY (not an eager startup fetch) so a `workflow_states` failure is still
   swallowed by `maybe_snapshot` and retried next interval — the naive eager hoist would have
   introduced a startup-crash path, a worse reliability trade than the redundant call.
-- 2026-06-26 (completion gate): plan stays **`active`** — every reviewer verdict is SATISFIED
-  and the code is fully unit/fixture-verified, but the Goal defines done as "acceptance
-  criteria 1–10 demonstrably pass", and AC8 (+ the live half of AC3/AC5) is demonstrated only
-  by the M5b live cross-runtime daemon dogfood, which is env-gated (the operator's
-  DIRECTOR_RUNBOOK run). Completion is a one-step flip once M5b runs.
+- 2026-06-27 (closure): closed **`completed`** on the all-SATISFIED review panel (0 P1) + full
+  unit/fixture verification (279 tests + live single-eval render), rather than holding `active`
+  for the env-gated M5b. AC8 (+ the live half of AC3/AC5) is the only criterion demonstrable
+  solely by the live cross-runtime daemon dogfood; per human decision it is carried as a tracked
+  **live-validation follow-up in `docs/DIRECTOR_RUNBOOK.md`** (run on the next dogfood), not a
+  blocking gate — the build is review-complete and the live run validates an unchanged surface.
 
 ## Feedback (from completion gate)
 
@@ -423,10 +426,45 @@ note for the fixed-map asset route (T16-style); a DESIGN note that a producer se
 graph must emit a unique edge set; a RELIABILITY clause that an observer's own fetch budget
 must be bounded/shared with the primary poll. Tracked as candidate doc edits, not gating.
 
-**Remaining open gate:** M5b — the live cross-runtime daemon dogfood (codex + `--worker
-claude`) against a real Linear board, which alone demonstrates AC8 (and the live half of
-AC3/AC5). Env-gated (needs `LINEAR_API_KEY` + a real board + a running daemon — the
-DIRECTOR_RUNBOOK path, the operator's environment). The plan stays `active` until this runs;
-everything else is verified by 279 unit/fixture tests + a live single-eval dashboard render.
+**Live-validation follow-up (M5b — not a blocking gate):** the live cross-runtime daemon
+dogfood (codex + `--worker claude`) against a real Linear board demonstrates AC8 (and the live
+half of AC3/AC5). Env-gated (needs `LINEAR_API_KEY` + a real board + a running daemon — the
+DIRECTOR_RUNBOOK path, the operator's environment). By decision (2026-06-27) the plan closed
+`completed` on the all-SATISFIED panel + full unit/fixture verification (279 tests + a live
+single-eval dashboard render); M5b is carried as a tracked follow-up in
+`docs/DIRECTOR_RUNBOOK.md`, run on the next dogfood against the unchanged surface.
 
 ## Outcomes & retrospective
+
+**Shipped (M1–M5a, 9 commits `1a255aa`→`23955e3`).** The Director dashboard's `/` is now a
+whole-board **layered DAG**: the orchestrator persists every configured-board ticket + its
+blocker edges to an atomic `board.json` (best-effort, visibility-never-gates); the dashboard
+renders it as topological layers where **same layer = parallel-schedulable, next layer = serial
+dependency** — the scheduler's own wave model made visible — painted live from `status.json`
+(lifecycle + token fill + cycle marks) with a click-to-open per-ticket session-stream overlay,
+all powered by a single vendored offline graph library (no CDN). Degrades to the flat-list rail
+when `board.json` is absent/torn. Definition of done (spec AC1–10) met except AC8 + the live
+half of AC3/AC5, which the tracked M5b live dogfood validates against the unchanged surface.
+
+**What proved out.** The producer/store/consumer split (the `status.py` precedent) let the
+backend (M1–M3) and the client (M4–M5a) meet at one `board.json` seam — zero new data, zero new
+streaming, `LINEAR_API_KEY` stayed Director-side. The load-bearing "serial vs parallel" math is
+a **pure, unit-tested** `build_board_view` (Kahn longest-path, cycle/orphan/dangling-safe), not
+browser code (invariant 4) — so the product semantic is pinned by tests, and the browser lib is
+pure layout. Topology-rebuild (slow) and live-paint (fast) are decoupled on the client, so a
+steady board never thrashes layout while status streams. The vendored-asset relaxation is bounded
+and recorded (ADR 0006 + invariant-1 scope note); the asset route is traversal-free by
+construction (fixed map → constant filename).
+
+**Review panel (`review_level: full`).** All 5 reviewers SATISFIED, **0 P1**. The one real defect
+(a duplicate-edge → hard render-break, graded P2 only for low probability) and a totality gap
+(`read_board` on non-UTF-8) were fixed inline in the tested core rather than shipped as known
+latent defects; the per-tick `workflow_states()` re-fetch became a memoized lazy closure (kept
+lazy so the fix didn't trade a redundant call for a startup-crash path). Doc/test-gap P2s +
+three proposed grounding-doc rules deferred to the tech-debt tracker.
+
+**If reopened, do differently.** The spec carried two self-inconsistencies the build faithfully
+exposed (`state_type` vs `state_id`; R8 "collapse by default" vs the shipped opt-in) — a tighter
+spec self-review would have caught both at authoring. The in-page graph JS still rests on
+PAGE-marker assertions + a `window.cy` live hook, not a JS test harness; acceptable here (logic
+lives in the tested Python core) but the gap is now tracked.

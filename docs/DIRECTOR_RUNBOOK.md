@@ -276,10 +276,22 @@ python3 -m director.dashboard            # default dirs (.claude/harness/directo
 
 > The default port **8787 may already be bound** (another dashboard, or any unrelated dev
 > server) — startup fails with `OSError: Address already in use`. Pass `--port <N>` to pick
-> a free one. The `--status-dir`/`--queue-dir`/`--events-dir`/`--history-dir` flags override
-> the `.claude/harness/director-*` defaults (omit them when running from the runner cwd).
+> a free one. The `--status-dir`/`--queue-dir`/`--events-dir`/`--history-dir`/`--board-dir`
+> flags override the `.claude/harness/director-*` defaults (omit them when running from the
+> runner cwd; `--board-dir` defaults to `.claude/harness/director-board`).
 
-- **Watch:** the live run header (cumulative **tokens** climbing mid-turn, runtime,
+- **Project graph (the `/` page):** the whole configured board as a **layered DAG** — every
+  ticket is a node, blocker edges connect them, and nodes sit in topological layers where
+  *same layer = parallel-schedulable, next layer = serial dependency* (the orchestrator's own
+  wave model). Nodes are painted live from `status.json` (lifecycle colour + an in-flight token
+  fill; blocked/cycle nodes marked); **tap a node** to open the per-ticket session overlay
+  below. Auto-fits on load; pan/zoom navigate, with opt-in subtree-collapse (`dbltap` a node)
+  and a frontier-focus toggle. Served from a vendored offline graph lib (no CDN); reads only the
+  local `board.json` the orchestrator writes (`--board-dir`), so no Linear key is needed
+  dashboard-side. If there's no board snapshot yet it shows a labeled empty-state and the side
+  rail below still works. Routes: `GET /api/v1/board` (the layered view) + `/assets/*` (the
+  vendored lib).
+- **Watch (side rail):** the live run header (cumulative **tokens** climbing mid-turn, runtime,
   rate-limit headroom), in-flight tickets, what's stuck, recent outcomes, the pending
   queue, and a cross-run history panel — server-pushed over SSE.
 - **Drill down (per-ticket session events):** click any in-flight or recent ticket row →
@@ -291,6 +303,15 @@ python3 -m director.dashboard            # default dirs (.claude/harness/directo
   reply/done/blocked/escalate; mergeReview → requeue/abandon) — it writes through the same
   `director_min` path as §6. Bound to `127.0.0.1` only; writes need a per-server CSRF token
   + localhost Origin/Host (reads unfenced).
+
+> **Follow-up — live-validate the project graph (was M5b).** The project-graph view shipped
+> `completed` on an all-SATISFIED review panel + full unit/fixture verification, with its live
+> cross-runtime acceptance deferred to a real dogfood. On your next watched run, confirm against
+> the live board: (1) `/` renders the board DAG with the expected layers; (2) an in-flight ticket
+> lights up with a climbing token fill and tapping it streams its session; (3) a blocked/cycle
+> ticket is marked; (4) it holds up on a 100+-node board (pan/zoom/collapse). Do it once with the
+> codex worker and once with `--worker claude`. See
+> `docs/exec-plans/completed/2026-06-26-project-dependency-graph-view.md` (M5b / Outcomes).
 
 **Get pinged when a run parks** (so you know to open the console):
 

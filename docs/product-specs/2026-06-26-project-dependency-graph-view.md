@@ -1,6 +1,6 @@
 ---
-status: draft
-last_verified: 2026-06-26
+status: stable
+last_verified: 2026-06-27
 owner: harness
 phase: symphony/05-project-graph-view
 type: product-spec
@@ -373,7 +373,7 @@ escalated and answered before drafting.
 
 ## Hand-off
 
-ExecPlan in `docs/exec-plans/active/2026-06-26-project-dependency-graph-view.md`
+ExecPlan in `docs/exec-plans/completed/2026-06-26-project-dependency-graph-view.md`
 references this spec and owns the build. Suggested milestone order (the ExecPlan
 owns the final cut): (M1) `board_snapshot.py` pure core + writer + tests; (M2)
 orchestrator poll-tick wiring + config knob + a **live whole-board snapshot proof**
