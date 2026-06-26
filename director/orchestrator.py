@@ -26,6 +26,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import director.queue as dq
+from director import board_snapshot as board_snapshot_mod
 from director import config, decider, history, merger, run, status as status_mod, taxonomy, ticket_events as events_mod
 from director.board import linear as board_linear
 from director.worker import app_server, autonomy
@@ -609,7 +610,7 @@ def _dispatch_wave(board, tickets: list[dict], *, command: list[str], states: di
 
 def run_once(board, command: list[str], *, team: str, states: dict,
              done_types=("completed",), dispatch_requires_label: bool = False,
-             status=None, events=None, **wave_kwargs) -> list[dict]:
+             status=None, events=None, board_snapshotter=None, **wave_kwargs) -> list[dict]:
     """One poll→filter→dispatch→reconcile pass. Polls ready tickets, keeps only the
     DAG-eligible ones (blockers all done), then dispatches+drains that wave. Returns
     a per-ticket summary list. The shared Director queue carries approvals to the
@@ -620,7 +621,9 @@ def run_once(board, command: list[str], *, team: str, states: dict,
     (re-poll waves, stuck detection, drained/stuck terminal) belongs to
     run_until_drained — a `--once` snapshot ends at "pass_complete" by design."""
     status = status or status_mod.NoopStatusWriter()
+    board_snapshotter = board_snapshotter or board_snapshot_mod.NoopBoardSnapshotter()
     status.wave(1)
+    board_snapshotter.maybe_snapshot(time.monotonic())  # whole-board snapshot for the graph view
     ready = board.list_ready_issues(team, states["ready"])
     eligible = eligible_tickets(ready, done_types=done_types,
                                 require_label=dispatch_requires_label)
@@ -643,7 +646,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
                       done_types=("completed",), dispatch_requires_label: bool = False,
                       max_passes: int = 50,
                       max_dispatched: int = 200, status=None, events=None, history_base=None,
-                      **wave_kwargs) -> dict:
+                      board_snapshotter=None, **wave_kwargs) -> dict:
     """Re-poll the board and dispatch each newly-eligible wave until the DAG drains.
 
     Board-as-truth: a completed ticket leaves the `ready` state (reconciled to done),
@@ -663,6 +666,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
     poll_error = None
     done = set(done_types)
     status = status or status_mod.NoopStatusWriter()
+    board_snapshotter = board_snapshotter or board_snapshot_mod.NoopBoardSnapshotter()
     while True:
         if passes >= max_passes:
             stopped_reason = "max_passes"
@@ -674,6 +678,7 @@ def run_until_drained(board, command: list[str], *, team: str, states: dict,
         # eligibility computation (no-op when `merging` is unconfigured).
         _reconcile_merges(board, team=team, states=states,
                           queue_base=wave_kwargs.get("queue_base"))
+        board_snapshotter.maybe_snapshot(time.monotonic())  # whole-board snapshot for the graph view
         try:
             ready = board.list_ready_issues(team, states["ready"])
         except Exception as exc:  # a transient poll failure ends the run cleanly, not a crash
@@ -851,7 +856,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 workspace_root=run.DEFAULT_WORKSPACE_ROOT, retry_budget: int = 1,
                 tools=None, tool_executor=None, install_skills: bool = False,
                 read_timeout_s: float = 30.0, timeout_s: float = 300.0, status=None,
-                events=None,
+                events=None, board_snapshotter=None,
                 approval_policy: str = "untrusted", sandbox: str = "workspace-write",
                 decide=decider.autonomous_decide, max_turns: int = run.DEFAULT_MAX_TURNS,
                 reconcile_interval_s: float = config.DEFAULTS["reconcile_interval_s"],
@@ -898,6 +903,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     # orphaned `started` tickets BEFORE the first tick. Fail-soft — never blocks startup.
     _startup_recovery(board, states, team=team, workspace_root=workspace_root,
                       queue_base=queue_base, hooks=hooks, hook_timeout_s=hook_timeout_s)
+    board_snapshotter = board_snapshotter or board_snapshot_mod.NoopBoardSnapshotter()
     done_set = set(done_types)
     last_reconcile = time.monotonic()
     forced = False
@@ -941,6 +947,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 # whose PR just landed clears its children's blocker promptly even under a
                 # saturated pool (no-op when `merging` is unconfigured; fail-soft).
                 _reconcile_merges(board, team=team, states=states, queue_base=state.queue_base)
+                board_snapshotter.maybe_snapshot(now)  # whole-board snapshot for the graph view (throttled)
                 # DUE RETRIES (A): re-dispatch any pending whose backoff elapsed (now first
                 # so they count in futures below). Guarded by `not draining` — a shutdown
                 # abandons pending retries (D-81), left In Progress for board-as-truth.
@@ -1161,6 +1168,9 @@ def resolve_settings(args, cfg) -> dict:
         "turn_review_timeout_s": _pick(args.turn_review_timeout, cfg.turn_review_timeout_s),
         "reconcile_interval_s": _pick(args.reconcile_interval, cfg.reconcile_interval_s),
         "poll_interval_s": _pick(args.poll_interval, cfg.poll_interval_s),
+        # whole-board snapshot cadence (project graph view) — config-only (no CLI flag);
+        # None tracks poll_interval_s, resolved where the snapshotter is built.
+        "board_snapshot_interval_s": cfg.board_snapshot_interval_s,
         "backoff_base_s": _pick(args.backoff_base, cfg.backoff_base_s),
         "backoff_cap_s": _pick(args.backoff_cap, cfg.backoff_cap_s),
         "codex_command": (args.codex if args.codex is not None
@@ -1329,6 +1339,25 @@ def main(argv=None, *, board=None) -> int:
               "hooks": hooks, "hook_timeout_s": s["workspace"].hook_timeout_s}
     if s["workspace_root"]:
         kwargs["workspace_root"] = Path(s["workspace_root"])
+
+    # Whole-board snapshot for the dashboard's project-graph view (M3). Shares the
+    # visibility switch (`--no-status` → Noop, byte-identical poll loop). The writer lives
+    # in a sibling of the status dir (so a custom --status-dir co-locates it; the
+    # dashboard's --board-dir default matches the bare default). The fetch thunk reads the
+    # WHOLE board — every workflow state's issues (with their blocker DAG), via the all-ids
+    # set from workflow_states — so backlog/done/etc. all appear, not just dispatch states.
+    # interval: director.board_snapshot_interval_s, else the poll interval.
+    if args.no_status:
+        board_snapshotter = board_snapshot_mod.NoopBoardSnapshotter()
+    else:
+        _team = s["team"]
+        _board_dir = (Path(s["status_dir"]).parent / "director-board") if s["status_dir"] else None
+        board_snapshotter = board_snapshot_mod.BoardSnapshotter(
+            fetch=lambda: board.fetch_issues_by_states(
+                _team, [v["id"] for v in board.workflow_states(_team).values()]),
+            writer=board_snapshot_mod.BoardWriter(base=_board_dir),
+            interval_s=s["board_snapshot_interval_s"] or s["poll_interval_s"])
+    kwargs["board_snapshotter"] = board_snapshotter
 
     command = _command(args, s["codex_command"], s["posture"])
     if args.daemon:

@@ -218,6 +218,48 @@ def read_board(base: Path | str | None = None) -> dict | None:
         return None
 
 
+class BoardSnapshotter:
+    """Throttled whole-board snapshot driver the orchestrator's poll loops call once per
+    tick. Encapsulates the cadence so the loops carry no snapshot bookkeeping (the
+    `_RunState`/StatusWriter precedent: the loop calls a method, the object owns the state).
+
+    `fetch` is an injected thunk `() -> list[node]` (main wires it to the whole-board
+    read — every workflow state's issues with their blocker DAG); decoupling from the
+    board interface keeps this pure-testable (a fake fetch, no network). `maybe_snapshot`
+    fires the FIRST time it is called (so a fresh run / pre-run gets a snapshot promptly),
+    then at most once per `interval_s`. Exception-total (R1/R12): a failing fetch/write is
+    swallowed — a board snapshot must NEVER gate the orchestrator's poll. The throttle
+    clock advances even on failure, so a persistently-failing board is retried at the
+    cadence, never hammered."""
+
+    def __init__(self, fetch: Callable[[], list], writer, interval_s: float):
+        self._fetch = fetch
+        self._writer = writer
+        self._interval = interval_s
+        self._last: float | None = None     # monotonic of the last attempt (None = never)
+
+    def maybe_snapshot(self, now: float) -> bool:
+        """Snapshot if due (`now` = a monotonic clock). Returns True if it attempted a
+        snapshot this call, False if throttled. Never raises."""
+        if self._last is not None and (now - self._last) < self._interval:
+            return False
+        self._last = now
+        try:
+            self._writer.write(self._fetch())
+        except Exception as exc:  # best-effort: visibility NEVER gates the poll (R1/R3).
+            self._writer.last_error = str(exc)
+        return True
+
+
+class NoopBoardSnapshotter:
+    """Snapshots nothing — the default when the board surface is off (the `--no-status`
+    switch, library calls, tests), so the poll loops are byte-identical (the
+    `NoopStatusWriter`/`NoopBoardWriter` precedent)."""
+
+    def maybe_snapshot(self, now: float) -> bool:
+        return False
+
+
 def main(argv=None) -> int:
     """Read surface: dump the current board as the layered-DAG view (read-only)."""
     import argparse

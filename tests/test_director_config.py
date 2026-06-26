@@ -101,6 +101,20 @@ class LoadConfigTest(unittest.TestCase):
         cfg = config.load_director_config(root=self.root)
         self.assertFalse(cfg.merger.require_resolved_threads)
 
+    def test_board_snapshot_interval_default_none_tracks_poll(self):
+        # None default = "track poll_interval_s" (resolved where the snapshotter is built).
+        self.assertIsNone(config.defaults().board_snapshot_interval_s)
+
+    def test_board_snapshot_interval_override(self):
+        _write(self.root, {"director": {"board_snapshot_interval_s": 30}})
+        cfg = config.load_director_config(root=self.root)
+        self.assertEqual(cfg.board_snapshot_interval_s, 30.0)
+
+    def test_bad_board_snapshot_interval_raises(self):
+        _write(self.root, {"director": {"board_snapshot_interval_s": -5}})
+        with self.assertRaises(ValueError):
+            config.load_director_config(root=self.root)
+
     # -- use-all shakedown fixes: read_timeout default + dispatch_requires_label -----
     def test_read_timeout_default_is_180(self):
         # F3: the default per-message read budget is 180s (was 30s, which crashed real

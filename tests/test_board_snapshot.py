@@ -149,6 +149,50 @@ class BoardWriterTest(unittest.TestCase):
             self.assertIsNone(bs.read_board(base=d))
 
 
+class _RecWriter:
+    """A BoardWriter stand-in that records the node lists it was handed."""
+    def __init__(self):
+        self.writes = []
+        self.last_error = None
+
+    def write(self, nodes):
+        self.writes.append(nodes)
+
+
+class BoardSnapshotterTest(unittest.TestCase):
+    def test_first_call_snapshots_then_throttles(self):
+        w = _RecWriter()
+        s = bs.BoardSnapshotter(fetch=lambda: [node("a")], writer=w, interval_s=10)
+        self.assertTrue(s.maybe_snapshot(100.0))      # first call always fires (prompt fresh snapshot)
+        self.assertFalse(s.maybe_snapshot(105.0))     # within interval → throttled
+        self.assertTrue(s.maybe_snapshot(110.0))      # interval elapsed → fires again
+        self.assertFalse(s.maybe_snapshot(111.0))
+        self.assertEqual(len(w.writes), 2)            # exactly the two un-throttled calls wrote
+
+    def test_fetch_failure_is_swallowed_and_still_throttles(self):
+        w = _RecWriter()
+        def boom():
+            raise RuntimeError("board down")
+        s = bs.BoardSnapshotter(fetch=boom, writer=w, interval_s=10)
+        self.assertTrue(s.maybe_snapshot(100.0))      # attempted, never raises
+        self.assertEqual(w.writes, [])                # fetch failed → nothing written
+        self.assertEqual(w.last_error, "board down")  # recorded on the writer
+        self.assertFalse(s.maybe_snapshot(105.0))     # clock advanced even on failure → throttled (no hammer)
+
+    def test_write_failure_is_swallowed(self):
+        class BoomWriter:
+            last_error = None
+            def write(self, nodes):
+                raise RuntimeError("disk full")
+        s = bs.BoardSnapshotter(fetch=lambda: [node("a")], writer=BoomWriter(), interval_s=10)
+        self.assertTrue(s.maybe_snapshot(100.0))      # never raises into the poll
+
+    def test_noop_snapshotter_never_fires(self):
+        s = bs.NoopBoardSnapshotter()
+        self.assertFalse(s.maybe_snapshot(100.0))
+        self.assertFalse(s.maybe_snapshot(1e9))
+
+
 class RootResolutionTest(unittest.TestCase):
     def test_explicit_base_beats_env(self):
         with tempfile.TemporaryDirectory() as d:

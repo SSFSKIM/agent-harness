@@ -11,6 +11,7 @@ import director.director_min as dmin  # noqa: E402
 import director.history as dh  # noqa: E402
 import director.orchestrator as orch  # noqa: E402
 import director.queue as dq  # noqa: E402
+import director.board_snapshot as bs  # noqa: E402
 import director.run as run  # noqa: E402
 import director.status as ds  # noqa: E402
 import director.ticket_events as te  # noqa: E402
@@ -1843,6 +1844,66 @@ class MergeGatedEligibilityE2ETest(unittest.TestCase):
         self.assertIn("c", order)                           # C dispatched only after the land
         self.assertEqual(board.state_name("p"), "Done")     # parent finalized by the sweep
         self.assertEqual(out2["stopped_reason"], "drained")
+
+
+class BoardSnapshotWiringTest(unittest.TestCase):
+    """M3: the poll loops persist the WHOLE board (every state, blocker DAG) to board.json
+    via the injected BoardSnapshotter — and a Noop (visibility-off) run writes nothing."""
+
+    def _board(self):
+        # `a` is In Progress (not ready, not done), `b` is a Todo blocked by `a` (not done →
+        # not eligible). So run_once dispatches NOTHING (fast, no worker), but the snapshot —
+        # which fires BEFORE the eligibility check — still captures BOTH across their states.
+        return orch.MockBoard([
+            {"id": "a", "identifier": "A", "title": "design", "state_id": "st_prog"},
+            {"id": "b", "identifier": "B", "title": "impl", "state_id": "st_todo",
+             "blockers": ["a"]},
+        ])
+
+    def _snapshotter(self, board, board_dir):
+        # built exactly as orchestrator.main does: fetch the whole board across all states.
+        return bs.BoardSnapshotter(
+            fetch=lambda: board.fetch_issues_by_states(
+                "T", [v["id"] for v in board.workflow_states("T").values()]),
+            writer=bs.BoardWriter(base=board_dir), interval_s=999)
+
+    def test_run_once_persists_whole_board(self):
+        board = self._board()
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as tmp:
+            board_dir = Path(tmp) / "director-board"
+            res = orch.run_once(board, command=["x"], team="T", states=states,
+                                queue_base=Path(tmp) / "q", workspace_root=Path(tmp) / "ws",
+                                board_snapshotter=self._snapshotter(board, board_dir))
+            snap = bs.read_board(base=board_dir)
+            assert snap is not None  # the snapshot fired before the eligibility check
+            view = bs.build_board_view(snap["nodes"])
+        self.assertEqual(res, [])                                   # nothing eligible → no dispatch
+        self.assertEqual({n["id"] for n in view["nodes"]}, {"a", "b"})  # BOTH states captured
+        self.assertEqual([(e["from"], e["to"]) for e in view["edges"]], [("a", "b")])
+        self.assertEqual(next(n["layer"] for n in view["nodes"] if n["id"] == "b"), 1)
+
+    def test_noop_snapshotter_writes_nothing(self):
+        board = self._board()
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as tmp:
+            board_dir = Path(tmp) / "director-board"
+            # default board_snapshotter=None → NoopBoardSnapshotter (the off-path)
+            orch.run_once(board, command=["x"], team="T", states=states,
+                          queue_base=Path(tmp) / "q", workspace_root=Path(tmp) / "ws")
+            self.assertIsNone(bs.read_board(base=board_dir))        # byte-identical off-path: no board.json
+
+    def test_run_until_drained_snapshots_each_pass(self):
+        board = self._board()
+        states = orch.resolve_states(board, "T")
+        with tempfile.TemporaryDirectory() as tmp:
+            board_dir = Path(tmp) / "director-board"
+            orch.run_until_drained(board, command=["x"], team="T", states=states,
+                                   queue_base=Path(tmp) / "q", workspace_root=Path(tmp) / "ws",
+                                   board_snapshotter=self._snapshotter(board, board_dir))
+            snap = bs.read_board(base=board_dir)
+            assert snap is not None
+        self.assertEqual({n["id"] for n in snap["nodes"]}, {"a", "b"})
 
 
 if __name__ == "__main__":

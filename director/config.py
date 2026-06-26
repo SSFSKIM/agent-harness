@@ -72,6 +72,12 @@ DEFAULTS: dict = {
     # the board for new ready work and ticks while idle (Symphony `polling.interval_ms`).
     # Only used by `--daemon`; the batch paths ignore it.
     "poll_interval_s": 10.0,
+    # whole-board snapshot cadence (project graph view): how often the poll loops persist
+    # the ENTIRE board (every state's issues + blocker DAG) to board.json for the
+    # dashboard's layered-DAG view. None = track `poll_interval_s` (one snapshot per poll).
+    # Independent of dispatch — read-only observability, throttled so a large board never
+    # out-fetches the dispatch poll. Shares the visibility switch (`--no-status` → off).
+    "board_snapshot_interval_s": None,
     # daemon (run_forever, gap #3) exponential-backoff curve, shared by retry / idle /
     # claim re-admission: wait min(base·2^(n-1), cap). `base` seeds retry+claim backoff
     # (Symphony §8.4 uses 10s); idle backoff seeds from `poll_interval_s` instead. `cap`
@@ -186,6 +192,7 @@ class DirectorConfig:
     turn_review_timeout_s: float
     reconcile_interval_s: float
     poll_interval_s: float
+    board_snapshot_interval_s: float | None  # None = track poll_interval_s
     backoff_base_s: float
     backoff_cap_s: float
     codex_command: str
@@ -397,6 +404,11 @@ def _build(raw: dict) -> DirectorConfig:
     if not isinstance(drl, bool):
         raise ValueError(f"director.dispatch_requires_label must be a boolean, got {drl!r}")
 
+    # board_snapshot_interval_s: None (track poll_interval_s) passes through; a provided
+    # value is a positive number (fail-loud, named) — same discipline as the other knobs.
+    bsi = raw.get("board_snapshot_interval_s", DEFAULTS["board_snapshot_interval_s"])
+    board_snapshot_interval_s = None if bsi is None else _pos_num(bsi, "board_snapshot_interval_s")
+
     return DirectorConfig(
         team=_str_or_none(raw.get("team", DEFAULTS["team"]), "team"),
         states=states,
@@ -413,6 +425,7 @@ def _build(raw: dict) -> DirectorConfig:
                                               DEFAULTS["reconcile_interval_s"]), "reconcile_interval_s"),
         poll_interval_s=_pos_num(raw.get("poll_interval_s",
                                          DEFAULTS["poll_interval_s"]), "poll_interval_s"),
+        board_snapshot_interval_s=board_snapshot_interval_s,
         backoff_base_s=_pos_num(raw.get("backoff_base_s",
                                         DEFAULTS["backoff_base_s"]), "backoff_base_s"),
         backoff_cap_s=_pos_num(raw.get("backoff_cap_s",

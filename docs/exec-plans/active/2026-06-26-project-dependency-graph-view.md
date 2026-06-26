@@ -229,8 +229,20 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
   collapse capture was blocked by playwright env flakiness (page reset between calls) —
   handlers are wired + the consumed events route is unit-tested; the full interactive
   behavioral pass is M5's scope.
-- [ ] **M3 — next.** orchestrator poll-tick wiring + `board_snapshot_interval_s` knob + live proof.
-- [ ] M4 — graph-view UI restructure + node painting + re-homed session overlay.
+- [x] (2026-06-26) **M3 done — orchestrator persists the whole board.** `config.py`:
+  `board_snapshot_interval_s` knob (None = track `poll_interval_s`; config-only, fail-loud
+  on a bad value). `board_snapshot.py`: `BoardSnapshotter` (injected fetch thunk + writer +
+  throttle, fires first-call-then-per-interval, exception-total) + `NoopBoardSnapshotter`.
+  `orchestrator.py`: all three poll loops (`run_once`/`run_until_drained`/`run_forever`)
+  take `board_snapshotter=None` (→ Noop, byte-identical off-path) and call `maybe_snapshot`
+  at the poll point; `main()` builds the real one (whole-board fetch = `fetch_issues_by_states`
+  over ALL `workflow_states` ids, so backlog/done/etc. appear), shares the `--no-status`
+  switch, writer in the status-dir sibling `director-board`. **+11 tests** (BoardSnapshotter
+  throttle/exception-total/Noop; config default/override/malformed; run_once + run_until_drained
+  persist the whole board incl. blocker DAG; Noop off-path writes nothing). 274/274 suite GREEN;
+  `--mock --once` smoke writes a real `board.json`. Off-path proven byte-identical.
+- [ ] **M4 — next.** graph-view UI restructure (promote graph to `/`) + live `/api/v1/board`×
+  `/api/v1/state` node painting + re-homed session overlay + side rail.
 - [ ] M5 — scale/collapse + playwright behavioral + cross-runtime pass.
 
 ## Surprises & discoveries
@@ -265,6 +277,18 @@ ExecPlan owns the build cut, and the lib is the risk to retire first.
 - 2026-06-26 (M2): Exposed `window.cy` on the graph page — an introspection hook for
   debugging and the behavioral test (`window.cy.nodes()`, `emit('tap')`); harmless on a
   read-only localhost instrument.
+- 2026-06-26 (M3): `BoardSnapshotter` takes an injected **fetch thunk** (not the board
+  object) — decouples the throttle/cadence logic from the board interface, so it is
+  pure-testable with a fake fetch (no network) and `main()` owns the "whole board" query
+  shape. Throttle clock advances even on a failed fetch (best-effort, no hammer).
+- 2026-06-26 (M3): "Whole board" = `fetch_issues_by_states` over **all** `workflow_states`
+  ids (not just the logical ready/started/done map), so backlog/canceled/in-review tickets
+  appear too — the project view, not the dispatch view. Re-resolves the id set each snapshot
+  (cheap at the throttled cadence; handles a state added mid-run).
+- 2026-06-26 (M3): `board_snapshot_interval_s` is **config-only** (no CLI flag, unlike
+  poll/reconcile) — a deployment-tuning knob, not a per-invocation one; `None` tracks
+  `poll_interval_s` so a host that retunes the poll cadence gets matching snapshot cadence
+  for free. Shares the `--no-status` visibility switch (no separate disable knob, YAGNI).
 - 2026-06-26: Library feasibility front-loaded as an M2 spike against a static fixture —
   the offline no-bundler stacked-UMD render is the dominant unknown, retired before the
   producer wiring and full UI invest (Approach B). Keepers (asset, route, ADR) survive
