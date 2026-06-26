@@ -1,10 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-21
+last_verified: 2026-06-26
 owner: doc-gardener
 type: methodology
 tags: [quality, grading, doc-gardener]
-description: The domain-by-layer quality grades from A to F that the doc-gardener updates on each gardening pass.
+description: The domain-by-layer quality grades from A to F that the doc-gardener updates on each gardening pass — covering both the plugin machine and the director/ host application.
 ---
 # QUALITY_SCORE.md — domain × layer grades
 
@@ -40,6 +40,46 @@ Grade notes:
   converted agent → skill (2026-06-13 — setup needs the main agent's full repo
   context). docs C: ARCHITECTURE inv7 + DESIGN rule + SECURITY T9, fresh.
 
+## director/ — host application (instance layer)
+
+`director/` is THIS repo's self-hosting Symphony orchestrator (ARCHITECTURE "Host
+runtime (`director/`) invariants"). It is instance-layer **application** code, so
+the plugin-machine layers (`skills`/`agents`/`hooks`) are n/a here — `scripts` = the
+Python modules, `docs` = the governing product-specs/ADRs + the ARCHITECTURE
+host-runtime invariants. Its taste/review governance is graded under `review-gate` +
+`taste-enforcement` above (the review personas that ground in these docs).
+
+| Domain (director/) | docs | scripts | skills | agents | hooks |
+|---|---|---|---|---|---|
+| orchestration core (poll/dispatch/reconcile/daemon) | B | B | - | - | - |
+| worker-runtime (app-server seam + autonomy/authority) | B | B | - | - | - |
+| board adapter (Linear) | C | B | - | - | - |
+| serialized merger | B | B | - | - | - |
+| observability (dashboard/status/ticket-events) | B | B | - | - | - |
+| lights-out autonomy (Director judge) | B | C | - | - | - |
+
+director grade notes:
+- ~611 unittest tests across the director subsystems + 11 TS app-server suites; the
+  whole surface is review-gated (spec-compliance + code-quality every ExecPlan).
+  `check.py` GREEN.
+- orchestration core scripts B: heaviest coverage (orchestrator 111 / run 37 /
+  config 78 / decider+drive+watch 34); the daemon + active-run reconciliation +
+  exponential backoff shipped (`symphony-parity-gap.md` gaps #1–#3 CLOSED); exercised
+  in a live dogfood run with findings tracked. Not A: live operability still thin
+  (single real multi-ticket run so far).
+- worker-runtime scripts B: app_server 21 + authority 31 + autonomy 8 + tools 17 +
+  policy 9 (+ the TS app-server broker suites); strong app-server seam + deny-by-default
+  secret boundary (exceeds Symphony §15.5).
+- board adapter docs C: only the Linear adapter is built — the pluggable GitHub/local
+  adapters (RV5) are not, so the "tracker-agnostic behind an adapter" promise is partial.
+- serialized merger scripts B: 92 tests (merger 61 / merge_preserve 31); preservation
+  tripwire + hygiene gate, hardened (`2026-06-19-merge-preservation-hardening`).
+- lights-out autonomy scripts C: the `make_queue_decider` seam + the park /
+  "awaiting human" marker are unit-tested, but the **Daemonized Claude Code runtime**
+  that makes the human-absent deputy real is unbuilt (ADR 0003, separate track) — only
+  the watched session runs live today. docs B: `DIRECTOR.md` + `PRINCIPLES.md` +
+  ADR 0003 complete and fresh.
+
 ## History
 - 2026-06-12: initial table (Phase 1).
 - 2026-06-12: memory loop + review gate graded after §7 validation (Phase 3-6).
@@ -57,3 +97,11 @@ Grade notes:
   `director/` self-hosting application (the bulk of the repo today) is **not yet
   graded** here — a fuller gardening pass should add its rows. The surviving rows
   are unchanged from their last verification.
+- 2026-06-26 (gardening): **closed the director/ honest gap** — added the
+  `director/` host-application table (6 domain rows: orchestration core,
+  worker-runtime, board adapter, serialized merger, observability, lights-out
+  autonomy), grounded in ~611 director unittests + 11 TS app-server suites and the
+  review-gated ExecPlan history. Mostly B (solid, shipped, review-gated); board
+  adapter docs C (Linear-only, no pluggable adapters) and lights-out scripts C (the
+  Daemonized Claude Code runtime is unbuilt — watched mode only in live use). Paired
+  with the `symphony-parity-gap.md` refresh (substrate gaps #1–#5 CLOSED).

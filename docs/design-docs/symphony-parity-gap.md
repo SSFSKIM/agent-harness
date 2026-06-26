@@ -1,10 +1,10 @@
 ---
 status: stable
-last_verified: 2026-06-16
+last_verified: 2026-06-26
 owner: harness
 type: design-doc
 tags: [symphony, orchestrator, parity, gap-analysis]
-description: A holistic gap analysis comparing this harness's orchestrator against the original OpenAI Symphony specification and workflow.
+description: A holistic gap analysis comparing this harness's orchestrator against the original OpenAI Symphony spec — as of 2026-06-26 the substrate gaps are all shipped; the only remaining deltas are deliberate philosophy forks (no WORKFLOW.md file, no Liquid templating, no hot-reload) plus the un-built lights-out runtime.
 ---
 # Symphony parity — gap analysis
 
@@ -18,14 +18,25 @@ plus `DIRECTOR.md`/`ARCHITECTURE.md`. This is the reference the Symphony-parity
 track cites; it is observational (what differs and why), not a roadmap — the
 chosen next move lives in its own spec (see "Derived work" below).
 
-> **Strategic update (2026-06-17).** This doc's "neither bet is ahead" stance and
-> its gap-#5-as-output-quality framing are **narrowed by
+> **Status refresh (2026-06-26).** The "gaps, ranked" below were the 2026-06-16
+> snapshot; **all five plus every lesser adapter/workspace gap have since shipped**
+> (each marked CLOSED inline with its landing execplan). What is left versus
+> Symphony is no longer a *capability* deficit — it is three **deliberate
+> philosophy forks** (no `WORKFLOW.md` file, no Liquid prompt templating, no
+> config hot-reload) and exactly **one un-built capability: the lights-out
+> *runtime*** (the Daemonized Claude Code; its contracts shipped, the runtime did
+> not). Read the "Remaining deltas" section for the current truth; the ranked
+> gaps are retained as the historical record of how we got here.
+>
+> **Strategic stance (2026-06-17, unchanged).** This doc's original "neither bet is
+> ahead" framing is **narrowed by
 > [ADR 0002 — graduated autonomy](../adr/0002-graduated-autonomy.md)**: we
-> now deliberately take Symphony's autonomy bet on the *middle* (Director →
-> exception-handler) and *worker-autonomy* axes, while **keeping** our board-ownership
-> + serialized merger (those are correctness wins, not human-in-loop artifacts). Gap
-> #5 is reclassified there as the *worker-autonomy enabler*, not just output quality.
-> Read this doc as the observational comparison; read ADR 0002 for the chosen stance.
+> deliberately take Symphony's autonomy bet on the *middle* (Director →
+> exception-handler) and *worker-autonomy* axes, while **keeping** our
+> board-ownership + serialized merger (correctness wins, not human-in-loop
+> artifacts). Read this doc as the observational comparison; read ADR 0002 for the
+> chosen stance and [ADR 0003](../adr/0003-lights-out-director.md) for the
+> lights-out completion.
 
 ## The headline: a different bet, not a worse one
 
@@ -40,116 +51,143 @@ Symphony and our Director solve the same problem with opposite philosophies.
   and performs every tracker write + the PR land itself.
 - **Our Director is supervised, episodic, and code-configured.** A live Claude
   session is the taste-judge; worker turn-ends route to it through a queue and it
-  answers free-form. Policy lives in code + CLI flags. The *orchestrator* (not the
-  agent) owns board writes; a *separate serialized merger* lands PRs.
+  answers free-form. Policy lives in `.harness.json` + CLI flags, resolved once at
+  startup. The *orchestrator* (not the agent) owns board writes; a *separate
+  serialized merger* lands PRs.
 
 Neither is strictly ahead. The bets diverge on autonomy (Symphony: full, human
-only seeds the board; us: supervised, a human-proxy Director holds taste) and on
-where policy lives (Symphony: declarative `WORKFLOW.md`; us: code).
+only seeds the board; us: supervised by default, with a designed lights-out path
+where a Director agent holds taste via `PRINCIPLES.md`) and on where policy lives
+(Symphony: declarative `WORKFLOW.md`, hot-reloaded; us: declarative
+`.harness.json`, startup-resolved).
 
 ## Where we match or exceed Symphony
 
 | Symphony capability | Our implementation | State |
 |---|---|---|
-| Dispatch loop, DAG eligibility, bounded concurrency, claim-before-act (§7–8, §16) | `orchestrator.py`: `run_once`/`run_until_drained`, `eligible_tickets`, `_dispatch_wave` | ✓ |
+| Continuous poll→dispatch→reconcile daemon, DAG eligibility, bounded concurrency, claim-before-act (§7–8, §16) | `orchestrator.py`: `run_forever` (continuous tick) + `run_once`/`run_until_drained` (batch), `eligible_tickets`, `_dispatch_wave`/`_RunState` | ✓ |
+| Active-run reconciliation + stall handling + terminal-state cancel (§8.5, §14.4) | `_reconcile_in_flight` (wall-clock-anchored, ARCH inv. 7) | ✓ |
+| Exponential backoff + retry/idle/claim cadence (§8.4) | `_backoff_s` helper (daemon path; batch keeps immediate retry) | ✓ |
 | Codex app-server client: handshake, turn stream, server-request seam, dynamic tools (§10) | `worker/app_server.py` | ✓ strong |
 | Token/rate-limit accounting — absolute totals, ignore deltas (§13.5) | `app_server.extract_usage`/`extract_rate_limits`; `status` `codex_totals` | ✓ |
-| Runtime snapshot + HTTP `GET /api/v1/state`, loopback, read-only, error envelope (§13.3, §13.7) | `status.py`, `dashboard.py` | ✓ |
-| Linear adapter: candidate fetch, blockers, labels, state writes (§11) | `board/linear.py` | ◐ partial |
+| Runtime snapshot + HTTP `GET /api/v1/state` + per-ticket drill-down (SSE), loopback, read-only, error envelope (§13.3, §13.7) | `status.py`, `dashboard.py`, `ticket_events.py` | ✓ exceeds |
+| Linear adapter: candidate fetch (paginated), `fetch_issues_by_states`, `fetch_issue_states_by_ids`, blockers, labels, state writes (§11) | `board/linear.py` | ✓ |
+| Workspace: sanitized per-issue key, root-containment, `after_create`/`before_run`/`after_run`/`before_remove` hooks, startup terminal cleanup + orphan recovery (§8.6, §9) | `run.py` (`workspace_key`/`is_contained`/`run_hook`), `orchestrator.py` startup recovery | ✓ |
 | Documented approval/sandbox posture (§10.5, §15.1) | `worker/autonomy.py` + the deny-by-default secret boundary | ✓ exceeds |
 
 **Where we go beyond Symphony:**
 
 - **Dev-stage taxonomy pipeline** (`taxonomy.py`) — planning → research/design/spec
   → impl as institution-as-data, with worker-driven DAG decomposition. Symphony
-  has no typed-work model; a ticket is just a ticket.
+  has no typed-work model; a ticket is just a ticket. (Per
+  [ADR 0005](../adr/0005-no-stage-prompt-templates.md) the label is now
+  dispatch/DAG metadata only — the worker's methodology surface is
+  `WORKER_PROTOCOL` + the host's `AGENTS.md`, Symphony's own model.)
 - **Serialized single-consumer PR-merger** (`merger.py`) — rebase → integration
-  gate → squash-merge, one PR at a time (no concurrent-main thrash). Symphony lets
-  the agent merge its own PR via the `land` skill.
+  gate (preservation tripwire + hygiene) → code-issued squash-merge, one PR at a
+  time (no concurrent-main thrash). Symphony lets the agent merge its own PR via
+  the `land` skill.
 - **The watched-Director judge** — free-form turn-end dispositions + the
-  taste-vs-handle line (`DIRECTOR.md`). Symphony has no equivalent (it's
-  `approval_policy: never`, user-input = hard fail).
+  taste-vs-handle line (`DIRECTOR.md`) + the lights-out completion (`PRINCIPLES.md`
+  as the human's externalized taste, [ADR 0003](../adr/0003-lights-out-director.md)).
+  Symphony has no equivalent (it's `approval_policy: never`, user-input = hard fail).
 - **Deny-by-default worker secret boundary** (`worker/policy.py`) — Symphony only
   *recommends* harness hardening in §15.5 and ships nothing.
 
-## The gaps, ranked
+## The gaps, ranked (2026-06-16 snapshot — all CLOSED, retained as history)
 
-**1. No active-run reconciliation or stall detection (§8.5) — the biggest
-correctness/operability gap.** Symphony, *every tick*, refreshes the tracker state
-of all running issues and **stops a worker whose ticket a human moved to
-terminal/cancelled** — the operator's primary control lever (§14.4). It also reaps
-workers idle for `stall_timeout_ms`. We do **neither**: once dispatched, a worker
-runs to terminal with no mid-flight tracker re-check, and a wedged worker is never
-reaped. We also lack the `fetch_issue_states_by_ids` adapter op (§11.1) this needs.
+**1. No active-run reconciliation or stall detection (§8.5).** *Was* the biggest
+correctness/operability gap: once dispatched, a worker ran to terminal with no
+mid-flight tracker re-check, a wedged worker was never reaped, and there was no
+`fetch_issue_states_by_ids` adapter op. **CLOSED** — `2026-06-16-active-run-reconciliation`
+added `_reconcile_in_flight` (terminal-state cancel + stall reap) and the
+`fetch_issue_states_by_ids` adapter op.
 
-**2. We're a batch drainer, not a daemon (§6.2, §8.1) — the identity gap.**
-`run_until_drained` re-polls *within* a run but exits on "drained". Symphony ticks
-forever at `polling.interval_ms`, picking up tickets created later, indefinitely.
-The "long-running automation service" Symphony *is*, we are not. → **daemon stage 2:
-`docs/product-specs/2026-06-17-continuous-daemon-loop.md`** (collapses both barriers
-into one continuous tick loop over a persistent running-map; adds the `run_forever`
-mode; lifts stage 1's reconcile/cancel pieces unchanged).
+**2. We're a batch drainer, not a daemon (§6.2, §8.1).** `run_until_drained`
+re-polled *within* a run but exited on "drained"; Symphony ticks forever.
+**CLOSED** — `2026-06-17-continuous-daemon-loop` added `run_forever` over a
+persistent running-map (`_RunState`), with the batch wave and the daemon sharing
+one claim→submit→reap→reconcile implementation (ARCH inv. 7).
 
-> **The structural root of #1 and #2.** `_dispatch_wave` **blocks** on
-> `wait(FIRST_COMPLETED)` until the whole wave reaches terminal (the "wave
-> barrier"). Symphony keeps a `running` map of *background* workers and **keeps
-> ticking while they run** — which is exactly what lets it reconcile/kill a worker
-> mid-flight. So #1 and #2 are not independent bolt-ons: closing them means moving
-> from our wave-barrier to Symphony's "running-map + independent tick" loop. That
-> refactor is the real cost.
+> **The structural root of #1 and #2 (resolved).** `_dispatch_wave` once **blocked**
+> on `wait(FIRST_COMPLETED)` until the whole wave reached terminal (the "wave
+> barrier"), which is why mid-flight reconcile/kill was impossible. The daemon-loop
+> slice moved to Symphony's "running-map + independent tick" model; the wave barrier
+> survives only as the batch mode, which now also reconciles in-flight on a
+> wall-clock cadence (`reconcile_interval_s`, D-60).
 
-**3. No exponential backoff (§8.4).** We retry-once, immediately, in-wave
-(`reconcile` `retry_budget`). Symphony does `min(10000·2^(attempt-1),
-max_retry_backoff_ms)` plus a ~1s continuation retry after a *normal* worker exit
-that re-checks whether the issue is still active. Small; completes the retry model.
-→ **daemon stage 3: `docs/product-specs/2026-06-17-daemon-exponential-backoff.md`**
-(exponential backoff for the daemon's retry/idle/claim via one `_backoff_s` helper;
-batch keeps immediate retry; the per-completion re-check is a non-goal — active-run
-reconciliation already covers it). **With stages 1–3 shipped, the daemon track
-(gaps #1/#2/#3) is CLOSED;** gap #4 (config) is done; only gap #5 (agent protocol
-depth) remains, on the separate worker-protocol track.
+**3. No exponential backoff (§8.4).** We retried once, immediately, in-wave.
+**CLOSED** — `2026-06-17-daemon-exponential-backoff` added the `_backoff_s` helper
+(`min(base·2^(attempt-1), cap)`) for the daemon's retry/idle/claim; batch keeps
+immediate retry by design; the per-completion ~1s continuation re-check is covered
+by active-run reconciliation + multi-turn execution.
 
-**4. No `WORKFLOW.md` declarative contract (§5–6) — the portability/philosophy
-gap.** Symphony's premise — "teams version the agent prompt + runtime settings
-*with their code*" — has no analog. Our state-name map, concurrency, codex command,
-posture, and stage templates are baked into code/flags; no config layer, `$VAR`
-indirection, or reload. Partly deliberate (we self-host), but it is the single most
-Symphony-defining feature we lack, and it maps naturally onto our existing
-`.harness.json` host-config grain (ARCHITECTURE invariant 7).
+**4. No declarative config contract (§5–6).** Our state-name map, concurrency,
+codex command, and posture were baked into code/flags. **CLOSED (as config, with a
+deliberate exception)** — `2026-06-16-director-declarative-config` moved them into
+the `director` block of `.harness.json` (typed, `$VAR`-resolved, single `DEFAULTS`
+source, ARCH inv. 5). The one Symphony feature we deliberately did **not** adopt is
+**hot-reload** — see Remaining deltas.
 
-**5. Thinner agent operating protocol.** Symphony's `WORKFLOW.md` *file* encodes a
-rich, battle-tested agent protocol: the single `## Codex Workpad` comment as
-source-of-truth, reproduction-first, acceptance-criteria mirroring, the **PR
-feedback sweep**, and the explicit Human Review / Rework lifecycle. Our per-stage
-templates in `taxonomy.py` are a few sentences each. This is the lever for worker
-*output quality* — and, per
-[ADR 0002](../adr/0002-graduated-autonomy.md), the **precondition for
-graduated autonomy**: the worker protocol must be rich enough to run unsupervised
-before the Director can step back from judging every turn-end. Harvest the
-stage-agnostic disciplines into a shared worker-protocol preamble; do **not** port
-`WORKFLOW.md` as a file (its lifecycle steps assume the worker owns the board +
-self-merge — the two axes ADR 0002 rejects).
+**5. Thinner agent operating protocol.** Symphony's `WORKFLOW.md` *file* encoded a
+rich agent protocol (the single `## Codex Workpad` source-of-truth,
+reproduction-first, acceptance-criteria mirroring, the PR feedback sweep, the
+Human Review / Rework lifecycle); our per-stage templates were a few sentences each.
+**CLOSED** — harvested into `WORKER_PROTOCOL` across `2026-06-17-worker-operating-protocol`,
+`2026-06-23-worker-methodology-delivery`, and `2026-06-25-worker-methodology-surface`;
+[ADR 0005](../adr/0005-no-stage-prompt-templates.md) then made `WORKER_PROTOCOL` +
+the host's `AGENTS.md` the *whole* methodology surface and deleted the stage
+templates. As predicted, we did **not** port `WORKFLOW.md` as a file (its lifecycle
+steps assume the worker owns the board + self-merge — the two axes ADR 0002 rejects).
 
-**Lesser/adapter-level gaps:** `board/linear.py` lacks `fetch_issue_states_by_ids`
-(§11.1, ties to #1), pagination (§11.2), and startup terminal-workspace cleanup
-(§8.6); no crash/restart recovery path (§7.4, §14.3 — though our board-as-truth
-model recovers in spirit); workspace handling lacks Symphony's sanitization +
-root-containment invariants and the `after_create`/`before_run`/`after_run`/
-`before_remove` hooks (§9).
+**Lesser/adapter-level gaps — all CLOSED.** `board/linear.py` gained
+`fetch_issue_states_by_ids` (with `2026-06-16-active-run-reconciliation`),
+pagination + `fetch_issues_by_states`, workspace sanitization + root-containment,
+and startup terminal cleanup + crash/orphan recovery (`2026-06-18-symphony-adapter-workspace-parity`,
+R1–R3). The §9 lifecycle hooks (the repo-population bridge), deferred there as R4,
+**shipped** in `2026-06-19-workspace-lifecycle-hooks` (`run.py:run_hook` —
+`after_create`/`before_run` fatal, `after_run`/`before_remove` swallowed, per §9.4).
 
-> **Update (2026-06-18).** `fetch_issue_states_by_ids` **landed** with the
-> active-run-reconciliation slice (so it is no longer a gap). The rest of this
-> paragraph is now the **Symphony adapter & workspace parity** track:
-> [`docs/product-specs/2026-06-18-symphony-adapter-workspace-parity.md`](../product-specs/2026-06-18-symphony-adapter-workspace-parity.md)
-> takes pagination + the `fetch_issues_by_states` op (R1), workspace sanitization +
-> root-containment (R2), and startup cleanup + crash/orphan recovery (R3); the §9
-> lifecycle hooks (the repo-population bridge) are deferred there as R4.
+## Remaining deltas (2026-06-26) — three deliberate forks + one un-built runtime
+
+After the closures above, the orchestration **substrate** is at parity or ahead.
+What remains is no longer a backlog of capabilities; it is a small set of
+intentional divergences plus a single pending runtime:
+
+1. **No config hot-reload (§6.2) — deliberate.** Symphony *MUST* watch `WORKFLOW.md`
+   and re-apply config/prompt without restart. We resolve `.harness.json` **once at
+   startup** (ARCH inv. 5: "deployment policy is declarative, not code… resolved
+   ONCE at startup"). For a self-hosted, episodically-launched Director this is a
+   non-cost; it is the one live Symphony *MUST* we do not meet, and would be a
+   bounded add (a watch + re-resolve over the existing `DEFAULTS` loader) if a
+   long-lived multi-tenant deployment ever needs it.
+
+2. **No `WORKFLOW.md` file / no Liquid prompt templating + `attempt` variable
+   (§5.4, §12) — deliberate fork.** Per [ADR 0005](../adr/0005-no-stage-prompt-templates.md),
+   the worker prompt is `WORKER_PROTOCOL` + a self-contained ticket, not a
+   strict-rendered template; the dev-stage label carries no prompt. This is a
+   contract-shape difference, not a capability hole — "templates restrict more than
+   they guide," and it *is* Symphony's own one-operating-manual model, just split
+   across `WORKER_PROTOCOL` (injected) + the host `AGENTS.md` (auto-loaded).
+
+3. **The lights-out *runtime* (the one genuinely un-built capability).** The
+   lights-out *contracts* shipped (`2026-06-17-lights-out-director`): `PRINCIPLES.md`,
+   the `DIRECTOR.md` §13 procedure, the park / "awaiting human" board+queue marker,
+   and the two-axis mode model ([ADR 0003](../adr/0003-lights-out-director.md)). What
+   does **not** exist is the **Daemonized Claude Code** — an event-woken, always-ready
+   session that *is* the Director while the human is away. Until it lands, the only
+   live Director is the **watched** session (the human's own), so the
+   "decoupled human-deputy" the architecture reaches for is real as *seams and
+   contracts* but **not yet exercised as a human-absent deputy**. This is the single
+   highest-leverage open item and is tracked as a separate in-development runtime
+   track (ADR 0003: "OUT of scope here").
 
 ## Derived work
 
-The chosen next move (human pick, 2026-06-16, from the three axes — daemon /
-declarative-config / agent-protocol) is **gap #4**: see
-`docs/product-specs/2026-06-16-director-declarative-config.md`. Gaps #1–#3 (the
-reconciling-daemon refactor) and #5 (worker protocol depth) remain open and would
-each take the full product-design → execplan flow; #1's wave-barrier→running-map
-refactor is the heaviest single item.
+The 2026-06-16 "chosen next move" (gap #4, declarative config) and the daemon
+track (#1–#3), adapter/workspace parity, the §9 hooks, and the worker-protocol
+depth (#5) are **all shipped** — see the execplans cited inline above. The
+remaining forward work is **not** in this substrate: it is the **lights-out
+runtime** (the Daemonized Claude Code, ADR 0003's separate track) and the optional
+hot-reload add (delta #1). Everything else versus Symphony is a settled, documented
+divergence rather than a gap.
