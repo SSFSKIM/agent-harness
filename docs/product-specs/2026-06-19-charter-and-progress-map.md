@@ -9,6 +9,11 @@ description: A top-level authored CHARTER (mission + locked human-AI assumptions
 ---
 # Charter & derived progress map (the intent layer)
 
+> **Update (2026-06-27):** the charter's *section structure* was reframed by
+> [Charter restructure](2026-06-27-charter-restructure.md) (5 sections → 4;
+> Locked assumptions → Core Axioms; doneness folded into Mission). This spec
+> remains the record of the intent layer's original design.
+
 ## Problem
 
 In long agent sessions the work fans out — subproject after subproject — and the

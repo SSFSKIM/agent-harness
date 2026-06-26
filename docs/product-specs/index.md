@@ -309,3 +309,15 @@ owner: harness
   poll-tick 1지점 + 신규 read 라우트; worker/decider/merger/status/ticket_events 불변. Non-goals:
   그래프에서 보드 편집·multi-team·board history/time-travel·신규 write 라우트·2번째 라이브러리.
   observability-dashboard/-polish/per-ticket-stream 후속. draft.
+- [Charter restructure — 4 sections, generative axioms, a Mission that steers](2026-06-27-charter-restructure.md)
+  — `2026-06-19-charter-and-progress-map` 의 **구조** 후속(의도 레이어 존재는 유지). CHARTER 를
+  5 섹션 → **4**: (1) **Mission** 을 north-star 고도로 올려 — 가장 야심찬 end-state + 관측가능한
+  "이럴 때 동작한다" 한 절(삭제된 doneness 의 접힌 잔여) + "어떤 workstream 이 옳은가" 필터 문장 —
+  세 役을 한 문단에 흡수(별도 North Star 섹션 **안 둠**: north star 는 프로젝트 *위* 팀/비즈니스
+  레벨이라 단일 repo charter 에선 Mission 과 일치). (2) **Locked assumptions → Core Axioms**:
+  방어적("안 따진다") → 생성적("여기서 derive"); reversal test(*뒤집어도 같은 프로젝트인가?* 아니오→
+  axiom) + lock-as-few 규칙, 기존 3 axiom 유지. (3) **"What done looks like" 삭제**(정적 스냅샷은
+  rot — live doneness 는 `nav.py roadmap`, 방향성 doneness 는 Mission). Core Axioms 를 Design
+  philosophy **앞**에(bedrock→building). 헤딩을 파싱하는 소비자 0 → content 변경, 구조 break 0.
+  3 copy(self-host/template/base seed) 동일 전파 + prose reference 갱신. follow-up 4종(direction-GC
+  workstream scout / Mission-distance roadmap view / axiom-violation lint / 실제 2번째 host)은 캡처만.
