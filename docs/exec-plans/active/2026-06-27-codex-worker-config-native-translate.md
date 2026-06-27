@@ -51,7 +51,7 @@ Definition of done (observable): `python -m unittest tests.test_director_run` pa
 
 ## Progress log
 - [x] (2026-06-27) Research + direction settled (option A); memory `codex-worker-config-surface` written; ExecPlan created at base_commit 890bedd7.
-- [ ] M1 — per-destination vendoring + skills dual-placement
+- [x] (2026-06-27) M1 — per-destination vendoring: skills → `.claude/skills`+`.agents/skills` (`.codex/skills` dropped), agents → `.claude/agents`+`.codex/agents` (still `.md`, M2 translates codex). Refactored `install_worker_methodology` to helper-based per-destination (`_refuse_symlink`/`_clear_target`/`_copy_into`/`_install_agents`); `_INJECTED_DIRS`-driven `.git/info/exclude`; help/comment strings in run.py/config.py/orchestrator.py updated. Tests updated; `python3 -m unittest discover -s tests -p test_director_run.py` → 37 pass; `check.py` GREEN.
 - [ ] M2 — agent .md→.toml translation
 - [ ] M3 — workspace trust + precedence guard (PoC first)
 - [ ] M4 — runtime-neutral persona dispatch in execplan SKILL.md

@@ -1240,8 +1240,9 @@ def main(argv=None, *, board=None) -> int:
                          "none); 'linear' hands the worker the linear_graphql tool")
     ap.add_argument("--install-skills", action="store_true", default=None,
                     help="install both plugins — workspace skills + methodology skills/agents "
-                         "(both .codex/ and .claude/) — into each worker workspace "
-                         "(default: director.worker.install_skills, else on)")
+                         "— into each worker workspace at the runtime's native loader path "
+                         "(skills→.claude/skills+.agents/skills, agents→.claude/agents+.codex/"
+                         "agents) (default: director.worker.install_skills, else on)")
     ap.add_argument("--once", action="store_true",
                     help="single pass (no re-poll); default is the DAG-aware continuous loop")
     ap.add_argument("--max-passes", type=int, default=None,

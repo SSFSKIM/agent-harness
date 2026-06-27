@@ -78,26 +78,28 @@ class RunEndToEndTest(unittest.TestCase):
     def test_install_worker_methodology(self):
         ws = self.tmp / "wsskills"
         run.install_worker_methodology(ws)
-        # Installed into BOTH runtime roots: .codex (Codex app-server) and .claude (the
-        # Claude worker, which reads project skills/agents from .claude via cc-harness).
-        for root in (".codex", ".claude"):
+        # SKILLS land where each runtime's loader scans: Claude=.claude/skills, Codex=.agents/
+        # skills (the real Codex CLI never reads .codex/skills).
+        for sdir in (".claude/skills", ".agents/skills"):
             # workspace plugin (agent-harness-workspace): git/PR/Linear skills.
-            self.assertTrue((ws / root / "skills" / "linear" / "SKILL.md").exists())
-            self.assertTrue((ws / root / "skills" / "commit" / "SKILL.md").exists())
-            self.assertTrue((ws / root / "skills" / "push" / "SKILL.md").exists())
+            self.assertTrue((ws / sdir / "linear" / "SKILL.md").exists())
+            self.assertTrue((ws / sdir / "commit" / "SKILL.md").exists())
+            self.assertTrue((ws / sdir / "push" / "SKILL.md").exists())
             # methodology plugin (agent-harness): the skills a worker INVOKES, alongside
             # the workspace skills in the same skills/ dir (disjoint name-sets).
-            self.assertTrue((ws / root / "skills" / "execplan" / "SKILL.md").exists())
-            self.assertTrue((ws / root / "skills" / "product-design" / "SKILL.md").exists())
-            # methodology plugin: the review/gardener agents a worker DISPATCHES at its
-            # execplan completion gate — the load-bearing part (a runtime registers agents
-            # only from its own agents/ dir, never from a repo path).
-            self.assertTrue((ws / root / "agents" / "review-spec-compliance.md").exists())
-            self.assertTrue((ws / root / "agents" / "review-arch.md").exists())
-            self.assertTrue((ws / root / "agents" / "doc-gardener.md").exists())
+            self.assertTrue((ws / sdir / "execplan" / "SKILL.md").exists())
+            self.assertTrue((ws / sdir / "product-design" / "SKILL.md").exists())
             # Slice 4 R4.3: the standalone `qa` skill was retired (redundant with the
             # execplan completion gate); it must no longer be installed into a worker.
-            self.assertFalse((ws / root / "skills" / "qa").exists())
+            self.assertFalse((ws / sdir / "qa").exists())
+        self.assertFalse((ws / ".codex" / "skills").exists())  # inert path dropped (M1)
+        # AGENTS — the review/gardener personas a worker DISPATCHES at its completion gate
+        # (a runtime registers agents only from its own agents/ dir, never a repo path).
+        # Claude reads .claude/agents/*.md; Codex its own .codex/agents/ dir (M2 → *.toml).
+        for adir in (".claude/agents", ".codex/agents"):
+            self.assertTrue((ws / adir / "review-spec-compliance.md").exists())
+            self.assertTrue((ws / adir / "review-arch.md").exists())
+            self.assertTrue((ws / adir / "doc-gardener.md").exists())
         run.install_worker_methodology(ws)  # idempotent re-run
 
     def test_run_ticket_threads_tools_and_executor(self):
@@ -150,7 +152,7 @@ class RunEndToEndTest(unittest.TestCase):
     def test_install_skills_does_not_follow_symlink_target(self):
         # P1: a pre-existing symlinked skill target must not be written through.
         ws = self.tmp / "wssym"
-        skills = ws / ".codex" / "skills"
+        skills = ws / ".agents" / "skills"
         skills.mkdir(parents=True)
         outside = self.tmp / "outside_dir"
         outside.mkdir()
@@ -178,9 +180,9 @@ class RunEndToEndTest(unittest.TestCase):
         (ws / ".git" / "info").mkdir(parents=True)
         run.install_worker_methodology(ws)
         lines = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
-        # Both subdirs of both roots are excluded — skills AND the injected agents dir.
-        for pat in ("/.codex/skills/", "/.claude/skills/",
-                    "/.codex/agents/", "/.claude/agents/"):
+        # Every injected dir is excluded — both skill dests AND both agent dests.
+        for pat in ("/.claude/skills/", "/.agents/skills/",
+                    "/.claude/agents/", "/.codex/agents/"):
             self.assertIn(pat, lines)
         run.install_worker_methodology(ws)  # idempotent: no duplicate patterns
         lines2 = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
@@ -207,7 +209,7 @@ class RunEndToEndTest(unittest.TestCase):
         # vendored target — neither file nor dir — must be removed before copy, or the
         # idempotent re-run breaks. A prior sandboxed worker could plant one.
         ws = self.tmp / "wsfifo"
-        skills = ws / ".codex" / "skills"
+        skills = ws / ".agents" / "skills"
         skills.mkdir(parents=True)
         os.mkfifo(skills / "linear")
         run.install_worker_methodology(ws)  # must not raise
@@ -215,15 +217,14 @@ class RunEndToEndTest(unittest.TestCase):
         self.assertTrue((skills / "linear" / "SKILL.md").exists())
 
     def test_install_refuses_colliding_vendored_sources(self):
-        # Hardening (codex review): two sources mapping into the SAME dest subdir must have
-        # disjoint entry names (they do today) — a future collision must fail loud, not
-        # silently clobber. Drive it with two temp sources that share a name in `skills/`.
+        # Hardening (codex review): the two skill sources copy into the SAME dest dir, so
+        # their entry names must be disjoint (they do today) — a future collision must fail
+        # loud, not silently clobber. Drive it with two temp sources that share a name.
         srcA = self.tmp / "srcA"
         srcB = self.tmp / "srcB"
         (srcA / "dup").mkdir(parents=True)
         (srcB / "dup").mkdir(parents=True)
-        with mock.patch.object(run, "_VENDORED_SOURCES",
-                               ((srcA, "skills"), (srcB, "skills"))):
+        with mock.patch.object(run, "_SKILL_SOURCES", (srcA, srcB)):
             with self.assertRaises(RuntimeError):
                 run.install_worker_methodology(self.tmp / "wscollide")
 

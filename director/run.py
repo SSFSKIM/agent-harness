@@ -31,91 +31,124 @@ DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
 # drive bound (R6): a worker that never signals terminal stops here, reported stuck.
 DEFAULT_MAX_TURNS = config.DEFAULTS["max_turns"]
 _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
-# What the Director vendors into each worker workspace, as (source dir, dest subdir).
-# BOTH plugins, so a WORKER — not just the Director — runs the whole methodology:
-#   - the git/PR/Linear worker skills (`agent-harness-workspace`, Apache-2.0, vendored
-#     from openai/symphony) → `skills/`,
-#   - the methodology skills the worker invokes (`agent-harness`) → `skills/`,
-#   - the review/gardener agents the worker DISPATCHES at the execplan completion gate
-#     (`agent-harness`) → `agents/`.
-# Each plugin's LICENSE/NOTICE/manifest live at its plugin root, outside these dirs, so
-# they are not copied. The two skill name-sets are disjoint, so both land in one `skills/`.
+# What the Director vendors into each worker workspace so a WORKER — not just the Director —
+# runs the whole methodology. Two surfaces, each placed where the target runtime's NATIVE
+# loader actually reads it (asymmetric ON PURPOSE — memory codex-worker-config-surface):
+#   - SKILLS: the git/PR/Linear worker skills (`agent-harness-workspace`, Apache-2.0, vendored
+#     from openai/symphony) + the methodology skills the worker invokes (`agent-harness`),
+#     copied verbatim. Claude Code scans `.claude/skills/`; the REAL Codex CLI scans
+#     `.agents/skills/` (the repo path) — NOT `.codex/skills/`, which it never reads.
+#   - AGENTS: the review/gardener personas the worker DISPATCHES at the execplan completion
+#     gate (`agent-harness`). Claude reads `.claude/agents/*.md` verbatim; Codex reads
+#     `.codex/agents/*.toml` (trust-gated; the `.md`→`.toml` translation lands in a later
+#     milestone — for now the .md is copied to both, the Codex copy being inert).
+# A runtime dispatches agents only from its own dir, never an arbitrary repo path (memory
+# mid-session-agents-not-dispatchable), so agents MUST be copied/translated in. Each plugin's
+# LICENSE/NOTICE/manifest live at its plugin root, outside these dirs, so are not copied.
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-_VENDORED_SOURCES = (
-    (_PLUGIN_ROOT / "plugin-workspace" / "skills", "skills"),  # 6 git/PR/Linear skills
-    (_PLUGIN_ROOT / "plugin" / "skills", "skills"),            # 8 methodology skills
-    (_PLUGIN_ROOT / "plugin" / "agents", "agents"),            # 6 review/gardener agents
+# Skill source dirs — both copied into each runtime's skills dir; their entry-name sets are
+# disjoint (`_assert_skill_sources_disjoint`), so they coexist without clobber.
+_SKILL_SOURCES = (
+    _PLUGIN_ROOT / "plugin-workspace" / "skills",  # git/PR/Linear skills
+    _PLUGIN_ROOT / "plugin" / "skills",            # methodology skills
 )
-# The distinct dest subdirs a runtime registers from (order-preserving) — used for
-# symlink-refusal and the PR-hygiene exclude. Derived from the sources above so it can
-# never drift from them.
-_VENDORED_SUBDIRS = tuple(dict.fromkeys(sub for _, sub in _VENDORED_SOURCES))
+# The skills dir each runtime's loader scans: Claude=.claude/skills, Codex=.agents/skills.
+_SKILL_DESTS = (".claude/skills", ".agents/skills")
+# Agent persona source (.md — the single authoring format) and its per-runtime dest dirs.
+_AGENT_SOURCE = _PLUGIN_ROOT / "plugin" / "agents"   # review/gardener personas (.md)
+_AGENT_DEST_CLAUDE = ".claude/agents"   # .md copied verbatim (cc-harness reads project agents)
+_AGENT_DEST_CODEX = ".codex/agents"     # Codex custom-agent dir (trust-gated `.codex/` layer)
+# Every Director-injected methodology dir, for the PR-hygiene `.git/info/exclude` and the
+# symlink-refusal sweep. Derived from the dests above so it can never drift from them.
+_INJECTED_DIRS = (*_SKILL_DESTS, _AGENT_DEST_CLAUDE, _AGENT_DEST_CODEX)
 
 
-# The two worker runtimes read the SAME vendored methodology from DIFFERENT roots: the
-# Codex app-server from `.codex/`, the Claude worker (cc-codex-appserver → cc-harness, whose
-# settingSources default to user/project/local) from Claude Code's project `.claude/`.
-# Installing into both keeps adoption config-only — the Director need not know which runtime
-# the host wired; SKILL.md/agent frontmatter is valid for either. A runtime dispatches agents
-# only from its own `agents/` dir (never an arbitrary repo path — memory
-# mid-session-agents-not-dispatchable), which is why the agents MUST be copied, not path-read.
-# See memory: cc-codex-appserver-drop-in-verified.
-_WORKER_ROOTS = (".codex", ".claude")
+def _refuse_symlink(path) -> None:
+    """A vendored destination (runtime root or leaf dir) that is a symlink is REFUSED, never
+    written through — a prior workspace-write worker could plant one to redirect the copy
+    outside the workspace (completion-gate P1)."""
+    if Path(path).is_symlink():
+        raise RuntimeError(f"refusing to install methodology through symlink: {path}")
+
+
+def _clear_target(target: Path) -> None:
+    """Remove a pre-existing target before copy (idempotent re-run + planted-node safety):
+    unlink a symlink WITHOUT following it, unlink a special node (fifo/socket/device) or a
+    file, rmtree only a REAL directory — a symlink-to-dir is removed as the link itself."""
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        target.unlink()
+    elif target.is_dir():
+        shutil.rmtree(target)
+
+
+def _copy_into(src_dir: Path, dst_dir: Path) -> None:
+    """Copy every entry of `src_dir` into the already-created, non-symlink `dst_dir`, each
+    cleared via `_clear_target` first. Dirs deep-copied, files copied with metadata."""
+    for item in src_dir.iterdir():
+        target = dst_dir / item.name
+        _clear_target(target)
+        if item.is_dir():
+            shutil.copytree(item, target)
+        else:
+            shutil.copy2(item, target)
+
+
+def _assert_skill_sources_disjoint() -> None:
+    """The skill sources share one dest dir, so their entry names MUST be disjoint or the
+    later copy silently clobbers the earlier. Fail loud (naming both sources) rather than
+    rely on disjointness holding as the plugins evolve — they are disjoint today."""
+    seen: dict[str, Path] = {}
+    for src in _SKILL_SOURCES:
+        for item in src.iterdir():
+            if item.name in seen:
+                raise RuntimeError(f"vendored skill name collision: '{item.name}' from both "
+                                   f"{seen[item.name]} and {src}")
+            seen[item.name] = src
+
+
+def _install_agents(ws: Path) -> None:
+    """Vendor the review/gardener personas into BOTH runtimes' agent dirs. Claude reads
+    `.claude/agents/*.md` verbatim; Codex reads `.codex/agents/` (the `.md`→`.toml`
+    translation arrives in M2 — for now the .md is copied to both)."""
+    for dest in (_AGENT_DEST_CLAUDE, _AGENT_DEST_CODEX):
+        _refuse_symlink(ws / Path(dest).parts[0])  # the runtime root (.claude / .codex)
+        dst = ws / dest
+        _refuse_symlink(dst)
+        dst.mkdir(parents=True, exist_ok=True)
+        _copy_into(_AGENT_SOURCE, dst)
 
 
 def install_worker_methodology(workspace) -> None:
-    """Copy BOTH plugins — the vendored worker skills AND the full agent-harness
-    methodology (skills + review/gardener agents) — into BOTH `<workspace>/.codex/` and
-    `<workspace>/.claude/`, so whichever runtime the host wired finds them and a WORKER
-    (not just the Director) runs the whole execplan completion gate. The review agents are
-    the load-bearing part: a runtime dispatches agents only from its own `agents/` dir,
-    never from an arbitrary repo path, so without this copy the worker's gate has no
-    personas to dispatch (memory: mid-session-agents-not-dispatchable).
+    """Vendor the worker skills + the agent-harness methodology (skills + review/gardener
+    agents) into each runtime's NATIVE loader path so a WORKER (not just the Director) runs
+    the whole execplan completion gate. Skills → `.claude/skills/` (Claude) and
+    `.agents/skills/` (the only repo path the real Codex CLI scans); agents → `.claude/agents/`
+    (Claude, `.md`) and `.codex/agents/` (Codex). The review agents are the load-bearing part:
+    a runtime dispatches agents only from its own dir, never an arbitrary repo path, so without
+    this copy the worker's gate has no personas to dispatch (memory:
+    mid-session-agents-not-dispatchable, codex-worker-config-surface).
 
-    Safety (completion-gate P1): the per-ticket workspace is reused across runs and
-    a prior worker (workspace-write sandbox) can plant symlinks, so we must never
-    write THROUGH a pre-existing symlink. A symlinked root or `skills`/`agents` parent is
-    refused; each target is removed (link unlinked, dir/file deleted) before a fresh copy —
-    copytree never runs into an attacker-controlled destination. Idempotent.
+    Safety (completion-gate P1): the per-ticket workspace is reused across runs and a prior
+    worker (workspace-write sandbox) can plant symlinks, so we never write THROUGH a
+    pre-existing symlink — `_refuse_symlink` rejects a symlinked runtime root or dest dir, and
+    `_clear_target` removes each target (link unlinked, special node/file deleted, real dir
+    rmtree'd) before a fresh copy. Idempotent.
 
     PR hygiene: the injected methodology is not part of the ticket's work, so its dirs are
     added to the clone's local `.git/info/exclude` (uncommitted, modifies no tracked file)
     and thus stay out of `git status`/`git add -A` — see `_exclude_injected_methodology`."""
     ws = Path(workspace)
-    # Sources sharing a dest subdir (workspace + methodology skills both → `skills/`) must
-    # have DISJOINT entry names, or the later copy silently clobbers the earlier. Enforce it
-    # (fail loud, naming both sources) rather than rely on disjointness holding as the
-    # plugins evolve — the two name-sets are disjoint today.
-    seen: dict[tuple[str, str], Path] = {}
-    for src, sub in _VENDORED_SOURCES:
-        for item in src.iterdir():
-            key = (sub, item.name)
-            if key in seen:
-                raise RuntimeError(f"vendored-source name collision in {sub}/: '{item.name}' "
-                                   f"from both {seen[key]} and {src}")
-            seen[key] = src
-    for root in _WORKER_ROOTS:
-        parents = [ws / root] + [ws / root / sub for sub in _VENDORED_SUBDIRS]
-        for parent in parents:
-            if parent.is_symlink():
-                raise RuntimeError(f"refusing to install methodology through symlink: {parent}")
-        for src, sub in _VENDORED_SOURCES:
-            dst = ws / root / sub
-            dst.mkdir(parents=True, exist_ok=True)
-            for item in src.iterdir():
-                target = dst / item.name
-                # Remove any pre-existing target before copying (idempotent re-run; a prior
-                # sandboxed worker may have planted it). Unlink a symlink WITHOUT following it,
-                # and a special node (fifo/socket/device) too — only a real directory is
-                # rmtree'd; a symlink-to-dir is removed as the link itself, never followed.
-                if target.is_symlink() or (target.exists() and not target.is_dir()):
-                    target.unlink()
-                elif target.is_dir():
-                    shutil.rmtree(target)
-                if item.is_dir():
-                    shutil.copytree(item, target)
-                else:
-                    shutil.copy2(item, target)
+    _assert_skill_sources_disjoint()
+    # SKILLS — copy both source dirs verbatim into each runtime's skills dir.
+    for dest in _SKILL_DESTS:
+        _refuse_symlink(ws / Path(dest).parts[0])  # the runtime root (.claude / .agents)
+        dst = ws / dest
+        _refuse_symlink(dst)
+        dst.mkdir(parents=True, exist_ok=True)
+        for src in _SKILL_SOURCES:
+            _copy_into(src, dst)
+    # AGENTS — Claude reads .md verbatim; Codex reads its own `.codex/agents/` dir.
+    _install_agents(ws)
     _exclude_injected_methodology(ws)
 
 
@@ -140,7 +173,7 @@ def _exclude_injected_methodology(ws: Path) -> None:
     if exclude.is_symlink():
         raise RuntimeError(f"refusing to write exclude through symlink: {exclude}")
     existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
-    patterns = [f"/{root}/{sub}/" for root in _WORKER_ROOTS for sub in _VENDORED_SUBDIRS]
+    patterns = [f"/{d}/" for d in _INJECTED_DIRS]
     missing = [p for p in patterns if p not in existing.splitlines()]
     if not missing:
         return
@@ -528,8 +561,9 @@ def main(argv=None) -> int:
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
                     help="advertise worker tools (linear = linear_graphql)")
     ap.add_argument("--install-skills", action="store_true",
-                    help="install both plugins into the worker workspace — workspace "
-                         "skills + the methodology skills/agents (both .codex/ and .claude/)")
+                    help="install both plugins into the worker workspace — skills into "
+                         ".claude/skills + .agents/skills, agents into .claude/agents + "
+                         ".codex/agents (each runtime's native loader path)")
     ap.add_argument("--autonomous", action="store_true",
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "
