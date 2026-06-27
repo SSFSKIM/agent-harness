@@ -221,6 +221,21 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   8 events render as 3 turn rule-lines + 5 typed rows (`◆` #c4c4d8 agent_message, `▶` #93c5fd
   tool_call) each with a `21:04:07` ts.
 
+- [x] (2026-06-27) **M5 — ADR amend + cleanup + behavioral acceptance + completion gate.**
+  Amended **ADR 0006** → `status: superseded` with a "Superseded — 2026-06-27" header (the
+  re-skin dropped the vendored library; dashboard serves zero assets; invariants 1 & 3 both
+  moved stricter). Amended **ARCHITECTURE invariant 1** → no JS carve-out (single
+  self-contained HTML page, zero vendored assets; ADR 0006 retired). Verified **no dead
+  asset-serving code** (`grep` clean; `director/assets/` gone — removed back in M1). Gate
+  **GREEN**. **Behavioral AC1–8 full pass** captured (playwright on the :8788 sample +
+  board-less :8799 for the empty-state): AC1 10 cards in `wave 1…5`, LIN-3 id+badge+title@layer1;
+  AC2 `3/10 done`/30% bar/`2 active·0 blocked·0 failed`; AC3 edges `active:3 done:1 backlog:2
+  blocked:2` + arrow marker; AC4 LIN-3 `in_progress`+`running · 20560t`+`nodepulse`; AC5 overlay
+  3 rule-lines + 5 typed rows (`◆`#c4c4d8, `▶`#93c5fd) + telemetry strip + live dot; AC6
+  `/assets/cytoscape.min.js`→404, 0 `/assets`·`cytoscape`·`cdn` refs; AC7 "no board snapshot yet";
+  AC8 `python3 -m director.dashboard` runs with zero build step, stdlib-only. → completion-gate
+  review panel next (review_level: full).
+
 ## Surprises & discoveries
 - (M1) The hand-roll is *simpler* than the reference, as predicted: because `/api/v1/board`
   already ships each node's `layer` + the grouped `layers`, the client does zero topology

@@ -120,11 +120,12 @@ architecture invariants live here (review-arch grounds in this doc). Runtime
 1. **Stdlib-only.** No third-party imports anywhere under `director/` (no
    `pyproject.toml` / `requirements.txt`) — the same "boring tech / internalize
    dependencies" grain as `plugin/scripts`. A new dependency is a design change to
-   justify, never a default. **Scope:** this rule scopes *Python* imports; the
-   observability dashboard may serve a fixed set of **offline, checked-in JS assets**
-   under `director/assets/` (a graph library) from a constant route — a deliberately
-   scoped relaxation of the dashboard's single-file grain, never a Python dependency
-   and never a CDN ([docs/adr/0006-observability-vendored-asset.md](docs/adr/0006-observability-vendored-asset.md)).
+   justify, never a default. **Scope:** this rule scopes *Python* imports, and the
+   observability dashboard now has **no JS carve-out** — it is a single self-contained
+   HTML page that serves **zero** vendored assets (the project graph is hand-rolled
+   DOM+SVG, positioned from the server's layering). ADR 0006 once relaxed this to vendor
+   a graph library; the 2026-06-27 graph-view re-skin dropped the library and **retired
+   that relaxation** ([docs/adr/0006-observability-vendored-asset.md](docs/adr/0006-observability-vendored-asset.md) — superseded).
 2. **Explicit `base=` over ambient state.** Every module resolves its state dir
    through a single `_root(base=None)` that honors an explicit `base=` (tests)
    then an env override then a default — and nothing else reads `cwd`/env

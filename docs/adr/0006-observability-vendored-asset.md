@@ -1,12 +1,32 @@
 ---
-status: accepted
-last_verified: 2026-06-26
+status: superseded
+last_verified: 2026-06-27
 owner: harness
 type: adr
 tags: [observability, dashboard, architecture, invariant, vendoring]
-description: The observability dashboard may vendor a single offline, checked-in JS asset set (a graph library) served from a fixed local route — a scoped relaxation of the dashboard's "single self-contained HTML, no external asset" grain. The Python stdlib-only invariant (ARCHITECTURE invariant 1) and offline operation both stay in force.
+description: "SUPERSEDED (2026-06-27): The 2026-06-27 graph-view re-skin dropped the vendored graph library and hand-rolled the render (DOM+SVG), so the dashboard serves ZERO assets and this relaxation is retired. Historical record of the scoped relaxation that briefly let the observability dashboard vendor an offline, checked-in JS graph library from a fixed local route."
 ---
 # Observability dashboard may vendor an offline, checked-in JS asset
+
+## Superseded — 2026-06-27 (the re-skin retired this relaxation)
+
+This relaxation is **no longer in force.** The graph-view re-skin
+([spec](../product-specs/2026-06-27-project-graph-view-reskin.md) R6/R8,
+[ExecPlan](../exec-plans/active/2026-06-27-project-graph-view-reskin.md)) **dropped the
+vendored graph library** (Cytoscape + dagre + the adapter, ≈670KB) and hand-rolled the
+project-graph render as plain **DOM + SVG**, positioned from the server's existing
+`layer`/`layers`/`edges` (the server already owns the layering — invariant 4 — so the
+crossing-minimization this ADR justified buying turned out to be unnecessary at board
+scale, and rich HTML node-cards are native to DOM but impossible as Cytoscape canvas
+nodes). `director/assets/` and the `_ASSETS`/`_asset` route are **deleted**; the dashboard
+now serves **zero** request-derived bytes.
+
+Net effect on the invariants this ADR discussed: ARCHITECTURE **invariant 1** returns to
+having *no JS carve-out* (the dashboard is back to a single self-contained HTML page);
+**invariant 3** (zero traversal) now holds trivially (no asset route at all). Both moved in
+the *stricter* direction — fewer served bytes, not more — exactly as this ADR anticipated
+under "Reversible." The decision below is retained as the historical record of why the
+library was briefly vendored; it is no longer the system's behavior.
 
 ## Decision
 
