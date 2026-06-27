@@ -27,6 +27,9 @@ process `-c` config for that thread):
   - approvals_reviewer + network     -> `-c` overrides on the codex launch command
 
 Key names verified against codex-cli 0.139.0 via `codex app-server --strict-config`.
+`features.hooks` verified live on codex-cli 0.142.0: `codex features list` lists it
+(`hooks  stable  true`) and `codex doctor -c features.hooks=false` reports it under
+"feature flag overrides" (`hooks=false`) — so the disable is honored, not silently dropped.
 """
 from __future__ import annotations
 

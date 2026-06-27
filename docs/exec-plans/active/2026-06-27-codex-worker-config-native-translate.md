@@ -39,7 +39,7 @@ Definition of done (observable): `python -m unittest tests.test_director_run` pa
 - Assumption: a launch-command `-c projects."<ws_abs>".trust_level="trusted"` is honored by `codex app-server` the same way the existing `-c approvals_reviewer=...` overrides are (`autonomy.py`). If the key shape differs, M3's PoC catches it before the real wiring.
 - Assumption: the `tools:` frontmatter on our review personas (`Read, Grep, Glob, Bash`) has **no** direct Codex equivalent (Codex governs tool surface by `sandbox_mode` + `mcp_servers`, not an allowlist); we approximate with `sandbox_mode` derived from tools (Edit/Write present → `workspace-write`, else `read-only`). Recorded as a deliberate lossy mapping.
 - Assumption: the Director vendors agents **uniformly** today (all of `plugin/agents/`), so M2 translates the full set rather than curating a worker-only subset — curation would be a separate decision and risks drift. doc-gardener (Edit/Write/Bash) → `workspace-write`; the rest → `read-only`. The two scout personas (`vision-judge`, `workstream-scout`) carry web tools; their `.toml` gets `read-only` and relies on the worker's existing network posture (no per-agent MCP wired in Phase 1).
-- Open: should the inert `.codex/skills/` + `.codex/agents/*.md` be *deleted* or just *stopped*? → resolved autonomously: **stop writing them** (per-destination vendoring no longer targets those paths) AND the idempotent target-removal already in `install_worker_methodology` cleans a stale one on the next run; no separate migration needed. Recorded in Decision log.
+- Open: should the inert `.codex/skills/` + `.codex/agents/*.md` be *deleted* or just *stopped*? → resolved autonomously: **stop writing them** (per-destination vendoring no longer targets those paths). CORRECTION (completion-gate, review-arch P2): the original claim that "the idempotent target-removal already cleans a stale one" is **false** — `_clear_target`/`_copy_into` only touch the CURRENT dests, so on a workspace REUSED from the pre-change layout a stale `.codex/skills/` (and stale `.codex/agents/*.md`) lingers, inert. It stays out of the PR only because the append-only `.git/info/exclude` retains the old `/.codex/skills/` line. A targeted stale-layout sweep is tracked as fix-forward (Feedback + tech-debt-tracker), not a Phase-1 blocker.
 - Open (Taste — escalate-worthy, but defaulting): the runtime-neutral persona-dispatch wording in `execplan` SKILL.md (M4). Default chosen: keep the existing Claude `subagent_type:` instruction AND add a parallel "on Codex, ask Codex to spawn the `<name>` agent" sentence, gated by a single "whichever your runtime exposes" note (mirrors the wording already in the completion-gate step). If the human prefers a different framing, that is the one genuine taste call — surfaced at the gate, not blocking the build.
 
 ## Milestones
@@ -69,5 +69,24 @@ Definition of done (observable): `python -m unittest tests.test_director_run` pa
 - 2026-06-27: **Hooks deferred to Phase 2** (user decision) — features.hooks + trust + trust-hash friction outweighs current value; skills+agents are the load-bearing methodology delivery.
 
 ## Feedback (from completion gate)
+Five reviews dispatched (path-scoped to this plan's files — master had interleaved concurrent
+"scout" commits). Verdicts: spec-compliance SATISFIED, arch SATISFIED, reliability SATISFIED;
+code-quality + security initially NOT-SATISFIED (3 P1) → all P1 fixed inline (`846cb00`) → re-verified.
+
+**P1 fixed inline:**
+- (code-quality) `plugin-workspace/skills/land/SKILL.md:116` invoked the dropped `.codex/skills/land/land_watch.py` — a regression from M1's destination move. Repointed to a runtime-resolved path (`ls .agents/skills/... .claude/skills/... | head -1`); grep-confirmed it was the only surviving-body ref to the retired path in active source.
+- (security) clone-shipped `.codex/hooks.json` is config-only RCE under trust → CLOSED deterministically with `-c features.hooks=false` (`autonomy.DISABLE_HOOKS`, always-on).
+- (security) T16 mischaracterized clone `mcp_servers` as benign → rewritten as config-driven host code execution, precedence scope corrected (pins only approval/sandbox/network), residual folded into the T11 isolation track.
+
+**P2 fixed inline:** trust gated on `install_skills` (arch); `_ensure_dir` clears a planted non-dir at a dest-dir path so a reused-workspace re-run isn't bricked (reliability); TOML literal closing-fence newline guard (code-quality); realpath trust key (spec-compliance); negative-path tests added.
+
+**P2 / follow-ups deferred → tech-debt-tracker:**
+1. **Live E2E verification** of the Goal's DoD clause 2 — a real Codex worker run that spawns a vendored persona BY NAME from `.codex/agents/*.toml` under trust (custom agents are spawn-time, not prompt-listed, so `codex debug prompt-input` can't confirm it; mechanism is unit-tested + PoC-verified, full native dispatch unverified).
+2. **Extend runtime-neutral dispatch** (M4 did only the execplan completion gate) to the sibling skills `plugin/skills/garden/SKILL.md` + `plugin/skills/scout/SKILL.md`, whose personas are now vendored as `.codex/agents/*.toml` but whose dispatch wording is still Claude-`subagent_type`-only.
+3. **mcp_servers residual** — a non-worktree-polluting neutralization (per-workspace `CODEX_HOME`, or load only our agents without trusting the whole project) to fully close the config-driven-exec vector instead of accepting it as a T11-class residual.
+4. **Stale-layout sweep** — a reused workspace from the pre-change layout keeps an inert `.codex/skills/` + `.codex/agents/*.md`; sweep them (they are our untracked injected files, safe to remove — not clone tracked content).
+5. **Cosmetic/edge** — `_exclude_injected_methodology` appends a duplicate comment block when a new dest is added to a reused ws; the trust `-c` append duplicates the autonomy `-c` mechanism (consider a shared helper); the trust key doesn't escape a `"` in an explicit-`ticket["workspace"]` override path (fails loud, not corruption).
+
+**Proposed rules (for doc-gardener / DESIGN.md):** (a) a skill/agent body must not reference a vendored asset by a hardcoded workspace-relative path that Director config determines — use a runtime-resolved/skill-relative path; (b) a change that moves a vendoring destination must add a test/lint asserting no tracked body still references the retired path (the structural analog of the "grep surviving bodies" rule); (c) a launch-command capability/trust override is applied only when its enabling artifact is present (least-privilege; grounds the `install_skills`-gated trust).
 
 ## Outcomes & retrospective

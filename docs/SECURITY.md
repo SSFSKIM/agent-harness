@@ -356,7 +356,13 @@ Grounding document for the review-security persona. Threats are numbered.
     the SAME class as the T11 worker exec/exfil residual (under T11 the worker already runs target-repo
     code with network on + filesystem-wide reads). It is accepted ONLY where the worker runs against a
     semi-trusted repo with throwaway credentials, and is retired the SAME way as T11 — by moving the
-    worker into an isolated environment (container/VM). We cannot simply strip the clone's tracked
+    worker into an isolated environment (container/VM). Precision (unverified): it is not confirmed
+    whether an orchestrator-spawned MCP subprocess runs INSIDE the codex OS sandbox; if it does not,
+    it also loses write-containment (host persistence — `~/.bashrc`/`~/.ssh`), which for the **codex**
+    runtime is otherwise outside the accepted T11 residual (T11 keeps write-containment for codex;
+    only the sandbox-disabled `claude` runtime accepts host persistence). Until verified, treat the
+    codex-runtime acceptance here as conservatively covering host persistence too — the container/VM
+    retirement closes it regardless. We cannot simply strip the clone's tracked
     `.codex/config.toml` (a tracked-file deletion would pollute the worker's PR — the per-item
     overlay + `.git/info/exclude` design exists precisely to never touch the clone's tracked tree);
     a non-worktree-polluting neutralization (e.g. a per-workspace `CODEX_HOME`) is the tracked
