@@ -8,7 +8,7 @@ description: Human-absent autonomy — the Director judges with the human's exte
 ---
 # Lights-out Director — human-absent autonomy via the Core Principle doc
 
-> **Refined by [[0007-one-operating-mode]]** (2026-06-28): the two-axes split stands,
+> **Refined by [[0008-one-operating-mode]]** (2026-06-28): the two-axes split stands,
 > but "lights-out" is now framed as a **property** (human absent) of the one operating
 > mode, not a separate mode; "autonomous" (pure-code decider) is a CI/`--mock` **fixture**.
 

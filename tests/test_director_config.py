@@ -633,7 +633,7 @@ class WiringTest(unittest.TestCase):
 
     def test_real_run_honors_linear_tool_config(self):
         # a real (non-mock) run picks up the host's linear tool + skill default with no flag.
-        # A real run defaults to the always-on daemon (ADR 0007), so patch run_forever.
+        # A real run defaults to the always-on daemon (ADR 0008), so patch run_forever.
         from director import orchestrator
         _write(self.root, {"director": {"team": "T", "worker": {
             "tools": "linear", "install_skills": True}}})
@@ -649,7 +649,7 @@ class WiringTest(unittest.TestCase):
     def test_real_run_defaults_install_skills_on(self):
         # the production path installs the methodology by DEFAULT — no worker block, no
         # flag, a real (non-mock) run still threads install_skills=True to the dispatcher.
-        # A real run defaults to the always-on daemon (ADR 0007), so patch run_forever.
+        # A real run defaults to the always-on daemon (ADR 0008), so patch run_forever.
         from director import orchestrator
         _write(self.root, {"director": {"team": "T"}})  # no worker block at all
         board = orchestrator.MockBoard.demo()
@@ -659,7 +659,7 @@ class WiringTest(unittest.TestCase):
             orchestrator.main([], board=board)  # team from config, no flags
         self.assertTrue(loop.call_args.kwargs["install_skills"])
 
-    # -- run-loop resolution (ADR 0007: daemon is the default; --mock ⇒ bounded) -----
+    # -- run-loop resolution (ADR 0008: daemon is the default; --mock ⇒ bounded) -----
     def _run_main_loops(self, argv):
         """Run orchestrator.main with all three loop entrypoints patched (serializable
         returns so main never blocks). Returns the (forever, drained, once) mocks."""
@@ -676,7 +676,7 @@ class WiringTest(unittest.TestCase):
         return forever, drained, once
 
     def test_real_run_defaults_to_daemon(self):
-        # ADR 0007: a real run with no loop flag IS the always-on daemon.
+        # ADR 0008: a real run with no loop flag IS the always-on daemon.
         forever, drained, once = self._run_main_loops(["--team", "T"])
         self.assertEqual(forever.call_count, 1)
         self.assertEqual((drained.call_count, once.call_count), (0, 0))

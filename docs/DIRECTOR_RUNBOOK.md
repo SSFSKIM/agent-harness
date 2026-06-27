@@ -222,7 +222,7 @@ Run it as a **background task** so the session stays free to answer. `--turn-rev
 3600` keeps a worker from timing out while you deliberate. This first-run command uses
 **`--once`** — a single bounded pass, ideal for validating one canary ticket (`--batch` is
 the multi-pass bounded drain). **Omit the bounded flag and the bare command is the always-on
-daemon — the default operating mode (ADR 0007), which never exits on a drained board (§9).**
+daemon — the default operating mode (ADR 0008), which never exits on a drained board (§9).**
 (`--daemon` still works but is now a redundant, deprecated alias of the default.)
 
 **2. Arm the queue Monitor** — emits one line per newly-pending request + one `runReport`
@@ -356,13 +356,13 @@ green, 0 threads), so `--mock` lands it without another multi-M-token worker.
 
 ## 9. The always-on daemon — the default
 
-The always-on daemon **is the default operating mode** (ADR 0007): a real run with no loop
+The always-on daemon **is the default operating mode** (ADR 0008): a real run with no loop
 flag never exits on a drained board — it keeps polling and tops up the moment a slot frees
 or a human adds a ticket. The bounded fixtures `--batch`/`--once` (§8) drain and exit instead.
 
 ```bash
 python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --poll-interval 10
-#   --daemon   # redundant, deprecated alias of the default (ADR 0007)
+#   --daemon   # redundant, deprecated alias of the default (ADR 0008)
 ```
 
 - **Stop it:** `SIGTERM`/`Ctrl-C` once → graceful drain (let in-flight workers finish, then
@@ -421,7 +421,7 @@ behind (a `pending` ghost from a prior run will show on the next dashboard).
   taste-vs-handle judgment, answering turn/merge reviews, the one operating mode + its
   properties, reporting, lights-out, and the config map. **Come here to run; go there to
   decide.** (Section numbers intentionally not mirrored here — see DIRECTOR.md's own table of contents.)
-- [`docs/adr/0007-one-operating-mode.md`](adr/0007-one-operating-mode.md) — the one
+- [`docs/adr/0008-one-operating-mode.md`](adr/0008-one-operating-mode.md) — the one
   operating mode (Director ⟷ Board): attended/lights-out as a property, the bounded/no-judge
   paths as fixtures, daemon as the default. Refines
   [`0003-lights-out-director.md`](adr/0003-lights-out-director.md) (the guardrail safety floor).

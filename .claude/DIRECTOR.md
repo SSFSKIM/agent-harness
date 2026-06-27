@@ -187,7 +187,7 @@ decider (§6) is only for the truly-detached case (no session at all).
 There is **one operating mode**: an always-present **Director** (a judging agent)
 adjudicating an always-present **Board** (the Linear work queue). What used to be framed
 as separate "modes" is reclassified into *properties* of a run and *fixtures* — never
-modes you switch between (ADR 0007, finishing the two-axes split of ADR 0003). Posture is
+modes you switch between (ADR 0008, finishing the two-axes split of ADR 0003). Posture is
 **identical** throughout — per-action self-governance (`on-request` + `auto_review`) AND
 full network are shared (SECURITY T11; the exfil residual is deferred to one holistic
 mitigation).
@@ -401,7 +401,7 @@ flag runs forever (Symphony's identity; spec
 `--batch` (drain ready work across DAG-aware passes, then exit) and `--once` (a single
 pass) — are for dev / test / CI; `--mock` **defaults** to `--batch` (an explicit loop flag
 still wins — order `--daemon` > `--once` > `--batch` > mock-default). `--daemon` survives
-only as a redundant, **deprecated alias** of the default (ADR 0007). The launch command (just run it,
+only as a redundant, **deprecated alias** of the default (ADR 0008). The launch command (just run it,
 optionally `[--poll-interval N]`) is in the runbook
 ([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §9); the *semantics* you must
 understand to operate it are here:

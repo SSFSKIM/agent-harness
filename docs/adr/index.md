@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-21
+last_verified: 2026-06-28
 owner: harness
 ---
 # ADR index
@@ -46,10 +46,17 @@ Decisions + why. Register every page here (lint D8).
   checked-in JS bundles (Cytoscape + dagre + cytoscape-dagre) from a constant `/assets/*`
   route — offline (never a CDN), zero-traversal (fixed map), Python stdlib-only untouched.
   Not a general license to add deps elsewhere under `director/`.
-- [One operating mode — Director ⟷ Board](0007-one-operating-mode.md)
+- [No Director-authored worker hooks — `features.hooks=false` is settled, not deferred](0007-no-director-authored-worker-hooks.md)
+  — closes the codex-worker-config lineage's deferred "Phase 3 = Codex hooks": the Director
+  authors no tool-use hooks for either worker. No symmetry to restore (neither worker gets
+  vendored hooks today), the candidate payloads are already served elsewhere or proved weak
+  (context-budget is model-dependent + can't read usage from a shell hook), and enabling
+  `features.hooks=true` would re-open the clone-`.codex/hooks.json` RCE that the always-on
+  disable closes (T16, load-bearing). Reversal trigger recorded; cross-links 0005.
+- [One operating mode — Director ⟷ Board](0008-one-operating-mode.md)
   — refines 0002/0003: finishes the arc by removing the residual multi-mode *framing*.
   There is ONE operating mode (always-present Director adjudicating an always-present
   Board); `attended`/`lights-out` are a **property** (human present?), `batch`/`--once`
   and the pure-code `--autonomous` decider are **fixtures**, and the always-on **daemon
-  is the default**. `--mock` implies the bounded loop (offline board has nothing to poll
+  is the default**. `--mock` defaults to the bounded loop (offline board has nothing to poll
   forever). No posture/security change; Daemonized-Claude runtime still a separate track.

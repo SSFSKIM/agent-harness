@@ -33,7 +33,7 @@ Definition of done (observable):
    `--autonomous` selects the no-judge decider — each documented as a fixture.
 4. `grep -rInE "three modes|the third mode" .claude docs` returns **nothing** in
    governed docs; DIRECTOR.md presents "one mode + properties + fixtures".
-5. `docs/adr/0007-one-operating-mode.md` exists, is indexed, and refines ADR 0002/0003.
+5. `docs/adr/0008-one-operating-mode.md` exists, is indexed, and refines ADR 0002/0003.
 6. `python3 plugin/scripts/check.py` is GREEN; the full unittest suite passes.
 
 ## Context
@@ -46,7 +46,7 @@ A novice needs these to execute from the plan alone:
   independent axes** — is a Director present? × is the human present?"; rebinds
   "autonomous" to *no-human, Director-only*; demotes the pure-code decider to a
   no-agent niche). This plan **completes** that arc by removing the residual
-  multi-mode *framing* (and aligning the CLI to it). ADR 0007 (M1) is the decision
+  multi-mode *framing* (and aligning the CLI to it). ADR 0008 (M1) is the decision
   record; it refines — does not rewrite — 0002/0003 (ADRs are immutable).
 - **The two orthogonal axes + the niche, in code:**
   - *Run-loop axis* — `director/orchestrator.py`: `run_forever` (daemon, always-on,
@@ -126,8 +126,8 @@ A novice needs these to execute from the plan alone:
 
 ## Milestones
 
-- **M1 — The decision record (ADR 0007).** *Scope:* author
-  `docs/adr/0007-one-operating-mode.md` — the durable decision that there is one
+- **M1 — The decision record (ADR 0008).** *Scope:* author
+  `docs/adr/0008-one-operating-mode.md` — the durable decision that there is one
   operating mode (Director ⟷ Board), with human-presence and run-loop bounds as
   *properties* and the pure-code/batch paths as *fixtures*, and daemon as the
   default loop (with the "mock ⇒ bounded" refinement). It states the
@@ -136,7 +136,7 @@ A novice needs these to execute from the plan alone:
   0007 in `docs/adr/index.md`, cross-links 0002/0003 + DIRECTOR.md + this plan).
   *At end:* the ADR exists, is indexed, and the graph links resolve. *Command:*
   `python3 plugin/scripts/check.py` (lints: frontmatter, index registration D8,
-  link integrity) + `python3 plugin/scripts/nav.py backlinks docs/adr/0007-one-operating-mode.md`.
+  link integrity) + `python3 plugin/scripts/nav.py backlinks docs/adr/0008-one-operating-mode.md`.
   *Acceptance:* check.py GREEN; `nav.py` shows 0007 linked from the index and
   cross-referenced by/with 0002/0003.
 
@@ -182,9 +182,9 @@ A novice needs these to execute from the plan alone:
 
 ## Progress log
 - [x] (2026-06-28) Plan created; base_commit recorded; creation-time self-review done.
-- [x] (2026-06-28) M1 — ADR 0007 written, indexed (D8), refines-pointers added to 0002/0003; check.py GREEN.
+- [x] (2026-06-28) M1 — ADR 0008 written, indexed (D8), refines-pointers added to 0002/0003; check.py GREEN.
 - [x] (2026-06-28) M2 — orchestrator.py daemon-default + `--mock`⇒bounded + `--batch` + `--autonomous`/`--daemon` reframe; run.py/config.py/status.py comment reframes; 6 new loop-resolution tests + 2 repointed. Behavioral: `--mock` drains & exits (exit 0); full director suite 615 OK; check.py GREEN.
-- [x] (2026-06-28) M3 — DIRECTOR.md §5 retitled, §6 rewritten ("one mode + properties + fixtures"), §12/§13 reframed (daemon=default; lights-out=property), §9/§11 scattered lines fixed; DIRECTOR_RUNBOOK quick-ref + §8/§9 + see-also reframed (bare command = daemon; --batch/--once fixtures; ADR 0007 linked). Acceptance grep clean (only ADR 0007 quotes the old titles); check.py GREEN.
+- [x] (2026-06-28) M3 — DIRECTOR.md §5 retitled, §6 rewritten ("one mode + properties + fixtures"), §12/§13 reframed (daemon=default; lights-out=property), §9/§11 scattered lines fixed; DIRECTOR_RUNBOOK quick-ref + §8/§9 + see-also reframed (bare command = daemon; --batch/--once fixtures; ADR 0008 linked). Acceptance grep clean (only ADR 0008 quotes the old titles); check.py GREEN.
 
 ## Surprises & discoveries
 - (2026-06-28) `--mock` defaulting to the daemon would hang tests/quick-runs over the
@@ -203,7 +203,7 @@ A novice needs these to execute from the plan alone:
 ## Feedback (from completion gate)
 - **review-spec-compliance: SATISFIED.** All 6 DoD items verified; scope honored (only specified
   files touched; `--batch` the one new flag, specified in M2). Full suite 851 tests OK.
-  - **P2 (found + FIXED inline):** the `mode="batch"` heartbeat label was documented (ADR 0007 +
+  - **P2 (found + FIXED inline):** the `mode="batch"` heartbeat label was documented (ADR 0008 +
     `director/status.py` docstrings) but never emitted — `run_until_drained`/`run_once` call
     `status.wave()`, not `polled()`, so bounded fixtures keep `mode=None`. Fixed the ADR line +
     both status.py docstrings to state bounded fixtures emit no heartbeat (`mode=None`), matching
@@ -223,7 +223,7 @@ A novice needs these to execute from the plan alone:
   layer-law/portability issues. P2s: (a) docs said "`--mock` **implies** `--batch`" but code makes
   it only the *default* (explicit `--daemon` wins → `--mock --daemon` runs the daemon) →
   **FIXED inline** (softened the wording to "defaults to … an explicit loop flag still wins" + the
-  total order, in the `--batch` help / ADR 0007 / DIRECTOR.md §12; added
+  total order, in the `--batch` help / ADR 0008 / DIRECTOR.md §12; added
   `test_mock_daemon_explicit_flag_wins_over_mock_default`). (b) DIRECTOR.md §6 called the run loop
   "a second property" — contradicts the taxonomy (the daemon IS the mode) → **FIXED inline**
   ("the other axis … daemon IS the mode"). Proposed rule (run-loop as a `director.loop` config key)
@@ -241,7 +241,7 @@ A novice needs these to execute from the plan alone:
 ## Outcomes & retrospective
 
 **Shipped.** One operating mode — Director ⟷ Board — now presented consistently across the
-decision record (ADR 0007, refining 0002/0003), the code (`director/orchestrator.py`: daemon is
+decision record (ADR 0008, refining 0002/0003), the code (`director/orchestrator.py`: daemon is
 the default loop, `--mock`⇒bounded, `--batch` added, `--once`/`--daemon`-alias kept,
 `--autonomous` reframed as a fixture; comment/heartbeat reframes in run.py/config.py/status.py),
 and the docs (`.claude/DIRECTOR.md` §5/§6/§12/§13 + scattered lines; `DIRECTOR_RUNBOOK` quick-ref

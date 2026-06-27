@@ -1246,11 +1246,11 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--once", action="store_true",
                     help="bounded fixture: one dispatch pass (no re-poll), then exit "
                          "(run_once). The default operating mode is the always-on daemon "
-                         "(ADR 0007)")
+                         "(ADR 0008)")
     ap.add_argument("--batch", action="store_true",
                     help="bounded fixture: drain ready work across DAG-aware re-poll passes, "
                          "then exit (run_until_drained). The default operating mode is the "
-                         "always-on daemon (ADR 0007); --batch/--once are dev/test/CI "
+                         "always-on daemon (ADR 0008); --batch/--once are dev/test/CI "
                          "fixtures. --mock defaults to --batch unless an explicit loop flag "
                          "is given; precedence: --daemon > --once > --batch > mock-default")
     ap.add_argument("--max-passes", type=int, default=None,
@@ -1267,7 +1267,7 @@ def main(argv=None, *, board=None) -> int:
                     help="fixture (NOT a mode): self-resolve turn-ends with the pure-code "
                          "decider — no judging Director. The CI/--mock/truly-detached path; "
                          "in production a Director (human-attended OR lights-out daemon, the "
-                         "SAME queue path) is always present and answers turn-ends (ADR 0007 "
+                         "SAME queue path) is always present and answers turn-ends (ADR 0008 "
                          "/ DIRECTOR.md §6). Posture is identical to the default")
     ap.add_argument("--read-timeout", type=float, default=None,
                     help="per-event read timeout for a worker turn (s); raise for slow "
@@ -1280,7 +1280,7 @@ def main(argv=None, *, board=None) -> int:
                          "ticket states are re-read to stop externally-moved tickets")
     ap.add_argument("--daemon", action="store_true",
                     help="DEPRECATED alias — the always-on loop (run_forever) is now the "
-                         "DEFAULT for real runs (ADR 0007), so this flag is redundant. Kept "
+                         "DEFAULT for real runs (ADR 0008), so this flag is redundant. Kept "
                          "for back-compat; stop the loop with SIGTERM / double-SIGINT")
     ap.add_argument("--poll-interval", type=float, default=None,
                     help="always-on loop (default) board-poll cadence (s): how often new "
@@ -1303,7 +1303,7 @@ def main(argv=None, *, board=None) -> int:
     board = board if board is not None else _build_board(args)
     states = resolve_states(board, s["team"], s["states"])
 
-    # Decider selection (ADR 0007). The DEFAULT routes each turn-end to the Director
+    # Decider selection (ADR 0008). The DEFAULT routes each turn-end to the Director
     # queue, where the Director answers free-form (.claude/DIRECTOR.md) — a human-attended
     # session OR a lights-out daemon, the SAME make_queue_decider path ("attended" vs
     # "lights-out" is a property, not a mode). The pure-code decider is a FIXTURE:
@@ -1382,7 +1382,7 @@ def main(argv=None, *, board=None) -> int:
 
     command = _command(args, s["codex_command"], s["posture"])
 
-    # Run-loop resolution (ADR 0007). The one operating mode is the always-on daemon, so a
+    # Run-loop resolution (ADR 0008). The one operating mode is the always-on daemon, so a
     # real run with no loop flag runs forever. --mock is an offline fixture with no live
     # board to poll, so it defaults to the bounded drain-and-exit loop. The bounded fixtures
     # (--once single-pass, --batch multi-pass) and the explicit, now-redundant --daemon alias
@@ -1397,7 +1397,7 @@ def main(argv=None, *, board=None) -> int:
         loop = "batch" if args.mock else "daemon"
 
     if loop == "daemon":
-        # The always-on operating mode (ADR 0007; gap #2): blocks until SIGTERM /
+        # The always-on operating mode (ADR 0008; gap #2): blocks until SIGTERM /
         # double-SIGINT, then returns a session summary. Signal handlers install by default
         # (main thread); the bounded fixtures' max_passes/max_dispatched bounds do not
         # apply — the daemon is unbounded by design.
