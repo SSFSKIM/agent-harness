@@ -260,11 +260,12 @@ def _sweep_stale_codex_layout(ws: Path) -> None:
     """Remove inert Director-injected leftovers from a REUSED pre-Phase-2 workspace — the old
     `<ws>/.codex/skills/` and `<ws>/.codex/agents/` copies the Director used to write (Phase 1)
     but no longer does (skills never lived on a Codex loader path there; Codex personas moved
-    user-scope to CODEX_HOME). Removes ONLY git-UNTRACKED files under those two dirs (the
-    Director's clone starts pristine, so untracked content there is OURS), then prunes the
-    emptied dirs — a TRACKED `.codex/` file the clone itself ships is never in `ls-files
-    --others`, so it is never touched (no PR pollution). No-op on a non-git workspace
-    (mock/offline). Symlinks are unlinked as links, never followed."""
+    user-scope to CODEX_HOME). Removes ONLY git-UNTRACKED content under those two dirs (the
+    Director's clone starts pristine, so untracked content there is OURS): a dir with NO tracked
+    file under it is removed whole (subtree included); a dir that ALSO holds tracked content keeps
+    that content and only its untracked files are unlinked. A TRACKED `.codex/` file the clone
+    itself ships is never in `ls-files --others`, so it is never touched (no PR pollution). No-op
+    on a non-git workspace (mock/offline). Symlinks are unlinked as links, never followed."""
     git = ws / ".git"
     if not git.exists() or git.is_symlink():
         return

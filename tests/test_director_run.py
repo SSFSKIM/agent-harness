@@ -184,6 +184,31 @@ class RunEndToEndTest(unittest.TestCase):
                                              encoding="utf-8")
         self.assertNotIn("projects", (src / "config.toml").read_text(encoding="utf-8"))
 
+    def test_prepare_injects_codex_home_into_worker_env(self):
+        # M2 wiring: with install_skills set and _ensure_codex_home yielding a path, _prepare
+        # injects it into the worker subprocess env so the codex worker uses the Director home.
+        ticket = {"id": "WIRE-1", "prompt": "p", "model": None,
+                  "workspace": str(self.tmp / "wsenv")}
+        with mock.patch("director.run._ensure_codex_home", return_value="/sentinel/codex-home"):
+            client = run._prepare(
+                ticket, command=[sys.executable, MOCK, "plain"], queue_base=self.qbase,
+                workspace_root=self.tmp, timeout_s=5.0, read_timeout_s=5.0,
+                tool_executor=None, install_skills=True)
+        assert client.env is not None
+        self.assertEqual(client.env["CODEX_HOME"], "/sentinel/codex-home")
+
+    def test_prepare_omits_codex_home_when_none(self):
+        # No codex install to serve → _ensure_codex_home returns None → CODEX_HOME stays unset.
+        ticket = {"id": "WIRE-2", "prompt": "p", "model": None,
+                  "workspace": str(self.tmp / "wsenv2")}
+        with mock.patch("director.run._ensure_codex_home", return_value=None):
+            client = run._prepare(
+                ticket, command=[sys.executable, MOCK, "plain"], queue_base=self.qbase,
+                workspace_root=self.tmp, timeout_s=5.0, read_timeout_s=5.0,
+                tool_executor=None, install_skills=True)
+        assert client.env is not None
+        self.assertNotIn("CODEX_HOME", client.env)
+
     def test_sweep_stale_codex_layout_removes_only_untracked(self):
         # M3: a reused pre-Phase-2 workspace's inert Director-injected .codex/{skills,agents}
         # leftovers (UNTRACKED) are swept, while a clone-TRACKED .codex/ file is untouched.
