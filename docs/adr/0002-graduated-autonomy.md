@@ -8,6 +8,10 @@ description: Move the Director from per-turn judge to exception-handler — work
 ---
 # Graduated autonomy — human at the edges, autonomous in the middle
 
+> **Refined by [[0007-one-operating-mode]]** (2026-06-28): the decision stands; its
+> "modes/axes" *framing* is finished — there is one operating mode (Director ⟷ Board),
+> with human-presence a property and the pure-code/batch paths fixtures.
+
 ## Decision
 
 We move the Director from a **per-turn judge** toward an **exception-handler**:

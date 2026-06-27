@@ -46,3 +46,10 @@ Decisions + why. Register every page here (lint D8).
   checked-in JS bundles (Cytoscape + dagre + cytoscape-dagre) from a constant `/assets/*`
   route — offline (never a CDN), zero-traversal (fixed map), Python stdlib-only untouched.
   Not a general license to add deps elsewhere under `director/`.
+- [One operating mode — Director ⟷ Board](0007-one-operating-mode.md)
+  — refines 0002/0003: finishes the arc by removing the residual multi-mode *framing*.
+  There is ONE operating mode (always-present Director adjudicating an always-present
+  Board); `attended`/`lights-out` are a **property** (human present?), `batch`/`--once`
+  and the pure-code `--autonomous` decider are **fixtures**, and the always-on **daemon
+  is the default**. `--mock` implies the bounded loop (offline board has nothing to poll
+  forever). No posture/security change; Daemonized-Claude runtime still a separate track.

@@ -181,8 +181,8 @@ A novice needs these to execute from the plan alone:
   docs; check.py GREEN; a read-through confirms no remaining peer-mode language.
 
 ## Progress log
-- [ ] (2026-06-28) Plan created; base_commit recorded; creation-time self-review done.
-- [ ] M1 — ADR 0007
+- [x] (2026-06-28) Plan created; base_commit recorded; creation-time self-review done.
+- [x] (2026-06-28) M1 — ADR 0007 written, indexed (D8), refines-pointers added to 0002/0003; check.py GREEN.
 - [ ] M2 — CLI alignment + tests
 - [ ] M3 — Doc reframe
 
