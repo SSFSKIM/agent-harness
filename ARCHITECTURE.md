@@ -148,7 +148,7 @@ architecture invariants live here (review-arch grounds in this doc). Runtime
    worker posture, paths, merger knobs) live in the `director` block of
    `<root>/.harness.json` and are resolved ONCE at startup by `director/config.py`
    — the single `DEFAULTS` source, precedence CLI flag > config > default. The
-   *methodology* (dev-stage templates, queue schema, disposition kinds) stays in
+   *methodology* (the worker protocol, queue schema, disposition kinds) stays in
    code: a host buys the harness's method and tunes only its deployment. A
    present-but-malformed block fails loud at load (before any worker spawns); an
    absent block uses the defaults. This is the `director/` analog of invariant 7

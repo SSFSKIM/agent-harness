@@ -131,7 +131,7 @@ reference.
       "merging": "In Review"              // present -> enables merge-gated landing (§8)
     },
     "concurrency": 2,
-    "dispatch_requires_label": true,      // only claim tickets carrying a dev-stage label
+    "dispatch_requires_label": true,      // default; only claim tickets tagged `agent-ready`
     "worker": { "tools": "linear", "install_skills": true },
     "workspace": {
       "hooks": {
@@ -162,10 +162,12 @@ A malformed block fails **loud at startup**, before any worker spawns.
 
 ## 4. Prepare the board (one-time)
 
-On the target Linear team, create the dev-stage labels — `planning` / `spec` / `design`
-/ `research` / `impl` — and tag each ticket with the one stage it should run (`impl`
-routes the full ExecPlan methodology). With `dispatch_requires_label: true`, an
-unlabelled ticket is never claimed (onboarding/stray issues are ignored).
+On the target Linear team, create a single `agent-ready` label and tag each ticket you want
+the Director to pick up. `dispatch_requires_label` is **true by default** (ADR 0007), so an
+un-tagged ticket is never claimed — onboarding/stray issues are ignored. You do **not**
+pre-classify the work (research vs spec vs build): the worker decides HOW from the ticket's
+goal + the host's `AGENTS.md` + skills. (Set `dispatch_requires_label: false` to claim every
+ready ticket instead.)
 
 ---
 

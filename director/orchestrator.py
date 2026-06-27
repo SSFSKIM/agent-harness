@@ -27,7 +27,7 @@ from pathlib import Path
 
 import director.queue as dq
 from director import board_snapshot as board_snapshot_mod
-from director import config, decider, history, merger, run, status as status_mod, taxonomy, ticket_events as events_mod
+from director import config, decider, history, merger, run, status as status_mod, ticket_events as events_mod
 from director.board import linear as board_linear
 from director.worker import app_server, autonomy
 
@@ -89,7 +89,7 @@ def dispatch(ticket: dict, **kwargs) -> dict:
 
     `composed` is an intentional SHALLOW copy — its `blockers`/`labels` lists alias the
     board ticket's. Nothing downstream (drive) mutates them; callers must not."""
-    composed = {**ticket, "prompt": taxonomy.compose_worker_prompt(ticket)}
+    composed = {**ticket, "prompt": ticket.get("prompt", "")}
     try:
         return run.drive(composed, **kwargs)
     except Exception as exc:  # subprocess death, handshake error, etc.
@@ -298,21 +298,30 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     return {"summary": summary}
 
 
+# The single dispatch-admission label (worker-policy-polish; ADR 0007). A ready ticket is
+# handed to a worker ONLY if it carries this label (when `dispatch_requires_label` is on —
+# now the default). It replaces the 5-value dev-stage taxonomy, whose ONLY runtime use was
+# this gate: DAG sequencing is pure `blocked_by` + blocker state_type (never the stage
+# label), and the stage labels never shaped the worker prompt (ADR 0005). One explicit
+# "this is agent work" signal does the gating; HOW to do it is the worker's judgment.
+DISPATCH_LABEL = "agent-ready"
+
+
 def eligible_tickets(tickets: list[dict], *, done_types=("completed",),
                      require_label: bool = False) -> list[dict]:
     """The DAG-eligible subset: a ticket whose every blocked_by blocker is in a
     done state-type. A ticket with no blockers is always eligible. Pure function —
     blockers come from the board read (list_ready_issues -> ticket['blockers']).
 
-    When `require_label` is True, a ticket carrying no dev-stage label
-    (`taxonomy.ticket_type` is None) is ALSO dropped — so untyped board tickets (e.g.
-    Linear's default onboarding issues sitting in the ready state) are never dispatched
-    as raw-prompt workers (use-all shakedown F1; `director.dispatch_requires_label`)."""
+    When `require_label` is True, a ticket NOT carrying the `agent-ready` dispatch label
+    (DISPATCH_LABEL) is ALSO dropped — so non-harness board tickets (Linear's default
+    onboarding issues, or anything a human is still shaping) are never dispatched as
+    workers (use-all shakedown F1; `director.dispatch_requires_label`, now default on)."""
     done = set(done_types)
     out = [t for t in tickets
            if all(b.get("state_type") in done for b in t.get("blockers", []))]
     if require_label:
-        out = [t for t in out if taxonomy.ticket_type(t) is not None]
+        out = [t for t in out if DISPATCH_LABEL in (t.get("labels") or [])]
     return out
 
 
@@ -1066,10 +1075,12 @@ class MockBoard:
 
     @classmethod
     def demo(cls) -> "MockBoard":
+        # Both carry the agent-ready dispatch label so the gate (on by default, ADR 0007)
+        # admits them — a demo board mirrors a real one where dispatchable tickets are tagged.
         return cls([
-            {"id": "u1", "identifier": "DEMO-1", "title": "first",
+            {"id": "u1", "identifier": "DEMO-1", "title": "first", "labels": ["agent-ready"],
              "description": "do first", "prompt": "DEMO-1: do first", "state_id": "st_todo"},
-            {"id": "u2", "identifier": "DEMO-2", "title": "second",
+            {"id": "u2", "identifier": "DEMO-2", "title": "second", "labels": ["agent-ready"],
              "description": "do second", "prompt": "DEMO-2: do second", "state_id": "st_todo"}])
 
     def workflow_states(self, team):
@@ -1084,7 +1095,7 @@ class MockBoard:
             # resolve each blocker id to its current {id, state_type} (DAG truth)
             t["blockers"] = [{"id": bid, "state_type": self._state_type(bid)}
                              for bid in i.get("blockers", [])]
-            t["labels"] = list(i.get("labels", []))  # dev-stage type labels
+            t["labels"] = list(i.get("labels", []))  # dispatch label(s)
             out.append(t)
         return out
 
