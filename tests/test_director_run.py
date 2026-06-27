@@ -133,12 +133,14 @@ class RunEndToEndTest(unittest.TestCase):
         cmd = ["bash", "-c", "codex app-server -c approvals_reviewer=auto_review"]
         out = run._with_codex_trust(cmd, ws)
         self.assertEqual(out[:2], ["bash", "-c"])
-        abs_ws = os.path.abspath(str(ws))
+        # realpath (not abspath): the key must match the canonical path Codex resolves the
+        # project root to, or trust silently fails on a symlinked workspace-root component.
+        real_ws = os.path.realpath(str(ws))
         self.assertIn("-c approvals_reviewer=auto_review", out[2])  # preserved
         # bash re-tokenizes the appended fragment to the EXACT TOML kv (quotes pass literally
         # to codex's -c parser — the quoting that the live probe confirmed codex accepts).
         self.assertEqual(shlex.split(out[2])[-1],
-                         f'projects."{abs_ws}".trust_level="trusted"')
+                         f'projects."{real_ws}".trust_level="trusted"')
 
     def test_with_codex_trust_leaves_mock_unchanged(self):
         # The mock command is not `bash -c …`, so trust must not corrupt it.

@@ -373,9 +373,14 @@ def _with_codex_trust(command: list[str], ws) -> list[str]:
     Only the bash-wrapped real runtime is touched: a mock command (not `bash -c …`) is returned
     unchanged. The key is a no-op for the Claude adapter (it ignores codex `projects.*` config),
     matching how the autonomy `-c` flags already reach both runtimes. The path is shell-quoted so
-    bash passes the TOML quoted-key literally to codex's `-c` parser (verified accepted)."""
+    bash passes the TOML quoted-key literally to codex's `-c` parser (verified accepted).
+
+    The key is the FULLY-RESOLVED path (`realpath`, not `abspath`): Codex canonicalizes the
+    project root for its `projects.<path>` trust lookup, so a symlinked workspace-root component
+    (e.g. macOS `/tmp`→`/private/tmp`) would make an unresolved key silently fail to match —
+    trust would not apply and `.codex/agents/` would not load."""
     if len(command) == 3 and command[0] == "bash" and command[1] == "-c":
-        kv = f'projects."{os.path.abspath(str(ws))}".trust_level="trusted"'
+        kv = f'projects."{os.path.realpath(str(ws))}".trust_level="trusted"'
         return [command[0], command[1], command[2] + f" -c {shlex.quote(kv)}"]
     return command
 
