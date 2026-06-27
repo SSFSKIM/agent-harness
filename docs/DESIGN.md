@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-25
+last_verified: 2026-06-28
 owner: review-arch
 type: methodology
 tags: [design-taste, review-arch, scripts]
@@ -18,6 +18,16 @@ Grounding document for the review-arch persona (with ARCHITECTURE.md).
   `director/` invariant 8 (`SEEDS`/`render`/`components_table` live in `harness_lib`
   so `lint_base` and `scaffold` share one source instead of importing each
   other).
+- **A value set that drives more than one representation has one canonical home;
+  the others derive from it.** When a single enum feeds both CSS and JS — the
+  dashboard's 7 lifecycle buckets drive `.node.<bucket>` CSS rules, a `BADGE` JS
+  label map, AND the lifecycle-class swap — name ONE source and derive the rest
+  rather than re-spelling the set in three places that drift apart.
+  `director/dashboard.py`: `BADGE` is the home; `setLifecycle` removes
+  `...Object.keys(BADGE)`, never a hand-listed token set (the `.node.<bucket>`
+  CSS can't import the JS, so it stays the one accepted hand-mirror — but the JS
+  never re-hardcodes what `BADGE` already owns). The cross-representation analog
+  of the harness_lib "one home for shared logic" rule above.
 - Every check function takes explicit paths (root/plugin) so tests run on
   fixtures; `main()` does the wiring. Logic-free runners (check.py) are the
   only TDD exemption.

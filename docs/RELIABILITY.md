@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-20
+last_verified: 2026-06-28
 owner: review-reliability
 type: methodology
 tags: [reliability, idempotency, review-reliability]
@@ -200,3 +200,17 @@ cite them in findings.
   a turn. The `observe` builder already bakes this in (swallow → `{}`); a hand-written hook adds it
   explicitly. R6's "hooks fail open" carried into the worker runtime (cf. R14 for request threads)
   — the turn boundary owns the catch, the worker keeps working.
+- **R24 — The dashboard's in-page render is total over a torn `/api/v1/*` payload.** The
+  **client-side** mirror of R12 (server-side extractor totality) and R14 (request-thread fail-soft):
+  the browser render path in `director/dashboard.py`'s page (`render` / `paintGraph` / `renderGraph`
+  / `loadBoard` / `openDrill`) consumes producer JSON that can be partial, reordered, or torn — a
+  board snapshot read mid-write, an edge naming a node absent from `nodes`, a missing `layers` /
+  `labels` / `tokens` field. Every such access degrades, never throws: **guard each
+  cross-reference** (`G.byId[e.from]` / `G.byId[e.to]` → `if (!a || !b) continue`; `n.dom`;
+  `bucket[pred]`; `node && node.dom`) and **default every absent collection** (`(v.nodes || [])`,
+  `(st.in_flight || [])`, `(G.preds[id] || [])`). And **every call site of `render()` is wrapped**
+  so a thrown frame is swallowed and the last good view kept — the SSE `onmessage` (`try/catch`),
+  the no-SSE `fetch().then(render).catch()`, and the poll loop — so one malformed frame degrades
+  that frame, never wedges `paintGraph` nor blanks the surface. A read-only instrument must observe
+  a hostile payload, never crash on it (R12 / R14 carried into the client render); a new render
+  branch inherits the rule by guarding its lookups and riding a wrapped call site.

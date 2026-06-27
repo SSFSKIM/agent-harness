@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-25
+last_verified: 2026-06-28
 owner: harness
 type: methodology
 tags: [execplan, planning, methodology]
@@ -124,6 +124,12 @@ missing, nothing extra?) then **code-quality** (clean, tested, maintainable?).
   behavior a human can verify (command → observable output), never as "code
   changed" or "struct added".
 - **Define every term of art** at first use in plain language, or don't use it.
+- **Design tokens are unambiguous.** A magic constant a spec or plan hands the
+  builder — a layout dimension, a threshold, a colour — is copied verbatim, so
+  give it ONE value or NAME the parts (`PAD_X`/`PAD_Y`), never a slashed `40/52`
+  pair that reads two ways (is it 40-or-52, or 40-horizontal/52-vertical?). A
+  token a reader can interpret two ways is the value-level form of the ambiguity
+  a requirement must not have.
 - **Prose first.** Narrative sentences carry the plan — milestones included;
   checklists belong only in the Progress log.
 - **Unknowns get PoC milestones.** A milestone with significant unknowns is

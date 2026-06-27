@@ -1,6 +1,6 @@
 ---
 status: draft
-last_verified: 2026-06-27
+last_verified: 2026-06-28
 owner: harness
 phase: symphony/06-graph-view-reskin
 type: product-spec
@@ -113,7 +113,7 @@ blocked     border #d97706  bg rgba(217,119,6,.09)   text #fcd34d  glow rgba(217
 failed      border #ef4444  bg rgba(239,68,68,.09)   text #fca5a5  glow rgba(239,68,68,.22)
 in_cycle    border #a855f7  bg rgba(168,85,247,.09)  text #d8b4fe  glow rgba(168,85,247,.22)
 ```
-Layout: `NODE_W 168, NODE_H 74, H_GAP 56, V_GAP 16, PAD 40/52`; layer stride = `NODE_W+H_GAP`,
+Layout: `NODE_W 168, NODE_H 74, H_GAP 56, V_GAP 16, PAD 40`; layer stride = `NODE_W+H_GAP`,
 node stride = `NODE_H+V_GAP`; a layer's nodes are vertically centered against the tallest layer.
 Page: bg `#070711`, mono accent `#00d68f`, header height 44. Event-type styles:
 `thinking #475569 "···"`, `tool_call/tool_use #93c5fd "▶"`, `tool_result #86efac "←"`,

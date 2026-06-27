@@ -21,7 +21,8 @@ Grounding document for the review-security persona. Threats are numbered.
 > (Director workspace write/delete surface), **T15** (workspace lifecycle hooks —
 > host-trusted Director-side shell), **T16** (Codex auto-trusts the worker
 > workspace → the cloned repo's project `.codex/` config is an untrusted-input
-> exec surface). The full
+> exec surface), **T17** (dashboard read/render DOM-XSS contract — producer data
+> renders as inert text). The full
 > model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
@@ -380,3 +381,23 @@ Grounding document for the review-security persona. Threats are numbered.
   Scoping: the `CODEX_HOME` redirect applies only when the Director vendored the methodology
   (`install_skills`) and there is a codex install to serve; it is a no-op for the mock and ignored by
   the Claude adapter (which reads `.claude/agents/` from the workspace, not `CODEX_HOME`).
+
+- **T17 — Dashboard read/render DOM-XSS contract (producer data renders as inert text).**
+  The served page (`director/dashboard.py`'s `PAGE`) renders **producer-controlled** strings —
+  board ticket titles / identifiers / labels, Linear state names, and per-ticket session-event
+  text and phase — all attacker-influenceable content (T1-class: a malicious PR / branch / ticket
+  can carry `<img onerror=…>` in a title). This is a **read / GET** surface (the operator **write**
+  fence is T12), so the threat is **DOM XSS in the operator's own loopback browser**, not host
+  code-execution. The contract that keeps it closed, three parts, all currently held:
+  (1) **every producer value reaches the DOM through `textContent`** — the `el(tag, text, cls)`
+  helper does `n.textContent = String(text)`, and the direct writes use `.textContent =` — so
+  producer text is never parsed as markup; (2) **`innerHTML` is used ONLY to clear a container**
+  (`box.innerHTML = ""`), never to ASSIGN producer data (an empty-string clear parses no markup);
+  (3) **no producer string is interpolated into an SVG / HTML attribute** — the edge / marker
+  attributes carry only constants (`"url(#arrow)"`, `"context-stroke"`) and numeric geometry the
+  server's layout computes (`edgePath` from node x/y), never a producer string, so there is no
+  attribute-injection seam. A new render path inherits this: route producer data through
+  `el()` / `textContent`, keep `innerHTML` to the empty-string clear, and never build an attribute
+  value from producer input. Switching a value to an `innerHTML`-assign, or templating a producer
+  string into an attribute, is a threat-model change. (The render path is also reliability-total
+  over a torn payload — RELIABILITY R24 — a separate, non-security contract on the same surface.)
