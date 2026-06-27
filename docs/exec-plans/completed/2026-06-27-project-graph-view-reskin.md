@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-27
 owner: harness
 type: exec-plan
@@ -299,4 +299,89 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
 
 ## Feedback (from completion gate)
 
+Completion-gate review panel (review_level: full), reviewing the path-scoped re-skin diff
+(`407ebd5..HEAD` scoped to the re-skin paths — master is shared with concurrent sessions, so
+the raw range is polluted; the scope was verified to be cleanly mine). Each reviewer read the
+actual `PAGE` code / docs, not the plan's self-report.
+
+| Reviewer | Verdict | Findings |
+| --- | --- | --- |
+| review-spec-compliance | SATISFIED | 0 P1; R1–R8 + AC1–8 + the 7-bucket mapping + Non-goals all verified in code |
+| review-code-quality | SATISFIED | 0 P1; 5 P2 (4 fixed inline, 1 deferred) |
+| review-arch | SATISFIED (after the P1 fix; initially NOT-SATISFIED) | 1 P1 (fixed) + 2 P2 (fixed) |
+| review-reliability | SATISFIED | 0 P1; 1 P2 (the transient bug — fixed) |
+| review-security | SATISFIED | 0 P1, 0 P2 (XSS clean via `textContent`/`el()`; write fence unchanged; surface reduced) |
+
+**P1 processed (fixed in-gate, gate re-run GREEN):**
+- review-arch — `docs/DIRECTOR_RUNBOOK.md` dashboard section asserted a now-false "served from a
+  vendored offline graph lib" + a "`/assets/*`" route (the "retire a name → grep the surviving
+  bodies" rule). Rewrote to hand-rolled DOM+SVG / zero served assets / single `/api/v1/board`
+  route + refreshed the painting description. (`b69d66d`)
+
+**P2 fixed in-gate** (real latent bugs or cheap high-value cleanups — judgment per the
+duplicate-edge-guard precedent):
+- review-arch + review-reliability — **transient-card orphan-on-rebuild bug**: `renderGraph`
+  wiped `#cy` (`host.textContent=""`) but never reset `G.transient`, so a topology rebuild
+  orphaned just-claimed transient cards (never re-attached to the fresh canvas) — a regression
+  vs the old Cytoscape path. `renderGraph` now resets `G.transient = {}`. (`b69d66d`)
+- review-code-quality + review-arch — `docs/adr/index.md` 0006 entry still presented the
+  relaxation as in-force; added the "superseded 2026-06-27" note. (`b69d66d`)
+- review-code-quality — `currentPhase` now reads `text`-kind phase (consistent with `evtText`);
+  `setLifecycle` derives its removal list from `Object.keys(BADGE)` (one home for the bucket set,
+  not three); `metaText` extracted (DRY across `paintGraph` + `paintTransient`). (`b69d66d`)
+
+**P2 deferred** (logged to `docs/exec-plans/tech-debt-tracker.md`, the re-skin row):
+- review-code-quality — the expanded marker-test-only JS surface (the re-skin added `edgeClass`,
+  the 3-pass mapping, `descendants`/`applyCollapsed`, `paintTransient`, `layout` math, the typed
+  overlay); close when a JS harness exists (the page is behaviorally pinned by the playwright
+  `window.__graph` evals recorded above). Corrected the stale `window.cy`→`window.__graph` row.
+- review-code-quality — `updateHeader`'s `if(fill/pt/hc)` guards on statically-present elements
+  are **kept deliberately** (fail-soft in the hot per-tick paint path — a structural drift must
+  degrade a frame, never wedge `paintGraph`); a recorded trade, not debt.
+- 4 proposed grounding-doc rules (doc-gardener; behavior already satisfied): a SECURITY.md
+  numbered DOM-XSS read-surface threat; a RELIABILITY.md dashboard-render-totality sub-clause; a
+  DESIGN.md state-enum-single-source taste note; product-spec hygiene (per-axis layout tokens,
+  not a slashed `PAD 40/52` pair).
+
 ## Outcomes & retrospective
+
+**Shipped.** The Director dashboard project-graph view (`/`) is re-skinned to the
+operator-validated design language, hand-rolled with **zero** vendored bytes:
+- HTML node-cards (identifier + state badge + 2-line title + in-flight `phase · Nt` + a
+  pulsing token-activity bar) on the 7-state palette, in `wave N`-labeled topological layers
+  positioned purely from the server's `layer`/`layers` (the client computes no topology).
+- A header `done/total` progress bar + live `active/blocked/failed` counts; state-aware SVG
+  bezier edges (active green / done dim / blocked amber / backlog dashed) with arrow markers;
+  a redesigned per-ticket overlay (telemetry strip + typed event stream over the unchanged SSE).
+- The vendored Cytoscape/dagre library (≈670KB) + the `/assets/*` routes are **gone** — net
+  **−4446 / +835** lines; the dashboard now serves zero request-derived bytes. ADR 0006's
+  relaxation is **retired** (superseded) and ARCHITECTURE invariant 1's JS carve-out removed;
+  invariants 1 & 3 both moved *stricter*.
+- The operator answer console (CSRF + loopback fence), history, SSE paint, and labeled
+  empty-state are preserved **byte-for-byte** (R7) — verified by the unchanged tests.
+
+**Acceptance.** Spec AC1–8 demonstrably pass (behavioral playwright capture in the M5 progress
+entry); gate GREEN; dashboard suite 58/58. Completion-gate review panel (review_level: full): all
+five reviewers SATISFIED (spec-compliance, code-quality, arch, reliability, security) — see Feedback.
+
+**Retrospective.**
+- *Incremental Approach A held.* Every milestone (M1 rip-out → M2 design system → M3 live paint →
+  M4 overlay → M5 ADR/gate) stayed bootable, gate-green, and playwright-verified on the live :8788
+  sample; the security-sensitive write console was preserved continuously, never reconstructed.
+  The `window.__graph` introspection hook made each milestone provable via a single live eval
+  (per the flaky-env memory — JS state, not screenshots), not a marker-test guess.
+- *The hand-roll was simpler than the reference,* exactly as the spec predicted: because the
+  server already ships the wave layering (`build_board_view`, invariant 4), `layout()` is ~15
+  lines of pure positioning vs the reference's in-browser longest-path recompute. Dropping the
+  library dropped in-browser layout cost, not just bytes.
+- *Preserve-by-not-touching* was the right R7 strategy: the answer console's JS is unchanged, so
+  the CSRF/loopback path had zero edits and every fence test stayed green — the lowest-risk way to
+  carry a security surface through a big rewrite.
+- *The gate earned its keep:* it caught a real doc-drift P1 (the runbook still claimed the vendored
+  lib) and a real latent regression — the transient-card orphan-on-rebuild bug, flagged
+  independently by review-arch AND review-reliability — that the green test suite never would
+  (marker tests don't exercise a topology rebuild). Both fixed in-gate.
+
+**Follow-ups (non-blocking):** the deferred P2s + 4 proposed grounding-doc rules are logged in
+`docs/exec-plans/tech-debt-tracker.md` (doc-gardener). No behavioral follow-up is owed — the
+shipped surface is fully verified.

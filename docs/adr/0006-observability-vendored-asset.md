@@ -12,7 +12,7 @@ description: "SUPERSEDED (2026-06-27): The 2026-06-27 graph-view re-skin dropped
 
 This relaxation is **no longer in force.** The graph-view re-skin
 ([spec](../product-specs/2026-06-27-project-graph-view-reskin.md) R6/R8,
-[ExecPlan](../exec-plans/active/2026-06-27-project-graph-view-reskin.md)) **dropped the
+[ExecPlan](../exec-plans/completed/2026-06-27-project-graph-view-reskin.md)) **dropped the
 vendored graph library** (Cytoscape + dagre + the adapter, ≈670KB) and hand-rolled the
 project-graph render as plain **DOM + SVG**, positioned from the server's existing
 `layer`/`layers`/`edges` (the server already owns the layering — invariant 4 — so the
