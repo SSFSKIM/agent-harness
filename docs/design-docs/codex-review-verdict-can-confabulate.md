@@ -30,7 +30,5 @@ an error.
 - Treat codex's cited `file:line` / type names as **suspect** unless re-confirmed
   against the code.
 
-The review-reliability companion to
-[codex review companion scoping](codex-review-companion-scoping.md) (which covers
-*which* codex review command to use): together they say **codex review is useful
-but flaky — corroborate scope and evidence both.**
+In short: **codex review is useful but flaky — corroborate its evidence against
+the real code, and never lean on its cited file:line / type detail.**

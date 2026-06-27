@@ -18,6 +18,5 @@ Catalog of design documents. Add new pages here (lint D8 enforces).
 Reusable agent & review methodology lessons, promoted out of an agent's private
 memory into the repo so they are shared and resolvable.
 
-- codex-review-companion-scoping.md — `/codex:review` is working-tree scoped and rejects focus text; use `adversarial-review --base --scope branch` for a branch
 - codex-review-verdict-can-confabulate.md — codex review verdicts can hallucinate evidence when shell output degrades; corroborate with a real-code reviewer
 - own-context-for-synthesis-tasks.md — read both sides yourself for synthesis/comparison; delegate only breadth-sweep find/locate work
