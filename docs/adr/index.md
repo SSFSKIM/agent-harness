@@ -39,10 +39,10 @@ Decisions + why. Register every page here (lint D8).
   orchestrator paths); the dev-stage label stays as dispatch/DAG metadata only. Completes
   0004; supersedes its per-template edits and the dev-stage-taxonomy template layer.
 - [Observability dashboard may vendor an offline, checked-in JS asset](0006-observability-vendored-asset.md)
-  — a SCOPED relaxation for the observability surface only: the dashboard may serve a
-  fixed set of vendored, checked-in JS bundles (Cytoscape + dagre + cytoscape-dagre, for
-  the project graph view) from a constant `/assets/*` route — offline (never a CDN) and
-  zero-traversal (fixed map). The Python stdlib-only invariant (ARCHITECTURE invariant 1)
-  is untouched — it scopes Python imports, not a served `.js`. Only the dashboard's
-  "single self-contained HTML, no external asset" grain relaxes. Not a general license to
-  add deps elsewhere under `director/`.
+  — **superseded 2026-06-27**: the [graph-view re-skin](../product-specs/2026-06-27-project-graph-view-reskin.md)
+  dropped the vendored library and hand-rolled the render (DOM+SVG), so the dashboard now
+  serves **zero** assets and the `/assets/*` route is gone (invariants 1 & 3 moved stricter).
+  *Historical:* a SCOPED relaxation that let the dashboard serve a fixed set of vendored,
+  checked-in JS bundles (Cytoscape + dagre + cytoscape-dagre) from a constant `/assets/*`
+  route — offline (never a CDN), zero-traversal (fixed map), Python stdlib-only untouched.
+  Not a general license to add deps elsewhere under `director/`.

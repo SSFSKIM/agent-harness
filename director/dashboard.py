@@ -551,8 +551,10 @@ function fallbackPoll() {                  // the ~1s degradation path — idemp
 // tool summary / agent message can never be parsed as markup.
 const drills = {};   // ticket_id -> { es, panel }
 function tsShort(ts) { return ts ? String(ts).slice(11, 19) : ""; }   // HH:MM:SS from an ISO ts
-function currentPhase(events) {                  // the latest agent_message phase seen
-  let p = ""; for (const e of events) if (e.kind === "agent_message" && e.phase) p = e.phase; return p;
+function currentPhase(events) {                  // the latest phase seen (agent_message/text carry it)
+  let p = "";
+  for (const e of events) if ((e.kind === "agent_message" || e.kind === "text") && e.phase) p = e.phase;
+  return p;
 }
 // Typed event styling (the spec's event-type tokens) mapped onto our real `ticket_events`
 // kinds; turn_started/turn_ended render as faint rule lines, the rest as a coloured glyph +
@@ -726,8 +728,12 @@ function extent() {
   return { w: w + PAD, h: h + PAD };
 }
 function setLifecycle(card, cls) {                // swap ONLY lifecycle tokens (keep node/dimmed/collapsed)
-  card.classList.remove("in_progress", "done", "failed", "blocked", "backlog", "ready", "cancelled", "in_cycle");
+  card.classList.remove(...Object.keys(BADGE));   // the bucket set has one home (BADGE), not three
   for (const c of cls.split(" ")) if (c) card.classList.add(c);
+}
+function metaText(fl) {                           // the in-flight card readout: phase · Nt (one home)
+  const t = fl && fl.tokens;
+  return (fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "");
 }
 function edgeClass(fromB, toB) {                  // R4: colour an edge by its endpoint lifecycle buckets
   // amber if either end is blocked/cycling (a stalled path), green if active (an in_progress
@@ -771,6 +777,8 @@ function makeCard(n) {                            // the full card anatomy (shar
 function renderGraph() {
   // (Re)build the DOM: a transformed inner canvas holding the SVG edge layer + the cards.
   const host = $("cy"); host.textContent = "";
+  G.transient = {};                                // the old transient cards die with the wiped canvas;
+                                                   // clear the map so paintTransient re-creates them fresh
   if (!G.nodes.length) {                           // no board snapshot yet → labeled empty-state (rail still works)
     host.appendChild(el("div", "no board snapshot yet — the side rail shows live run state", "empty"));
     G.canvas = G.svg = null; return;
@@ -882,10 +890,7 @@ function paintGraph(v) {
     const badge = n.dom.querySelector(".node-badge");
     if (badge) badge.textContent = BADGE[b] || b;
     const meta = n.dom.querySelector(".node-meta");
-    if (meta) {                                      // in-flight: phase · Nt readout
-      const fl = inflight[n.id], t = fl && fl.tokens;
-      meta.textContent = fl ? ((fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "")) : "";
-    }
+    if (meta) meta.textContent = inflight[n.id] ? metaText(inflight[n.id]) : "";   // in-flight: phase · Nt
   }
   for (const e of G.edges) {                         // edges: colour by endpoint lifecycle (R4)
     if (e.dom) setEdgeClass(e.dom, edgeClass(bucket[e.from], bucket[e.to]));
@@ -974,8 +979,7 @@ function paintTransient(inflight) {                 // union just-claimed in-fli
     }
     card.style.left = (PAD + i * STRIDE) + "px"; card.style.top = baseY + "px";
     const badge = card.querySelector(".node-badge"); if (badge) badge.textContent = "claimed";
-    const meta = card.querySelector(".node-meta"), t = fl.tokens;
-    if (meta) meta.textContent = (fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "");
+    const meta = card.querySelector(".node-meta"); if (meta) meta.textContent = metaText(fl);
     i++;
   }
 }

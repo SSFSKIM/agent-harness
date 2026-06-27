@@ -283,14 +283,16 @@ python3 -m director.dashboard            # default dirs (.claude/harness/directo
 - **Project graph (the `/` page):** the whole configured board as a **layered DAG** — every
   ticket is a node, blocker edges connect them, and nodes sit in topological layers where
   *same layer = parallel-schedulable, next layer = serial dependency* (the orchestrator's own
-  wave model). Nodes are painted live from `status.json` (lifecycle colour + an in-flight token
-  fill; blocked/cycle nodes marked); **tap a node** to open the per-ticket session overlay
-  below. Auto-fits on load; pan/zoom navigate, with opt-in subtree-collapse (`dbltap` a node)
-  and a frontier-focus toggle. Served from a vendored offline graph lib (no CDN); reads only the
-  local `board.json` the orchestrator writes (`--board-dir`), so no Linear key is needed
-  dashboard-side. If there's no board snapshot yet it shows a labeled empty-state and the side
-  rail below still works. Routes: `GET /api/v1/board` (the layered view) + `/assets/*` (the
-  vendored lib).
+  wave model). Each ticket is an HTML node-card (identifier + state badge + 2-line title)
+  painted live from `status.json` via the 7-state palette (running/done/ready/todo/blocked/
+  failed/cycle), with a header `done/total` bar + active/blocked/failed counts and state-aware
+  edges; **tap a node** to open the per-ticket session overlay (a typed event stream) below.
+  Auto-fits on load; pan/zoom navigate, with opt-in subtree-collapse (double-click a node) and a
+  frontier-focus toggle. The graph is **hand-rolled DOM+SVG** — no graph library, no CDN, zero
+  served assets (positioned from the server's layering). Reads only the local `board.json` the
+  orchestrator writes (`--board-dir`), so no Linear key is needed dashboard-side. If there's no
+  board snapshot yet it shows a labeled empty-state and the side rail below still works. Route:
+  `GET /api/v1/board` (the layered view).
 - **Watch (side rail):** the live run header (cumulative **tokens** climbing mid-turn, runtime,
   rate-limit headroom), in-flight tickets, what's stuck, recent outcomes, the pending
   queue, and a cross-run history panel — server-pushed over SSE.
