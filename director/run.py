@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from director import config, taxonomy
@@ -211,16 +212,49 @@ def _install_claude_agents(ws: Path) -> None:
     _copy_into(_AGENT_SOURCE, claude)
 
 
+# Serializes CODEX_HOME materialization across the worker pool's threads (one shared home,
+# default concurrency 3): in-process single-flight. Cross-PROCESS concurrency (parallel
+# Directors in one clone sharing this home) is handled by the atomic temp+os.replace writes
+# below — last-writer-wins identical content, never a torn read or a missing-then-present window.
+_CODEX_HOME_LOCK = threading.Lock()
+
+
+def _atomic_replace_symlink(link_to: Path, at: Path) -> None:
+    """Point `at` at `link_to` atomically: create a uniquely-named temp symlink in the same dir,
+    then `os.replace` it onto `at`. Never leaves `at` momentarily absent and never collides with
+    a concurrent materializer (each uses its own temp name)."""
+    tmp = at.with_name(f".{at.name}.tmp-{os.getpid()}-{threading.get_ident()}")
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    os.symlink(link_to, tmp)
+    os.replace(tmp, at)
+
+
+def _atomic_write_bytes(data: bytes, at: Path) -> None:
+    """Write `data` to `at` atomically (temp in the same dir + `os.replace`) — safe under
+    concurrent writers materializing the same shared file."""
+    tmp = at.with_name(f".{at.name}.tmp-{os.getpid()}-{threading.get_ident()}")
+    tmp.write_bytes(data)
+    os.replace(tmp, at)
+
+
 def _write_codex_agents(agents_dir: Path) -> None:
     """Translate each `.md` persona into a Codex custom-agent `.toml` in `agents_dir`, both the
     `name =` field and the filename sanitized via `_codex_agent_name` so the file and its
-    spawnable identity never diverge. Used to populate `$CODEX_HOME/agents/`."""
+    spawnable identity never diverge. Asserts the sanitized names are disjoint (two sources that
+    collapse to one Codex name would silently clobber — mirrors `_assert_skill_sources_disjoint`).
+    Each file is written atomically (temp + `os.replace`). Used to populate `$CODEX_HOME/agents/`."""
     _ensure_dir(agents_dir)
+    seen: dict[str, str] = {}
     for item in sorted(_AGENT_SOURCE.iterdir()):
         if item.is_file() and item.suffix == ".md":
-            target = agents_dir / (_codex_agent_name(item.stem) + ".toml")
-            _clear_target(target)
-            target.write_text(_translate_agent_md_to_toml(item), encoding="utf-8")
+            name = _codex_agent_name(item.stem)
+            if name in seen:
+                raise RuntimeError(f"codex agent name collision: '{name}' from both "
+                                   f"{seen[name]} and {item.name}")
+            seen[name] = item.name
+            _atomic_write_bytes(_translate_agent_md_to_toml(item).encode("utf-8"),
+                                agents_dir / (name + ".toml"))
 
 
 def _ensure_codex_home(target=None, source_home=None) -> str | None:
@@ -230,29 +264,35 @@ def _ensure_codex_home(target=None, source_home=None) -> str | None:
     None when there is no codex install to serve (no source `auth.json` — a claude-only host
     or CI), in which case the caller leaves CODEX_HOME unset.
 
-    Idempotent + symlink-refusing (a reused dir may have been touched by a prior worker):
+    Idempotent, symlink-refusing, and concurrency-safe (materialized once-per-launch across the
+    worker pool — `_CODEX_HOME_LOCK` single-flights it in-process and every write is atomic):
       - `auth.json`  → SYMLINK to the source `auth.json` (token refreshes propagate to the one
         real credential store; auth carries no trust state, so the symlink is safe).
       - `config.toml` → COPY of the source config (preserves provider/model/auth-mode). A COPY,
         not a symlink, so Codex's auto-trust writes land HERE, never in the user's real config
-        (the F3 close). Copied if-missing; remove the codex-home to refresh a changed provider.
+        (the F3 close). A planted symlink at `config.toml` is REFUSED (removed) unconditionally,
+        not honored — else it would re-open F3. Copied if-missing; remove the codex-home to
+        refresh a changed provider.
       - `agents/<name>.toml` → the translated personas (`_write_codex_agents`)."""
     src = Path(source_home) if source_home else \
         Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
     if not (src / "auth.json").exists():
         return None  # no codex credentials to serve → nothing to materialize
-    home = (Path(target) if target else DEFAULT_CODEX_HOME).resolve()
-    _refuse_symlink(home)
-    home.mkdir(parents=True, exist_ok=True)
-    auth, src_auth = home / "auth.json", (src / "auth.json").resolve()
-    if not (auth.is_symlink() and os.path.realpath(auth) == str(src_auth)):
-        _clear_target(auth)
-        auth.symlink_to(src_auth)
-    cfg = home / "config.toml"
-    if not cfg.exists() and (src / "config.toml").exists():
-        _refuse_symlink(cfg)
-        shutil.copy2(src / "config.toml", cfg)
-    _write_codex_agents(home / "agents")
+    home = Path(target) if target else DEFAULT_CODEX_HOME
+    _refuse_symlink(home)         # BEFORE resolve(): resolve() dereferences a symlinked home,
+    home = home.resolve()         # which would silently disarm the refusal.
+    src_auth = (src / "auth.json").resolve()
+    with _CODEX_HOME_LOCK:
+        home.mkdir(parents=True, exist_ok=True)
+        auth = home / "auth.json"
+        if not (auth.is_symlink() and os.path.realpath(auth) == str(src_auth)):
+            _atomic_replace_symlink(src_auth, auth)
+        cfg = home / "config.toml"
+        if cfg.is_symlink():      # never honor/extend a planted symlink config (F3)
+            cfg.unlink()
+        if not cfg.exists() and (src / "config.toml").exists():
+            _atomic_write_bytes((src / "config.toml").read_bytes(), cfg)
+        _write_codex_agents(home / "agents")
     return str(home)
 
 
@@ -271,21 +311,27 @@ def _sweep_stale_codex_layout(ws: Path) -> None:
         return
 
     def _tracked_under(rel: str) -> bool:
+        # Fail SAFE on anything indeterminate — a non-zero exit (held index.lock, broken .git),
+        # a missing git, or a hang must NOT let the caller rmtree the subtree.
         try:
             r = subprocess.run(["git", "-C", str(ws), "ls-files", "-z", "--", rel],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, timeout=30)
+            if r.returncode != 0:
+                return True
             return bool(r.stdout.strip("\0"))
-        except OSError:
-            return True  # can't tell → assume tracked (fail safe: don't delete)
+        except (OSError, subprocess.TimeoutExpired):
+            return True
 
     def _untracked_under(rel: str) -> list[str]:
+        # On error/timeout we under-report (delete fewer) — safe (leftovers persist, nothing
+        # over-deleted), unlike _tracked_under which must over-report to stay safe.
         out = ""
         for flags in (["--exclude-standard"], ["--ignored", "--exclude-standard"]):
             try:
                 out += subprocess.run(
                     ["git", "-C", str(ws), "ls-files", "--others", *flags, "-z", "--", rel],
-                    capture_output=True, text=True).stdout
-            except OSError:
+                    capture_output=True, text=True, timeout=30).stdout
+            except (OSError, subprocess.TimeoutExpired):
                 pass
         return [x for x in out.split("\0") if x]
 

@@ -92,15 +92,13 @@ reviewer that inherited the implementer's context loses adversarial independence
      `subagent_type:"agent-harness:review-spec-compliance"` / `…:review-code-quality` /
      `…:review-arch` …. A Claude WORKER uses the BARE name (`review-spec-compliance` …) —
      the agents are vendored into the workspace's `.claude/agents/`.
-   • Codex worker: ask Codex to spawn the persona BY NAME, using the UNDERSCORE form (Codex's
-     spawn tool rejects hyphens — `review-spec-compliance` → `review_spec_compliance`,
-     `review-code-quality` → `review_code_quality`, `review-arch` → `review_arch`,
-     `review-reliability` → `review_reliability`, `review-security` → `review_security`) — e.g.
-     "Spawn the `review_spec_compliance` agent with this prompt, wait for it, and report its
-     verdict" (one request per persona; run them in parallel where the step says so). Codex
-     registers these from the vendored agents (its `CODEX_HOME/agents/*.toml`) and orchestrates
-     spawn/wait/collect itself, but only spawns when EXPLICITLY asked — so name every persona
-     the step requires.
+   • Codex worker: ask Codex to spawn the persona BY NAME, using the UNDERSCORE form of the
+     persona's name — Codex's spawn tool rejects hyphens, so map every `-` to `_` (e.g.
+     `review-spec-compliance` → `review_spec_compliance`). E.g. "Spawn the `review_spec_compliance`
+     agent with this prompt, wait for it, and report its verdict" (one request per persona; run
+     them in parallel where the step says so). Codex registers these from the vendored agents
+     (its `CODEX_HOME/agents/*.toml`) and orchestrates spawn/wait/collect itself, but only spawns
+     when EXPLICITLY asked — so name every persona the step requires.
    Either way the agents come from `director/run.py:install_worker_methodology`, and a
    reviewer is ALWAYS a fresh subagent — never the implementer's context or a fork.)
 6. Process findings (steps 4 + 5): P1 → fix now, rerun gate from step 1.

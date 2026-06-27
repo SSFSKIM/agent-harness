@@ -232,6 +232,43 @@ class RunEndToEndTest(unittest.TestCase):
         self.assertFalse((ws / ".codex" / "agents").exists())
         self.assertTrue((ws / ".codex" / "config.toml").exists())  # tracked → untouched
 
+    def test_sweep_keeps_tracked_in_mixed_dir(self):
+        # M3 mixed-branch: a stale dir that ALSO holds a tracked file keeps the tracked file and
+        # only its untracked siblings are unlinked (never delete clone-tracked content).
+        ws = self.tmp / "wsmixed"
+        ws.mkdir()
+        subprocess.run(["git", "-C", str(ws), "init", "-q"], check=True)
+        (ws / ".codex" / "agents").mkdir(parents=True)
+        (ws / ".codex" / "agents" / "kept.toml").write_text("clone's own\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(ws), "add", ".codex/agents/kept.toml"], check=True)
+        subprocess.run(["git", "-C", str(ws), "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-q", "-m", "init"], check=True)
+        (ws / ".codex" / "agents" / "review_arch.toml").write_text("stale\n", encoding="utf-8")
+        run._sweep_stale_codex_layout(ws)
+        self.assertTrue((ws / ".codex" / "agents" / "kept.toml").exists())   # tracked → kept
+        self.assertFalse((ws / ".codex" / "agents" / "review_arch.toml").exists())  # untracked → swept
+
+    def test_ensure_codex_home_refuses_symlinked_home(self):
+        # The home-dir symlink refusal must fire (the check runs BEFORE .resolve()).
+        src = self._fake_source_home()
+        outside = self.tmp / "outside_home"; outside.mkdir()
+        link = self.tmp / "symhome"; link.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(RuntimeError):
+            run._ensure_codex_home(target=link, source_home=src)
+
+    def test_ensure_codex_home_refuses_symlinked_config(self):
+        # A planted config.toml symlink (e.g. → the user's real config) must be REMOVED and a
+        # fresh COPY written, never honored — else codex's auto-trust writes follow it (F3).
+        src = self._fake_source_home()
+        target = self.tmp / "chsymcfg"; target.mkdir()
+        evil = self.tmp / "real_user_config.toml"; evil.write_text("model = \"x\"\n", encoding="utf-8")
+        (target / "config.toml").symlink_to(evil)
+        run._ensure_codex_home(target=target, source_home=src)
+        self.assertFalse((target / "config.toml").is_symlink())  # symlink replaced by a copy
+        # a later write to the codex-home config must NOT reach the evil target
+        (target / "config.toml").write_text("[projects.\"/x\"]\n", encoding="utf-8")
+        self.assertNotIn("projects", evil.read_text(encoding="utf-8"))
+
     def test_translate_agent_guards_fail_loud(self):
         # The parse/translate guards must fail LOUD on a malformed first-party persona
         # (fail before any worker spawn — never emit silently-broken TOML).
