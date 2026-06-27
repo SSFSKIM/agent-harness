@@ -94,13 +94,36 @@ class RunEndToEndTest(unittest.TestCase):
             self.assertFalse((ws / sdir / "qa").exists())
         self.assertFalse((ws / ".codex" / "skills").exists())  # inert path dropped (M1)
         # AGENTS — the review/gardener personas a worker DISPATCHES at its completion gate
-        # (a runtime registers agents only from its own agents/ dir, never a repo path).
-        # Claude reads .claude/agents/*.md; Codex its own .codex/agents/ dir (M2 → *.toml).
-        for adir in (".claude/agents", ".codex/agents"):
-            self.assertTrue((ws / adir / "review-spec-compliance.md").exists())
-            self.assertTrue((ws / adir / "review-arch.md").exists())
-            self.assertTrue((ws / adir / "doc-gardener.md").exists())
+        # (a runtime registers agents only from its own agents/ dir, never a repo path), each
+        # in its native format: Claude reads .claude/agents/*.md, Codex reads .codex/agents/*.toml.
+        for name in ("review-spec-compliance", "review-arch", "doc-gardener"):
+            self.assertTrue((ws / ".claude" / "agents" / f"{name}.md").exists())
+            self.assertTrue((ws / ".codex" / "agents" / f"{name}.toml").exists())
+        # The Codex side is TOML, not the inert .md (which Codex never loads).
+        self.assertFalse((ws / ".codex" / "agents" / "review-arch.md").exists())
         run.install_worker_methodology(ws)  # idempotent re-run
+
+    def test_codex_agent_toml_translation_round_trips(self):
+        # M2: each .md persona is translated to a Codex custom-agent .toml that an independent
+        # TOML parser accepts, with the three required keys + a tools-derived sandbox_mode and
+        # the body preserved verbatim as developer_instructions.
+        import tomllib
+        ws = self.tmp / "wstoml"
+        run.install_worker_methodology(ws)
+        data = tomllib.loads(
+            (ws / ".codex" / "agents" / "review-security.toml").read_text(encoding="utf-8"))
+        self.assertEqual(data["name"], "review-security")
+        self.assertTrue(data["description"])
+        self.assertEqual(data["sandbox_mode"], "read-only")  # Read/Grep/Glob/Bash → read-only
+        self.assertIn("security", data["developer_instructions"].lower())
+        src = (Path(run.__file__).resolve().parent.parent / "plugin" / "agents"
+               / "review-security.md").read_text(encoding="utf-8")
+        _, body = run._parse_agent_frontmatter(src)
+        self.assertEqual(data["developer_instructions"].rstrip("\n"), body.rstrip("\n"))
+        # doc-gardener carries Edit/Write → workspace-write.
+        gardener = tomllib.loads(
+            (ws / ".codex" / "agents" / "doc-gardener.toml").read_text(encoding="utf-8"))
+        self.assertEqual(gardener["sandbox_mode"], "workspace-write")
 
     def test_run_ticket_threads_tools_and_executor(self):
         seen = []

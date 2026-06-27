@@ -39,9 +39,9 @@ _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
 #     copied verbatim. Claude Code scans `.claude/skills/`; the REAL Codex CLI scans
 #     `.agents/skills/` (the repo path) — NOT `.codex/skills/`, which it never reads.
 #   - AGENTS: the review/gardener personas the worker DISPATCHES at the execplan completion
-#     gate (`agent-harness`). Claude reads `.claude/agents/*.md` verbatim; Codex reads
-#     `.codex/agents/*.toml` (trust-gated; the `.md`→`.toml` translation lands in a later
-#     milestone — for now the .md is copied to both, the Codex copy being inert).
+#     gate (`agent-harness`). Claude reads `.claude/agents/*.md` verbatim; the real Codex CLI
+#     reads `.codex/agents/*.toml` (translated from the same `.md` source by
+#     `_translate_agent_md_to_toml`; the `.codex/` layer loads only when the ws is trusted).
 # A runtime dispatches agents only from its own dir, never an arbitrary repo path (memory
 # mid-session-agents-not-dispatchable), so agents MUST be copied/translated in. Each plugin's
 # LICENSE/NOTICE/manifest live at its plugin root, outside these dirs, so are not copied.
@@ -106,16 +106,78 @@ def _assert_skill_sources_disjoint() -> None:
             seen[item.name] = src
 
 
+def _parse_agent_frontmatter(text: str):
+    """Split an agent `.md` into (frontmatter dict, body str). Frontmatter is the block
+    between the first two `---` fence lines; each entry a `key: value` split on the FIRST
+    colon (a value may itself contain colons). Body is everything after the closing `---`,
+    with leading blank lines trimmed."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        raise RuntimeError("agent .md has no opening '---' frontmatter fence")
+    fm: dict[str, str] = {}
+    i = 1
+    while i < len(lines) and lines[i].strip() != "---":
+        line = lines[i].strip()
+        if line and ":" in line:
+            key, val = line.split(":", 1)
+            fm[key.strip()] = val.strip()
+        i += 1
+    if i >= len(lines):
+        raise RuntimeError("agent .md frontmatter not closed with '---'")
+    return fm, "".join(lines[i + 1:]).lstrip("\n")
+
+
+def _toml_basic_string(s: str) -> str:
+    """A single-line TOML basic string with the minimal escapes (backslash, double-quote)."""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _translate_agent_md_to_toml(md_path: Path) -> str:
+    """Translate a Claude agent `.md` (frontmatter `name`/`description`/`tools` + markdown
+    body) into a Codex custom-agent TOML (developers.openai.com/codex/subagents): the three
+    required keys `name`/`description`/`developer_instructions`, plus a `sandbox_mode` derived
+    from the `.md` `tools` (Edit/Write present → `workspace-write`, else `read-only` — Codex
+    has no tool allowlist, so the sandbox posture is the closest equivalent). `name` is kept
+    IDENTICAL to the `.md` so the methodology's bare-name dispatch refers to one name on both
+    runtimes. The body becomes `developer_instructions` verbatim via a TOML multiline LITERAL
+    string (no escape processing — safe for the regex/backslashes/quotes in a persona prompt;
+    the only sequence it cannot contain is `'''`, which we reject loudly)."""
+    fm, body = _parse_agent_frontmatter(md_path.read_text(encoding="utf-8"))
+    for req in ("name", "description"):
+        if not fm.get(req):
+            raise RuntimeError(f"agent {md_path.name} missing frontmatter '{req}'")
+    tools = fm.get("tools", "")
+    sandbox = "workspace-write" if ("Edit" in tools or "Write" in tools) else "read-only"
+    if "'''" in body:
+        raise RuntimeError(f"agent {md_path.name} body contains \"'''\" — cannot emit it as a "
+                           f"TOML literal string; escape it in the source or extend the translator")
+    return (f"name = {_toml_basic_string(fm['name'])}\n"
+            f"description = {_toml_basic_string(fm['description'])}\n"
+            f"sandbox_mode = {_toml_basic_string(sandbox)}\n"
+            f"developer_instructions = '''\n{body}'''\n")
+
+
 def _install_agents(ws: Path) -> None:
-    """Vendor the review/gardener personas into BOTH runtimes' agent dirs. Claude reads
-    `.claude/agents/*.md` verbatim; Codex reads `.codex/agents/` (the `.md`→`.toml`
-    translation arrives in M2 — for now the .md is copied to both)."""
-    for dest in (_AGENT_DEST_CLAUDE, _AGENT_DEST_CODEX):
-        _refuse_symlink(ws / Path(dest).parts[0])  # the runtime root (.claude / .codex)
-        dst = ws / dest
-        _refuse_symlink(dst)
-        dst.mkdir(parents=True, exist_ok=True)
-        _copy_into(_AGENT_SOURCE, dst)
+    """Vendor the review/gardener personas into BOTH runtimes' agent dirs, each in its NATIVE
+    format: Claude reads `.claude/agents/*.md` (copied verbatim); the real Codex CLI reads
+    `.codex/agents/*.toml` (translated — `_translate_agent_md_to_toml`). Codex loads the
+    `.codex/agents/` layer only when the workspace is TRUSTED — handled at launch (M3)."""
+    # Claude — copy the .md personas verbatim.
+    _refuse_symlink(ws / Path(_AGENT_DEST_CLAUDE).parts[0])
+    claude = ws / _AGENT_DEST_CLAUDE
+    _refuse_symlink(claude)
+    claude.mkdir(parents=True, exist_ok=True)
+    _copy_into(_AGENT_SOURCE, claude)
+    # Codex — translate each .md persona into a custom-agent .toml.
+    _refuse_symlink(ws / Path(_AGENT_DEST_CODEX).parts[0])
+    codex = ws / _AGENT_DEST_CODEX
+    _refuse_symlink(codex)
+    codex.mkdir(parents=True, exist_ok=True)
+    for item in sorted(_AGENT_SOURCE.iterdir()):
+        if item.is_file() and item.suffix == ".md":
+            target = codex / (item.stem + ".toml")
+            _clear_target(target)
+            target.write_text(_translate_agent_md_to_toml(item), encoding="utf-8")
 
 
 def install_worker_methodology(workspace) -> None:

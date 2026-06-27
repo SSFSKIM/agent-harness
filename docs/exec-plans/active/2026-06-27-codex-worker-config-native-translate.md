@@ -52,7 +52,7 @@ Definition of done (observable): `python -m unittest tests.test_director_run` pa
 ## Progress log
 - [x] (2026-06-27) Research + direction settled (option A); memory `codex-worker-config-surface` written; ExecPlan created at base_commit 890bedd7.
 - [x] (2026-06-27) M1 — per-destination vendoring: skills → `.claude/skills`+`.agents/skills` (`.codex/skills` dropped), agents → `.claude/agents`+`.codex/agents` (still `.md`, M2 translates codex). Refactored `install_worker_methodology` to helper-based per-destination (`_refuse_symlink`/`_clear_target`/`_copy_into`/`_install_agents`); `_INJECTED_DIRS`-driven `.git/info/exclude`; help/comment strings in run.py/config.py/orchestrator.py updated. Tests updated; `python3 -m unittest discover -s tests -p test_director_run.py` → 37 pass; `check.py` GREEN.
-- [ ] M2 — agent .md→.toml translation
+- [x] (2026-06-27) M2 — agent `.md`→`.toml` translation. Added `_parse_agent_frontmatter`/`_toml_basic_string`/`_translate_agent_md_to_toml` (body→`developer_instructions` via TOML multiline-literal, verbatim; `sandbox_mode` from tools: Edit/Write→workspace-write else read-only; `name` kept identical to the .md for bare-name dispatch). `_install_agents` now copies `.md` to `.claude/agents` and writes translated `.toml` to `.codex/agents`. New `test_codex_agent_toml_translation_round_trips` (tomllib parse + sandbox map + body equality); 38 tests pass; `check.py` GREEN. Verified no agent body contains `'''` (literal-string path safe).
 - [ ] M3 — workspace trust + precedence guard (PoC first)
 - [ ] M4 — runtime-neutral persona dispatch in execplan SKILL.md
 - [ ] M5 — SECURITY.md trust-surface note + gate green
