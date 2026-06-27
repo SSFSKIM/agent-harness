@@ -62,12 +62,15 @@ skill on {{TODAY}}.
 | skill | `harness-init` | Use when setting up, installing, initializing, bootstrapping, or porting this harness into |
 | skill | `harness-lint` | Use to run the deterministic gate (taste lints + structure lints + generated-file check +  |
 | skill | `product-design` | Use before non-trivial work when the *what* deserves settling before the *how* — requireme |
+| skill | `scout` | Use on-demand to propose the project's next big initiatives — the divergent strategy pass. |
 | agent | `doc-gardener` | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden |
 | agent | `review-arch` | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the |
 | agent | `review-code-quality` | Code-quality review persona — always-on at every ExecPlan completion gate, after spec-comp |
 | agent | `review-reliability` | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Gro |
 | agent | `review-security` | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Ground |
 | agent | `review-spec-compliance` | Spec-compliance review persona — always-on at every ExecPlan completion gate. Verifies the |
+| agent | `vision-judge` | Independent strategy evaluator. Dispatched by the `scout` skill, one per vision (blind to  |
+| agent | `workstream-scout` | Divergent strategy generator. Dispatched by the `scout` skill, one per stance, to hypothes |
 
 ## Docs placement
 

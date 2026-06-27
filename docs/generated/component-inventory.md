@@ -12,10 +12,13 @@
 | skill | harness-init | Use when setting up, installing, initializing, bootstrapping, or porting this harness into a new or  | plugin/skills/harness-init/SKILL.md |
 | skill | harness-lint | Use to run the deterministic gate (taste lints + structure lints + generated-file check + unit tests | plugin/skills/harness-lint/SKILL.md |
 | skill | product-design | Use before non-trivial work when the *what* deserves settling before the *how* — requirements that o | plugin/skills/product-design/SKILL.md |
+| skill | scout | Use on-demand to propose the project's next big initiatives — the divergent strategy pass. Fans out  | plugin/skills/scout/SKILL.md |
 | agent | doc-gardener | Entropy GC persona. Dispatch periodically (garden skill) to detect code↔docs drift, golden-rule devi | plugin/agents/doc-gardener.md |
 | agent | review-arch | Architecture & design-taste review persona. Dispatch at ExecPlan completion gates with the diff rang | plugin/agents/review-arch.md |
 | agent | review-code-quality | Code-quality review persona — always-on at every ExecPlan completion gate, after spec-compliance. Ve | plugin/agents/review-code-quality.md |
 | agent | review-reliability | Reliability review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1  | plugin/agents/review-reliability.md |
 | agent | review-security | Security review persona. Dispatch at ExecPlan completion gates with the diff range. Grounded 1:1 in  | plugin/agents/review-security.md |
 | agent | review-spec-compliance | Spec-compliance review persona — always-on at every ExecPlan completion gate. Verifies the diff buil | plugin/agents/review-spec-compliance.md |
+| agent | vision-judge | Independent strategy evaluator. Dispatched by the `scout` skill, one per vision (blind to siblings), | plugin/agents/vision-judge.md |
+| agent | workstream-scout | Divergent strategy generator. Dispatched by the `scout` skill, one per stance, to hypothesize one bo | plugin/agents/workstream-scout.md |
 | hook | Stop | runs `tidy_stop.py` | plugin/hooks/hooks.json |

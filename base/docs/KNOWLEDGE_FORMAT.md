@@ -106,6 +106,7 @@ directory-implicit taxonomy into the field:
 | `charter` | `CHARTER.md` — top-level intent: mission, core axioms, design philosophy |
 | `tracker` | `exec-plans/tech-debt-tracker.md` — the fix-forward debt log (also absorbs open questions + limitations) |
 | `log` | `logs.md` — milestone-grained project/docs-evolution narrative |
+| `horizon` | `horizons/*` — scout strategy proposals: ranked next-initiative bets (Tier 1) + foundational challenges (Tier 2), for human decision |
 
 ### 2.4 Frontmatter value forms
 

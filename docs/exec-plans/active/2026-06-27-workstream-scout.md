@@ -124,12 +124,26 @@ must agree across skill ↔ generator ↔ judge; I hold that in context.
   that this milestone's diff added only the horizon doc + index line (R6).
 
 ## Progress log
-- [ ] M1 — horizon type + docs/horizons/ scaffold
-- [ ] M2 — workstream-scout + vision-judge personas
-- [ ] M3 — scout orchestrator skill
-- [ ] M4 — dogfood run → real horizon doc
+- [x] M1 — `type: horizon` in the KF type table (self + seed + base sync) +
+  `docs/horizons/index.md` scaffold. Gate GREEN.
+- [x] M2 — `plugin/agents/workstream-scout.md` (web tools, stance mandate) +
+  `plugin/agents/vision-judge.md` (five-axis rubric, Tier routing). Structure lint OK.
+- [x] M3 — `plugin/skills/scout/SKILL.md` (5-step orchestrator). Gate GREEN after
+  fixing S7 + GEN + base drift (see Surprises).
+- [ ] M4 — dogfood run → real horizon doc.
 
 ## Surprises & discoveries
+- **S7 on the skill.** SKILL.md initially hardcoded `python3 plugin/scripts/nav.py`
+  — but plugin markdown travels to hosts without that layout (lint S7 / core-belief
+  13). Fixed to reference the `docs-nav` skill (`nav.py roadmap`) and the gate
+  command in `agent-harness.md`, matching `garden`/`base/AGENTS.md`.
+- **Adding components drifts a base render.** `base/docs/design-docs/agent-harness.md`
+  renders a `{{COMPONENTS}}` table; adding the scout skill + two agents made it
+  stale (lint_base B2). There is **no base-regen command** — `scaffold.py` is
+  create-only (SKIPs existing files), `base/` is hand-synced + lint-checked. I
+  regenerated via `lint_base.expected_files()` (the exact render the gate expects).
+  Harness gap → tracked (a `regen-base`/`lint_base --write` would remove the
+  hand-sync toil). Also regenerated `docs/generated/component-inventory.md` (GEN).
 
 ## Decision log
 - 2026-06-27: `review_level: targeted` (review-arch) — new component pattern is a
