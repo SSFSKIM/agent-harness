@@ -250,7 +250,7 @@ PAGE = """<!doctype html>
 <meta name="director-token" content="__DIRECTOR_TOKEN__">
 <style>
   html,body { height:100%; }
-  body { background:#0e1116; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:0; }
+  body { background:#070711; color:#d6dde6; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; margin:0; }
   h1 { font-size:14px; font-weight:600; margin:0; }
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#7d8896; margin:1.1rem 0 .3rem; }
   .muted { color:#7d8896; }
@@ -269,58 +269,101 @@ PAGE = """<!doctype html>
   .drillhead { display:flex; gap:.4rem; align-items:center; margin-bottom:.2rem; }
   .evt { padding:.1rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
   .evt.tool { color:#9ecbff; } .evt.msg { color:#d6dde6; } .evt.tok { color:#7d8896; } .evt.turn { color:#6ee7a8; }
-  /* M4 layout: graph centerpiece + collapsible side rail + floating session overlay */
-  #bar { display:flex; gap:.7rem; align-items:center; flex-wrap:wrap; padding:.4rem .8rem; border-bottom:1px solid #1b2230; }
-  #bar h1 { margin-right:.2rem; }
-  .legend span { margin-right:.5rem; } .dot { font-size:14px; vertical-align:-1px; }
-  #main { position:absolute; top:2.5rem; left:0; right:0; bottom:0; display:flex; }
-  #cy { flex:1; min-width:0; height:100%; position:relative; overflow:hidden; cursor:grab; }
+  /* ---- header chrome (re-skin): brand · LIVE · done/total · counts · legend · controls ---- */
+  #bar, .node, .wavelabel { font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  #bar { display:flex; gap:.7rem; align-items:center; flex-wrap:wrap; min-height:44px;
+         padding:.3rem .85rem; border-bottom:1px solid #18202c; background:#0a0a14; }
+  .brand { display:inline-flex; align-items:center; gap:.4rem; font-weight:600; color:#e6edf3; }
+  .brand svg { color:#00d68f; }
+  .live { display:inline-flex; align-items:center; gap:.3rem; color:#00d68f; font-size:11px; letter-spacing:.06em; }
+  .livedot { width:7px; height:7px; border-radius:50%; background:#00d68f; box-shadow:0 0 6px #00d68f;
+             animation:livepulse 1.6s ease-in-out infinite; }
+  @keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .prog { width:9rem; height:7px; background:#161c26; border-radius:4px; overflow:hidden; }
+  .progfill { height:100%; width:0; background:linear-gradient(90deg,#16a34a,#00d68f); transition:width .4s ease; }
+  .legend { display:inline-flex; gap:.55rem; flex-wrap:wrap; color:#7d8896; font-size:11px; }
+  .legend span { display:inline-flex; align-items:center; gap:.25rem; }
+  .sw { width:9px; height:9px; border-radius:2px; display:inline-block; }
+  .ctls { display:inline-flex; gap:.3rem; }
+  /* ---- layout ---- */
+  #main { position:absolute; top:44px; left:0; right:0; bottom:0; display:flex; }
+  #cy { flex:1; min-width:0; height:100%; position:relative; overflow:hidden; cursor:grab;
+        background:radial-gradient(circle at 30% 20%, #0c0c1a 0%, #070711 60%); }
   #cy.grabbing { cursor:grabbing; }
   #cy .empty { display:flex; align-items:center; justify-content:center; height:100%; color:#7d8896; font-size:.85rem; }
   /* hand-rolled graph: a transformed inner canvas holds absolutely-positioned cards + an SVG edge layer */
   .gcanvas { position:absolute; top:0; left:0; transform-origin:0 0; }
   .gedges { position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
-  .gedge { stroke:#39414f; stroke-width:1.5; }
+  .gedge { stroke:#39414f; stroke-width:1.5; fill:none; }
   .gedge.dimmed { opacity:.18; }
-  .node { position:absolute; box-sizing:border-box; width:168px; min-height:74px; padding:.3rem .45rem;
-          background:#11161f; border:1px solid #39414f; border-radius:.45rem; cursor:pointer; overflow:hidden; }
-  .node:hover { border-color:#46506180; }
-  .node .node-id { font-weight:600; color:#d6dde6; }
-  .node .node-title { color:#7d8896; font-size:.78rem; margin-top:.15rem; display:-webkit-box;
+  .wavelabel { position:absolute; text-align:center; color:#3d4757; font-size:10px; letter-spacing:.14em;
+          text-transform:uppercase; pointer-events:none; }
+  /* ---- node cards: the 7-state palette (border/bg/text/glow per the spec tokens) ---- */
+  .node { position:absolute; box-sizing:border-box; width:168px; min-height:74px; padding:.32rem .45rem .42rem;
+          border:1px solid var(--bd); border-radius:.55rem; background:var(--bgc);
+          box-shadow:0 0 10px var(--glow); cursor:pointer; overflow:hidden;
+          --bd:#39414f; --bgc:#11161f; --tx:#cbd5e1; --glow:transparent; }
+  .node:hover { filter:brightness(1.14); }
+  .node-head { display:flex; align-items:baseline; justify-content:space-between; gap:.3rem; }
+  .node-id { font-weight:700; font-size:.8rem; color:var(--tx); }
+  .node-badge { font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:var(--tx);
+          opacity:.82; white-space:nowrap; }
+  .node-title { color:#8b97a6; font-size:.72rem; line-height:1.25; margin-top:.12rem; display:-webkit-box;
           -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .node.running { border-color:#9ecbff; }
-  .node.done { border-color:#6ee7a8; }
-  .node.failed { border-color:#ff9b9b; }
-  .node.blocked { border-color:#e3b341; }
-  .node.cancelled { color:#7d8896; }
-  .node.cycle { border-color:#ff9b9b; border-style:double; border-width:3px; }
-  .node.collapsed { border-style:dashed; border-color:#e3b341; }
-  .node.dimmed { opacity:.28; }
+  .node-meta { color:var(--tx); font-size:.68rem; margin-top:.18rem; opacity:.92; white-space:nowrap;
+          overflow:hidden; text-overflow:ellipsis; }
+  .node-meta:empty { display:none; }
+  .node-tokenbar { position:absolute; left:0; right:0; bottom:0; height:3px; background:transparent; }
+  .node.done       { --bd:#16a34a; --bgc:rgba(22,163,74,.07);  --tx:#86efac; --glow:rgba(22,163,74,.18); }
+  .node.in_progress{ --bd:#00d68f; --bgc:rgba(0,214,143,.08);  --tx:#6ee7b7; --glow:rgba(0,214,143,.30); }
+  .node.ready      { --bd:#3b82f6; --bgc:rgba(59,130,246,.07); --tx:#93c5fd; --glow:rgba(59,130,246,.18); }
+  .node.backlog    { --bd:#2d3748; --bgc:rgba(45,55,72,.25);   --tx:#4a5568; --glow:transparent; }
+  .node.blocked    { --bd:#d97706; --bgc:rgba(217,119,6,.09);  --tx:#fcd34d; --glow:rgba(217,119,6,.22); }
+  .node.failed     { --bd:#ef4444; --bgc:rgba(239,68,68,.09);  --tx:#fca5a5; --glow:rgba(239,68,68,.22); }
+  .node.in_cycle   { --bd:#a855f7; --bgc:rgba(168,85,247,.09); --tx:#d8b4fe; --glow:rgba(168,85,247,.22);
+          border-style:dashed; }
+  .node.cancelled  { --bd:#2d3748; --bgc:rgba(45,55,72,.18);   --tx:#5a6677; --glow:transparent; opacity:.72; }
+  .node.in_progress { animation:nodepulse 1.9s ease-in-out infinite; }
+  @keyframes nodepulse { 0%,100%{box-shadow:0 0 8px var(--glow)} 50%{box-shadow:0 0 20px var(--glow)} }
+  .node.in_progress .node-tokenbar { background:linear-gradient(90deg,transparent,#00d68f,transparent);
+          background-size:200% 100%; animation:tokenflow 1.4s linear infinite; }
+  @keyframes tokenflow { from{background-position:200% 0} to{background-position:-200% 0} }
+  .node.collapsed { border-style:dashed; }
+  .node.dimmed { opacity:.26; }
   #rail { width:23rem; overflow:auto; border-left:1px solid #1b2230; padding:.2rem .7rem .8rem; }
   #rail.hidden { display:none; }
   #drill { position:absolute; right:24rem; top:3rem; width:23rem; max-height:74%; overflow:auto; z-index:5; }
   #drill.railhidden { right:1rem; }
 </style></head><body>
 <div id="bar">
-  <h1>director · project graph</h1>
-  <span id="updated" class="muted"></span>
-  <span id="counts" class="muted"></span>
-  <span class="legend muted">
-    <span><span class="dot" style="color:#9ecbff">●</span>running</span>
-    <span><span class="dot" style="color:#6ee7a8">●</span>done</span>
-    <span><span class="dot" style="color:#ff9b9b">●</span>failed/cycle</span>
-    <span><span class="dot" style="color:#e3b341">●</span>blocked</span>
-    <span><span class="dot" style="color:#7d8896">●</span>todo/backlog</span>
+  <span class="brand"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>project-dependency-graph</span>
+  <span class="live"><span class="livedot"></span>LIVE</span>
+  <div class="prog"><div id="progfill" class="progfill"></div></div>
+  <span id="progtxt" class="muted">—</span>
+  <span id="hcounts" class="muted"></span>
+  <span class="legend">
+    <span><i class="sw" style="background:#16a34a"></i>done</span>
+    <span><i class="sw" style="background:#00d68f"></i>running</span>
+    <span><i class="sw" style="background:#3b82f6"></i>ready</span>
+    <span><i class="sw" style="background:#2d3748"></i>todo</span>
+    <span><i class="sw" style="background:#d97706"></i>blocked</span>
+    <span><i class="sw" style="background:#ef4444"></i>failed</span>
+    <span><i class="sw" style="background:#a855f7"></i>cycle</span>
   </span>
-  <button class="act" onclick="fitGraph()">fit</button>
-  <button class="act" onclick="toggleFocus()">focus frontier</button>
-  <button class="act" onclick="toggleRail()">toggle rail</button>
-  <span class="muted">tap node = session · dbl-tap = collapse</span>
+  <span class="ctls">
+    <button class="act" onclick="zoomBy(1.2)" title="zoom in">+</button>
+    <button class="act" onclick="zoomBy(1/1.2)" title="zoom out">−</button>
+    <button class="act" onclick="fitGraph()">fit</button>
+    <button class="act" onclick="toggleFocus()">focus</button>
+    <button class="act" onclick="toggleRail()">rail</button>
+  </span>
+  <span id="updated" class="muted"></span>
 </div>
 <div id="main">
   <div id="cy"></div>
   <div id="rail">
     <div id="run" class="run"></div>
+    <div id="counts" class="muted"></div>
     <h2>in-flight</h2><div id="inflight"></div>
     <h2>stuck</h2><div id="stuck"></div>
     <h2>recent</h2><div id="recent"></div>
@@ -563,19 +606,23 @@ function startStream() {
 // wave) and grouped `layers` — the client computes no topology (ARCHITECTURE invariant 4).
 // Tap a card → the per-ticket session overlay (openDrill); double-tap → collapse its
 // subtree. `window.__graph` is the introspection hook (debug + behavioral test), replacing
-// the old `window.cy`. (M1 is minimal styling; the design tokens land in M2.)
+// the old `window.cy`. (M2 applies the 7-state palette + card anatomy + header chrome; the
+// live 7-bucket mapping, token values, and state-aware edge coloring land in M3.)
 const SVGNS = "http://www.w3.org/2000/svg";
 const NODE_W = 168, NODE_H = 74, H_GAP = 56, V_GAP = 16, PAD = 40;
 const STRIDE = NODE_W + H_GAP, ROW = NODE_H + V_GAP;
 const G = { nodes: [], byId: {}, edges: [], scale: 1, tx: 0, ty: 0,
             boardSig: "", lastState: null, canvas: null, svg: null };
-function lifecycleFromState(s) {                 // board Linear state name -> a base lifecycle class
+// state bucket -> the short human label shown in the card's state badge.
+const BADGE = { done: "done", in_progress: "running", ready: "ready", backlog: "todo",
+                blocked: "blocked", failed: "failed", cancelled: "cancelled", in_cycle: "cycle" };
+function lifecycleFromState(s) {                 // board Linear state name -> a base lifecycle bucket
   s = (s || "").toLowerCase();
   if (s.includes("done") || s.includes("complete") || s.includes("merged")) return "done";
   if (s.includes("cancel")) return "cancelled";
-  if (s.includes("progress") || s.includes("review")) return "running";
+  if (s.includes("progress") || s.includes("review")) return "in_progress";
   if (s.includes("block")) return "blocked";
-  return "todo";                                 // backlog / todo / ready / open / unknown
+  return "backlog";                              // backlog / todo / open / unknown (ready split: M3)
 }
 function layout(view) {
   // Position each node from the server's layer/layers (no client topology): x by layer
@@ -609,7 +656,7 @@ function extent() {
   return { w: w + PAD, h: h + PAD };
 }
 function setLifecycle(card, cls) {                // swap ONLY lifecycle tokens (keep node/dimmed/collapsed)
-  card.classList.remove("running", "done", "failed", "blocked", "cancelled", "todo", "cycle");
+  card.classList.remove("in_progress", "done", "failed", "blocked", "backlog", "ready", "cancelled", "in_cycle");
   for (const c of cls.split(" ")) if (c) card.classList.add(c);
 }
 function renderGraph() {
@@ -628,11 +675,24 @@ function renderGraph() {
     p.setAttribute("d", edgePath(a, b)); p.setAttribute("class", "gedge"); p.setAttribute("fill", "none");
     e.dom = p; svg.appendChild(p);
   }
+  // wave-N labels above each topological layer (consume the server's layering; 1-indexed to
+  // match the orchestrator's wave numbering — same wave ⇒ parallel-schedulable, next ⇒ serial).
+  const maxLayer = G.nodes.reduce(function (m, n) { return Math.max(m, n.layer); }, 0);
+  for (let L = 0; L <= maxLayer; L++) {
+    const lab = el("div", "wave " + (L + 1), "wavelabel");
+    lab.style.left = (PAD + L * STRIDE) + "px"; lab.style.top = "10px"; lab.style.width = NODE_W + "px";
+    canvas.appendChild(lab);
+  }
   for (const n of G.nodes) {
     const card = el("div", null, "node " + n.cls); card.dataset.id = n.id;
     card.style.left = n.x + "px"; card.style.top = n.y + "px";
-    card.appendChild(el("div", n.label, "node-id"));
-    card.appendChild(el("div", n.title, "node-title"));
+    const head = el("div", null, "node-head");      // identifier + state badge
+    head.appendChild(el("div", n.label, "node-id"));
+    head.appendChild(el("span", "", "node-badge"));
+    card.appendChild(head);
+    card.appendChild(el("div", n.title, "node-title"));      // 2-line clamped (CSS)
+    card.appendChild(el("div", "", "node-meta"));            // in-flight phase · Nt (set by paintGraph)
+    card.appendChild(el("div", null, "node-tokenbar"));      // bottom activity bar (CSS pulse on in_progress)
     card.title = "click to stream this ticket's events";
     card.onclick = function () { openDrill(n.id); };
     card.ondblclick = function () { toggleCollapse(n); };
@@ -674,30 +734,54 @@ function wireViewport() {                          // hand-rolled pan (drag) + z
     G.scale = ns; applyTransform();
   }, { passive: false });
 }
+function updateHeader(c) {                          // R3: a done/total progress bar + active/blocked/failed
+  const total = c.total || 0, done = c.done || 0, pct = total ? Math.round(100 * done / total) : 0;
+  const fill = $("progfill"); if (fill) fill.style.width = pct + "%";
+  const pt = $("progtxt"); if (pt) pt.textContent = total ? (done + "/" + total + " done") : "no board";
+  const hc = $("hcounts");
+  if (hc) hc.textContent = c.in_progress + " active · " + c.blocked + " blocked · " + c.failed + " failed";
+}
+function zoomBy(f) {                                // zoom toward the viewport center (the +/- controls)
+  const host = $("cy"); if (!host) return;
+  const cx = host.clientWidth / 2, cy = host.clientHeight / 2;
+  const ns = Math.max(0.2, Math.min(3, G.scale * f));
+  G.tx = cx - (cx - G.tx) * (ns / G.scale); G.ty = cy - (cy - G.ty) * (ns / G.scale);
+  G.scale = ns; applyTransform();
+}
 function paintGraph(v) {
   // Merge the live run-state view onto the existing cards. Called from render() every state
   // tick; a no-op until loadBoard() has built the cards. Stashes the latest state so a fresh
-  // render (after a topology rebuild) can paint immediately. M1 keeps the parity class-swap;
-  // the richer 7-bucket mapping / token bar / state-aware edges land in M3.
+  // render (after a topology rebuild) can paint immediately. M2 paints the 7-state palette +
+  // the badge/meta + the header done/total counts; the ready-vs-backlog split, the transient
+  // just-claimed union, and the state-aware edge coloring land in M3.
   if (v) G.lastState = v;
   if (!G.nodes.length || !G.lastState) return;
   const st = G.lastState, inflight = {}, recent = {}, stuck = {};
   for (const e of (st.in_flight || [])) inflight[e.ticket_id] = e;
   for (const r of (st.recent || [])) recent[r.ticket_id] = r;
   for (const s of (st.stuck || [])) stuck[s.ticket || s.ticket_id] = s;
+  const counts = { total: G.nodes.length, done: 0, in_progress: 0, blocked: 0, failed: 0 };
   for (const n of G.nodes) {
     if (!n.dom) continue;
-    let cls = lifecycleFromState(n.bstate), suffix = "";
-    if (inflight[n.id]) { cls = "running"; const t = inflight[n.id].tokens;
-      if (t && t.total != null) suffix = " ·" + t.total + "t"; }
+    let cls = lifecycleFromState(n.bstate);
+    const fl = inflight[n.id];
+    if (fl) cls = "in_progress";                     // live state wins; recent→done/failed; stuck→blocked
     else if (recent[n.id]) cls = (recent[n.id].status === "completed") ? "done" : "failed";
     else if (stuck[n.id]) cls = "blocked";
-    if (n.inCycle) cls += " cycle";
-    setLifecycle(n.dom, cls);                       // preserves dimmed/collapsed across a repaint
-    const idEl = n.dom.querySelector(".node-id");
-    if (idEl) idEl.textContent = n.ident + suffix;
+    if (n.inCycle) cls += " in_cycle";               // cycle ring (composes over the bucket)
+    setLifecycle(n.dom, cls);                        // preserves dimmed/collapsed across a repaint
+    const primary = cls.split(" ")[0];
+    if (counts[primary] !== undefined) counts[primary]++;
+    const badge = n.dom.querySelector(".node-badge");
+    if (badge) badge.textContent = BADGE[primary] || primary;
+    const meta = n.dom.querySelector(".node-meta");
+    if (meta) {                                      // in-flight: phase · Nt readout (token VALUE; M3 refines)
+      const t = fl && fl.tokens;
+      meta.textContent = fl ? ((fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "")) : "";
+    }
   }
-  if (focusOn) applyFocus();                        // re-dim settled nodes after the repaint
+  updateHeader(counts);
+  if (focusOn) applyFocus();                         // re-dim settled nodes after the repaint
 }
 async function loadBoard() {
   // Fetch the board topology and (re)build the render only when the node/edge set changed

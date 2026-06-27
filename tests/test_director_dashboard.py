@@ -770,7 +770,10 @@ class BoardRouteTest(unittest.TestCase):
         self.assertNotIn("cytoscape", html.lower())    # no graph library at all
         self.assertNotIn("cdn", html.lower())
         for marker in ('id="cy"', "window.__graph", "renderGraph", "loadBoard", "paintGraph",
-                       "/api/v1/board", "toggleCollapse", "gcanvas", "node-id", 'id="rail"'):
+                       "/api/v1/board", "toggleCollapse", "gcanvas", "node-id", 'id="rail"',
+                       # M2 design system: header chrome + card anatomy + wave labels.
+                       "project-dependency-graph", "progfill", "wavelabel", "node-badge",
+                       "updateHeader", "in_progress"):
             self.assertIn(marker, html)
 
     def test_page_shows_labeled_empty_state_when_no_board(self):

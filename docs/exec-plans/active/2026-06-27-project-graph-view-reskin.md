@@ -166,11 +166,34 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   LIN-8 `blocked cycle`; `curl /assets/cytoscape.min.js` → 404; page source has no
   `/assets/`·`cytoscape`·`cdn`.
 
+- [x] (2026-06-27) **M2 — design system + node-cards + page chrome.** Applied the spec's
+  durable tokens to the hand-rolled render. CSS: the 7-state palette as `--bd/--bgc/--tx/--glow`
+  custom properties per bucket (`done/in_progress/ready/backlog/blocked/failed/in_cycle` +
+  `cancelled`), `in_cycle` composing a purple dashed ring over its bucket; `@keyframes
+  nodepulse` (in-flight glow) + `tokenflow` (bottom activity bar); page bg `#070711`, radial
+  canvas wash, system-ui sans scoped to `#bar`/`.node`. Card anatomy in `renderGraph`:
+  `.node-head` (identifier + `.node-badge`) + 2-line clamped `.node-title` + `.node-meta`
+  (`phase · Nt`) + `.node-tokenbar`. Header `#bar` rewritten: inline-SVG GitBranch mark +
+  `project-dependency-graph` + animated `LIVE` + `done/total` progress bar (`#progfill`/
+  `#progtxt`) + `N active·blocked·failed` (`#hcounts`) + the 7-swatch legend + `+/−/fit/focus/
+  rail` controls; `wave N` labels per layer (1-indexed). New JS: `updateHeader()` (counts
+  derived in the paint pass), `zoomBy()`; `lifecycleFromState`/`setLifecycle`/`paintGraph`
+  re-vocabularied to the 7 buckets; the run-level `#counts` moved into the rail (render()
+  contract intact). Gate **GREEN**; dashboard suite 58/58. Behavioral (:8788 sample): header
+  `3/10 done` + 30% bar + `2 active · 2 blocked · 0 failed`; `wave 1…wave 5`; LIN-3
+  `node in_progress` border `#00d68f` badge `running` meta `running · 20560t`, LIN-1
+  `node done` `#16a34a`, LIN-8 `node blocked in_cycle` ring `#a855f7`; cards render `system-ui`.
+
 ## Surprises & discoveries
 - (M1) The hand-roll is *simpler* than the reference, as predicted: because `/api/v1/board`
   already ships each node's `layer` + the grouped `layers`, the client does zero topology
   work — `layout()` is ~15 lines of pure positioning vs. the reference's in-browser
   longest-path recompute. Dropping the lib also dropped in-browser layout cost, not just bytes.
+- (M2) CSS custom properties make the 7-bucket palette compose cleanly: a node painted
+  `blocked in_cycle` keeps the amber `--bgc`/`--tx` from `.blocked` while `.in_cycle` (declared
+  later) overrides only `--bd` to purple + a dashed ring — so "blocked AND cycling" reads in one
+  card with no specificity war and no per-combination class. The pulse keyframes reference
+  `var(--glow)`, so one `@keyframes` animates every bucket in its own colour.
 
 ## Decision log
 - 2026-06-27: Chose incremental in-place rewrite (Approach A) seeded by C — the hand-rolled
@@ -194,6 +217,15 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   `base..HEAD` at M5 (where full removal is explicitly called for), so this is net-identical to
   the plan and strictly cleaner; M5 keeps the real asset work (the ADR-0006 + ARCHITECTURE
   invariant-1 amendment), and its "remove dead asset code" step becomes a verified no-op.
+- 2026-06-27 (M2): scoped the `system-ui` sans font to `#bar` + `.node` only (the re-skinned
+  chrome), leaving the rail / answer-console / overlay in the existing `ui-monospace`. Faithful
+  to the reference (its cards are sans) AND inside the graph-view scope — a global font swap
+  would churn the preserved surfaces (R7) for no design gain there. The "system stack, no
+  vendored font" decision (spec open-factor) is satisfied either way (`ui-monospace` is a system
+  font); this just matches the reference's card typography without touching the rest of the page.
+- 2026-06-27 (M2): rendered `wave N` **1-indexed** (`layer + 1`) to match the orchestrator's own
+  wave numbering (the sample's `claimed(wave=2)` sits at board `layer 1`) and human "wave 1, 2…"
+  intuition, rather than exposing the 0-indexed topological layer.
 - 2026-06-27 (M1): M1 preserves the live-paint class-swap + `·{total}t` suffix + frontier-focus
   + subtree-collapse as **parity** on the new DOM (no regression of shipped behavior), via a
   `setLifecycle()` helper that swaps only lifecycle tokens so `dimmed`/`collapsed` survive a
