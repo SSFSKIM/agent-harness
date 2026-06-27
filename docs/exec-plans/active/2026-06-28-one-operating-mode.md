@@ -184,7 +184,7 @@ A novice needs these to execute from the plan alone:
 - [x] (2026-06-28) Plan created; base_commit recorded; creation-time self-review done.
 - [x] (2026-06-28) M1 — ADR 0007 written, indexed (D8), refines-pointers added to 0002/0003; check.py GREEN.
 - [x] (2026-06-28) M2 — orchestrator.py daemon-default + `--mock`⇒bounded + `--batch` + `--autonomous`/`--daemon` reframe; run.py/config.py/status.py comment reframes; 6 new loop-resolution tests + 2 repointed. Behavioral: `--mock` drains & exits (exit 0); full director suite 615 OK; check.py GREEN.
-- [ ] M3 — Doc reframe
+- [x] (2026-06-28) M3 — DIRECTOR.md §5 retitled, §6 rewritten ("one mode + properties + fixtures"), §12/§13 reframed (daemon=default; lights-out=property), §9/§11 scattered lines fixed; DIRECTOR_RUNBOOK quick-ref + §8/§9 + see-also reframed (bare command = daemon; --batch/--once fixtures; ADR 0007 linked). Acceptance grep clean (only ADR 0007 quotes the old titles); check.py GREEN.
 
 ## Surprises & discoveries
 - (2026-06-28) `--mock` defaulting to the daemon would hang tests/quick-runs over the

@@ -29,8 +29,8 @@ DIRECTOR.md section that owns it.
 | You want to… | Go to | Cost / blast radius |
 |---|---|---|
 | Smoke that a worker can do *one* ticket end-to-end (no board poll, no live Director) | **§5** `director.run --linear` | One ticket, autonomous, one PR |
-| Run the **full loop** — dispatch → you answer turn-reviews → PR → merger lands | **§6 + §8** | One pass, watched; lands real PRs |
-| Run it **always-on** (picks up tickets as a human adds them) | **§9** `--daemon` | Open-ended; bounded by `concurrency` |
+| Run the **full loop bounded** — dispatch → you answer turn-reviews → PR → merger lands, then exit | **§6 + §8** `--batch`/`--once` | Bounded; lands real PRs |
+| Run it **always-on** — the default; picks up tickets as a human adds them | **§9** (default) | Open-ended; bounded by `concurrency` |
 | Watch/answer a run from a **browser** instead of the session | **§7** dashboard | Read + fenced writes |
 
 **First time against a project? Do §1 → §4 once, then pick a path.** Already set up?
@@ -213,14 +213,17 @@ worker continues. You do not poll. (The *judgment* — what to answer — is
 ```bash
 set -a; . ./.env; set +a
 python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --turn-review-timeout 3600
-#   --once                      # drain ready work in ONE pass, then exit (bounded run)
+#   --once                      # bounded: drain ready work in ONE pass, then exit
+#   --batch                     # bounded: drain ready work across DAG-aware passes, then exit
 #   --concurrency 1             # one worker at a time for a clean first run
 #   --worker claude             # claude runtime (default: codex)
 ```
 Run it as a **background task** so the session stays free to answer. `--turn-review-timeout
-3600` keeps a worker from timing out while you deliberate. `--once` is the bounded
-single-pass run (ideal for validating one canary ticket); omit it for the multi-wave
-batch, or use `--daemon` (§9) for always-on.
+3600` keeps a worker from timing out while you deliberate. **The bare command is the
+always-on daemon — the default operating mode (ADR 0007); it never exits on a drained board
+(§9).** For a *bounded* first run add `--once` (a single pass — ideal for validating one
+canary ticket) or `--batch` (multi-pass drain-and-exit). (`--daemon` still works but is now
+a redundant, deprecated alias of the default.)
 
 **2. Arm the queue Monitor** — emits one line per newly-pending request + one `runReport`
 per run-level terminal, so each becomes a session notification (the polling lives in this
@@ -351,13 +354,15 @@ green, 0 threads), so `--mock` lands it without another multi-M-token worker.
 
 ---
 
-## 9. Daemon — always-on
+## 9. The always-on daemon — the default
 
-`--once`/default are **batch** (drain ready work, exit). `--daemon` never exits on a drained
-board — it keeps polling and tops up the moment a slot frees or a human adds a ticket:
+The always-on daemon **is the default operating mode** (ADR 0007): a real run with no loop
+flag never exits on a drained board — it keeps polling and tops up the moment a slot frees
+or a human adds a ticket. The bounded fixtures `--batch`/`--once` (§8) drain and exit instead.
 
 ```bash
-python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --daemon --poll-interval 10
+python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --poll-interval 10
+#   --daemon   # redundant, deprecated alias of the default (ADR 0007)
 ```
 
 - **Stop it:** `SIGTERM`/`Ctrl-C` once → graceful drain (let in-flight workers finish, then
@@ -413,9 +418,11 @@ behind (a `pending` ghost from a prior run will show on the next dashboard).
 ## 12. See also
 
 - [`.claude/DIRECTOR.md`](../.claude/DIRECTOR.md) — the behavioral guide: identity,
-  taste-vs-handle judgment, answering turn/merge reviews, the modes, reporting, lights-out,
-  and the config map. **Come here to run; go there to decide.** (Section numbers intentionally
-  not mirrored here — see DIRECTOR.md's own table of contents.)
-- [`docs/adr/0003-lights-out-director.md`](adr/0003-lights-out-director.md) —
-  the attended / lights-out / no-agent modes and the guardrail safety floor.
+  taste-vs-handle judgment, answering turn/merge reviews, the one operating mode + its
+  properties, reporting, lights-out, and the config map. **Come here to run; go there to
+  decide.** (Section numbers intentionally not mirrored here — see DIRECTOR.md's own table of contents.)
+- [`docs/adr/0007-one-operating-mode.md`](adr/0007-one-operating-mode.md) — the one
+  operating mode (Director ⟷ Board): attended/lights-out as a property, the bounded/no-judge
+  paths as fixtures, daemon as the default. Refines
+  [`0003-lights-out-director.md`](adr/0003-lights-out-director.md) (the guardrail safety floor).
 - [`docs/PLANS.md`](PLANS.md) — the ExecPlan methodology the `impl`-labelled workers run.

@@ -165,7 +165,7 @@ The taste-vs-handle line (§2) decides which: *"A 냐 B 냐"* is **usually non-t
 technical choice you answer with a `reply`. A product-direction/irreversible fork is
 **taste** — `escalate`. Most forks the worker raises are yours to answer, not the human's.
 
-## 5. Running as an event-woken Director (the watched loop)
+## 5. Running as an event-woken Director (the operating loop)
 
 You do not poll. You stand up the loop once — the watched orchestrator + a queue Monitor
 (`director.watch`) — then let worker turn-ends **event-wake** you. The launch commands
@@ -182,28 +182,36 @@ This makes a real Director answer every turn end without a human watching and wi
 headless spawn — the session is woken exactly when a worker needs input. The code
 decider (§6) is only for the truly-detached case (no session at all).
 
-## 6. The three modes (who answers turn ends)
+## 6. One mode: Director ⟷ Board — and its properties
 
-Posture is **identical** across modes — per-action self-governance (`on-request` +
-`auto_review`) AND full network are shared (SECURITY T11; the exfil residual is deferred
-to one holistic mitigation). ADR 0003 splits the old binary along two axes — *is a
-Director (judging agent) present?* × *is the human present?* — so the **only** real
-difference is **who answers turn ends**:
+There is **one operating mode**: an always-present **Director** (a judging agent)
+adjudicating an always-present **Board** (the Linear work queue). What used to be framed
+as separate "modes" is reclassified into *properties* of a run and *fixtures* — never
+modes you switch between (ADR 0007, finishing the two-axes split of ADR 0003). Posture is
+**identical** throughout — per-action self-governance (`on-request` + `auto_review`) AND
+full network are shared (SECURITY T11; the exfil residual is deferred to one holistic
+mitigation).
 
-- **attended** (watched, default) — a **human-attended** session is the Director; **you**
-  answer each `turnReview` (§4/§5). Human present.
-- **lights-out** — a **Daemonized Claude Code** is the Director: same posture, same queue
-  path (`make_queue_decider`), it answers `turnReview` with the same taste-vs-handle
-  judgment (§2) augmented by the §13 procedure. **No new orchestrator flag** — it *is* the
-  watched queue path with a daemon on the answering end. Human absent but async-reachable;
-  the daemon parks the residual it cannot resolve (§13). (The daemon runtime is a separate
-  track; `make_queue_decider` already routes to "whoever is the Director.")
-- **no-agent** (`--autonomous`) — no judging agent at all: the code decider
-  (`director.decider.autonomous_decide`) trusts the worker's terminal proposal and
-  otherwise replies "use your best judgment and continue" — **no `turnReview` reaches the
-  queue**. This is the `--mock` / CI / truly-detached niche (§5); `director.status` is then
-  for *monitoring*. The security boundary is Codex's sandbox + `auto_review` + the T10
-  Linear guardrail — not a judge.
+**Property — is the human present?** This changes only *who* answers a turn-end, on the
+**same** `make_queue_decider` queue path (no orchestrator flag distinguishes them):
+
+- **attended** (human present — you are at the keyboard) — **you** answer each `turnReview`
+  (§4/§5).
+- **lights-out** (human absent but async-reachable) — a **Daemonized Claude Code** is the
+  Director: same posture, same queue path, answering each `turnReview` with the same
+  taste-vs-handle judgment (§2) augmented by the §13 procedure, and **parking** the
+  residual it cannot resolve (§13). (The daemon runtime is a separate track;
+  `make_queue_decider` already routes to "whoever is the Director.")
+
+**Fixture — no judge at all (`--autonomous` / `--mock`).** *Not* a production mode: the
+code decider (`director.decider.autonomous_decide`) trusts the worker's terminal proposal
+and otherwise replies "use your best judgment and continue" — **no `turnReview` reaches
+the queue**. This is the `--mock` / CI / truly-detached niche (§5); in production a
+Director (attended or lights-out) is always present and answers. The security boundary is
+then Codex's sandbox + `auto_review` + the T10 Linear guardrail — not a judge.
+
+(The *run loop* is a second property — the always-on **daemon is the default and the
+mode**; `--batch`/`--once` are bounded dev/test/CI fixtures. See §12.)
 
 ## 7. Handling a merge escalation (the merger raised a PR)
 
@@ -289,8 +297,9 @@ On a `runReport`:
    - A failure *pattern* (many `failed`/high `attempts` across tickets) is **your judgment** from
      the snapshot — code never flags it for you; that's why this is a procedure, not a gate.
 
-Run-level reporting is **watched-mode only** — un-watched (`--autonomous`) has no live you to
-pull, so no `runReport` is acted on (the run's outcome is read from `director.status` after).
+Run-level reporting applies **whenever a Director is present** (attended or lights-out) — the
+no-judge `--autonomous` fixture has no live you to pull, so no `runReport` is acted on (the
+run's outcome is read from `director.status` after).
 
 ## 10. Watching — and answering — a run live (the operator console)
 
@@ -378,17 +387,21 @@ queue schema) stays in code — a host buys the harness's method, tunes only the
 - **`$VAR` indirection:** a value of the form `"$NAME"`/`"${NAME}"` resolves from the
   environment (e.g. `"team": "$DIRECTOR_TEAM"`) — keep secrets out of the committed file.
 - **Load-once (not hot-reload):** the config is read at process startup; edit it, and the
-  **next** run picks it up (we are episodic — a run drains and exits, so restart *is*
-  reload). A malformed block fails **loud at startup**, before any worker spawns — a wrong
+  **next process start** picks it up — restart the daemon (SIGTERM, then relaunch), or start
+  the next bounded `--batch`/`--once` run, to apply a change. A malformed block fails **loud
+  at startup**, before any worker spawns — a wrong
   team/state can never silently claim or transition the wrong tickets. An **absent** block
   runs on the documented defaults.
 
-## 12. Running as a daemon (the always-on loop)
+## 12. The always-on daemon — the default run loop
 
-The default run (`run_until_drained`) and `--once` are **batch**: they drain the board's
-ready work and **exit**. `--daemon` is the third mode — the always-on service (Symphony's
-identity; spec `docs/product-specs/2026-06-17-continuous-daemon-loop.md`). The launch
-command (`--daemon [--poll-interval N]`) is in the runbook
+The always-on daemon **is the operating mode and the default**: a real run with no loop
+flag runs forever (Symphony's identity; spec
+`docs/product-specs/2026-06-17-continuous-daemon-loop.md`). The **bounded fixtures** —
+`--batch` (drain ready work across DAG-aware passes, then exit) and `--once` (a single
+pass) — are for dev / test / CI; `--mock` implies `--batch`. `--daemon` survives only as a
+redundant, **deprecated alias** of the default (ADR 0007). The launch command (just run it,
+optionally `[--poll-interval N]`) is in the runbook
 ([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §9); the *semantics* you must
 understand to operate it are here:
 
@@ -409,8 +422,9 @@ understand to operate it are here:
   blocker or a dependency cycle) — the daemon will not make progress until **you** unblock it
   (move/fix a blocker). Unlike a batch run, "stuck" does **not** stop the daemon; it is a
   signal for you to act, and the §9 run-report pull still surfaces it.
-- **Active-run reconciliation still applies** (it does in every mode): move a ticket out of
-  `In Progress` in Linear and its worker is stopped within `reconcile_interval_s`.
+- **Active-run reconciliation still applies** (it applies to every run — the daemon or a
+  bounded fixture): move a ticket out of `In Progress` in Linear and its worker is stopped
+  within `reconcile_interval_s`.
 - **Exponential backoff** (daemon only; Symphony §8.4): the daemon does not hammer on
   failure or idleness — three things back off on a shared `min(base·2^(n-1), cap)` curve
   (`--backoff-base`, default 10s; `--backoff-cap`, default 300s). (1) **Retry** — a failed
@@ -422,13 +436,14 @@ understand to operate it are here:
   appears. (3) **Claim** — a ticket whose claim write is rejected is retried after the
   backoff rather than abandoned for the run. A graceful shutdown does **not** wait out a
   pending retry's backoff — it drains running workers and exits, leaving the retry's ticket
-  `In Progress` for the next run to pick up. The batch modes (`--once`/default) are
+  `In Progress` for the next run to pick up. The bounded fixtures (`--batch`/`--once`) are
   unaffected: they retry immediately.
 
-## 13. Running lights-out (human absent, Director present)
+## 13. The lights-out procedure (human absent, Director present)
 
-Lights-out is §6's middle mode: you are a Daemonized Claude Code, judging every turn-end
-with the **same** taste-vs-handle line (§2), but the human is not watching — only
+Lights-out is the **human-absent property** of the one mode (§6): you are a Daemonized
+Claude Code, judging every turn-end with the **same** taste-vs-handle line (§2), but the
+human is not watching — only
 async-reachable. The job is unchanged; what changes is that you can no longer hand a fork
 to a human in the moment, so for a fork you cannot trivially auto-continue, decide by this
 procedure:
