@@ -1,51 +1,40 @@
-"""Dev-stage taxonomy: ticket label -> dispatch + DAG metadata (ADR 0005).
+"""Worker first-turn framing: the operating + terminal contracts (ADR 0005, ADR 0007).
 
-A ticket's `type` (a Linear stage label) is **metadata only**: it gates dispatch
-(`dispatch_requires_label`) and types the `blocked_by` DAG for sequencing + observability.
-It does **not** shape the worker's prompt. Per ADR 0005 the worker's methodology surface is
-exactly `WORKER_PROTOCOL` (the single operating contract, always injected — the analog of
-Symphony's `WORKFLOW.md`, and it carries the implementation craft) PLUS the host's
-auto-loaded `AGENTS.md` and its invocable skills (product-design / execplan / …), which the
-worker consults and calls by its own judgment. There are **no per-stage prompt templates**:
-`compose_worker_prompt` returns the ticket's own prompt unchanged, identically on the
-orchestrator and `director.run` paths.
+This module owns the two stage-agnostic blocks injected into every worker's FIRST-turn
+prompt by `frame_first_turn`: `WORKER_PROTOCOL` (the single, always-injected operating
+contract — the analog of Symphony's `WORKFLOW.md`, carrying the implementation craft) then
+the `TERMINAL_CONTRACT` (how/when to call `report_outcome`). The worker's full methodology
+surface is exactly these two PLUS the host's auto-loaded `AGENTS.md` and its invocable skills
+(product-design / execplan / …), which the worker consults and calls by its own judgment —
+there are no per-stage prompt templates (ADR 0005).
 
-Every worker's FIRST-turn prompt is framed (`frame_first_turn`) with two stage-agnostic
-blocks: `WORKER_PROTOCOL` (operating contract) then the `TERMINAL_CONTRACT` (report_outcome).
-See docs/adr/0005-no-stage-prompt-templates.md (completes 0004 — the purpose-unit decision
-now lives wholly in `WORKER_PROTOCOL`; 0002 gap #5 for the protocol's lineage).
+The dev-stage taxonomy (a 5-value `planning/research/design/spec/impl` label → DAG metadata)
+was REMOVED by ADR 0007: its only runtime use was the dispatch gate (DAG sequencing is pure
+`blocked_by`; the stage labels never shaped the prompt or sequencing), so it collapsed to a
+single `agent-ready` admission label (`orchestrator.DISPATCH_LABEL`). HOW to do the work —
+research, spec, ExecPlan, or a direct patch — is the worker's judgment, not a label.
+
+See docs/adr/0007-collapse-dispatch-taxonomy.md (supersedes the dispatch/DAG-metadata clause
+of 0005) and docs/adr/0005-no-stage-prompt-templates.md. (The module name is historical —
+it no longer holds a taxonomy; a rename to `worker_protocol` is a deferred cosmetic follow-up.)
 """
 from __future__ import annotations
-
-# institution-as-data: stage label -> DAG metadata (ADR 0005 — NO `template`; the label does
-# not shape the prompt). `child_types` describes the EXCEPTIONAL size-split edge (ADR 0004): a
-# split sub-project starts its own pipeline (spec), planning may recurse, impl splits into impl.
-# Metadata only — no runtime consumer beyond `ticket_type` (dispatch filter + DAG typing).
-TAXONOMY: dict[str, dict] = {
-    "planning": {"label": "planning",
-                 "stage": "decompose a large goal into independently shippable sub-project tickets",
-                 "child_types": ["spec", "planning"]},
-    "research": {"label": "research", "stage": "investigate an unknown", "child_types": []},
-    "design": {"label": "design", "stage": "architecture / high-low design", "child_types": ["spec"]},
-    "spec": {"label": "spec", "stage": "product design (the what)", "child_types": ["spec"]},
-    "impl": {"label": "impl", "stage": "implementation (the build)", "child_types": ["impl"]},
-}
-
-# Most-specific-first: a ticket carrying several stage labels resolves to the latest stage.
-_PRIORITY = ["impl", "spec", "design", "research", "planning"]
 
 # The multi-turn TERMINAL CONTRACT injected into every worker's first-turn prompt
 # (multi-turn-ticket-execution slice). Without it a worker that finishes its work but
 # never calls `report_outcome` is read un-watched as "still continuing" and loops to
 # `stuck` (a finished ticket mis-reported). This tells the worker, where it reliably
 # reads it, that signalling terminal is ITS job and how. Pairs with the report_outcome
-# tool `drive` advertises — so `drive` (not compose_worker_prompt) injects it, covering
+# tool `drive` advertises — so `drive` injects it (via `frame_first_turn`), covering
 # the orchestrator, run.main, and direct-drive paths alike.
 TERMINAL_CONTRACT = """\
 This ticket may take several turns on one thread; keep working across turns until the \
 work is genuinely done — do not stop merely because a turn ends. YOU signal the \
 terminal outcome by calling the `report_outcome` tool, and only when the work truly ends:
-- done — the ticket is fully complete: report_outcome(status="done", reason="…").
+- done — the ticket is fully complete: report_outcome(status="done", reason="…"). If \
+you filed non-blocking follow-up tickets while working (deferred/out-of-scope work, \
+tech debt, extra hardening), include their ids in spawned_ticket_ids so they surface \
+on the board.
 - blocked — you cannot proceed and have filed follow-up child tickets: \
 report_outcome(status="blocked", reason="…", spawned_ticket_ids=["…"]).
 - needs_human — a product/taste decision is genuinely required: \
@@ -97,8 +86,8 @@ tests / hardening whose inline fix would break your momentum. Anything smaller s
 this ticket's scope. Every ticket you issue must be self-contained: a clear title, a \
 description of the work, acceptance criteria, and provenance — link the parent ticket and \
 the source doc (spec / design / research) it derives from — so a fresh worker can start \
-from the ticket alone. Create it with the linear skill, labeled with the right stage and \
-blocked_by/related to this one, and note it.
+from the ticket alone. Create it with the linear skill, labeled `agent-ready` (so the \
+orchestrator will pick it up) and blocked_by/related to this one, and note it.
 - Proportional context — orient only as much as THIS ticket needs. Do NOT survey the whole \
 repo for a focused change. Orientation is a tool, not a mandatory step: for a broad or \
 unfamiliar change the `docs-nav` skill (`nav.py map`/`catalog`/`tree`/`backlinks`) surfaces \
@@ -145,23 +134,3 @@ def frame_first_turn(prompt: str) -> str:
     terminal block to `with_terminal_contract` (kept byte-stable)."""
     framed = f"{prompt}\n\n---\nWORKER PROTOCOL\n{WORKER_PROTOCOL}"
     return with_terminal_contract(framed)
-
-
-def ticket_type(ticket: dict) -> str | None:
-    """The dev-stage type of a ticket from its labels, or None (untyped) if it carries
-    no stage label. Multiple stage labels resolve by _PRIORITY (most specific first).
-    Used for dispatch gating + DAG typing — NOT for prompt composition (ADR 0005)."""
-    labels = set(ticket.get("labels") or [])
-    for t in _PRIORITY:
-        if TAXONOMY[t]["label"] in labels:
-            return t
-    return None
-
-
-def compose_worker_prompt(ticket: dict) -> str:
-    """The prompt a worker receives = the ticket's own prompt, UNCHANGED (ADR 0005: there is
-    no per-stage prompt template). The dev-stage label is dispatch/DAG metadata, not a
-    prompt-shaper, so the orchestrator and `director.run` send identical worker prompts. The
-    operating contract + terminal contract are added once by `frame_first_turn` (in
-    `run.drive`); the methodology the worker follows comes from the host's AGENTS.md + skills."""
-    return ticket.get("prompt", "")

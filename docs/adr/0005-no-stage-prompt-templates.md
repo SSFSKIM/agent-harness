@@ -33,6 +33,12 @@ The dev-stage **label / `ticket_type` stays — as metadata only**: the dispatch
 (`dispatch_requires_label`) and the typed DAG (`blocked_by` sequencing + observability).
 It no longer shapes the prompt.
 
+> **Superseded 2026-06-28 by [[0007-collapse-dispatch-taxonomy]].** A trace found this clause
+> over-claimed: DAG sequencing is pure `blocked_by` (never `ticket_type`), and `child_types`
+> was dead — so the taxonomy's only runtime use was the dispatch gate. The 5-value taxonomy is
+> deleted and collapsed to a single `agent-ready` admission label (gate on by default). The
+> rest of this ADR — no per-stage prompt templates — **stands.**
+
 We add **no** methodology-pointer or "default posture" line to `WORKER_PROTOCOL`. Routing
 the worker to product-design vs. an ExecPlan vs. a direct patch is **`AGENTS.md`'s job +
 the worker's judgment**, not injected guidance.
