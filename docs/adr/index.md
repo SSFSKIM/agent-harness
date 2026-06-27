@@ -38,16 +38,8 @@ Decisions + why. Register every page here (lint D8).
   `compose_worker_prompt` returns the raw ticket (converging the `director.run` and
   orchestrator paths); the dev-stage label stays as dispatch/DAG metadata only. Completes
   0004; supersedes its per-template edits and the dev-stage-taxonomy template layer.
-  **Dispatch/DAG-metadata clause superseded 2026-06-28 by [0007](0007-collapse-dispatch-taxonomy.md)**
+  **Dispatch/DAG-metadata clause superseded 2026-06-28 by [0009](0009-collapse-dispatch-taxonomy.md)**
   — the 5-value taxonomy collapsed to a single `agent-ready` label; the rest of 0005 stands.
-- [Collapse the dispatch taxonomy to a single `agent-ready` label](0007-collapse-dispatch-taxonomy.md)
-  — a trace showed the 5-value dev-stage taxonomy (planning/research/design/spec/impl) earned
-  no structure: DAG sequencing is pure `blocked_by`, `child_types` was dead, and the label never
-  shaped the prompt (0005) — its whole runtime footprint was the dispatch gate. Delete the
-  taxonomy code; admit a ticket iff it carries `agent-ready` (`orchestrator.DISPATCH_LABEL`),
-  gate **on by default**. A ticket carries the goal; *whether* an agent takes it is the one bit
-  a human owns — HOW (research/spec/ExecPlan/patch) is the worker's judgment. Supersedes the
-  dispatch/DAG-metadata clause of 0005.
 - [Observability dashboard may vendor an offline, checked-in JS asset](0006-observability-vendored-asset.md)
   — **superseded 2026-06-27**: the [graph-view re-skin](../product-specs/2026-06-27-project-graph-view-reskin.md)
   dropped the vendored library and hand-rolled the render (DOM+SVG), so the dashboard now
@@ -70,3 +62,11 @@ Decisions + why. Register every page here (lint D8).
   and the pure-code `--autonomous` decider are **fixtures**, and the always-on **daemon
   is the default**. `--mock` defaults to the bounded loop (offline board has nothing to poll
   forever). No posture/security change; Daemonized-Claude runtime still a separate track.
+- [Collapse the dispatch taxonomy to a single `agent-ready` label](0009-collapse-dispatch-taxonomy.md)
+  — a trace showed the 5-value dev-stage taxonomy (planning/research/design/spec/impl) earned
+  no structure: DAG sequencing is pure `blocked_by`, `child_types` was dead, and the label never
+  shaped the prompt (0005) — its whole runtime footprint was the dispatch gate. Delete the
+  taxonomy code; admit a ticket iff it carries `agent-ready` (`orchestrator.DISPATCH_LABEL`),
+  gate **on by default**. A ticket carries the goal; *whether* an agent takes it is the one bit
+  a human owns — HOW (research/spec/ExecPlan/patch) is the worker's judgment. Supersedes the
+  dispatch/DAG-metadata clause of 0005.

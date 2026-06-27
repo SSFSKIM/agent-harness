@@ -298,7 +298,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     return {"summary": summary}
 
 
-# The single dispatch-admission label (worker-policy-polish; ADR 0007). A ready ticket is
+# The single dispatch-admission label (worker-policy-polish; ADR 0009). A ready ticket is
 # handed to a worker ONLY if it carries this label (when `dispatch_requires_label` is on —
 # now the default). It replaces the 5-value dev-stage taxonomy, whose ONLY runtime use was
 # this gate: DAG sequencing is pure `blocked_by` + blocker state_type (never the stage
@@ -1075,7 +1075,7 @@ class MockBoard:
 
     @classmethod
     def demo(cls) -> "MockBoard":
-        # Both carry the agent-ready dispatch label so the gate (on by default, ADR 0007)
+        # Both carry the agent-ready dispatch label so the gate (on by default, ADR 0009)
         # admits them — a demo board mirrors a real one where dispatchable tickets are tagged.
         return cls([
             {"id": "u1", "identifier": "DEMO-1", "title": "first", "labels": ["agent-ready"],
