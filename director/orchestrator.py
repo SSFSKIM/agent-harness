@@ -183,6 +183,14 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
         outcome = disp.get("outcome") or {}
         ostatus = outcome.get("status")
         if ostatus == "done":
+            # done-with-follow-ups (worker-policy-polish): a worker can finish the ticket
+            # AND have filed non-blocking follow-up tickets (WORKER_PROTOCOL trigger #2 —
+            # deferred/out-of-scope work, in-scope tech debt, extra hardening). Surface
+            # their ids on the done path too — the blocked path already did, but a `done`
+            # silently dropped them. This is a payload enrichment, NOT a new terminal
+            # status: the board action is still done/merging (so no new dispatch branch).
+            spawned = outcome.get("spawned_ticket_ids") or []
+            follow = f" — follow-ups: {', '.join(spawned)}" if spawned else ""
             # Act-before-consume ([[queue-act-before-consume-ordering]], review-reliability
             # P1): ENQUEUE the PR-merge (the durable downstream handoff) BEFORE the terminal
             # `done` transition. A crash between them must never leave a `done`-on-board
@@ -202,8 +210,9 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             if enqueued and states.get("merging"):
                 set_state(states["merging"])
                 comment(f"🔀 worker done after {turns} turn(s) (turn {disp.get('turn_id')})"
-                        f"{reason} — PR queued; awaiting merge to main")
-                summary = summarize("completed", "merging", merge_enqueued=True)
+                        f"{reason} — PR queued; awaiting merge to main{follow}")
+                summary = summarize("completed", "merging", merge_enqueued=True,
+                                    spawned_ticket_ids=spawned)
             else:
                 # Misfire net (merge-gate-bypass defense-in-depth): a PR-bearing done that
                 # did NOT park in `merging` despite that state being configured means the
@@ -214,8 +223,9 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                     errs.append("misfire: PR-bearing done not parked in merging "
                                 "(merge enqueue failed?) — PR may be left unmerged")
                 set_state(states["done"])
-                comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}")
-                summary = summarize("completed", "done", merge_enqueued=enqueued)
+                comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}{follow}")
+                summary = summarize("completed", "done", merge_enqueued=enqueued,
+                                    spawned_ticket_ids=spawned)
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
             final = "started"

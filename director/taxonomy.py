@@ -45,7 +45,10 @@ TERMINAL_CONTRACT = """\
 This ticket may take several turns on one thread; keep working across turns until the \
 work is genuinely done — do not stop merely because a turn ends. YOU signal the \
 terminal outcome by calling the `report_outcome` tool, and only when the work truly ends:
-- done — the ticket is fully complete: report_outcome(status="done", reason="…").
+- done — the ticket is fully complete: report_outcome(status="done", reason="…"). If \
+you filed non-blocking follow-up tickets while working (deferred/out-of-scope work, \
+tech debt, extra hardening), include their ids in spawned_ticket_ids so they surface \
+on the board.
 - blocked — you cannot proceed and have filed follow-up child tickets: \
 report_outcome(status="blocked", reason="…", spawned_ticket_ids=["…"]).
 - needs_human — a product/taste decision is genuinely required: \

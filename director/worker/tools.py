@@ -34,7 +34,9 @@ def report_outcome_spec() -> dict:
         "name": REPORT_OUTCOME_TOOL,
         "description": "Report the TERMINAL outcome of your work on THIS ticket. Call "
                        "it exactly once, only when work truly ends: status=done when "
-                       "the ticket is complete; status=blocked when you cannot proceed "
+                       "the ticket is complete (optionally list any non-blocking "
+                       "follow-up tickets you filed in spawned_ticket_ids); "
+                       "status=blocked when you cannot proceed "
                        "and have filed follow-up tickets (put their ids in "
                        "spawned_ticket_ids); status=needs_human when a product/taste "
                        "decision is required. Do NOT call it to ask whether to continue "
@@ -49,8 +51,11 @@ def report_outcome_spec() -> dict:
                            "description": "One line: why this is the outcome."},
                 "spawned_ticket_ids": {
                     "type": "array", "items": {"type": "string"},
-                    "description": "Ids of tickets you created (e.g. when blocked → "
-                                   "decomposed into follow-ups)."},
+                    "description": "Ids of tickets you created — the decomposed children "
+                                   "when status=blocked, OR non-blocking follow-ups you "
+                                   "filed when status=done (deferred/out-of-scope work, "
+                                   "tech debt, hardening). They surface on the board "
+                                   "either way."},
                 "pr_url": {"type": "string",
                            "description": "When status=done and you opened a PR for this "
                                           "work, its URL — the orchestrator enqueues it "

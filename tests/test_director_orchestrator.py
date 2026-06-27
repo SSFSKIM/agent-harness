@@ -930,6 +930,39 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertFalse(out["summary"]["merge_enqueued"])
         self.assertEqual(self._merge_reqs(), [])
 
+    def test_done_with_follow_ups_surfaces_spawned_ids(self):
+        # done-with-follow-ups (worker-policy-polish): a worker can finish the ticket
+        # (done) AND have filed non-blocking follow-up tickets (WORKER_PROTOCOL trigger
+        # #2 — deferred/out-of-scope work). Those ids must surface on the done path —
+        # summary + board comment — not be dropped (previously only the blocked path
+        # consumed spawned_ticket_ids). This is a payload enrichment on done, NOT a new
+        # report_outcome status: the board action is still done.
+        out = self._reconcile(self._done(spawned_ticket_ids=["D-2", "D-3"]))
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["D-2", "D-3"])
+        body = "\n".join(self.board.comments["u1"])
+        self.assertIn("D-2", body)
+        self.assertIn("D-3", body)
+
+    def test_done_without_follow_ups_summary_has_empty_spawned(self):
+        # uniform shape with the blocked path: the key is always present (empty list when
+        # the worker filed no follow-ups) so the StatusWriter sees a consistent summary.
+        out = self._reconcile(self._done())
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], [])
+
+    def test_pr_bearing_done_parked_in_merging_still_surfaces_follow_ups(self):
+        # follow-ups are independent of the merge gate: a PR-bearing done that PARKS in
+        # `merging` must still surface its follow-up ids (summary + comment).
+        states = dict(self.states)
+        states["merging"] = "st_merge"
+        out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
+                             self._done(pr_url="http://pr/7", pr_branch="feat/x",
+                                        spawned_ticket_ids=["D-9"]),
+                             1, states, 1, queue_base=self.qbase,
+                             workspace_root=self.tmp / "wsr")
+        self.assertEqual(out["summary"]["final_state"], "merging")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["D-9"])
+        self.assertIn("D-9", "\n".join(self.board.comments["u1"]))
+
     def test_done_with_evidence_carries_it_into_payload(self):
         # merge-preservation M1 (R4): the worker's optional sweep evidence rides
         # outcome → _maybe_enqueue_merge → merge payload (advisory audit data).
