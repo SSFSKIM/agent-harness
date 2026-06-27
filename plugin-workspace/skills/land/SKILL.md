@@ -113,7 +113,9 @@ Preferred: use the asyncio watcher to monitor review comments, CI, and head
 updates in parallel:
 
 ```
-python3 .codex/skills/land/land_watch.py
+# the helper is vendored next to this skill — under .agents/skills/ (Codex worker)
+# or .claude/skills/ (Claude worker), whichever runtime loaded it; run from the repo root.
+python3 "$(ls .agents/skills/land/land_watch.py .claude/skills/land/land_watch.py 2>/dev/null | head -1)"
 ```
 
 Exit codes:

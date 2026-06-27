@@ -82,6 +82,18 @@ def _clear_target(target: Path) -> None:
         shutil.rmtree(target)
 
 
+def _ensure_dir(path: Path) -> None:
+    """Make `path` a real directory ready to vendor into: REFUSE a symlink (never write
+    through one — completion-gate P1), remove a planted non-dir occupant (file/fifo/socket) at
+    the dir path so the idempotent re-run is not bricked by `mkdir` (a prior workspace-write
+    worker could plant one), then `mkdir(exist_ok=True)`. An existing REAL dir is kept (overlay
+    — never rmtree'd, so a clone's own tracked content in `.claude/`/`.agents/` is preserved)."""
+    _refuse_symlink(path)
+    if path.exists() and not path.is_dir():
+        path.unlink()
+    path.mkdir(parents=True, exist_ok=True)
+
+
 def _copy_into(src_dir: Path, dst_dir: Path) -> None:
     """Copy every entry of `src_dir` into the already-created, non-symlink `dst_dir`, each
     cleared via `_clear_target` first. Dirs deep-copied, files copied with metadata."""
@@ -152,6 +164,10 @@ def _translate_agent_md_to_toml(md_path: Path) -> str:
     if "'''" in body:
         raise RuntimeError(f"agent {md_path.name} body contains \"'''\" — cannot emit it as a "
                            f"TOML literal string; escape it in the source or extend the translator")
+    # Force the closing fence onto its own line: a body ending in 1–2 apostrophes with no
+    # trailing newline would otherwise abut the fence into `''''`/`'''''`, which TOML rejects.
+    if not body.endswith("\n"):
+        body += "\n"
     return (f"name = {_toml_basic_string(fm['name'])}\n"
             f"description = {_toml_basic_string(fm['description'])}\n"
             f"sandbox_mode = {_toml_basic_string(sandbox)}\n"
@@ -164,16 +180,14 @@ def _install_agents(ws: Path) -> None:
     `.codex/agents/*.toml` (translated — `_translate_agent_md_to_toml`). Codex loads the
     `.codex/agents/` layer only when the workspace is TRUSTED — handled at launch (M3)."""
     # Claude — copy the .md personas verbatim.
-    _refuse_symlink(ws / Path(_AGENT_DEST_CLAUDE).parts[0])
+    _ensure_dir(ws / Path(_AGENT_DEST_CLAUDE).parts[0])
     claude = ws / _AGENT_DEST_CLAUDE
-    _refuse_symlink(claude)
-    claude.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(claude)
     _copy_into(_AGENT_SOURCE, claude)
     # Codex — translate each .md persona into a custom-agent .toml.
-    _refuse_symlink(ws / Path(_AGENT_DEST_CODEX).parts[0])
+    _ensure_dir(ws / Path(_AGENT_DEST_CODEX).parts[0])
     codex = ws / _AGENT_DEST_CODEX
-    _refuse_symlink(codex)
-    codex.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(codex)
     for item in sorted(_AGENT_SOURCE.iterdir()):
         if item.is_file() and item.suffix == ".md":
             target = codex / (item.stem + ".toml")
@@ -204,10 +218,9 @@ def install_worker_methodology(workspace) -> None:
     _assert_skill_sources_disjoint()
     # SKILLS — copy both source dirs verbatim into each runtime's skills dir.
     for dest in _SKILL_DESTS:
-        _refuse_symlink(ws / Path(dest).parts[0])  # the runtime root (.claude / .agents)
+        _ensure_dir(ws / Path(dest).parts[0])  # the runtime root (.claude / .agents)
         dst = ws / dest
-        _refuse_symlink(dst)
-        dst.mkdir(parents=True, exist_ok=True)
+        _ensure_dir(dst)
         for src in _SKILL_SOURCES:
             _copy_into(src, dst)
     # AGENTS — Claude reads .md verbatim; Codex reads its own `.codex/agents/` dir.
@@ -421,9 +434,11 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              timeout_s=hook_timeout_s, fatal=True)
     if install_skills:
         install_worker_methodology(ws)
-    # Trust the workspace so Codex loads the project `.codex/` layer we just vendored into
-    # (`.codex/agents/*.toml`); a no-op for mock/Claude (see `_with_codex_trust`).
-    command = _with_codex_trust(command, ws)
+        # Trust the workspace so Codex loads the project `.codex/` layer we just vendored into
+        # (`.codex/agents/*.toml`); a no-op for mock/Claude (see `_with_codex_trust`). Gated on
+        # `install_skills` — without the vendored `.codex/` layer there is nothing to trust FOR,
+        # and trusting would needlessly widen the T16 surface (the clone's own project config).
+        command = _with_codex_trust(command, ws)
     if worker_env is None:
         worker_env = worker_policy.build_worker_env(worker_policy.load_worker_policy())
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)

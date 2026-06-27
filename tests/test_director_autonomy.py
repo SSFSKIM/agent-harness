@@ -20,7 +20,8 @@ class CodexCommandTest(unittest.TestCase):
         self.assertEqual(
             out,
             "codex app-server -c approvals_reviewer=auto_review "
-            "-c sandbox_workspace_write.network_access=true")
+            "-c sandbox_workspace_write.network_access=true "
+            "-c features.hooks=false")  # hooks always disabled (security, T16)
 
     def test_preset_constants(self):
         self.assertEqual(autonomy.APPROVAL_POLICY, "on-request")
@@ -96,11 +97,12 @@ class CommandWrapTest(unittest.TestCase):
             self.assertIn("network_access", watched[2])       # network shared (exfil deferred)
 
     def test_command_omits_overrides_when_posture_tightened(self):
-        # a host that tightens director.worker (network/auto_review off) → the `-c`
-        # overrides are OMITTED (the fail-safe direction; declarative-config slice).
+        # a host that tightens director.worker (network/auto_review off) → the POSTURE `-c`
+        # overrides are OMITTED (the fail-safe direction; declarative-config slice). The
+        # `features.hooks=false` security override is unconditional (T16), so it remains.
         tight = config.Posture("untrusted", "workspace-write", auto_review=False, network=False)
         cmd = run._command(self._ns(False), "codex app-server", tight)
-        self.assertEqual(cmd, ["bash", "-c", "codex app-server"])
+        self.assertEqual(cmd, ["bash", "-c", "codex app-server -c features.hooks=false"])
 
     def test_mock_command_never_wrapped(self):
         ns = argparse.Namespace(mock=True, mock_scenario="plain", autonomous=True)

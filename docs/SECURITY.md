@@ -337,21 +337,33 @@ Grounding document for the review-security persona. Threats are numbered.
   for an untrusted project. Trust is **project-wide**, so Codex ALSO reads the cloned TARGET
   repo's own `<ws>/.codex/config.toml` (and any project `.codex/` hooks/rules it ships) — a
   new untrusted-input surface, since the clone is attacker-influenceable content (T1-class,
-  via a malicious PR/branch in the target repo). Bounded by:
-  (1) **Precedence** — CLI `-c`/`--config` and the `thread/start` `approvalPolicy`+`sandbox`
-  params OUTRANK project config (Codex config precedence: CLI #1 > project `.codex/config.toml`
-  #2). The autonomy `-c` flags (`approvals_reviewer`, network) + thread params pin the worker's
-  approval/sandbox/network ABOVE anything the clone's config could set, so a hostile
-  `.codex/config.toml` cannot loosen the posture (e.g. cannot force `approval_policy="never"` +
-  `sandbox="danger-full-access"`). (2) **Env** — the worker still runs under the deny-by-default
-  `worker_env` (T11), so project config cannot exfil the Director's host secrets via env.
-  (3) **Hooks** — Codex command-hooks are gated by a separate per-hook trust HASH; the
-  non-interactive Director grants none and passes no `--dangerously-bypass-hook-trust`, so a
-  clone-shipped `.codex/hooks.json` does not auto-execute (and the Director does not author any
-  Codex hooks — that surface is Phase 2, see the codex-worker-config ExecPlan). Rules: the trust
-  override is scoped to the **single contained workspace path** (never a parent/`~`), and is a
-  no-op for the mock and the Claude adapter. **Informed-accepted residual:** a trusted clone
-  `.codex/config.toml` can still declare benign-but-unexpected config the worker loads (e.g.
-  `mcp_servers`, model); like the T11 network-exfil residual this is accepted only where the
-  worker runs against a semi-trusted repo with throwaway credentials, and is retired the same
-  way — by moving the worker into an isolated environment (container/VM, the T11 track).
+  via a malicious PR/branch in the target repo). The TWO config-driven exec vectors a hostile
+  clone `.codex/` could carry are `hooks` (a `.codex/hooks.json` command runs at session start)
+  and `mcp_servers` (a `.codex/config.toml` entry whose `command`/`args` Codex spawns at session
+  start) — both are CODE EXECUTION with no prompt/agent decision, so neither is "benign config".
+  Handled as follows:
+  - **Hooks — CLOSED deterministically.** The launch command always carries `-c features.hooks=false`
+    (`director/worker/autonomy.py` `DISABLE_HOOKS`), so Codex loads NO hooks (user, system, OR a
+    clone-shipped `.codex/hooks.json`) regardless of trust. The Director authors no Codex hooks in
+    Phase 1; Phase 2 re-enables selectively. This does not rely on Codex's hook trust-hash behavior.
+  - **mcp_servers — bounded, INFORMED-ACCEPTED residual.** Precedence does NOT help here: CLI `-c`/
+    `--config` + the `thread/start` `approvalPolicy`+`sandbox` params outrank project config ONLY for
+    the keys they set (approval / sandbox / network — so a hostile `.codex/config.toml` cannot loosen
+    the worker posture, e.g. force `approval_policy="never"` + `sandbox="danger-full-access"`), but
+    there is no overriding param for `mcp_servers`, and the per-action `auto_review` sees the agent's
+    escalations, not an orchestrator-launched MCP subprocess. So a trusted clone `.codex/config.toml`
+    that declares an `mcp_servers.<x>.command` is config-only HOST CODE EXECUTION at session start —
+    the SAME class as the T11 worker exec/exfil residual (under T11 the worker already runs target-repo
+    code with network on + filesystem-wide reads). It is accepted ONLY where the worker runs against a
+    semi-trusted repo with throwaway credentials, and is retired the SAME way as T11 — by moving the
+    worker into an isolated environment (container/VM). We cannot simply strip the clone's tracked
+    `.codex/config.toml` (a tracked-file deletion would pollute the worker's PR — the per-item
+    overlay + `.git/info/exclude` design exists precisely to never touch the clone's tracked tree);
+    a non-worktree-polluting neutralization (e.g. a per-workspace `CODEX_HOME`) is the tracked
+    follow-up (tech-debt-tracker).
+  - **Env (unchanged from T11).** The worker runs under the deny-by-default `worker_env`, so neither
+    a project-config MCP child nor anything else inherits the Director's host secrets via env (it can
+    still read on-disk creds — the acknowledged T11 fs-read residual, not a new T16 claim).
+  Scoping: trust applies ONLY when the Director vendored the methodology (`install_skills`) and is the
+  **single contained workspace path** (`realpath`, never a parent/`~`/repo root — T14 containment);
+  it is a no-op for the mock and tolerated (ignored) by the Claude adapter.

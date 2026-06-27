@@ -147,6 +147,42 @@ class RunEndToEndTest(unittest.TestCase):
         cmd = [sys.executable, MOCK, "plain"]
         self.assertEqual(run._with_codex_trust(cmd, self.tmp / "x"), cmd)
 
+    def test_translate_agent_guards_fail_loud(self):
+        # The parse/translate guards must fail LOUD on a malformed first-party persona
+        # (fail before any worker spawn — never emit silently-broken TOML).
+        with self.assertRaises(RuntimeError):
+            run._parse_agent_frontmatter("no opening fence\n")
+        with self.assertRaises(RuntimeError):
+            run._parse_agent_frontmatter("---\nname: x\n(never closed)\n")
+        noname = self.tmp / "noname.md"
+        noname.write_text("---\ndescription: d\n---\nbody\n", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            run._translate_agent_md_to_toml(noname)
+        triple = self.tmp / "triple.md"
+        triple.write_text("---\nname: n\ndescription: d\n---\nhas ''' inside\n", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            run._translate_agent_md_to_toml(triple)
+
+    def test_translate_agent_body_ending_in_apostrophe_is_parseable(self):
+        # closing-fence robustness: a body ending in apostrophes with no trailing newline
+        # must still emit TOML an independent parser accepts.
+        import tomllib
+        p = self.tmp / "apos.md"
+        p.write_text("---\nname: n\ndescription: d\ntools: Read\n---\nends in two''",
+                     encoding="utf-8")
+        data = tomllib.loads(run._translate_agent_md_to_toml(p))
+        self.assertEqual(data["developer_instructions"].rstrip("\n"), "ends in two''")
+
+    def test_install_recovers_from_planted_file_at_dest_dir(self):
+        # reliability: a prior workspace-write worker plants a regular FILE where a dest dir
+        # must go; the idempotent re-run clears it rather than crashing on mkdir.
+        ws = self.tmp / "wsplanted"
+        (ws / ".codex").mkdir(parents=True)
+        (ws / ".codex" / "agents").write_text("planted\n", encoding="utf-8")
+        run.install_worker_methodology(ws)  # must not raise
+        self.assertTrue((ws / ".codex" / "agents").is_dir())
+        self.assertTrue((ws / ".codex" / "agents" / "review-arch.toml").exists())
+
     def test_run_ticket_threads_tools_and_executor(self):
         seen = []
 

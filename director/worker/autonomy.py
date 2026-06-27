@@ -47,21 +47,30 @@ SANDBOX = config.DEFAULTS["worker"]["sandbox"]                   # "workspace-wr
 # not a knob — whether each is applied is the config's `auto_review`/`network` bool).
 AUTO_REVIEW = "approvals_reviewer=auto_review"            # Codex's fail-closed reviewer
 NETWORK = "sandbox_workspace_write.network_access=true"   # full outbound (exfil deferred, T11)
+# ALWAYS applied (security, not a posture knob). Trusting the worker workspace so Codex loads
+# the vendored `.codex/agents/*.toml` (run.py `_with_codex_trust`) ALSO makes it load the cloned
+# target repo's project `.codex/` layer — and a clone-shipped `.codex/hooks.json` is config-only
+# RCE at session start. The Director authors NO Codex hooks (deferred to Phase 2), so we disable
+# hook loading outright, closing that vector deterministically (SECURITY.md T16). Re-enable
+# selectively when Phase 2 introduces Director-authored Codex hooks.
+DISABLE_HOOKS = "features.hooks=false"
 
 
 def codex_command(base: str, *, auto_review: bool = True, network: bool = True) -> str:
-    """Append the self-governance `-c` overrides to a codex launch command string.
+    """Append the self-governance + security `-c` overrides to a codex launch command string.
 
     `auto_review` (the per-action baseline) and `network` (full outbound) are applied
     per the resolved worker posture; the defaults (both on) preserve the historical
     behavior, and a host that sets `director.worker.network=false`/`auto_review=false`
     in `.harness.json` *tightens* the worker (the fail-safe direction — the override is
     omitted, not negated). The network exfil residual is deferred to a one-shot
-    mitigation (T11). Only the real codex path is wrapped — the mock takes no `-c`."""
+    mitigation (T11). `DISABLE_HOOKS` is applied UNCONDITIONALLY (security, T16 — see its
+    note). Only the real codex path is wrapped — the mock takes no `-c`."""
     overrides = []
     if auto_review:
         overrides.append(AUTO_REVIEW)
     if network:
         overrides.append(NETWORK)
+    overrides.append(DISABLE_HOOKS)
     extra = " ".join(f"-c {ov}" for ov in overrides)
     return f"{base} {extra}".rstrip()
