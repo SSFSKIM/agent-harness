@@ -87,12 +87,18 @@ reviewer that inherited the implementer's context loses adversarial independence
    (substitute the actual SHA from the plan's frontmatter) to see it. Read
    your grounding doc first. Output P1/P2 findings with file:line and a
    Verdict."
-   (The Task tool `subagent_type` depends on how the methodology reached your runtime:
-   `agent-harness:review-spec-compliance` / `…:review-code-quality` / `…:review-arch` …
-   when it is installed as a PLUGIN (the Director), or the bare `review-spec-compliance` /
-   `review-code-quality` / `review-arch` … when the agents are VENDORED into the workspace's
-   `.claude/agents/` or `.codex/agents/` (a worker — see
-   `director/run.py:install_worker_methodology`). Use whichever your runtime exposes.)
+   (HOW you dispatch a persona depends on your runtime — use whichever it exposes:
+   • Claude as the Director (plugin): the Task tool with
+     `subagent_type:"agent-harness:review-spec-compliance"` / `…:review-code-quality` /
+     `…:review-arch` …. A Claude WORKER uses the BARE name (`review-spec-compliance` …) —
+     the agents are vendored into the workspace's `.claude/agents/`.
+   • Codex worker: ask Codex to spawn the persona BY NAME — e.g. "Spawn the
+     `review-spec-compliance` agent with this prompt, wait for it, and report its verdict"
+     (one request per persona; run them in parallel where the step says so). Codex registers
+     these from the vendored `.codex/agents/*.toml` and orchestrates spawn/wait/collect
+     itself, but only spawns when EXPLICITLY asked — so name every persona the step requires.
+   Either way the agents come from `director/run.py:install_worker_methodology`, and a
+   reviewer is ALWAYS a fresh subagent — never the implementer's context or a fork.)
 6. Process findings (steps 4 + 5): P1 → fix now, rerun gate from step 1.
    P2 → append to the plan's Feedback section AND
    `docs/exec-plans/tech-debt-tracker.md`.
