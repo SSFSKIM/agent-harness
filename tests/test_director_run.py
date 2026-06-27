@@ -331,6 +331,20 @@ class RunEndToEndTest(unittest.TestCase):
         self.assertEqual(lines2.count("/.claude/skills/"), 1)
         self.assertEqual(lines2.count("/.claude/agents/"), 1)
 
+    def test_exclude_writes_header_comment_once_when_extending(self):
+        # Phase-1 P2 (cosmetic): a reused ws whose exclude already has the header + some
+        # patterns must gain only the MISSING pattern(s), never a duplicate header comment.
+        ws = self.tmp / "wsexcl"
+        (ws / ".git" / "info").mkdir(parents=True)
+        (ws / ".git" / "info" / "exclude").write_text(
+            "# director: injected worker methodology (not part of the ticket)\n/.claude/skills/\n",
+            encoding="utf-8")
+        run.install_worker_methodology(ws)
+        text = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+        self.assertEqual(text.count("# director: injected worker methodology"), 1)
+        for pat in ("/.claude/skills/", "/.agents/skills/", "/.claude/agents/"):
+            self.assertIn(pat, text.splitlines())
+
     def test_install_refuses_symlinked_git_exclude(self):
         # Hardening (codex review): the PR-hygiene exclude write must not follow a symlink
         # any more than the skill/agent copy does — a prior sandboxed worker that symlinks

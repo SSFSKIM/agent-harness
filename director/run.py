@@ -364,8 +364,11 @@ def _exclude_injected_methodology(ws: Path) -> None:
     if not missing:
         return
     prefix = existing if (not existing or existing.endswith("\n")) else existing + "\n"
+    # Write the header comment only ONCE — a reused ws that gains a new injected dir later
+    # appends just the missing pattern(s), never a duplicate comment block (Phase-1 P2).
     note = "# director: injected worker methodology (not part of the ticket)\n"
-    exclude.write_text(prefix + note + "\n".join(missing) + "\n", encoding="utf-8")
+    header = note if note.strip() not in existing else ""
+    exclude.write_text(prefix + header + "\n".join(missing) + "\n", encoding="utf-8")
 
 
 def load_ticket(path: str | Path) -> dict:

@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-27
+last_verified: 2026-06-28
 owner: review-security
 type: methodology
 tags: [security, threat-model, review-security]
@@ -19,8 +19,9 @@ Grounding document for the review-security persona. Threats are numbered.
 > Director's live exec surface), **T11** (autonomous worker posture), **T12**
 > (operator-console write surface), **T13** (notifier outbound egress), **T14**
 > (Director workspace write/delete surface), **T15** (workspace lifecycle hooks —
-> host-trusted Director-side shell), **T16** (trusted worker workspace loads the
-> cloned repo's project `.codex/` config). The full
+> host-trusted Director-side shell), **T16** (Codex auto-trusts the worker
+> workspace → the cloned repo's project `.codex/` config is an untrusted-input
+> exec surface). The full
 > model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
@@ -330,46 +331,52 @@ Grounding document for the review-security persona. Threats are numbered.
   hook content). A future hardening (deferred, container/vault track): sandbox the hooks
   themselves and/or redact captured hook output.
 
-- **T16 — Trusted worker workspace loads the cloned repo's project `.codex/` config.**
-  To make the real Codex CLI load the Director-vendored `.codex/agents/*.toml` review
-  personas, `director/run.py` `_with_codex_trust` marks the per-ticket workspace trusted
-  (`-c projects."<ws>".trust_level="trusted"`) — Codex skips project-scoped `.codex/` layers
-  for an untrusted project. Trust is **project-wide**, so Codex ALSO reads the cloned TARGET
-  repo's own `<ws>/.codex/config.toml` (and any project `.codex/` hooks/rules it ships) — a
-  new untrusted-input surface, since the clone is attacker-influenceable content (T1-class,
-  via a malicious PR/branch in the target repo). The TWO config-driven exec vectors a hostile
-  clone `.codex/` could carry are `hooks` (a `.codex/hooks.json` command runs at session start)
-  and `mcp_servers` (a `.codex/config.toml` entry whose `command`/`args` Codex spawns at session
-  start) — both are CODE EXECUTION with no prompt/agent decision, so neither is "benign config".
-  Handled as follows:
+- **T16 — Codex auto-trusts the worker workspace; the cloned repo's project `.codex/` config is
+  an untrusted-input exec surface.** The real Codex CLI **automatically trusts the directory it
+  operates in** — live-proven (codex-cli 0.142) on BOTH `codex exec` AND `codex app-server` (the
+  worker's runtime): a fresh clone's project `.codex/config.toml` loaded and its `mcp_servers`
+  command executed at session start with no trust step, and Codex even **persisted**
+  `trust_level="trusted"` for that path. There is no knob to disable auto-trust and no
+  default-untrusted: `projects.<path>.trust_level` is the only trust key, and an explicit
+  `-c …trust_level="untrusted"` is overwritten by the auto-trust persist. So Codex reads the cloned
+  TARGET repo's own `<ws>/.codex/config.toml` (and any project `.codex/` hooks/rules) regardless of
+  Director action — an untrusted-input surface, since the clone is attacker-influenceable content
+  (T1-class, via a malicious PR/branch). The TWO config-driven exec vectors a hostile clone `.codex/`
+  could carry are `hooks` (a `.codex/hooks.json` command runs at session start) and `mcp_servers` (a
+  `.codex/config.toml` entry whose `command`/`args` Codex spawns at session start) — both are CODE
+  EXECUTION with no prompt/agent decision, so neither is "benign config". Handled as follows:
+  - **The Director no longer trusts the clone, and does not need to.** Phase 2 moved the vendored
+    review personas to USER-scope in a Director-managed `CODEX_HOME` (`director/run.py`
+    `_ensure_codex_home`, wired via the worker env in `_prepare`); user-scope config always loads
+    without project trust, so the old explicit `_with_codex_trust` (`-c projects."<ws>".trust_level=
+    "trusted"`) was **removed** — it was redundant (auto-trust already trusts the cwd) and it
+    persisted a `[projects."<ws>"]` entry into the user's REAL `~/.codex/config.toml` per ticket.
+    Because the worker now runs under the Director-managed `CODEX_HOME` (auth symlinked, config
+    COPIED), Codex's unavoidable auto-trust persistence lands in that COPY, never the user's real
+    config — closing the config-pollution side-effect.
   - **Hooks — CLOSED deterministically.** The launch command always carries `-c features.hooks=false`
     (`director/worker/autonomy.py` `DISABLE_HOOKS`), so Codex loads NO hooks (user, system, OR a
-    clone-shipped `.codex/hooks.json`) regardless of trust. The Director authors no Codex hooks in
-    Phase 1; Phase 2 re-enables selectively. This does not rely on Codex's hook trust-hash behavior.
-  - **mcp_servers — bounded, INFORMED-ACCEPTED residual.** Precedence does NOT help here: CLI `-c`/
-    `--config` + the `thread/start` `approvalPolicy`+`sandbox` params outrank project config ONLY for
-    the keys they set (approval / sandbox / network — so a hostile `.codex/config.toml` cannot loosen
-    the worker posture, e.g. force `approval_policy="never"` + `sandbox="danger-full-access"`), but
-    there is no overriding param for `mcp_servers`, and the per-action `auto_review` sees the agent's
-    escalations, not an orchestrator-launched MCP subprocess. So a trusted clone `.codex/config.toml`
-    that declares an `mcp_servers.<x>.command` is config-only HOST CODE EXECUTION at session start —
-    the SAME class as the T11 worker exec/exfil residual (under T11 the worker already runs target-repo
-    code with network on + filesystem-wide reads). It is accepted ONLY where the worker runs against a
-    semi-trusted repo with throwaway credentials, and is retired the SAME way as T11 — by moving the
-    worker into an isolated environment (container/VM). Precision (unverified): it is not confirmed
-    whether an orchestrator-spawned MCP subprocess runs INSIDE the codex OS sandbox; if it does not,
-    it also loses write-containment (host persistence — `~/.bashrc`/`~/.ssh`), which for the **codex**
-    runtime is otherwise outside the accepted T11 residual (T11 keeps write-containment for codex;
-    only the sandbox-disabled `claude` runtime accepts host persistence). Until verified, treat the
-    codex-runtime acceptance here as conservatively covering host persistence too — the container/VM
-    retirement closes it regardless. We cannot simply strip the clone's tracked
-    `.codex/config.toml` (a tracked-file deletion would pollute the worker's PR — the per-item
-    overlay + `.git/info/exclude` design exists precisely to never touch the clone's tracked tree);
-    a non-worktree-polluting neutralization (e.g. a per-workspace `CODEX_HOME`) is the tracked
-    follow-up (tech-debt-tracker).
+    clone-shipped `.codex/hooks.json`). This is **load-bearing, not defence-in-depth**: precisely
+    because auto-trust cannot be turned off, a clone `.codex/hooks.json` WOULD run at session start
+    otherwise. Does not rely on Codex's hook trust-hash behavior. Re-enable selectively only if the
+    Director ever authors its own Codex hooks.
+  - **mcp_servers — NOT in-process closable; bounded, INFORMED-ACCEPTED residual.** No in-process
+    lever closes this (all live-tested, codex-cli 0.142): auto-trust ignores `-c …trust_level=
+    "untrusted"`; `-c mcp_servers={}` table-MERGES (does not clear a project entry); there is no
+    mcp-disable feature flag; and `CODEX_HOME` does not help (the project scan is keyed off the
+    worker cwd, which the worker must occupy). So a hostile clone `.codex/config.toml` declaring an
+    `mcp_servers.<x>.command` is config-only HOST CODE EXECUTION at session start — the SAME class as
+    the T11 worker exec/exfil residual (under T11 the worker already runs target-repo code with
+    network on + filesystem-wide reads). Accepted ONLY where the worker runs against a semi-trusted
+    repo with throwaway credentials, and retired the SAME way as T11 — by moving the worker into an
+    isolated environment (container/VM), which neutralizes it regardless of write-containment. (We do
+    NOT strip the clone's tracked `.codex/config.toml`: a tracked-file deletion would pollute the
+    worker's PR — the overlay + `.git/info/exclude` design exists precisely to never touch the clone's
+    tracked tree. A `git update-index --skip-worktree` neutralizer was considered and rejected as
+    fragile/partial for a residual the container track already retires.)
   - **Env (unchanged from T11).** The worker runs under the deny-by-default `worker_env`, so neither
     a project-config MCP child nor anything else inherits the Director's host secrets via env (it can
     still read on-disk creds — the acknowledged T11 fs-read residual, not a new T16 claim).
-  Scoping: trust applies ONLY when the Director vendored the methodology (`install_skills`) and is the
-  **single contained workspace path** (`realpath`, never a parent/`~`/repo root — T14 containment);
-  it is a no-op for the mock and tolerated (ignored) by the Claude adapter.
+  Scoping: the `CODEX_HOME` redirect applies only when the Director vendored the methodology
+  (`install_skills`) and there is a codex install to serve; it is a no-op for the mock and ignored by
+  the Claude adapter (which reads `.claude/agents/` from the workspace, not `CODEX_HOME`).
