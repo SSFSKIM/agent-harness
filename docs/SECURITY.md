@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-18
+last_verified: 2026-06-27
 owner: review-security
 type: methodology
 tags: [security, threat-model, review-security]
@@ -19,7 +19,8 @@ Grounding document for the review-security persona. Threats are numbered.
 > Director's live exec surface), **T11** (autonomous worker posture), **T12**
 > (operator-console write surface), **T13** (notifier outbound egress), **T14**
 > (Director workspace write/delete surface), **T15** (workspace lifecycle hooks —
-> host-trusted Director-side shell). The full
+> host-trusted Director-side shell), **T16** (trusted worker workspace loads the
+> cloned repo's project `.codex/` config). The full
 > model is no longer an active,
 > growing concern, and `review-security` is **no longer a mandatory
 > completion-gate persona** — it is dispatched only when a diff touches the live
@@ -328,3 +329,29 @@ Grounding document for the review-security persona. Threats are numbered.
   to its own stderr (the same "no secrets in output" discipline as T3/T9; the host owns the
   hook content). A future hardening (deferred, container/vault track): sandbox the hooks
   themselves and/or redact captured hook output.
+
+- **T16 — Trusted worker workspace loads the cloned repo's project `.codex/` config.**
+  To make the real Codex CLI load the Director-vendored `.codex/agents/*.toml` review
+  personas, `director/run.py` `_with_codex_trust` marks the per-ticket workspace trusted
+  (`-c projects."<ws>".trust_level="trusted"`) — Codex skips project-scoped `.codex/` layers
+  for an untrusted project. Trust is **project-wide**, so Codex ALSO reads the cloned TARGET
+  repo's own `<ws>/.codex/config.toml` (and any project `.codex/` hooks/rules it ships) — a
+  new untrusted-input surface, since the clone is attacker-influenceable content (T1-class,
+  via a malicious PR/branch in the target repo). Bounded by:
+  (1) **Precedence** — CLI `-c`/`--config` and the `thread/start` `approvalPolicy`+`sandbox`
+  params OUTRANK project config (Codex config precedence: CLI #1 > project `.codex/config.toml`
+  #2). The autonomy `-c` flags (`approvals_reviewer`, network) + thread params pin the worker's
+  approval/sandbox/network ABOVE anything the clone's config could set, so a hostile
+  `.codex/config.toml` cannot loosen the posture (e.g. cannot force `approval_policy="never"` +
+  `sandbox="danger-full-access"`). (2) **Env** — the worker still runs under the deny-by-default
+  `worker_env` (T11), so project config cannot exfil the Director's host secrets via env.
+  (3) **Hooks** — Codex command-hooks are gated by a separate per-hook trust HASH; the
+  non-interactive Director grants none and passes no `--dangerously-bypass-hook-trust`, so a
+  clone-shipped `.codex/hooks.json` does not auto-execute (and the Director does not author any
+  Codex hooks — that surface is Phase 2, see the codex-worker-config ExecPlan). Rules: the trust
+  override is scoped to the **single contained workspace path** (never a parent/`~`), and is a
+  no-op for the mock and the Claude adapter. **Informed-accepted residual:** a trusted clone
+  `.codex/config.toml` can still declare benign-but-unexpected config the worker loads (e.g.
+  `mcp_servers`, model); like the T11 network-exfil residual this is accepted only where the
+  worker runs against a semi-trusted repo with throwaway credentials, and is retired the same
+  way — by moving the worker into an isolated environment (container/VM, the T11 track).
