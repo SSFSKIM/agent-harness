@@ -259,16 +259,37 @@ PAGE = """<!doctype html>
   .badge { background:#3a1d1d; border:1px solid #6b2b2b; color:#ffb4b4; border-radius:.4rem; padding:.05rem .45rem; }
   .item { padding:.12rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
   .ok { color:#6ee7a8; } .bad { color:#ff9b9b; }
-  .pitem { padding:.3rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
+  .pitem { padding:.4rem .5rem; margin:.3rem 0; border:1px solid #2a3343; border-radius:.45rem; background:#0d1320; white-space:pre-wrap; }
   .ctl { margin-top:.25rem; display:flex; gap:.3rem; align-items:center; flex-wrap:wrap; }
   .ctl textarea { background:#0b0e13; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; font:inherit; min-width:15rem; height:1.7rem; padding:.15rem .35rem; }
   button.act { background:#1b2230; color:#d6dde6; border:1px solid #2a3343; border-radius:.3rem; padding:.12rem .55rem; cursor:pointer; font:inherit; }
   button.act:hover { background:#26304199; }
   .tk { cursor:pointer; } .tk:hover { background:#161c26; }
-  .drill { border:1px solid #2a3343; border-radius:.4rem; margin:.4rem 0; padding:.3rem .5rem; background:#11161f; }
-  .drillhead { display:flex; gap:.4rem; align-items:center; margin-bottom:.2rem; }
-  .evt { padding:.1rem .1rem; border-bottom:1px solid #161c26; white-space:pre-wrap; }
-  .evt.tool { color:#9ecbff; } .evt.msg { color:#d6dde6; } .evt.tok { color:#7d8896; } .evt.turn { color:#6ee7a8; }
+  /* per-ticket session overlay (re-skin): header + telemetry strip + typed event stream */
+  .drill { border:1px solid #232c3a; border-radius:.55rem; margin:.4rem 0; background:#0b0f17;
+           box-shadow:0 8px 30px #00000066; overflow:hidden; }
+  .drillhead { display:flex; gap:.45rem; align-items:center; padding:.4rem .55rem; border-bottom:1px solid #18202c; background:#0d1320; }
+  .drill-id { font-weight:700; color:#e6edf3; }
+  .drill-badge { font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:#7d8896; }
+  .drill-badge.in_progress { color:#6ee7b7; } .drill-badge.done { color:#86efac; }
+  .drill-badge.ready { color:#93c5fd; } .drill-badge.blocked { color:#fcd34d; }
+  .drill-badge.failed { color:#fca5a5; } .drill-badge.in_cycle { color:#d8b4fe; }
+  .drill-live { width:7px; height:7px; border-radius:50%; background:#2a3343; }
+  .drill-live.on { background:#00d68f; box-shadow:0 0 6px #00d68f; animation:livepulse 1.6s ease-in-out infinite; }
+  .spacer { flex:1; }
+  .drilltel { display:flex; gap:.4rem; flex-wrap:wrap; padding:.3rem .55rem; border-bottom:1px solid #161c26; }
+  .telchip { background:#11161f; border:1px solid #232c3a; border-radius:.3rem; padding:.04rem .4rem; color:#9aa6b2; font-size:11px; }
+  .drillevents { max-height:46vh; overflow:auto; padding:.2rem .25rem; }
+  .evt { display:flex; gap:.4rem; align-items:baseline; padding:.12rem .3rem; }
+  .evt-glyph { flex:none; width:1.1rem; text-align:center; }
+  .evt-text { flex:1; min-width:0; color:#c4c4d8; white-space:pre-wrap; word-break:break-word; }
+  .evt-ts { flex:none; color:#475569; font-size:10px; }
+  .evt-rule { display:flex; align-items:center; gap:.5rem; margin:.25rem .3rem; color:#3d4757; font-size:10px; }
+  .evt-rule::before, .evt-rule::after { content:""; flex:1; height:1px; background:#1b2230; }
+  .evt-rule-label { text-transform:uppercase; letter-spacing:.1em; }
+  .drilllabels { display:flex; gap:.3rem; flex-wrap:wrap; padding:.25rem .55rem; }
+  .drilllabels:empty { display:none; }
+  .lbl { background:#161c26; border:1px solid #232c3a; border-radius:.3rem; padding:.02rem .35rem; color:#8b97a6; font-size:10px; }
   /* ---- header chrome (re-skin): brand · LIVE · done/total · counts · legend · controls ---- */
   #bar, .node, .wavelabel { font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
   #bar { display:flex; gap:.7rem; align-items:center; flex-wrap:wrap; min-height:44px;
@@ -529,39 +550,81 @@ function fallbackPoll() {                  // the ~1s degradation path — idemp
 // the ~0.5s run-view re-renders). Every value is written via textContent (el()), so a
 // tool summary / agent message can never be parsed as markup.
 const drills = {};   // ticket_id -> { es, panel }
-function fmtTel(t) {
-  if (!t) return "";
-  const tools = Object.keys(t.tools||{}).map(k => k + "×" + t.tools[k]).join(" ");
-  return "turns " + (t.turns||0) + " · tool calls " + (t.tool_calls||0)
-    + (tools ? " (" + tools + ")" : "") + " · " + fmtTokens(t.tokens);
+function tsShort(ts) { return ts ? String(ts).slice(11, 19) : ""; }   // HH:MM:SS from an ISO ts
+function currentPhase(events) {                  // the latest agent_message phase seen
+  let p = ""; for (const e of events) if (e.kind === "agent_message" && e.phase) p = e.phase; return p;
 }
-function evtLine(e) {                       // [text, cssClass] for one event, kind-tagged
+// Typed event styling (the spec's event-type tokens) mapped onto our real `ticket_events`
+// kinds; turn_started/turn_ended render as faint rule lines, the rest as a coloured glyph +
+// text + ts row. Every value is written via textContent (el()) — never innerHTML.
+const EVTYPE = {
+  agent_message: { g: "◆", c: "#c4c4d8" }, text: { g: "◆", c: "#c4c4d8" },
+  tool_call: { g: "▶", c: "#93c5fd" }, tool_use: { g: "▶", c: "#93c5fd" },
+  tool_result: { g: "←", c: "#86efac" }, thinking: { g: "···", c: "#475569" },
+  token_usage: { g: "Σ", c: "#475569" }, error: { g: "✕", c: "#fca5a5" },
+  truncated: { g: "…", c: "#fca5a5" },
+};
+function evtText(e) {                             // human text for one event (kind-aware)
   const k = e.kind;
-  if (k === "agent_message") return ["💬 " + (e.phase||"") + ": " + (e.text||""), "evt msg"];
-  if (k === "tool_call") return ["🔧 " + (e.tool||"") + (e.summary ? " " + e.summary : ""), "evt tool"];
-  if (k === "token_usage") return ["📊 " + fmtTokens(e.tokens), "evt tok"];
-  if (k === "turn_started") return ["▶ turn started", "evt turn"];
-  if (k === "turn_ended") return ["⏹ turn " + (e.status||""), "evt turn"];
-  if (k === "truncated") return ["… " + (e.note||"truncated"), "evt tok"];
-  return [k + (e.item_type ? " " + e.item_type : ""), "evt"];
+  if (k === "agent_message" || k === "text") return (e.phase ? e.phase + ": " : "") + (e.text || "");
+  if (k === "tool_call" || k === "tool_use") return (e.tool || "") + (e.summary ? " " + e.summary : "");
+  if (k === "tool_result") return e.summary || e.text || "result";
+  if (k === "token_usage") return fmtTokens(e.tokens);
+  if (k === "truncated") return e.note || "truncated";
+  return e.item_type ? (e.item_type + (e.summary ? " " + e.summary : "")) : k;
+}
+function eventRow(e) {                            // one typed event → a DOM row
+  const k = e.kind;
+  if (k === "turn_started" || k === "turn_ended") {     // a faint rule line between turns
+    const r = el("div", null, "evt-rule");
+    r.appendChild(el("span", k === "turn_started" ? "turn started" : ("turn " + (e.status || "ended")), "evt-rule-label"));
+    return r;
+  }
+  const t = EVTYPE[k] || { g: "•", c: "#7d8896" };
+  const row = el("div", null, "evt");
+  const g = el("span", t.g, "evt-glyph"); g.style.color = t.c; row.appendChild(g);
+  row.appendChild(el("span", evtText(e), "evt-text"));
+  row.appendChild(el("span", tsShort(e.ts), "evt-ts"));
+  return row;
 }
 function openDrill(tid) {
+  // Per-ticket session overlay (R5): a header (identifier + state badge + live dot), a
+  // telemetry strip (phase / turns / tokens), and the TYPED event stream — over the UNCHANGED
+  // per-ticket SSE (live for in-flight, a one-shot fetch for the no-SSE fallback / terminal).
   if (!tid) return;
   if (drills[tid]) { drills[tid].panel.scrollIntoView({ block: "nearest" }); return; }
   const panel = el("div", null, "drill");
   const head = el("div", null, "drillhead");
-  head.appendChild(el("span", "▾ " + tid, "tag"));
+  const idspan = el("span", tid, "drill-id");
+  const badge = el("span", "", "drill-badge");
+  const live = el("span", null, "drill-live");
+  head.appendChild(idspan); head.appendChild(badge); head.appendChild(live);
+  head.appendChild(el("span", null, "spacer"));
   head.appendChild(btn("close", () => closeDrill(tid)));
-  const tel = el("div", "", "muted");
-  const list = el("div", null, "");
-  panel.appendChild(head); panel.appendChild(tel); panel.appendChild(list);
+  const tel = el("div", null, "drilltel");
+  const list = el("div", null, "drillevents");
+  const labelbar = el("div", null, "drilllabels");
+  panel.appendChild(head); panel.appendChild(tel); panel.appendChild(list); panel.appendChild(labelbar);
   $("drill").appendChild(panel);
   const render = (view) => {
-    tel.textContent = fmtTel(view.telemetry);
-    list.innerHTML = "";
-    for (const e of (view.events||[])) {
-      const [text, cls] = evtLine(e);
-      list.appendChild(el("div", "[" + (e.seq != null ? e.seq : "") + "] " + text, cls));
+    const node = G.byId[tid];
+    const bucket = (node && node.dom) ? ([].slice.call(node.dom.classList).find(c => BADGE[c]) || "") : "";
+    idspan.textContent = node ? node.ident : tid;
+    badge.textContent = bucket ? (BADGE[bucket] || bucket) : "";
+    badge.className = "drill-badge " + bucket;
+    live.className = "drill-live" + (bucket === "in_progress" ? " on" : "");
+    const tm = view.telemetry || {}, ev = view.events || [];
+    tel.textContent = "";
+    const ph = currentPhase(ev); if (ph) tel.appendChild(el("span", "phase " + ph, "telchip"));
+    tel.appendChild(el("span", "turns " + (tm.turns || 0), "telchip"));
+    tel.appendChild(el("span", "tools " + (tm.tool_calls || 0), "telchip"));
+    tel.appendChild(el("span", fmtTokens(tm.tokens), "telchip"));
+    list.textContent = "";
+    for (const e of ev) list.appendChild(eventRow(e));
+    labelbar.textContent = "";
+    for (const lb of (node && node.labels || [])) {
+      const txt = (typeof lb === "string") ? lb : (lb && lb.name) || "";
+      if (txt) labelbar.appendChild(el("span", txt, "lbl"));
     }
   };
   let es = null;
@@ -647,7 +710,7 @@ function layout(view) {
     const yOff = (maxRows - rows) * ROW / 2;       // center each column against the tallest
     return { id: n.id, layer: layer, ident: n.identifier || n.id, title: n.title || "",
              bstate: n.state || "", inCycle: !!n.in_cycle, cls: lifecycleFromState(n.state),
-             label: n.identifier || n.id, dom: null,
+             label: n.identifier || n.id, labels: n.labels || [], dom: null,
              x: PAD + layer * STRIDE, y: PAD + yOff + ri * ROW };
   });
 }

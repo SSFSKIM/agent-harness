@@ -775,7 +775,9 @@ class BoardRouteTest(unittest.TestCase):
                        "project-dependency-graph", "progfill", "wavelabel", "node-badge",
                        "updateHeader", "in_progress",
                        # M3 live paint: state-aware edges + ready/backlog + transient + collapse.
-                       "edgeClass", "marker-end", "paintTransient", "applyCollapsed", '"ready"'):
+                       "edgeClass", "marker-end", "paintTransient", "applyCollapsed", '"ready"',
+                       # M4 session overlay: typed events + telemetry strip + state badge.
+                       "eventRow", "EVTYPE", "drilltel", "evt-glyph", "drill-badge"):
             self.assertIn(marker, html)
 
     def test_page_shows_labeled_empty_state_when_no_board(self):

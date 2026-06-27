@@ -204,6 +204,23 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   active (clears on toggle); collapse hides 4 descendants, survives a repaint, restores on
   re-expand.
 
+- [x] (2026-06-27) **M4 — session overlay redesign (write console preserved).** Restyled the
+  per-ticket overlay (`openDrill`) to the reference SessionOverlay: a header (identifier resolved
+  via `G.byId[tid].ident` + a state badge + a live dot, both read from the painted graph node's
+  classList), a telemetry strip (`phase` derived from the events + `turns`/`tools`/tokens from the
+  per-ticket telemetry), and **typed event rendering** — `eventRow`/`EVTYPE`/`evtText` map the
+  spec's event-type tokens (`◆`/`▶`/`←`/`···`/`Σ`/`✕`, colours) onto our real `ticket_events`
+  kinds, with `turn_started`/`turn_ended` as faint rule lines and a `ts` (HH:MM:SS) per row; a
+  labels footer. Still over the UNCHANGED per-ticket SSE (live for in-flight / one-shot fetch
+  fallback). The operator **answer console** (`renderPending`/`answer`/`btn(...)`/CSRF+loopback
+  fence) is **untouched** — only `.pitem` was restyled to the card design — so its contract +
+  every preserved-surface test stay green. Removed the dead `fmtTel`/`evtLine`; `labels` added to
+  the layout node model. Gate **GREEN**; dashboard suite 58/58 (incl. the answer-POST + CSRF
+  tests, unchanged). Behavioral (:8788 sample, tap LIN-3): header `LIN-3`/`running`
+  (`drill-badge in_progress`) + live dot on; telemetry `phase commentary · turns 2 · tools 2`;
+  8 events render as 3 turn rule-lines + 5 typed rows (`◆` #c4c4d8 agent_message, `▶` #93c5fd
+  tool_call) each with a `21:04:07` ts.
+
 ## Surprises & discoveries
 - (M1) The hand-roll is *simpler* than the reference, as predicted: because `/api/v1/board`
   already ships each node's `layer` + the grouped `layers`, the client does zero topology
@@ -220,6 +237,12 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   and it reads better: a node stuck in a dependency *cycle* is shown as cycling, not merely
   blocked. Live state still wins over in_cycle, so an actively-running cycle member shows
   in_progress (the cycle is implied by its amber in-edges).
+- 2026-06-27 (M4): preserved the operator answer console by **not touching its JS** — `renderPending`/
+  `answer`/the `btn(...)` calls keep their exact contract, only `.pitem` CSS was restyled. The
+  plan's "re-home into the new layout" is satisfied by the restyle-in-place reading (the console
+  stays in the rail; the spec's Files note says "only their styling may change, not their
+  contracts"). This kept all the answer-POST + CSRF-fence tests green with zero edits to the
+  security-sensitive path — the lowest-risk way to satisfy R7.
 
 ## Decision log
 - 2026-06-27: Chose incremental in-place rewrite (Approach A) seeded by C — the hand-rolled
