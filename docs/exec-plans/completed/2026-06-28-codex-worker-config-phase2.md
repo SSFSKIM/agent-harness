@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-28
 owner: harness
 type: exec-plan
@@ -78,7 +78,86 @@ Definition of done (observable):
 - 2026-06-28: Keep `DISABLE_HOOKS` as defence-in-depth even though dropping clone trust already prevents a clone hooks.json from loading.
 
 ## Feedback (from completion gate)
-_(filled at the M5 gate)_
+Five full-level reviews (diff range `209964d..HEAD`, clean — only this plan's commits).
+Round 1 verdicts: spec-compliance / code-quality / arch / security **SATISFIED**; reliability
+**NOT-SATISFIED** (1 P1). All P1 + the convergent P2 bugs fixed inline (`3879a88`); reliability
+re-reviewed round 2 → **SATISFIED**. Final: all five SATISFIED.
+
+**P1 fixed inline (reliability, convergent with arch):**
+- `_ensure_codex_home` raced under the worker pool — non-atomic check→clear→create on the one
+  shared CODEX_HOME (default concurrency 3) → `FileExistsError` / a thread could unlink a live
+  worker's auth symlink. Fixed with `_CODEX_HOME_LOCK` (in-process single-flight) + atomic
+  temp+`os.replace` writes for the auth symlink, config copy, and agent tomls (cross-process
+  safety). Stress-verified: 8 threads × 5 iterations, 0 errors.
+
+**P2 fixed inline (convergent across code-quality / security / reliability):**
+- `_refuse_symlink` ran AFTER `.resolve()` (which dereferences the link) → the home-dir symlink
+  refusal was a no-op; moved it before `.resolve()`. (+ test)
+- `config.toml` symlink-refusal was dead under the common path (a symlink whose target exists
+  passed `cfg.exists()`) → could re-open F3; now `if cfg.is_symlink(): cfg.unlink()` runs
+  unconditionally before the copy gate. (+ test)
+- `_sweep_stale_codex_layout._tracked_under` was fail-OPEN on a non-zero git exit (empty stdout
+  → `rmtree`) → data-loss path for a clone shipping its own `.codex/`; now fail-SAFE on non-zero
+  returncode + `TimeoutExpired`, and both git probes carry `timeout=30`. (+ mixed-tracked test)
+- Spec-compliance: the `_prepare`→worker-env `CODEX_HOME` injection had no unit test (only the
+  helper + the direct E2E exercised it); added `test_prepare_injects_codex_home_into_worker_env`
+  + the None case.
+- Code-quality / arch taste: `_write_codex_agents` now asserts sanitized-name disjointness
+  (mirrors `_assert_skill_sources_disjoint`); the execplan dispatch states the hyphen→underscore
+  transform as a rule (one example) instead of a 5-way enumeration (map-not-encyclopedia).
+
+**P2 / proposed rules tracked → tech-debt-tracker (not blocking):**
+- doc-gardener: 3 grounding-rule proposals carried over from Phase 1 (no hardcoded
+  workspace-relative asset path in skill bodies; a vendoring-dest move needs a retired-path
+  test/lint; capability/trust override only when its enabling artifact is present) + new
+  candidates from this gate (a "symlink-refusing" docstring should have a planted-symlink test;
+  a destructive op gated on a subprocess probe must fail-safe on any non-zero/timeout, not only
+  on an exception; Director-managed copies of user config need a documented refresh contract).
+- `_atomic_write_bytes` can leak a hidden `.<name>.tmp-*` on a mid-write crash (never loaded —
+  not codex's `*.toml` glob — and gitignored; cosmetic).
+- CODEX_HOME `config.toml` is copy-if-missing (no auto-refresh on a user provider change; delete
+  the codex-home to refresh — documented in the helper docstring).
 
 ## Outcomes & retrospective
-_(filled at completion)_
+**Shipped (Phase 2).** The Codex worker now ACTUALLY spawns the vendored review/gardener personas
+by name — the capability Phase 1 claimed but, the live E2E revealed, never had. Two root faults +
+one residual were found and resolved:
+- **F1 (root-cause bug):** Codex rejects hyphenated agent names; all 8 personas were unspawnable.
+  Fixed by `_codex_agent_name` (hyphen→underscore on both the `name` field and the filename), with
+  per-runtime dispatch wording updated in execplan/garden/scout SKILL.md.
+- **F3 (config-pollution) + the trust mechanism:** live testing proved Codex **auto-trusts the
+  worker cwd** (on `codex exec` AND `codex app-server`), so Phase-1's `_with_codex_trust` was
+  redundant and had been persisting `[projects."<ws>"]` entries into the user's real
+  `~/.codex/config.toml`. Removed it; the worker now runs under a Director-managed `CODEX_HOME`
+  (auth symlinked, config COPIED, personas user-scope) so auto-trust persistence is contained and
+  no clone trust is needed. Stale pre-Phase-2 `.codex/{skills,agents}` leftovers are swept
+  (untracked-only).
+- **F4 (mcp_servers exec):** NOT in-process closable (auto-trust is unkillable; `-c untrusted`
+  overwritten, `-c mcp_servers={}` table-merges, no mcp-disable flag) — recorded honestly in
+  SECURITY.md T16 as a T11-class residual retired by OS isolation. Hooks stay closed via the
+  now-load-bearing `features.hooks=false`.
+
+Commits: `0ce1af0`(plan) `7849fdb`(M1) `3a76375`(M2+M3) `36606bb`(M4) `85b2c0b`+`65939b3`(M5)
+`3879a88`(gate P1+P2), base `209964d`.
+
+**Behavioral check (live, codex-cli 0.142).** PROVEN end-to-end through the SHIPPED path: the
+investigation matrix (router-error / mcp-marker / persisted-trust signals) on `codex exec` and a
+direct `AppServerClient` drive established F1–F4; then `run._ensure_codex_home()` materialized all
+8 personas + symlinked auth, and a real `codex` session under that CODEX_HOME spawned
+`review_spec_compliance` → child returned `GATE_PERSONA_OK`. Plus 52 `test_director_run` unit tests
+and an 8-thread concurrency stress (0 errors). The Goal's lead DoD — a live Codex worker spawning a
+vendored persona by name — is MET.
+
+**Review outcome.** 5 personas (full); 1 P1 (reliability concurrency) + convergent P2 bugs, all
+fixed inline and re-verified SATISFIED. The reviews materially improved the diff: the P1 race and
+the `_tracked_under` fail-open were both real defects a green test suite hadn't caught (the same
+class as Phase 1's "tomllib round-trips ≠ runtime accepts").
+
+**Retrospective.** The decisive lesson repeats Phase 1's: **a passing unit suite proves
+well-formedness, not runtime acceptance.** Phase 1 shipped a non-functional mechanism because
+"tomllib parses the toml" was mistaken for "codex spawns the agent"; the Phase-2 live E2E
+(item 1, done FIRST as the user asked) caught it. Carry-forward: for any worker-runtime
+integration, the completion gate's behavioral check must drive the REAL runtime (here, a live
+`codex` spawn), not just assert artifact shape. The CODEX_HOME redesign also shows the value of
+verifying the actual launch path (`codex app-server`, not `codex exec`) — the auto-trust behavior
+that reshaped item 3 was only confirmable by driving the worker's real runtime.
