@@ -359,8 +359,9 @@ Grounding document for the review-security persona. Threats are numbered.
     (`director/worker/autonomy.py` `DISABLE_HOOKS`), so Codex loads NO hooks (user, system, OR a
     clone-shipped `.codex/hooks.json`). This is **load-bearing, not defence-in-depth**: precisely
     because auto-trust cannot be turned off, a clone `.codex/hooks.json` WOULD run at session start
-    otherwise. Does not rely on Codex's hook trust-hash behavior. Re-enable selectively only if the
-    Director ever authors its own Codex hooks.
+    otherwise. Does not rely on Codex's hook trust-hash behavior. **Settled posture, not a deferral:**
+    the Director authors NO worker hooks (decided 2026-06-28 — `docs/adr/0007-no-director-authored-worker-hooks.md`),
+    so this disable is permanent; re-enabling would only ever be revisited under that ADR's reversal trigger.
   - **mcp_servers — NOT in-process closable; bounded, INFORMED-ACCEPTED residual.** No in-process
     lever closes this (all live-tested, codex-cli 0.142): auto-trust ignores `-c …trust_level=
     "untrusted"`; `-c mcp_servers={}` table-MERGES (does not clear a project entry); there is no
