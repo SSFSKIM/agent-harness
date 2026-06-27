@@ -96,9 +96,11 @@ class StatusWriter:
         self._root = _root(base)
         self._recent_max = recent_max
         self._now = now
-        # `mode`/`phase`/`last_poll_at`/`polls` are the daemon (run_forever, gap #2)
-        # live heartbeat (additive): the batch paths never call `polled()` so they
-        # keep mode=None/phase=None — back-compatible for every existing reader.
+        # `mode`/`phase`/`last_poll_at`/`polls` are the always-on loop's live heartbeat
+        # (additive). `mode` is a runtime LABEL (`daemon` for the default always-on loop,
+        # `batch` for the bounded fixture, `None` when not a polling loop) — NOT a
+        # user-chosen mode (ADR 0007). Non-polling paths never call `polled()`, so they keep
+        # mode=None/phase=None — back-compatible for every existing reader.
         self._run: dict = {"started_at": None, "pass": 0, "stopped_reason": None,
                            "mode": None, "phase": None, "last_poll_at": None, "polls": 0}
         self._in_flight: dict[str, dict] = {}

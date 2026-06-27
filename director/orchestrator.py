@@ -1244,11 +1244,18 @@ def main(argv=None, *, board=None) -> int:
                          "(skills→.claude/skills+.agents/skills, agents→.claude/agents+.codex/"
                          "agents) (default: director.worker.install_skills, else on)")
     ap.add_argument("--once", action="store_true",
-                    help="single pass (no re-poll); default is the DAG-aware continuous loop")
+                    help="bounded fixture: one dispatch pass (no re-poll), then exit "
+                         "(run_once). The default operating mode is the always-on daemon "
+                         "(ADR 0007)")
+    ap.add_argument("--batch", action="store_true",
+                    help="bounded fixture: drain ready work across DAG-aware re-poll passes, "
+                         "then exit (run_until_drained). The default operating mode is the "
+                         "always-on daemon (ADR 0007); --batch/--once are dev/test/CI "
+                         "fixtures. --mock implies --batch")
     ap.add_argument("--max-passes", type=int, default=None,
-                    help="continuous loop safety bound on re-poll passes")
+                    help="--batch (run_until_drained) safety bound on re-poll passes")
     ap.add_argument("--max-dispatched", type=int, default=None,
-                    help="continuous loop safety bound on total tickets dispatched")
+                    help="--batch (run_until_drained) safety bound on total tickets dispatched")
     ap.add_argument("--done-types", default=None,
                     help="comma-separated blocker state-types that count as done (unblock)")
     ap.add_argument("--no-status", action="store_true",
@@ -1256,12 +1263,11 @@ def main(argv=None, *, board=None) -> int:
     ap.add_argument("--status-dir", default=None,
                     help="orchestration-status dir override (default: .claude/harness/director-status)")
     ap.add_argument("--autonomous", action="store_true",
-                    help="no-agent: self-resolve turn-ends with the code turn-end decider — "
-                         "the --mock/CI/truly-detached niche (no judging agent). The default "
-                         "routes turn-ends to the Director: a human-attended session OR a "
-                         "lights-out daemon, same queue path (DIRECTOR.md §6). Per-action "
-                         "self-governance (on-request + auto_review) and full network are "
-                         "shared across all modes")
+                    help="fixture (NOT a mode): self-resolve turn-ends with the pure-code "
+                         "decider — no judging Director. The CI/--mock/truly-detached path; "
+                         "in production a Director (human-attended OR lights-out daemon, the "
+                         "SAME queue path) is always present and answers turn-ends (ADR 0007 "
+                         "/ DIRECTOR.md §6). Posture is identical to the default")
     ap.add_argument("--read-timeout", type=float, default=None,
                     help="per-event read timeout for a worker turn (s); raise for slow "
                          "real codex workers that think >30s mid-turn")
@@ -1272,16 +1278,17 @@ def main(argv=None, *, board=None) -> int:
                     help="active-run reconciliation cadence (s): how often in-flight "
                          "ticket states are re-read to stop externally-moved tickets")
     ap.add_argument("--daemon", action="store_true",
-                    help="continuous always-on loop (run_forever): keep polling forever, "
-                         "never exit on drained; stop with SIGTERM / double-SIGINT")
+                    help="DEPRECATED alias — the always-on loop (run_forever) is now the "
+                         "DEFAULT for real runs (ADR 0007), so this flag is redundant. Kept "
+                         "for back-compat; stop the loop with SIGTERM / double-SIGINT")
     ap.add_argument("--poll-interval", type=float, default=None,
-                    help="daemon (--daemon) board-poll cadence (s): how often new ready "
-                         "work is picked up and the idle loop ticks")
+                    help="always-on loop (default) board-poll cadence (s): how often new "
+                         "ready work is picked up and the idle loop ticks")
     ap.add_argument("--backoff-base", type=float, default=None,
-                    help="daemon (--daemon) exponential-backoff base (s) for retry/claim "
-                         "re-admission: wait min(base*2^(n-1), cap) (Symphony §8.4)")
+                    help="always-on loop (default) exponential-backoff base (s) for "
+                         "retry/claim re-admission: wait min(base*2^(n-1), cap) (Symphony §8.4)")
     ap.add_argument("--backoff-cap", type=float, default=None,
-                    help="daemon (--daemon) exponential-backoff ceiling (s), shared by "
+                    help="always-on loop (default) exponential-backoff ceiling (s), shared by "
                          "retry / idle-poll / claim re-admission")
     args = ap.parse_args(argv)
 
@@ -1295,11 +1302,12 @@ def main(argv=None, *, board=None) -> int:
     board = board if board is not None else _build_board(args)
     states = resolve_states(board, s["team"], s["states"])
 
-    # Decider selection (spec R5). Watched (default): each turn-end routes to the
-    # Director queue and the live main session answers free-form (.claude/DIRECTOR.md).
-    # Un-watched (--autonomous) and offline (--mock) use the code decider:
-    # --mock has no live Director session to answer turnReviews, so the watched queue
-    # decider would hang — the code decider self-resolves + trusts the worker proposal.
+    # Decider selection (ADR 0007). The DEFAULT routes each turn-end to the Director
+    # queue, where the Director answers free-form (.claude/DIRECTOR.md) — a human-attended
+    # session OR a lights-out daemon, the SAME make_queue_decider path ("attended" vs
+    # "lights-out" is a property, not a mode). The pure-code decider is a FIXTURE:
+    # --autonomous (no judging Director) and offline --mock (no live Director to answer
+    # turnReviews, which would hang the queue decider) self-resolve + trust the worker.
     decide = (decider.autonomous_decide if (args.autonomous or args.mock)
               else decider.make_queue_decider(base=s["queue_dir"],
                                               timeout_s=s["turn_review_timeout_s"]))
@@ -1372,26 +1380,42 @@ def main(argv=None, *, board=None) -> int:
     kwargs["board_snapshotter"] = board_snapshotter
 
     command = _command(args, s["codex_command"], s["posture"])
+
+    # Run-loop resolution (ADR 0007). The one operating mode is the always-on daemon, so a
+    # real run with no loop flag runs forever. --mock is an offline fixture with no live
+    # board to poll, so it defaults to the bounded drain-and-exit loop. The bounded fixtures
+    # (--once single-pass, --batch multi-pass) and the explicit, now-redundant --daemon alias
+    # override these defaults; --daemon still wins over --once/--batch (back-compat).
     if args.daemon:
-        # The always-on loop (gap #2): blocks until SIGTERM / double-SIGINT, then returns
-        # a session summary. Takes precedence over --once (both → daemon). Signal handlers
-        # install by default (main thread); --once/batch bounds (max_passes/dispatched)
-        # do not apply — the daemon is unbounded by design.
+        loop = "daemon"
+    elif args.once:
+        loop = "once"
+    elif args.batch:
+        loop = "batch"
+    else:
+        loop = "batch" if args.mock else "daemon"
+
+    if loop == "daemon":
+        # The always-on operating mode (ADR 0007; gap #2): blocks until SIGTERM /
+        # double-SIGINT, then returns a session summary. Signal handlers install by default
+        # (main thread); the bounded fixtures' max_passes/max_dispatched bounds do not
+        # apply — the daemon is unbounded by design.
         result = run_forever(board, command, poll_interval_s=s["poll_interval_s"],
                              backoff_base_s=s["backoff_base_s"],
                              backoff_cap_s=s["backoff_cap_s"], **kwargs)
         print(json.dumps(result, ensure_ascii=False))
         return 0
-    if args.once:
+    if loop == "once":
         summaries = run_once(board, command, **kwargs)
         for summary in summaries:
             print(json.dumps(summary, ensure_ascii=False))
         return 0 if all(x["status"] != "claim_failed" for x in summaries) else 1
 
+    # loop == "batch": multi-pass DAG-aware drain-and-exit (also the default for --mock).
     result = run_until_drained(board, command, max_passes=s["max_passes"],
                                max_dispatched=s["max_dispatched"], **kwargs)
-    for s in result["summaries"]:
-        print(json.dumps(s, ensure_ascii=False))
+    for summary in result["summaries"]:
+        print(json.dumps(summary, ensure_ascii=False))
     print(json.dumps({"stopped_reason": result["stopped_reason"],
                       "passes": result["passes"], "stuck": result["stuck"]},
                      ensure_ascii=False))

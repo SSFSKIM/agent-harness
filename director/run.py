@@ -814,9 +814,9 @@ def main(argv=None) -> int:
                          ".claude/skills + .agents/skills, Claude agents into .claude/agents; "
                          "Codex personas go user-scope into a Director-managed CODEX_HOME")
     ap.add_argument("--autonomous", action="store_true",
-                    help="un-watched: use the code turn-end decider (no live Director "
-                         "answers turn ends). Per-action self-governance (on-request + "
-                         "auto_review) and full network are shared with the watched default")
+                    help="no-op kept for symmetry: the single-ticket CLI has no orchestrator "
+                         "queue / Director to answer turn-ends, so it ALWAYS uses the pure-code "
+                         "decider (a fixture, never a production mode — ADR 0007)")
     ap.add_argument("--max-turns", type=int, default=None,
                     help="multi-turn drive bound (R6); over it → stuck")
     args = ap.parse_args(argv)
@@ -849,8 +849,8 @@ def main(argv=None) -> int:
     # Workspace lifecycle hooks (R4) from the resolved config — disabled under --mock
     # (the offline fake app-server has no real repo to populate).
     hooks = None if args.mock else cfg.workspace.hooks
-    # The single-ticket CLI is un-watched (no orchestrator queue / live Director to
-    # answer turn reviews), so it drives with the autonomous code decider.
+    # The single-ticket CLI is inherently a fixture — no orchestrator queue / live Director
+    # to answer turn reviews — so it always drives with the pure-code decider (ADR 0007).
     disp = drive(ticket, command=_command(args, codex_command, posture),
                  decide=autonomous_decide, queue_base=queue_dir, tools=tools,
                  tool_executor=tool_executor, install_skills=args.install_skills,

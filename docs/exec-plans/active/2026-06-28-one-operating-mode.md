@@ -183,7 +183,7 @@ A novice needs these to execute from the plan alone:
 ## Progress log
 - [x] (2026-06-28) Plan created; base_commit recorded; creation-time self-review done.
 - [x] (2026-06-28) M1 — ADR 0007 written, indexed (D8), refines-pointers added to 0002/0003; check.py GREEN.
-- [ ] M2 — CLI alignment + tests
+- [x] (2026-06-28) M2 — orchestrator.py daemon-default + `--mock`⇒bounded + `--batch` + `--autonomous`/`--daemon` reframe; run.py/config.py/status.py comment reframes; 6 new loop-resolution tests + 2 repointed. Behavioral: `--mock` drains & exits (exit 0); full director suite 615 OK; check.py GREEN.
 - [ ] M3 — Doc reframe
 
 ## Surprises & discoveries

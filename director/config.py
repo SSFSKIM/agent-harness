@@ -68,9 +68,9 @@ DEFAULTS: dict = {
     # ticket states to stop a worker a human moved out of `started` (lower = faster
     # operator-stop, more tracker calls).
     "reconcile_interval_s": 15.0,
-    # daemon (run_forever, gap #2) poll cadence: how often the always-on loop re-polls
-    # the board for new ready work and ticks while idle (Symphony `polling.interval_ms`).
-    # Only used by `--daemon`; the batch paths ignore it.
+    # always-on loop poll cadence: how often the daemon re-polls the board for new ready
+    # work and ticks while idle (Symphony `polling.interval_ms`). The daemon is the default
+    # operating mode (ADR 0007); the bounded `--batch`/`--once` fixtures ignore it.
     "poll_interval_s": 10.0,
     # whole-board snapshot cadence (project graph view): how often the poll loops persist
     # the ENTIRE board (every state's issues + blocker DAG) to board.json for the
@@ -78,10 +78,10 @@ DEFAULTS: dict = {
     # Independent of dispatch — read-only observability, throttled so a large board never
     # out-fetches the dispatch poll. Shares the visibility switch (`--no-status` → off).
     "board_snapshot_interval_s": None,
-    # daemon (run_forever, gap #3) exponential-backoff curve, shared by retry / idle /
-    # claim re-admission: wait min(base·2^(n-1), cap). `base` seeds retry+claim backoff
-    # (Symphony §8.4 uses 10s); idle backoff seeds from `poll_interval_s` instead. `cap`
-    # bounds all three. Only used by `--daemon`.
+    # always-on loop exponential-backoff curve, shared by retry / idle / claim re-admission:
+    # wait min(base·2^(n-1), cap). `base` seeds retry+claim backoff (Symphony §8.4 uses 10s);
+    # idle backoff seeds from `poll_interval_s` instead. `cap` bounds all three. Used by the
+    # default daemon loop (ADR 0007); the bounded `--batch`/`--once` fixtures ignore it.
     "backoff_base_s": 10.0,
     "backoff_cap_s": 300.0,
     "codex_command": "codex app-server",
