@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-28
 owner: harness
 type: exec-plan
@@ -213,5 +213,56 @@ A novice needs these to execute from the plan alone:
     ADR cross-ref convention). The cross-refs genuinely exist and resolve (check.py link-integrity
     GREEN); the right tool to demonstrate wikilink ADR cross-refs is check.py link-integrity, not
     `nav.py backlinks`. Recorded as a one-off learning (not deferred work).
+- **review-code-quality: SATISFIED.** Loop resolution is a clean resolve-then-dispatch block, no
+  dead code; incidentally fixes the latent `s` settings-dict shadow; the new tests are
+  fail-before/pass-after. P2s: (a) `--once` vs `--batch` precedence was unspecified/untested →
+  **FIXED inline** (added `test_once_wins_over_batch` + spelled the total order in the `--batch`
+  help). (b) `polled(mode="daemon")` keyword is now vestigial (no caller overrides) — pre-existing,
+  taste-only; left as-is (removing the param is out of this plan's "no schema change" scope).
+- **review-arch: SATISFIED.** Taxonomy coherent; refines-not-supersedes handled correctly; no
+  layer-law/portability issues. P2s: (a) docs said "`--mock` **implies** `--batch`" but code makes
+  it only the *default* (explicit `--daemon` wins → `--mock --daemon` runs the daemon) →
+  **FIXED inline** (softened the wording to "defaults to … an explicit loop flag still wins" + the
+  total order, in the `--batch` help / ADR 0007 / DIRECTOR.md §12; added
+  `test_mock_daemon_explicit_flag_wins_over_mock_default`). (b) DIRECTOR.md §6 called the run loop
+  "a second property" — contradicts the taxonomy (the daemon IS the mode) → **FIXED inline**
+  ("the other axis … daemon IS the mode"). Proposed rule (run-loop as a `director.loop` config key)
+  → **tracked** in tech-debt-tracker (out of scope, pre-existing).
+- **review-reliability: SATISFIED.** Default flip is correctly guarded (`--mock`⇒bounded prevents
+  CI hangs; 616 director tests pass under a 300s timeout, no hang), signal/drain unchanged, heartbeat
+  `mode` change is a no-op for readers (none consume it). P2s: (a) ADR "Live risk" overstated the
+  Ctrl-C mitigation given open tech-debt **F4** (draining daemon orphans worker children, burning
+  tokens) → **FIXED inline** (ADR risk section now cites F4; F4's tracker row annotated that the
+  daemon-default elevates its blast radius). (b) runbook §8 step-1 headline command was the bare
+  (now-unbounded) daemon while the nav row promised "bounded … then exit" → **FIXED inline** (§8
+  command now leads with `--once`, the canary-validation form). Proposed R-rule (draining daemon must
+  reap its worker process tree) → **tracked** under F4.
 
 ## Outcomes & retrospective
+
+**Shipped.** One operating mode — Director ⟷ Board — now presented consistently across the
+decision record (ADR 0007, refining 0002/0003), the code (`director/orchestrator.py`: daemon is
+the default loop, `--mock`⇒bounded, `--batch` added, `--once`/`--daemon`-alias kept,
+`--autonomous` reframed as a fixture; comment/heartbeat reframes in run.py/config.py/status.py),
+and the docs (`.claude/DIRECTOR.md` §5/§6/§12/§13 + scattered lines; `DIRECTOR_RUNBOOK` quick-ref
++ §8/§9 + see-also). Human-presence (attended/lights-out) and run-loop bounds are now *properties*;
+the pure-code/batch paths are *fixtures*; no "N modes" framing remains in the authoritative docs.
+
+**Verified.** `check.py` GREEN; full suite 851 tests OK (8 new/updated loop-resolution tests).
+Behavioral: `python3 -m director.orchestrator --team T --mock --mock-scenario report` drains and
+exits cleanly (exit 0 — the load-bearing `--mock`⇒bounded guard); `--help` shows the one-mode
+framing. M1/M3 are docs (no separate runnable surface → N/A beyond the grep acceptance).
+
+**Reviews.** All four SATISFIED (spec-compliance → code-quality → arch + reliability), 0 P1.
+Six P2s: four FIXED inline (never-emitted `mode=batch` label; `--mock` "implies" overclaim +
+precedence test; DIRECTOR.md §6 "second property" slip; ADR risk understating open F4 + runbook §8
+unbounded headline); two TRACKED (F4 teardown blast-radius elevated by the daemon-default; run-loop
+as a `director.loop` config knob). One taste note (vestigial `polled(mode=)` param) left as-is.
+
+**Retrospective.** The "modes" muddle was overwhelmingly *naming*: two of the user's three points
+(human-presence as a property; autonomous as a non-production fixture) were already true in the code
+(`make_queue_decider` is one path; `autonomous_decide` is `--mock`/CI-gated) — only mis-labeled in
+docs. The one genuine behavior change, daemon-as-default, was only safe because `--mock`⇒bounded
+keeps the offline/CI path from looping forever. Adversarial review earned its keep: it caught the
+doc-vs-code "implies" drift, an internal taxonomy slip in the authoritative guide, and an overstated
+risk mitigation — none of which broke the gate, all of which would have shipped reader-confusion.
