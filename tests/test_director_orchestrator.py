@@ -103,27 +103,30 @@ class EligibilityTest(unittest.TestCase):
                                                    {"id": "b", "state_type": "unstarted"}])])
         self.assertEqual(out, [])
 
-    def test_require_label_drops_untyped(self):
-        # F1: with require_label, an untyped ticket (no dev-stage label → ticket_type None)
-        # is dropped, so a board's stray non-harness tickets are never dispatched.
-        untyped = self._t("a", [])  # no 'labels' key
-        typed = {"id": "b", "identifier": "b", "blockers": [], "labels": ["impl"]}
-        out = orch.eligible_tickets([untyped, typed], require_label=True)
+    def test_require_label_drops_without_agent_ready(self):
+        # F1 (ADR 0007): with require_label, ONLY a ticket carrying the `agent-ready`
+        # dispatch label survives — an unlabeled ticket AND a ticket with some OTHER label
+        # (a stray board label) are both dropped, so non-harness tickets never dispatch.
+        ready = {"id": "b", "identifier": "b", "blockers": [], "labels": ["agent-ready"]}
+        unlabeled = self._t("a", [])                                   # no 'labels' key
+        other = {"id": "c", "identifier": "c", "blockers": [], "labels": ["Bug"]}
+        out = orch.eligible_tickets([unlabeled, ready, other], require_label=True)
         self.assertEqual([t["id"] for t in out], ["b"])
 
-    def test_require_label_default_off_keeps_untyped(self):
-        # Backward compat: default require_label=False dispatches an untyped ticket.
+    def test_require_label_default_off_keeps_unlabeled(self):
+        # The eligible_tickets PRIMITIVE defaults require_label=False (dispatch everything);
+        # the config layer is what defaults the gate ON (see test_director_config).
         out = orch.eligible_tickets([self._t("a", [])])
         self.assertEqual([t["id"] for t in out], ["a"])
 
-    def test_run_once_require_label_skips_untyped(self):
-        # End-to-end: run_once threads dispatch_requires_label into eligible_tickets, so an
-        # untyped ready ticket is never handed to dispatch.
+    def test_run_once_require_label_skips_without_agent_ready(self):
+        # End-to-end: run_once threads dispatch_requires_label into eligible_tickets, so a
+        # ready ticket WITHOUT the agent-ready label is never handed to dispatch.
         board = orch.MockBoard([
             {"id": "a", "identifier": "A", "title": "t", "description": "d",
-             "prompt": "pa", "state_id": "st_todo"},  # untyped
+             "prompt": "pa", "state_id": "st_todo"},  # unlabeled
             {"id": "b", "identifier": "B", "title": "t", "description": "d",
-             "prompt": "pb", "state_id": "st_todo", "labels": ["impl"]}])  # typed
+             "prompt": "pb", "state_id": "st_todo", "labels": ["agent-ready"]}])
         states = orch.resolve_states(board, "T")
         seen = []
 
@@ -134,7 +137,7 @@ class EligibilityTest(unittest.TestCase):
         with mock.patch("director.orchestrator.dispatch", fake):
             res = orch.run_once(board, command=["x"], team="T", states=states,
                                 dispatch_requires_label=True)
-        self.assertEqual(seen, ["b"])  # A (untyped) skipped
+        self.assertEqual(seen, ["b"])  # A (unlabeled) skipped
         self.assertEqual([r["ticket"] for r in res], ["B"])
 
     def test_run_once_skips_blocked_ticket(self):
@@ -552,8 +555,9 @@ def _issue(tid, blockers=None, state="st_todo", labels=None):
          "prompt": f"p-{tid}", "state_id": state}
     if blockers:
         d["blockers"] = blockers
-    if labels:
-        d["labels"] = labels
+    # A dispatchable mock ticket carries the agent-ready label (ADR 0007: the dispatch gate
+    # is on by default). Callers pass `labels` explicitly only to test a different set.
+    d["labels"] = list(labels) if labels else ["agent-ready"]
     return d
 
 
@@ -665,11 +669,12 @@ class RunUntilDrainedTest(unittest.TestCase):
         self.assertEqual(order, ["a", "b"])  # c never reached
 
 
-class TypeRoutingTest(unittest.TestCase):
-    """ADR 0005: the dev-stage label types the DAG (sequencing) + gates dispatch, but does
-    NOT shape the prompt — dispatch passes the ticket's own prompt through, typed or not."""
+class DispatchPromptTest(unittest.TestCase):
+    """ADR 0007: the dispatch label (`agent-ready`) only ADMITS a ticket; it never shapes the
+    prompt — dispatch passes the ticket's own prompt through unchanged. DAG sequencing is pure
+    `blocked_by` (the removed dev-stage taxonomy never typed it)."""
 
-    def test_dispatch_passes_typed_prompt_raw(self):
+    def test_dispatch_passes_prompt_raw(self):
         captured = {}
 
         def fake_drive(ticket, **kw):
@@ -677,29 +682,20 @@ class TypeRoutingTest(unittest.TestCase):
             return _done()
 
         with mock.patch("director.orchestrator.run.drive", fake_drive):
-            orch.dispatch(_issue("a", labels=["spec"]), command=["x"])
+            orch.dispatch(_issue("a"), command=["x"])
         self.assertEqual(captured["prompt"], "p-a")           # raw, no template wrapping
         self.assertNotIn("product-design", captured["prompt"])
+        self.assertNotIn("TASK:", captured["prompt"])
 
-    def test_dispatch_untyped_passes_raw_prompt(self):
-        captured = {}
-
-        def fake_drive(ticket, **kw):
-            captured["prompt"] = ticket["prompt"]
-            return _done()
-
-        with mock.patch("director.orchestrator.run.drive", fake_drive):
-            orch.dispatch(_issue("a"), command=["x"])  # no labels
-        self.assertEqual(captured["prompt"], "p-a")  # unchanged (backward compat)
-
-    def test_typed_pipeline_sequenced_by_dag(self):
-        # The label still types the DAG (blocked_by sequencing), but ADR 0005: it no longer
-        # shapes the prompt — each worker receives its ticket's raw prompt.
+    def test_pipeline_sequenced_by_dag_not_by_label(self):
+        # Sequencing is the blocked_by chain alone — every ticket carries the SAME agent-ready
+        # label, yet they still drain in dependency order. ADR 0007: the label admits; the DAG
+        # orders. Each worker receives its ticket's raw prompt.
         board = orch.MockBoard([
-            _issue("plan", labels=["planning"]),
-            _issue("design", ["plan"], labels=["design"]),
-            _issue("spec", ["design"], labels=["spec"]),
-            _issue("impl", ["spec"], labels=["impl"])])
+            _issue("plan"),
+            _issue("design", ["plan"]),
+            _issue("spec", ["design"]),
+            _issue("impl", ["spec"])])
         states = orch.resolve_states(board, "T")
         seen = []
 
@@ -929,6 +925,39 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         out = self._reconcile(self._done())
         self.assertFalse(out["summary"]["merge_enqueued"])
         self.assertEqual(self._merge_reqs(), [])
+
+    def test_done_with_follow_ups_surfaces_spawned_ids(self):
+        # done-with-follow-ups (worker-policy-polish): a worker can finish the ticket
+        # (done) AND have filed non-blocking follow-up tickets (WORKER_PROTOCOL trigger
+        # #2 — deferred/out-of-scope work). Those ids must surface on the done path —
+        # summary + board comment — not be dropped (previously only the blocked path
+        # consumed spawned_ticket_ids). This is a payload enrichment on done, NOT a new
+        # report_outcome status: the board action is still done.
+        out = self._reconcile(self._done(spawned_ticket_ids=["D-2", "D-3"]))
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["D-2", "D-3"])
+        body = "\n".join(self.board.comments["u1"])
+        self.assertIn("D-2", body)
+        self.assertIn("D-3", body)
+
+    def test_done_without_follow_ups_summary_has_empty_spawned(self):
+        # uniform shape with the blocked path: the key is always present (empty list when
+        # the worker filed no follow-ups) so the StatusWriter sees a consistent summary.
+        out = self._reconcile(self._done())
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], [])
+
+    def test_pr_bearing_done_parked_in_merging_still_surfaces_follow_ups(self):
+        # follow-ups are independent of the merge gate: a PR-bearing done that PARKS in
+        # `merging` must still surface its follow-up ids (summary + comment).
+        states = dict(self.states)
+        states["merging"] = "st_merge"
+        out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
+                             self._done(pr_url="http://pr/7", pr_branch="feat/x",
+                                        spawned_ticket_ids=["D-9"]),
+                             1, states, 1, queue_base=self.qbase,
+                             workspace_root=self.tmp / "wsr")
+        self.assertEqual(out["summary"]["final_state"], "merging")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["D-9"])
+        self.assertIn("D-9", "\n".join(self.board.comments["u1"]))
 
     def test_done_with_evidence_carries_it_into_payload(self):
         # merge-preservation M1 (R4): the worker's optional sweep evidence rides

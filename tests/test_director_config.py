@@ -123,12 +123,12 @@ class LoadConfigTest(unittest.TestCase):
         _write(self.root, {"director": {"read_timeout_s": 45}})
         self.assertEqual(config.load_director_config(root=self.root).read_timeout_s, 45.0)
 
-    def test_dispatch_requires_label_default_off_and_opt_in(self):
-        # F1: default False (pre-3b raw-prompt-for-untyped compat); a taxonomy-driven host
-        # opts in to skip untyped board tickets.
-        self.assertFalse(config.defaults().dispatch_requires_label)
-        _write(self.root, {"director": {"dispatch_requires_label": True}})
-        self.assertTrue(config.load_director_config(root=self.root).dispatch_requires_label)
+    def test_dispatch_requires_label_default_on_and_opt_out(self):
+        # ADR 0007: default True — the Director dispatches ONLY tickets carrying the
+        # `agent-ready` label; a host can opt OUT (dispatch every ready ticket) by False.
+        self.assertTrue(config.defaults().dispatch_requires_label)
+        _write(self.root, {"director": {"dispatch_requires_label": False}})
+        self.assertFalse(config.load_director_config(root=self.root).dispatch_requires_label)
 
     def test_bad_dispatch_requires_label_raises(self):
         _write(self.root, {"director": {"dispatch_requires_label": "yes"}})

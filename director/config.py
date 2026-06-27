@@ -51,12 +51,12 @@ DEFAULTS: dict = {
     "max_passes": 50,
     "max_dispatched": 200,
     "done_types": ["completed"],
-    # When True, the orchestrator dispatches ONLY tickets carrying a dev-stage label
-    # (taxonomy.ticket_type) — untyped board tickets (e.g. Linear's default onboarding
-    # issues sitting in the ready state) are skipped, never run as raw-prompt workers
-    # (use-all shakedown F1). Default False preserves the pre-3b raw-prompt-for-untyped
-    # backward-compat; a taxonomy-driven host (the self-host board) opts in.
-    "dispatch_requires_label": False,
+    # When True (the default — ADR 0007), the orchestrator dispatches ONLY tickets carrying
+    # the `agent-ready` label (orchestrator.DISPATCH_LABEL) — untagged board tickets (Linear's
+    # default onboarding issues, or anything a human is still shaping) are skipped, never run
+    # as workers (use-all shakedown F1). The label is the explicit "this is agent work" opt-in;
+    # a host can set this False to dispatch every ready ticket (the old permissive behavior).
+    "dispatch_requires_label": True,
     # Per-message inactivity budget for a worker turn (app_server `_wait_readable`). Real
     # Codex workers go silent >30s (cold start, a long command, deep reasoning), so the old
     # 30s default crashed them on ReadTimeout (use-all shakedown F3); 180s matches the
