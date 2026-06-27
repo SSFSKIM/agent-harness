@@ -19,11 +19,14 @@ it stops. Run it on demand when choosing what's next.
    panel doesn't re-propose dead ends). You hold this full context for the
    synthesis in step 4; generators and judges get only what you pass them.
 
-2. **Fan out generators (divergence).** Dispatch the `workstream-scout` persona
-   once per stance, in parallel (Task tool, `subagent_type:
-   agent-harness:workstream-scout`), passing each its stance + the project
-   grounding. The stances are a forcing function for *genuinely different* visions
-   — default set:
+2. **Fan out generators (divergence).** Dispatch the workstream-scout persona
+   once per stance, in parallel, passing each its stance + the project grounding.
+   (HOW depends on your runtime — use whichever it exposes: Claude Director —
+   Task tool `subagent_type:"agent-harness:workstream-scout"`; Claude worker — the
+   bare `workstream-scout` from `.claude/agents/`; Codex worker — ask Codex to spawn
+   the `workstream_scout` agent, the UNDERSCORE name since Codex rejects hyphens,
+   from its `CODEX_HOME/agents/*.toml`.) The stances are a forcing function for
+   *genuinely different* visions — default set:
    - **moonshot** — the order-of-magnitude bet.
    - **competitor-killer** — the move that wins against the frontier.
    - **first-principles-reframe** — reason up from the essence; question the
@@ -34,8 +37,9 @@ it stops. Run it on demand when choosing what's next.
    better; just keep the stances distinct.
 
 3. **Judge independently (convergence).** For each returned vision, dispatch a
-   *fresh* `vision-judge` (`subagent_type: agent-harness:vision-judge`), one per
-   vision, blind to the others. A generator never judges its own (or any) vision —
+   *fresh* vision-judge (Claude: `subagent_type:"agent-harness:vision-judge"` /
+   bare `vision-judge`; Codex: spawn the `vision_judge` agent — underscore name),
+   one per vision, blind to the others. A generator never judges its own (or any) vision —
    independence is the whole point. Each judge scores its vision on the five-axis
    rubric and routes it **Tier 1 / Tier 2 / drop** against the Mission + axioms.
 
