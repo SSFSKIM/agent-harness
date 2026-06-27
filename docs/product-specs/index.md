@@ -331,3 +331,15 @@ owner: harness
   philosophy **앞**에(bedrock→building). 헤딩을 파싱하는 소비자 0 → content 변경, 구조 break 0.
   3 copy(self-host/template/base seed) 동일 전파 + prose reference 갱신. follow-up 4종(direction-GC
   workstream scout / Mission-distance roadmap view / axiom-violation lint / 실제 2번째 host)은 캡처만.
+- [Workstream scout — 시스템 첫 divergent 에이전트](2026-06-27-workstream-scout.md)
+  — charter reframe 의 operationalization(Mission=filter, axioms=screen 를 *쓰는* 에이전트).
+  지금까지 모든 페르소나는 convergent(리뷰·게이트·gardener — 품질을 지키고 *아니오*); 이건 첫
+  **divergent** 에이전트(가능성을 열고 *what if*). 형태: `scout` 스킬(오케스트레이터 — 풀 프로젝트
+  맥락 보유, garden→doc-gardener 패턴의 fan-out 확장)이 stance 강제된 N개 generator
+  (`workstream-scout` 페르소나 — moonshot/competitor-killer/first-principles-reframe/narrowest-wedge,
+  **outward 웹 리서치**)를 펼치고, 비전마다 **독립** `vision-judge`(Mission+Core Axioms 루브릭)가
+  Tier1(실행가능 initiative)/Tier2(foundational challenge — Mission·axiom 진화 필요)/drop 으로
+  **라우팅**(keystone: axiom-screen = filter 아닌 **router** — axiom 깨는 명작은 죽이지도 enact
+  하지도 않고 인간에게 escalate), 스킬이 own-context 로 종합해 2-tier `type: horizon` 제안 doc
+  (`docs/horizons/`)을 씀. **propose, never enact**. on-demand v1(주기·완료트리거·auto-enact·
+  Workflow-tool 의존·worker 벤더링은 Non-goal). phase methodology/02-workstream-scout.
