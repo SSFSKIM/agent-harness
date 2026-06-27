@@ -96,11 +96,14 @@ class RunEndToEndTest(unittest.TestCase):
         # AGENTS — the review/gardener personas a worker DISPATCHES at its completion gate
         # (a runtime registers agents only from its own agents/ dir, never a repo path), each
         # in its native format: Claude reads .claude/agents/*.md, Codex reads .codex/agents/*.toml.
-        for name in ("review-spec-compliance", "review-arch", "doc-gardener"):
-            self.assertTrue((ws / ".claude" / "agents" / f"{name}.md").exists())
-            self.assertTrue((ws / ".codex" / "agents" / f"{name}.toml").exists())
+        # Claude keeps the hyphenated .md name; the Codex .toml uses the sanitized
+        # (underscore) name — Codex's spawn tool rejects hyphens (F1, codex-cli 0.142).
+        for md_name in ("review-spec-compliance", "review-arch", "doc-gardener"):
+            self.assertTrue((ws / ".claude" / "agents" / f"{md_name}.md").exists())
+            codex_name = run._codex_agent_name(md_name)
+            self.assertTrue((ws / ".codex" / "agents" / f"{codex_name}.toml").exists())
         # The Codex side is TOML, not the inert .md (which Codex never loads).
-        self.assertFalse((ws / ".codex" / "agents" / "review-arch.md").exists())
+        self.assertFalse((ws / ".codex" / "agents" / "review_arch.md").exists())
         run.install_worker_methodology(ws)  # idempotent re-run
 
     def test_codex_agent_toml_translation_round_trips(self):
@@ -110,9 +113,11 @@ class RunEndToEndTest(unittest.TestCase):
         import tomllib
         ws = self.tmp / "wstoml"
         run.install_worker_methodology(ws)
+        # The codex file + its `name` field both use the SANITIZED name (hyphens → underscores)
+        # — Codex's spawn tool rejects a hyphenated agent_name (live, codex-cli 0.142).
         data = tomllib.loads(
-            (ws / ".codex" / "agents" / "review-security.toml").read_text(encoding="utf-8"))
-        self.assertEqual(data["name"], "review-security")
+            (ws / ".codex" / "agents" / "review_security.toml").read_text(encoding="utf-8"))
+        self.assertEqual(data["name"], "review_security")
         self.assertTrue(data["description"])
         self.assertEqual(data["sandbox_mode"], "read-only")  # Read/Grep/Glob/Bash → read-only
         self.assertIn("security", data["developer_instructions"].lower())
@@ -120,10 +125,30 @@ class RunEndToEndTest(unittest.TestCase):
                / "review-security.md").read_text(encoding="utf-8")
         _, body = run._parse_agent_frontmatter(src)
         self.assertEqual(data["developer_instructions"].rstrip("\n"), body.rstrip("\n"))
-        # doc-gardener carries Edit/Write → workspace-write.
+        # doc-gardener carries Edit/Write → workspace-write (file: doc_gardener.toml).
         gardener = tomllib.loads(
-            (ws / ".codex" / "agents" / "doc-gardener.toml").read_text(encoding="utf-8"))
+            (ws / ".codex" / "agents" / "doc_gardener.toml").read_text(encoding="utf-8"))
         self.assertEqual(gardener["sandbox_mode"], "workspace-write")
+        self.assertEqual(gardener["name"], "doc_gardener")
+
+    def test_codex_agent_names_are_spawnable_charset(self):
+        # F1 regression guard: EVERY translated persona name must match Codex's spawn-tool
+        # charset `^[a-z0-9_]+$` (hyphens are rejected at spawn) AND equal _codex_agent_name of
+        # the source. Without this the codex worker's completion-gate personas are unspawnable.
+        import tomllib
+        ws = self.tmp / "wscharset"
+        run.install_worker_methodology(ws)
+        src_dir = Path(run.__file__).resolve().parent.parent / "plugin" / "agents"
+        names = [p.stem for p in src_dir.glob("*.md")]
+        self.assertTrue(names)
+        for md_name in names:
+            codex_name = run._codex_agent_name(md_name)
+            self.assertRegex(codex_name, r"^[a-z0-9_]+$")
+            data = tomllib.loads(
+                (ws / ".codex" / "agents" / f"{codex_name}.toml").read_text(encoding="utf-8"))
+            self.assertEqual(data["name"], codex_name)
+        # the mapping is exactly hyphen→underscore for our personas
+        self.assertEqual(run._codex_agent_name("review-spec-compliance"), "review_spec_compliance")
 
     def test_with_codex_trust_appends_for_bash_runtime(self):
         # M3: the bash-wrapped real runtime gets -c projects."<ws>".trust_level="trusted" so
@@ -181,7 +206,7 @@ class RunEndToEndTest(unittest.TestCase):
         (ws / ".codex" / "agents").write_text("planted\n", encoding="utf-8")
         run.install_worker_methodology(ws)  # must not raise
         self.assertTrue((ws / ".codex" / "agents").is_dir())
-        self.assertTrue((ws / ".codex" / "agents" / "review-arch.toml").exists())
+        self.assertTrue((ws / ".codex" / "agents" / "review_arch.toml").exists())
 
     def test_run_ticket_threads_tools_and_executor(self):
         seen = []

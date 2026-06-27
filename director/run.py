@@ -145,14 +145,27 @@ def _toml_basic_string(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _codex_agent_name(md_name: str) -> str:
+    """Sanitize a Claude persona name into Codex's custom-agent name charset. Codex's spawn
+    tool REJECTS any other character — live (codex-cli 0.142): `error=agent_name must use only
+    lowercase letters, digits, and underscores`. Our personas are hyphenated (Claude's idiom:
+    `review-spec-compliance`), which are UNSPAWNABLE on Codex, so the translated `.codex` name
+    lowercases and maps every char outside `[a-z0-9_]` to `_` (`review-spec-compliance` →
+    `review_spec_compliance`). The Claude `.md` keeps its hyphen name (valid there); this is the
+    single deterministic mapping the dispatch docs/tests share, so the two runtime names never
+    drift. The methodology names the persona per-runtime (execplan/garden/scout SKILL.md)."""
+    return re.sub(r"[^a-z0-9_]", "_", md_name.lower())
+
+
 def _translate_agent_md_to_toml(md_path: Path) -> str:
     """Translate a Claude agent `.md` (frontmatter `name`/`description`/`tools` + markdown
     body) into a Codex custom-agent TOML (developers.openai.com/codex/subagents): the three
     required keys `name`/`description`/`developer_instructions`, plus a `sandbox_mode` derived
     from the `.md` `tools` (Edit/Write present → `workspace-write`, else `read-only` — Codex
-    has no tool allowlist, so the sandbox posture is the closest equivalent). `name` is kept
-    IDENTICAL to the `.md` so the methodology's bare-name dispatch refers to one name on both
-    runtimes. The body becomes `developer_instructions` verbatim via a TOML multiline LITERAL
+    has no tool allowlist, so the sandbox posture is the closest equivalent). `name` is
+    SANITIZED to Codex's agent-name charset via `_codex_agent_name` (hyphens → underscores) —
+    Codex's spawn tool rejects any other character, so the hyphenated source names would be
+    unspawnable. The body becomes `developer_instructions` verbatim via a TOML multiline LITERAL
     string (no escape processing — safe for the regex/backslashes/quotes in a persona prompt;
     the only sequence it cannot contain is `'''`, which we reject loudly)."""
     fm, body = _parse_agent_frontmatter(md_path.read_text(encoding="utf-8"))
@@ -168,7 +181,7 @@ def _translate_agent_md_to_toml(md_path: Path) -> str:
     # trailing newline would otherwise abut the fence into `''''`/`'''''`, which TOML rejects.
     if not body.endswith("\n"):
         body += "\n"
-    return (f"name = {_toml_basic_string(fm['name'])}\n"
+    return (f"name = {_toml_basic_string(_codex_agent_name(fm['name']))}\n"
             f"description = {_toml_basic_string(fm['description'])}\n"
             f"sandbox_mode = {_toml_basic_string(sandbox)}\n"
             f"developer_instructions = '''\n{body}'''\n")
@@ -190,7 +203,9 @@ def _install_agents(ws: Path) -> None:
     _ensure_dir(codex)
     for item in sorted(_AGENT_SOURCE.iterdir()):
         if item.is_file() and item.suffix == ".md":
-            target = codex / (item.stem + ".toml")
+            # Name the .toml after the SANITIZED agent name (matches the `name =` field, which is
+            # Codex's source of truth) so the file and its spawnable identity never diverge.
+            target = codex / (_codex_agent_name(item.stem) + ".toml")
             _clear_target(target)
             target.write_text(_translate_agent_md_to_toml(item), encoding="utf-8")
 
