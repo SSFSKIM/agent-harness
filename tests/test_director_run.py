@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -93,30 +94,24 @@ class RunEndToEndTest(unittest.TestCase):
             # execplan completion gate); it must no longer be installed into a worker.
             self.assertFalse((ws / sdir / "qa").exists())
         self.assertFalse((ws / ".codex" / "skills").exists())  # inert path dropped (M1)
-        # AGENTS — the review/gardener personas a worker DISPATCHES at its completion gate
-        # (a runtime registers agents only from its own agents/ dir, never a repo path), each
-        # in its native format: Claude reads .claude/agents/*.md, Codex reads .codex/agents/*.toml.
-        # Claude keeps the hyphenated .md name; the Codex .toml uses the sanitized
-        # (underscore) name — Codex's spawn tool rejects hyphens (F1, codex-cli 0.142).
+        # AGENTS — Claude personas are vendored per-workspace as .md; the Codex personas are
+        # NOT in the workspace (they live user-scope in CODEX_HOME — _ensure_codex_home).
         for md_name in ("review-spec-compliance", "review-arch", "doc-gardener"):
             self.assertTrue((ws / ".claude" / "agents" / f"{md_name}.md").exists())
-            codex_name = run._codex_agent_name(md_name)
-            self.assertTrue((ws / ".codex" / "agents" / f"{codex_name}.toml").exists())
-        # The Codex side is TOML, not the inert .md (which Codex never loads).
-        self.assertFalse((ws / ".codex" / "agents" / "review_arch.md").exists())
+        self.assertFalse((ws / ".codex" / "agents").exists())  # moved to CODEX_HOME (M2)
         run.install_worker_methodology(ws)  # idempotent re-run
 
     def test_codex_agent_toml_translation_round_trips(self):
-        # M2: each .md persona is translated to a Codex custom-agent .toml that an independent
+        # M1/M2: each .md persona is translated to a Codex custom-agent .toml that an independent
         # TOML parser accepts, with the three required keys + a tools-derived sandbox_mode and
-        # the body preserved verbatim as developer_instructions.
+        # the body preserved verbatim as developer_instructions. Personas are user-scope, so we
+        # write them with _write_codex_agents (what _ensure_codex_home uses to fill CODEX_HOME).
         import tomllib
-        ws = self.tmp / "wstoml"
-        run.install_worker_methodology(ws)
+        agents = self.tmp / "agdir"
+        run._write_codex_agents(agents)
         # The codex file + its `name` field both use the SANITIZED name (hyphens → underscores)
         # — Codex's spawn tool rejects a hyphenated agent_name (live, codex-cli 0.142).
-        data = tomllib.loads(
-            (ws / ".codex" / "agents" / "review_security.toml").read_text(encoding="utf-8"))
+        data = tomllib.loads((agents / "review_security.toml").read_text(encoding="utf-8"))
         self.assertEqual(data["name"], "review_security")
         self.assertTrue(data["description"])
         self.assertEqual(data["sandbox_mode"], "read-only")  # Read/Grep/Glob/Bash → read-only
@@ -126,8 +121,7 @@ class RunEndToEndTest(unittest.TestCase):
         _, body = run._parse_agent_frontmatter(src)
         self.assertEqual(data["developer_instructions"].rstrip("\n"), body.rstrip("\n"))
         # doc-gardener carries Edit/Write → workspace-write (file: doc_gardener.toml).
-        gardener = tomllib.loads(
-            (ws / ".codex" / "agents" / "doc_gardener.toml").read_text(encoding="utf-8"))
+        gardener = tomllib.loads((agents / "doc_gardener.toml").read_text(encoding="utf-8"))
         self.assertEqual(gardener["sandbox_mode"], "workspace-write")
         self.assertEqual(gardener["name"], "doc_gardener")
 
@@ -136,41 +130,82 @@ class RunEndToEndTest(unittest.TestCase):
         # charset `^[a-z0-9_]+$` (hyphens are rejected at spawn) AND equal _codex_agent_name of
         # the source. Without this the codex worker's completion-gate personas are unspawnable.
         import tomllib
-        ws = self.tmp / "wscharset"
-        run.install_worker_methodology(ws)
+        agents = self.tmp / "agcharset"
+        run._write_codex_agents(agents)
         src_dir = Path(run.__file__).resolve().parent.parent / "plugin" / "agents"
         names = [p.stem for p in src_dir.glob("*.md")]
         self.assertTrue(names)
         for md_name in names:
             codex_name = run._codex_agent_name(md_name)
             self.assertRegex(codex_name, r"^[a-z0-9_]+$")
-            data = tomllib.loads(
-                (ws / ".codex" / "agents" / f"{codex_name}.toml").read_text(encoding="utf-8"))
+            data = tomllib.loads((agents / f"{codex_name}.toml").read_text(encoding="utf-8"))
             self.assertEqual(data["name"], codex_name)
         # the mapping is exactly hyphen→underscore for our personas
         self.assertEqual(run._codex_agent_name("review-spec-compliance"), "review_spec_compliance")
 
-    def test_with_codex_trust_appends_for_bash_runtime(self):
-        # M3: the bash-wrapped real runtime gets -c projects."<ws>".trust_level="trusted" so
-        # Codex loads the vendored project .codex/ layer; prior -c overrides are preserved.
-        import shlex
-        ws = self.tmp / "wstrust"
-        cmd = ["bash", "-c", "codex app-server -c approvals_reviewer=auto_review"]
-        out = run._with_codex_trust(cmd, ws)
-        self.assertEqual(out[:2], ["bash", "-c"])
-        # realpath (not abspath): the key must match the canonical path Codex resolves the
-        # project root to, or trust silently fails on a symlinked workspace-root component.
-        real_ws = os.path.realpath(str(ws))
-        self.assertIn("-c approvals_reviewer=auto_review", out[2])  # preserved
-        # bash re-tokenizes the appended fragment to the EXACT TOML kv (quotes pass literally
-        # to codex's -c parser — the quoting that the live probe confirmed codex accepts).
-        self.assertEqual(shlex.split(out[2])[-1],
-                         f'projects."{real_ws}".trust_level="trusted"')
+    def _fake_source_home(self):
+        # A minimal source codex-home: auth.json + config.toml (what _ensure_codex_home reads).
+        src = self.tmp / "srchome"
+        src.mkdir()
+        (src / "auth.json").write_text('{"tokens":"x"}\n', encoding="utf-8")
+        (src / "config.toml").write_text('model = "gpt-5.5"\n', encoding="utf-8")
+        return src
 
-    def test_with_codex_trust_leaves_mock_unchanged(self):
-        # The mock command is not `bash -c …`, so trust must not corrupt it.
-        cmd = [sys.executable, MOCK, "plain"]
-        self.assertEqual(run._with_codex_trust(cmd, self.tmp / "x"), cmd)
+    def test_ensure_codex_home_materializes_user_scope_agents(self):
+        # M2: the Director-managed CODEX_HOME carries auth (symlink), config (COPY — so codex's
+        # auto-trust persistence stays out of the user's real ~/.codex), and the personas
+        # user-scope (so Codex loads them WITHOUT trusting the clone). Returns its abs path.
+        import tomllib
+        src = self._fake_source_home()
+        target = self.tmp / "codexhome"
+        out = run._ensure_codex_home(target=target, source_home=src)
+        self.assertEqual(out, str(target.resolve()))
+        auth = target / "auth.json"
+        self.assertTrue(auth.is_symlink())
+        self.assertEqual(os.path.realpath(auth), os.path.realpath(src / "auth.json"))
+        self.assertFalse((target / "config.toml").is_symlink())   # COPY, not symlink (F3 close)
+        self.assertEqual((target / "config.toml").read_text(encoding="utf-8"), 'model = "gpt-5.5"\n')
+        data = tomllib.loads((target / "agents" / "review_security.toml").read_text(encoding="utf-8"))
+        self.assertEqual(data["name"], "review_security")  # sanitized, spawnable
+        run._ensure_codex_home(target=target, source_home=src)  # idempotent re-run must not raise
+
+    def test_ensure_codex_home_none_without_source_auth(self):
+        # No codex install to serve (no source auth.json) → None, so the caller leaves CODEX_HOME unset.
+        empty = self.tmp / "noauth"; empty.mkdir()
+        self.assertIsNone(run._ensure_codex_home(target=self.tmp / "ch2", source_home=empty))
+
+    def test_codex_home_config_copy_isolates_trust_persistence(self):
+        # A COPY (not symlink) means a later edit to the CODEX_HOME config never touches the
+        # user's real config — the F3 (trust-pollution) close.
+        src = self._fake_source_home()
+        target = self.tmp / "ch3"
+        run._ensure_codex_home(target=target, source_home=src)
+        (target / "config.toml").write_text('model = "gpt-5.5"\n[projects."/x"]\ntrust_level = "trusted"\n',
+                                             encoding="utf-8")
+        self.assertNotIn("projects", (src / "config.toml").read_text(encoding="utf-8"))
+
+    def test_sweep_stale_codex_layout_removes_only_untracked(self):
+        # M3: a reused pre-Phase-2 workspace's inert Director-injected .codex/{skills,agents}
+        # leftovers (UNTRACKED) are swept, while a clone-TRACKED .codex/ file is untouched.
+        ws = self.tmp / "wssweep"
+        ws.mkdir()
+        subprocess.run(["git", "-C", str(ws), "init", "-q"], check=True)
+        # clone-tracked sibling under .codex/ — must survive
+        (ws / ".codex").mkdir()
+        (ws / ".codex" / "config.toml").write_text("# clone's own\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(ws), "add", ".codex/config.toml"], check=True)
+        subprocess.run(["git", "-C", str(ws), "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-q", "-m", "init"], check=True)
+        # stale Director-injected leftovers (untracked)
+        (ws / ".codex" / "skills" / "execplan").mkdir(parents=True)
+        (ws / ".codex" / "skills" / "execplan" / "SKILL.md").write_text("stale\n", encoding="utf-8")
+        (ws / ".codex" / "agents").mkdir()
+        (ws / ".codex" / "agents" / "review-arch.md").write_text("stale md\n", encoding="utf-8")
+        (ws / ".codex" / "agents" / "review_arch.toml").write_text("stale toml\n", encoding="utf-8")
+        run._sweep_stale_codex_layout(ws)
+        self.assertFalse((ws / ".codex" / "skills").exists())
+        self.assertFalse((ws / ".codex" / "agents").exists())
+        self.assertTrue((ws / ".codex" / "config.toml").exists())  # tracked → untouched
 
     def test_translate_agent_guards_fail_loud(self):
         # The parse/translate guards must fail LOUD on a malformed first-party persona
@@ -202,11 +237,11 @@ class RunEndToEndTest(unittest.TestCase):
         # reliability: a prior workspace-write worker plants a regular FILE where a dest dir
         # must go; the idempotent re-run clears it rather than crashing on mkdir.
         ws = self.tmp / "wsplanted"
-        (ws / ".codex").mkdir(parents=True)
-        (ws / ".codex" / "agents").write_text("planted\n", encoding="utf-8")
+        (ws / ".claude").mkdir(parents=True)
+        (ws / ".claude" / "agents").write_text("planted\n", encoding="utf-8")
         run.install_worker_methodology(ws)  # must not raise
-        self.assertTrue((ws / ".codex" / "agents").is_dir())
-        self.assertTrue((ws / ".codex" / "agents" / "review_arch.toml").exists())
+        self.assertTrue((ws / ".claude" / "agents").is_dir())
+        self.assertTrue((ws / ".claude" / "agents" / "review-arch.md").exists())
 
     def test_run_ticket_threads_tools_and_executor(self):
         seen = []
@@ -273,7 +308,7 @@ class RunEndToEndTest(unittest.TestCase):
         ws.mkdir()
         outside = self.tmp / "outside2"
         outside.mkdir()
-        (ws / ".codex").symlink_to(outside, target_is_directory=True)
+        (ws / ".agents").symlink_to(outside, target_is_directory=True)
         with self.assertRaises(RuntimeError):
             run.install_worker_methodology(ws)
 
@@ -286,10 +321,11 @@ class RunEndToEndTest(unittest.TestCase):
         (ws / ".git" / "info").mkdir(parents=True)
         run.install_worker_methodology(ws)
         lines = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
-        # Every injected dir is excluded — both skill dests AND both agent dests.
-        for pat in ("/.claude/skills/", "/.agents/skills/",
-                    "/.claude/agents/", "/.codex/agents/"):
+        # Every injected per-workspace dir is excluded — both skill dests + the Claude agents
+        # dest. The Codex personas are NOT in the workspace (CODEX_HOME), so .codex/ is absent.
+        for pat in ("/.claude/skills/", "/.agents/skills/", "/.claude/agents/"):
             self.assertIn(pat, lines)
+        self.assertNotIn("/.codex/agents/", lines)
         run.install_worker_methodology(ws)  # idempotent: no duplicate patterns
         lines2 = (ws / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines2.count("/.claude/skills/"), 1)

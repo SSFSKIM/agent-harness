@@ -50,12 +50,15 @@ SANDBOX = config.DEFAULTS["worker"]["sandbox"]                   # "workspace-wr
 # not a knob — whether each is applied is the config's `auto_review`/`network` bool).
 AUTO_REVIEW = "approvals_reviewer=auto_review"            # Codex's fail-closed reviewer
 NETWORK = "sandbox_workspace_write.network_access=true"   # full outbound (exfil deferred, T11)
-# ALWAYS applied (security, not a posture knob). Trusting the worker workspace so Codex loads
-# the vendored `.codex/agents/*.toml` (run.py `_with_codex_trust`) ALSO makes it load the cloned
-# target repo's project `.codex/` layer — and a clone-shipped `.codex/hooks.json` is config-only
-# RCE at session start. The Director authors NO Codex hooks (deferred to Phase 2), so we disable
-# hook loading outright, closing that vector deterministically (SECURITY.md T16). Re-enable
-# selectively when Phase 2 introduces Director-authored Codex hooks.
+# ALWAYS applied (security, not a posture knob). Codex AUTO-TRUSTS the worker's cwd (live-proven
+# on both `codex exec` and `codex app-server`), so it loads the cloned target repo's project
+# `.codex/` layer regardless of any trust override — and a clone-shipped `.codex/hooks.json` is
+# config-only RCE at session start. The Director authors NO Codex hooks, so we disable hook
+# loading outright, closing that vector deterministically (this is LOAD-BEARING, not just
+# defence-in-depth, precisely because the auto-trust cannot be turned off). The sibling
+# `mcp_servers` config-exec vector is NOT closable in-process (no override clears a project
+# mcp table) — it is a T11-class residual retired by OS isolation (SECURITY.md T16). Re-enable
+# hooks selectively if the Director ever authors its own Codex hooks.
 DISABLE_HOOKS = "features.hooks=false"
 
 

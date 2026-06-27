@@ -113,9 +113,9 @@ DEFAULTS: dict = {
     # `tools`/`install_skills` are worker CAPABILITY defaults (vs. the security posture
     # above): which integration tool a worker is handed (`linear` → the linear_graphql
     # tool) and whether the worker methodology — both plugins' skills + the review/gardener
-    # agents — is installed into its workspace, each at the runtime's NATIVE loader path
-    # (skills → .claude/skills + .agents/skills; agents → .claude/agents + .codex/agents —
-    # whichever runtime the host wired reads its own).
+    # agents — is installed for the worker, each at the runtime's NATIVE loader path (skills
+    # → .claude/skills + .agents/skills; Claude agents → .claude/agents in the workspace;
+    # Codex personas → user-scope in a Director-managed CODEX_HOME — see run._ensure_codex_home).
     # `install_skills` defaults ON: the worker does ALL the real work (research, spec, plan,
     # build, QA), so it needs the full methodology by default — the Director only orchestrates.
     # `tools` stays OFF (Linear access is a separate, board-specific opt-in). The offline

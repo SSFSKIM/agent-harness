@@ -14,7 +14,6 @@ import argparse
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -32,20 +31,28 @@ DEFAULT_WORKSPACE_ROOT = Path(".claude/harness/director-workspaces")
 # drive bound (R6): a worker that never signals terminal stops here, reported stuck.
 DEFAULT_MAX_TURNS = config.DEFAULTS["max_turns"]
 _MOCK = str(Path(__file__).resolve().parent / "worker" / "_mock_app_server.py")
-# What the Director vendors into each worker workspace so a WORKER — not just the Director —
-# runs the whole methodology. Two surfaces, each placed where the target runtime's NATIVE
-# loader actually reads it (asymmetric ON PURPOSE — memory codex-worker-config-surface):
-#   - SKILLS: the git/PR/Linear worker skills (`agent-harness-workspace`, Apache-2.0, vendored
-#     from openai/symphony) + the methodology skills the worker invokes (`agent-harness`),
-#     copied verbatim. Claude Code scans `.claude/skills/`; the REAL Codex CLI scans
-#     `.agents/skills/` (the repo path) — NOT `.codex/skills/`, which it never reads.
-#   - AGENTS: the review/gardener personas the worker DISPATCHES at the execplan completion
-#     gate (`agent-harness`). Claude reads `.claude/agents/*.md` verbatim; the real Codex CLI
-#     reads `.codex/agents/*.toml` (translated from the same `.md` source by
-#     `_translate_agent_md_to_toml`; the `.codex/` layer loads only when the ws is trusted).
-# A runtime dispatches agents only from its own dir, never an arbitrary repo path (memory
-# mid-session-agents-not-dispatchable), so agents MUST be copied/translated in. Each plugin's
-# LICENSE/NOTICE/manifest live at its plugin root, outside these dirs, so are not copied.
+# What the Director vendors so a WORKER — not just the Director — runs the whole methodology.
+# Two surfaces, each placed where the target runtime's NATIVE loader actually reads it
+# (asymmetric ON PURPOSE — memory codex-worker-config-surface):
+#   - SKILLS (per-workspace): the git/PR/Linear worker skills (`agent-harness-workspace`,
+#     Apache-2.0, vendored from openai/symphony) + the methodology skills the worker invokes
+#     (`agent-harness`), copied verbatim. Claude Code scans `<ws>/.claude/skills/`; the REAL
+#     Codex CLI scans `<ws>/.agents/skills/` (the repo path) — NOT `.codex/skills/`.
+#   - AGENTS (the review/gardener personas the worker DISPATCHES at the completion gate):
+#     • Claude reads `<ws>/.claude/agents/*.md` verbatim (per-workspace).
+#     • The real Codex CLI reads custom agents USER-scope from `$CODEX_HOME/agents/*.toml`
+#       (translated from the same `.md` by `_translate_agent_md_to_toml`, names sanitized by
+#       `_codex_agent_name`). Phase 2 moved the Codex personas OUT of the clone's `.codex/agents/`
+#       and into a Director-managed CODEX_HOME (`_ensure_codex_home`): user-scope config always
+#       loads (no trust needed), so the Director no longer has to TRUST the clone — which (a) was
+#       redundant anyway (Codex auto-trusts the worker's cwd — live-proven on exec AND app-server)
+#       and (b) kept persisting `[projects."<ws>"]` trust entries into the user's real
+#       `~/.codex/config.toml` (SECURITY.md T16 / F3). A hostile clone's project `.codex/config.toml`
+#       `mcp_servers` still auto-executes regardless (F4) — that is a T11-class residual retired by
+#       OS isolation, NOT closable in-process (see SECURITY.md T16).
+# A runtime dispatches agents only from a loader dir, never an arbitrary repo path (memory
+# mid-session-agents-not-dispatchable). Each plugin's LICENSE/NOTICE/manifest live at its plugin
+# root, outside these dirs, so are not copied.
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 # Skill source dirs — both copied into each runtime's skills dir; their entry-name sets are
 # disjoint (`_assert_skill_sources_disjoint`), so they coexist without clobber.
@@ -55,13 +62,20 @@ _SKILL_SOURCES = (
 )
 # The skills dir each runtime's loader scans: Claude=.claude/skills, Codex=.agents/skills.
 _SKILL_DESTS = (".claude/skills", ".agents/skills")
-# Agent persona source (.md — the single authoring format) and its per-runtime dest dirs.
+# Agent persona source (.md — the single authoring format).
 _AGENT_SOURCE = _PLUGIN_ROOT / "plugin" / "agents"   # review/gardener personas (.md)
-_AGENT_DEST_CLAUDE = ".claude/agents"   # .md copied verbatim (cc-harness reads project agents)
-_AGENT_DEST_CODEX = ".codex/agents"     # Codex custom-agent dir (trust-gated `.codex/` layer)
-# Every Director-injected methodology dir, for the PR-hygiene `.git/info/exclude` and the
-# symlink-refusal sweep. Derived from the dests above so it can never drift from them.
-_INJECTED_DIRS = (*_SKILL_DESTS, _AGENT_DEST_CLAUDE, _AGENT_DEST_CODEX)
+_AGENT_DEST_CLAUDE = ".claude/agents"   # .md copied verbatim per-workspace (cc-harness reads it)
+# The clone-local `.codex/` dirs the Director NO LONGER writes (Phase 1 did; Codex agents are now
+# user-scope via CODEX_HOME). Kept as named constants only so the M3 stale-layout sweep
+# (`_sweep_stale_codex_layout`) knows what inert leftovers to remove from a REUSED workspace.
+_STALE_CODEX_DIRS = (".codex/skills", ".codex/agents")
+# Director-managed CODEX_HOME (per-Director, shared, gitignored, OUTSIDE the clone) — holds the
+# worker's codex auth (symlink), a copy of the user config (so codex's auto-trust persistence
+# stays OUT of the user's real `~/.codex`), and the translated personas user-scope.
+DEFAULT_CODEX_HOME = Path(".claude/harness/codex-home")
+# Every Director-injected per-workspace methodology dir, for the PR-hygiene `.git/info/exclude`
+# and the symlink-refusal sweep. Codex agents are NOT here (they live in CODEX_HOME, outside the ws).
+_INJECTED_DIRS = (*_SKILL_DESTS, _AGENT_DEST_CLAUDE)
 
 
 def _refuse_symlink(path) -> None:
@@ -187,50 +201,131 @@ def _translate_agent_md_to_toml(md_path: Path) -> str:
             f"developer_instructions = '''\n{body}'''\n")
 
 
-def _install_agents(ws: Path) -> None:
-    """Vendor the review/gardener personas into BOTH runtimes' agent dirs, each in its NATIVE
-    format: Claude reads `.claude/agents/*.md` (copied verbatim); the real Codex CLI reads
-    `.codex/agents/*.toml` (translated — `_translate_agent_md_to_toml`). Codex loads the
-    `.codex/agents/` layer only when the workspace is TRUSTED — handled at launch (M3)."""
-    # Claude — copy the .md personas verbatim.
+def _install_claude_agents(ws: Path) -> None:
+    """Vendor the review/gardener personas into the Claude worker's `<ws>/.claude/agents/` as
+    verbatim `.md` (Claude Code reads project agents from there). The Codex personas are NOT
+    written into the workspace — they are user-scope in CODEX_HOME (`_ensure_codex_home`)."""
     _ensure_dir(ws / Path(_AGENT_DEST_CLAUDE).parts[0])
     claude = ws / _AGENT_DEST_CLAUDE
     _ensure_dir(claude)
     _copy_into(_AGENT_SOURCE, claude)
-    # Codex — translate each .md persona into a custom-agent .toml.
-    _ensure_dir(ws / Path(_AGENT_DEST_CODEX).parts[0])
-    codex = ws / _AGENT_DEST_CODEX
-    _ensure_dir(codex)
+
+
+def _write_codex_agents(agents_dir: Path) -> None:
+    """Translate each `.md` persona into a Codex custom-agent `.toml` in `agents_dir`, both the
+    `name =` field and the filename sanitized via `_codex_agent_name` so the file and its
+    spawnable identity never diverge. Used to populate `$CODEX_HOME/agents/`."""
+    _ensure_dir(agents_dir)
     for item in sorted(_AGENT_SOURCE.iterdir()):
         if item.is_file() and item.suffix == ".md":
-            # Name the .toml after the SANITIZED agent name (matches the `name =` field, which is
-            # Codex's source of truth) so the file and its spawnable identity never diverge.
-            target = codex / (_codex_agent_name(item.stem) + ".toml")
+            target = agents_dir / (_codex_agent_name(item.stem) + ".toml")
             _clear_target(target)
             target.write_text(_translate_agent_md_to_toml(item), encoding="utf-8")
 
 
+def _ensure_codex_home(target=None, source_home=None) -> str | None:
+    """Materialize a Director-managed CODEX_HOME so the real Codex worker loads our review
+    personas USER-scope (no project trust needed) and so Codex's auto-trust persistence stays
+    OUT of the user's real `~/.codex/config.toml`. Returns the absolute CODEX_HOME path, or
+    None when there is no codex install to serve (no source `auth.json` — a claude-only host
+    or CI), in which case the caller leaves CODEX_HOME unset.
+
+    Idempotent + symlink-refusing (a reused dir may have been touched by a prior worker):
+      - `auth.json`  → SYMLINK to the source `auth.json` (token refreshes propagate to the one
+        real credential store; auth carries no trust state, so the symlink is safe).
+      - `config.toml` → COPY of the source config (preserves provider/model/auth-mode). A COPY,
+        not a symlink, so Codex's auto-trust writes land HERE, never in the user's real config
+        (the F3 close). Copied if-missing; remove the codex-home to refresh a changed provider.
+      - `agents/<name>.toml` → the translated personas (`_write_codex_agents`)."""
+    src = Path(source_home) if source_home else \
+        Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+    if not (src / "auth.json").exists():
+        return None  # no codex credentials to serve → nothing to materialize
+    home = (Path(target) if target else DEFAULT_CODEX_HOME).resolve()
+    _refuse_symlink(home)
+    home.mkdir(parents=True, exist_ok=True)
+    auth, src_auth = home / "auth.json", (src / "auth.json").resolve()
+    if not (auth.is_symlink() and os.path.realpath(auth) == str(src_auth)):
+        _clear_target(auth)
+        auth.symlink_to(src_auth)
+    cfg = home / "config.toml"
+    if not cfg.exists() and (src / "config.toml").exists():
+        _refuse_symlink(cfg)
+        shutil.copy2(src / "config.toml", cfg)
+    _write_codex_agents(home / "agents")
+    return str(home)
+
+
+def _sweep_stale_codex_layout(ws: Path) -> None:
+    """Remove inert Director-injected leftovers from a REUSED pre-Phase-2 workspace — the old
+    `<ws>/.codex/skills/` and `<ws>/.codex/agents/` copies the Director used to write (Phase 1)
+    but no longer does (skills never lived on a Codex loader path there; Codex personas moved
+    user-scope to CODEX_HOME). Removes ONLY git-UNTRACKED files under those two dirs (the
+    Director's clone starts pristine, so untracked content there is OURS), then prunes the
+    emptied dirs — a TRACKED `.codex/` file the clone itself ships is never in `ls-files
+    --others`, so it is never touched (no PR pollution). No-op on a non-git workspace
+    (mock/offline). Symlinks are unlinked as links, never followed."""
+    git = ws / ".git"
+    if not git.exists() or git.is_symlink():
+        return
+
+    def _tracked_under(rel: str) -> bool:
+        try:
+            r = subprocess.run(["git", "-C", str(ws), "ls-files", "-z", "--", rel],
+                               capture_output=True, text=True)
+            return bool(r.stdout.strip("\0"))
+        except OSError:
+            return True  # can't tell → assume tracked (fail safe: don't delete)
+
+    def _untracked_under(rel: str) -> list[str]:
+        out = ""
+        for flags in (["--exclude-standard"], ["--ignored", "--exclude-standard"]):
+            try:
+                out += subprocess.run(
+                    ["git", "-C", str(ws), "ls-files", "--others", *flags, "-z", "--", rel],
+                    capture_output=True, text=True).stdout
+            except OSError:
+                pass
+        return [x for x in out.split("\0") if x]
+
+    for rel in _STALE_CODEX_DIRS:
+        d = ws / rel
+        if d.is_symlink():
+            d.unlink()
+            continue
+        if not d.is_dir():
+            continue
+        if not _tracked_under(rel):
+            shutil.rmtree(d)  # entirely ours (no tracked file under it) → remove whole subtree
+        else:
+            for f in (ws / r for r in _untracked_under(rel)):  # mixed → remove only our untracked
+                if f.is_symlink() or f.is_file():
+                    f.unlink()
+
+
 def install_worker_methodology(workspace) -> None:
-    """Vendor the worker skills + the agent-harness methodology (skills + review/gardener
-    agents) into each runtime's NATIVE loader path so a WORKER (not just the Director) runs
-    the whole execplan completion gate. Skills → `.claude/skills/` (Claude) and
-    `.agents/skills/` (the only repo path the real Codex CLI scans); agents → `.claude/agents/`
-    (Claude, `.md`) and `.codex/agents/` (Codex). The review agents are the load-bearing part:
-    a runtime dispatches agents only from its own dir, never an arbitrary repo path, so without
-    this copy the worker's gate has no personas to dispatch (memory:
+    """Vendor the per-workspace methodology so a WORKER (not just the Director) runs the whole
+    execplan completion gate: skills → `<ws>/.claude/skills/` (Claude) and `<ws>/.agents/skills/`
+    (the only repo path the real Codex CLI scans); Claude review/gardener agents →
+    `<ws>/.claude/agents/*.md`. The Codex personas are NOT written here — they are user-scope in
+    a Director-managed CODEX_HOME (`_ensure_codex_home`, wired at launch in `_prepare`), so the
+    Director never has to trust the clone. The review agents are the load-bearing part: a runtime
+    dispatches agents only from a loader dir, never an arbitrary repo path (memory:
     mid-session-agents-not-dispatchable, codex-worker-config-surface).
 
     Safety (completion-gate P1): the per-ticket workspace is reused across runs and a prior
     worker (workspace-write sandbox) can plant symlinks, so we never write THROUGH a
     pre-existing symlink — `_refuse_symlink` rejects a symlinked runtime root or dest dir, and
     `_clear_target` removes each target (link unlinked, special node/file deleted, real dir
-    rmtree'd) before a fresh copy. Idempotent.
+    rmtree'd) before a fresh copy. Idempotent. A reused PRE-Phase-2 workspace also has inert
+    Director-injected `.codex/{skills,agents}` leftovers — swept by `_sweep_stale_codex_layout`.
 
     PR hygiene: the injected methodology is not part of the ticket's work, so its dirs are
     added to the clone's local `.git/info/exclude` (uncommitted, modifies no tracked file)
     and thus stay out of `git status`/`git add -A` — see `_exclude_injected_methodology`."""
     ws = Path(workspace)
     _assert_skill_sources_disjoint()
+    _sweep_stale_codex_layout(ws)
     # SKILLS — copy both source dirs verbatim into each runtime's skills dir.
     for dest in _SKILL_DESTS:
         _ensure_dir(ws / Path(dest).parts[0])  # the runtime root (.claude / .agents)
@@ -238,8 +333,8 @@ def install_worker_methodology(workspace) -> None:
         _ensure_dir(dst)
         for src in _SKILL_SOURCES:
             _copy_into(src, dst)
-    # AGENTS — Claude reads .md verbatim; Codex reads its own `.codex/agents/` dir.
-    _install_agents(ws)
+    # AGENTS — Claude reads .md from the workspace; Codex personas are user-scope (CODEX_HOME).
+    _install_claude_agents(ws)
     _exclude_injected_methodology(ws)
 
 
@@ -384,35 +479,6 @@ def _workspace_for(ticket: dict, workspace_root) -> tuple[Path, bool]:
     return ws, created_now
 
 
-def _with_codex_trust(command: list[str], ws) -> list[str]:
-    """Append `-c projects."<ws_abs>".trust_level="trusted"` to the launch command so the real
-    Codex CLI loads the workspace's project `.codex/` layer — the vendored `.codex/agents/*.toml`
-    personas live there, and Codex SKIPS project-scoped `.codex/` layers for an UNTRUSTED project
-    (developers.openai.com/codex/config-basic: "untrusted → skips project-scoped `.codex/`
-    layers, including project-local config, hooks, and rules"). Skills are unaffected (they load
-    from the repo `.agents/skills/` scan, not a trust-gated `.codex/` layer).
-
-    Security (SECURITY.md): trusting the workspace ALSO makes Codex read the cloned target repo's
-    own `.codex/config.toml` — a new untrusted-input surface. It cannot loosen the worker's
-    posture, because CLI `-c`/`--config` and the `thread/start` approvalPolicy+sandbox params
-    OUTRANK project config (config-basic precedence #1 > #2); the autonomy `-c` flags + thread
-    params already pin approval/sandbox/network above anything the project file could set.
-
-    Only the bash-wrapped real runtime is touched: a mock command (not `bash -c …`) is returned
-    unchanged. The key is a no-op for the Claude adapter (it ignores codex `projects.*` config),
-    matching how the autonomy `-c` flags already reach both runtimes. The path is shell-quoted so
-    bash passes the TOML quoted-key literally to codex's `-c` parser (verified accepted).
-
-    The key is the FULLY-RESOLVED path (`realpath`, not `abspath`): Codex canonicalizes the
-    project root for its `projects.<path>` trust lookup, so a symlinked workspace-root component
-    (e.g. macOS `/tmp`→`/private/tmp`) would make an unresolved key silently fail to match —
-    trust would not apply and `.codex/agents/` would not load."""
-    if len(command) == 3 and command[0] == "bash" and command[1] == "-c":
-        kv = f'projects."{os.path.realpath(str(ws))}".trust_level="trusted"'
-        return [command[0], command[1], command[2] + f" -c {shlex.quote(kv)}"]
-    return command
-
-
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              read_timeout_s, tool_executor, install_skills,
              worker_env: dict | None = None, cancel_event=None,
@@ -447,15 +513,23 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
     # FATAL — abort the attempt if the pre-run sync fails.
     run_hook("before_run", hooks.get("before_run"), cwd=ws,
              timeout_s=hook_timeout_s, fatal=True)
+    codex_home = None
     if install_skills:
         install_worker_methodology(ws)
-        # Trust the workspace so Codex loads the project `.codex/` layer we just vendored into
-        # (`.codex/agents/*.toml`); a no-op for mock/Claude (see `_with_codex_trust`). Gated on
-        # `install_skills` — without the vendored `.codex/` layer there is nothing to trust FOR,
-        # and trusting would needlessly widen the T16 surface (the clone's own project config).
-        command = _with_codex_trust(command, ws)
+        # Materialize the Director-managed CODEX_HOME so the real Codex worker loads our review
+        # personas USER-scope (no project trust needed). We deliberately do NOT trust the clone:
+        # it was redundant (Codex auto-trusts the worker cwd — live-proven on exec AND app-server)
+        # and the explicit trust persisted `[projects."<ws>"]` entries into the user's real
+        # `~/.codex/config.toml`. Returns None when there is no codex install to serve
+        # (claude-only host / CI) → CODEX_HOME left unset. (SECURITY.md T16.)
+        codex_home = _ensure_codex_home()
     if worker_env is None:
         worker_env = worker_policy.build_worker_env(worker_policy.load_worker_policy())
+    if codex_home is not None:
+        # CODEX_HOME is harness MECHANISM (like PATH), not host secret policy — injected AFTER the
+        # deny-by-default env build. Redirects the codex worker's auth/config/agents/state to the
+        # Director-managed home; ignored by the mock and the Claude adapter.
+        worker_env = {**worker_env, "CODEX_HOME": codex_home}
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
     return AppServerClient(command, cwd=ws, on_server_request=seam,
                            tool_executor=tool_executor, read_timeout_s=read_timeout_s,
@@ -686,9 +760,9 @@ def main(argv=None) -> int:
     ap.add_argument("--tools", choices=["none", "linear"], default="none",
                     help="advertise worker tools (linear = linear_graphql)")
     ap.add_argument("--install-skills", action="store_true",
-                    help="install both plugins into the worker workspace — skills into "
-                         ".claude/skills + .agents/skills, agents into .claude/agents + "
-                         ".codex/agents (each runtime's native loader path)")
+                    help="install the methodology into the worker workspace — skills into "
+                         ".claude/skills + .agents/skills, Claude agents into .claude/agents; "
+                         "Codex personas go user-scope into a Director-managed CODEX_HOME")
     ap.add_argument("--autonomous", action="store_true",
                     help="un-watched: use the code turn-end decider (no live Director "
                          "answers turn ends). Per-action self-governance (on-request + "
