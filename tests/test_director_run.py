@@ -125,6 +125,26 @@ class RunEndToEndTest(unittest.TestCase):
             (ws / ".codex" / "agents" / "doc-gardener.toml").read_text(encoding="utf-8"))
         self.assertEqual(gardener["sandbox_mode"], "workspace-write")
 
+    def test_with_codex_trust_appends_for_bash_runtime(self):
+        # M3: the bash-wrapped real runtime gets -c projects."<ws>".trust_level="trusted" so
+        # Codex loads the vendored project .codex/ layer; prior -c overrides are preserved.
+        import shlex
+        ws = self.tmp / "wstrust"
+        cmd = ["bash", "-c", "codex app-server -c approvals_reviewer=auto_review"]
+        out = run._with_codex_trust(cmd, ws)
+        self.assertEqual(out[:2], ["bash", "-c"])
+        abs_ws = os.path.abspath(str(ws))
+        self.assertIn("-c approvals_reviewer=auto_review", out[2])  # preserved
+        # bash re-tokenizes the appended fragment to the EXACT TOML kv (quotes pass literally
+        # to codex's -c parser — the quoting that the live probe confirmed codex accepts).
+        self.assertEqual(shlex.split(out[2])[-1],
+                         f'projects."{abs_ws}".trust_level="trusted"')
+
+    def test_with_codex_trust_leaves_mock_unchanged(self):
+        # The mock command is not `bash -c …`, so trust must not corrupt it.
+        cmd = [sys.executable, MOCK, "plain"]
+        self.assertEqual(run._with_codex_trust(cmd, self.tmp / "x"), cmd)
+
     def test_run_ticket_threads_tools_and_executor(self):
         seen = []
 

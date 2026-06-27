@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -355,6 +356,30 @@ def _workspace_for(ticket: dict, workspace_root) -> tuple[Path, bool]:
     return ws, created_now
 
 
+def _with_codex_trust(command: list[str], ws) -> list[str]:
+    """Append `-c projects."<ws_abs>".trust_level="trusted"` to the launch command so the real
+    Codex CLI loads the workspace's project `.codex/` layer — the vendored `.codex/agents/*.toml`
+    personas live there, and Codex SKIPS project-scoped `.codex/` layers for an UNTRUSTED project
+    (developers.openai.com/codex/config-basic: "untrusted → skips project-scoped `.codex/`
+    layers, including project-local config, hooks, and rules"). Skills are unaffected (they load
+    from the repo `.agents/skills/` scan, not a trust-gated `.codex/` layer).
+
+    Security (SECURITY.md): trusting the workspace ALSO makes Codex read the cloned target repo's
+    own `.codex/config.toml` — a new untrusted-input surface. It cannot loosen the worker's
+    posture, because CLI `-c`/`--config` and the `thread/start` approvalPolicy+sandbox params
+    OUTRANK project config (config-basic precedence #1 > #2); the autonomy `-c` flags + thread
+    params already pin approval/sandbox/network above anything the project file could set.
+
+    Only the bash-wrapped real runtime is touched: a mock command (not `bash -c …`) is returned
+    unchanged. The key is a no-op for the Claude adapter (it ignores codex `projects.*` config),
+    matching how the autonomy `-c` flags already reach both runtimes. The path is shell-quoted so
+    bash passes the TOML quoted-key literally to codex's `-c` parser (verified accepted)."""
+    if len(command) == 3 and command[0] == "bash" and command[1] == "-c":
+        kv = f'projects."{os.path.abspath(str(ws))}".trust_level="trusted"'
+        return [command[0], command[1], command[2] + f" -c {shlex.quote(kv)}"]
+    return command
+
+
 def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              read_timeout_s, tool_executor, install_skills,
              worker_env: dict | None = None, cancel_event=None,
@@ -391,6 +416,9 @@ def _prepare(ticket: dict, *, command, queue_base, workspace_root, timeout_s,
              timeout_s=hook_timeout_s, fatal=True)
     if install_skills:
         install_worker_methodology(ws)
+    # Trust the workspace so Codex loads the project `.codex/` layer we just vendored into
+    # (`.codex/agents/*.toml`); a no-op for mock/Claude (see `_with_codex_trust`).
+    command = _with_codex_trust(command, ws)
     if worker_env is None:
         worker_env = worker_policy.build_worker_env(worker_policy.load_worker_policy())
     seam = make_seam(str(ticket["id"]), str(ws), base=queue_base, timeout_s=timeout_s)
