@@ -773,7 +773,9 @@ class BoardRouteTest(unittest.TestCase):
                        "/api/v1/board", "toggleCollapse", "gcanvas", "node-id", 'id="rail"',
                        # M2 design system: header chrome + card anatomy + wave labels.
                        "project-dependency-graph", "progfill", "wavelabel", "node-badge",
-                       "updateHeader", "in_progress"):
+                       "updateHeader", "in_progress",
+                       # M3 live paint: state-aware edges + ready/backlog + transient + collapse.
+                       "edgeClass", "marker-end", "paintTransient", "applyCollapsed", '"ready"'):
             self.assertIn(marker, html)
 
     def test_page_shows_labeled_empty_state_when_no_board(self):

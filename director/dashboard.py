@@ -295,6 +295,10 @@ PAGE = """<!doctype html>
   .gcanvas { position:absolute; top:0; left:0; transform-origin:0 0; }
   .gedges { position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
   .gedge { stroke:#39414f; stroke-width:1.5; fill:none; }
+  .gedge.active { stroke:#00d68f; }                         /* an in-flight / freed-up path */
+  .gedge.done { stroke:#16a34a; opacity:.5; }               /* a satisfied dependency (dim) */
+  .gedge.blocked { stroke:#d97706; }                        /* into a blocked / cycling node */
+  .gedge.backlog { stroke:#39414f; stroke-dasharray:5 4; }  /* dependency not yet active */
   .gedge.dimmed { opacity:.18; }
   .wavelabel { position:absolute; text-align:center; color:#3d4757; font-size:10px; letter-spacing:.14em;
           text-transform:uppercase; pointer-events:none; }
@@ -329,6 +333,7 @@ PAGE = """<!doctype html>
           background-size:200% 100%; animation:tokenflow 1.4s linear infinite; }
   @keyframes tokenflow { from{background-position:200% 0} to{background-position:-200% 0} }
   .node.collapsed { border-style:dashed; }
+  .node.transient { border-style:dashed; opacity:.9; }      /* just-claimed, not yet in the board snapshot */
   .node.dimmed { opacity:.26; }
   #rail { width:23rem; overflow:auto; border-left:1px solid #1b2230; padding:.2rem .7rem .8rem; }
   #rail.hidden { display:none; }
@@ -606,13 +611,15 @@ function startStream() {
 // wave) and grouped `layers` — the client computes no topology (ARCHITECTURE invariant 4).
 // Tap a card → the per-ticket session overlay (openDrill); double-tap → collapse its
 // subtree. `window.__graph` is the introspection hook (debug + behavioral test), replacing
-// the old `window.cy`. (M2 applies the 7-state palette + card anatomy + header chrome; the
-// live 7-bucket mapping, token values, and state-aware edge coloring land in M3.)
+// the old `window.cy`. (M3 wires the full live paint: the 7-bucket mapping incl. ready-vs-
+// backlog by blocker-doneness, state-aware edge coloring, the just-claimed transient union,
+// and opt-in focus/collapse that survive a repaint.)
 const SVGNS = "http://www.w3.org/2000/svg";
 const NODE_W = 168, NODE_H = 74, H_GAP = 56, V_GAP = 16, PAD = 40;
 const STRIDE = NODE_W + H_GAP, ROW = NODE_H + V_GAP;
-const G = { nodes: [], byId: {}, edges: [], scale: 1, tx: 0, ty: 0,
-            boardSig: "", lastState: null, canvas: null, svg: null };
+const G = { nodes: [], byId: {}, edges: [], preds: {}, scale: 1, tx: 0, ty: 0,
+            boardSig: "", lastState: null, canvas: null, svg: null,
+            collapsed: new Set(), transient: {} };   // preds: id->blocker ids; collapsed persists across rebuilds
 // state bucket -> the short human label shown in the card's state badge.
 const BADGE = { done: "done", in_progress: "running", ready: "ready", backlog: "todo",
                 blocked: "blocked", failed: "failed", cancelled: "cancelled", in_cycle: "cycle" };
@@ -640,7 +647,7 @@ function layout(view) {
     const yOff = (maxRows - rows) * ROW / 2;       // center each column against the tallest
     return { id: n.id, layer: layer, ident: n.identifier || n.id, title: n.title || "",
              bstate: n.state || "", inCycle: !!n.in_cycle, cls: lifecycleFromState(n.state),
-             label: n.identifier || n.id, collapsed: false, dom: null,
+             label: n.identifier || n.id, dom: null,
              x: PAD + layer * STRIDE, y: PAD + yOff + ri * ROW };
   });
 }
@@ -659,6 +666,45 @@ function setLifecycle(card, cls) {                // swap ONLY lifecycle tokens 
   card.classList.remove("in_progress", "done", "failed", "blocked", "backlog", "ready", "cancelled", "in_cycle");
   for (const c of cls.split(" ")) if (c) card.classList.add(c);
 }
+function edgeClass(fromB, toB) {                  // R4: colour an edge by its endpoint lifecycle buckets
+  // amber if either end is blocked/cycling (a stalled path), green if active (an in_progress
+  // end or a freed-up ready target), dim green if fully satisfied (both done), else a faint
+  // dashed backlog edge — so a human can trace the active critical path by colour.
+  if (toB === "blocked" || toB === "in_cycle" || fromB === "blocked" || fromB === "in_cycle") return "blocked";
+  if (fromB === "in_progress" || toB === "in_progress" || toB === "ready") return "active";
+  if (fromB === "done" && toB === "done") return "done";
+  return "backlog";
+}
+function setEdgeClass(p, cls) {                   // swap ONLY the state class (keep gedge/dimmed)
+  p.classList.remove("active", "done", "blocked", "backlog");
+  p.classList.add(cls);
+}
+function arrowDefs() {                            // one shared arrowhead; `context-stroke` matches each edge colour
+  const defs = document.createElementNS(SVGNS, "defs");
+  const m = document.createElementNS(SVGNS, "marker");
+  m.setAttribute("id", "arrow"); m.setAttribute("viewBox", "0 0 10 10");
+  m.setAttribute("refX", "9"); m.setAttribute("refY", "5");
+  m.setAttribute("markerWidth", "6"); m.setAttribute("markerHeight", "6");
+  m.setAttribute("orient", "auto-start-reverse");
+  const mp = document.createElementNS(SVGNS, "path");
+  mp.setAttribute("d", "M0,0 L10,5 L0,10 z"); mp.setAttribute("fill", "context-stroke");
+  m.appendChild(mp); defs.appendChild(m); return defs;
+}
+function makeCard(n) {                            // the full card anatomy (shared by graph + transient cards)
+  const card = el("div", null, "node " + (n.cls || "backlog")); card.dataset.id = n.id;
+  if (n.x != null) { card.style.left = n.x + "px"; card.style.top = n.y + "px"; }
+  const head = el("div", null, "node-head");      // identifier + state badge
+  head.appendChild(el("div", n.label, "node-id"));
+  head.appendChild(el("span", "", "node-badge"));
+  card.appendChild(head);
+  card.appendChild(el("div", n.title, "node-title"));     // 2-line clamped (CSS)
+  card.appendChild(el("div", "", "node-meta"));           // in-flight phase · Nt (set by paintGraph)
+  card.appendChild(el("div", null, "node-tokenbar"));     // bottom activity bar (CSS pulse on in_progress)
+  card.title = "click to stream this ticket's events";
+  card.onclick = function () { openDrill(n.id); };
+  card.ondblclick = function () { toggleCollapse(n); };
+  n.dom = card; return card;
+}
 function renderGraph() {
   // (Re)build the DOM: a transformed inner canvas holding the SVG edge layer + the cards.
   const host = $("cy"); host.textContent = "";
@@ -668,11 +714,13 @@ function renderGraph() {
   }
   const canvas = el("div", null, "gcanvas");
   const svg = document.createElementNS(SVGNS, "svg"); svg.setAttribute("class", "gedges");
+  svg.appendChild(arrowDefs());                    // shared arrowhead (state-aware coloring is applied in paintGraph)
   canvas.appendChild(svg);
-  for (const e of G.edges) {                       // edges first (painted behind the cards)
+  for (const e of G.edges) {                        // edges first (painted behind the cards)
     const a = G.byId[e.from], b = G.byId[e.to]; if (!a || !b) continue;
     const p = document.createElementNS(SVGNS, "path");
-    p.setAttribute("d", edgePath(a, b)); p.setAttribute("class", "gedge"); p.setAttribute("fill", "none");
+    p.setAttribute("d", edgePath(a, b)); p.setAttribute("class", "gedge");
+    p.setAttribute("fill", "none"); p.setAttribute("marker-end", "url(#arrow)");
     e.dom = p; svg.appendChild(p);
   }
   // wave-N labels above each topological layer (consume the server's layering; 1-indexed to
@@ -683,21 +731,7 @@ function renderGraph() {
     lab.style.left = (PAD + L * STRIDE) + "px"; lab.style.top = "10px"; lab.style.width = NODE_W + "px";
     canvas.appendChild(lab);
   }
-  for (const n of G.nodes) {
-    const card = el("div", null, "node " + n.cls); card.dataset.id = n.id;
-    card.style.left = n.x + "px"; card.style.top = n.y + "px";
-    const head = el("div", null, "node-head");      // identifier + state badge
-    head.appendChild(el("div", n.label, "node-id"));
-    head.appendChild(el("span", "", "node-badge"));
-    card.appendChild(head);
-    card.appendChild(el("div", n.title, "node-title"));      // 2-line clamped (CSS)
-    card.appendChild(el("div", "", "node-meta"));            // in-flight phase · Nt (set by paintGraph)
-    card.appendChild(el("div", null, "node-tokenbar"));      // bottom activity bar (CSS pulse on in_progress)
-    card.title = "click to stream this ticket's events";
-    card.onclick = function () { openDrill(n.id); };
-    card.ondblclick = function () { toggleCollapse(n); };
-    n.dom = card; canvas.appendChild(card);
-  }
+  for (const n of G.nodes) canvas.appendChild(makeCard(n));
   host.appendChild(canvas); G.canvas = canvas; G.svg = svg;
   const ext = extent();
   svg.setAttribute("width", ext.w); svg.setAttribute("height", ext.h);
@@ -749,37 +783,51 @@ function zoomBy(f) {                                // zoom toward the viewport 
   G.scale = ns; applyTransform();
 }
 function paintGraph(v) {
-  // Merge the live run-state view onto the existing cards. Called from render() every state
-  // tick; a no-op until loadBoard() has built the cards. Stashes the latest state so a fresh
-  // render (after a topology rebuild) can paint immediately. M2 paints the 7-state palette +
-  // the badge/meta + the header done/total counts; the ready-vs-backlog split, the transient
-  // just-claimed union, and the state-aware edge coloring land in M3.
+  // Merge the live run-state onto the cards. Called from render() each state tick; a no-op
+  // until loadBoard() has built the cards. The full 7-bucket mapping (R-tokens): live state
+  // wins (in_flight→in_progress, recent→done/failed, stuck→blocked), else in_cycle, else the
+  // board state name; the todo-ish bucket splits ready-vs-backlog by blocker-doneness. Then
+  // state-aware edge coloring + the just-claimed transient union + focus/collapse re-apply.
   if (v) G.lastState = v;
   if (!G.nodes.length || !G.lastState) return;
   const st = G.lastState, inflight = {}, recent = {}, stuck = {};
   for (const e of (st.in_flight || [])) inflight[e.ticket_id] = e;
   for (const r of (st.recent || [])) recent[r.ticket_id] = r;
   for (const s of (st.stuck || [])) stuck[s.ticket || s.ticket_id] = s;
+  // pass 1 — primary bucket per node (live > in_cycle > board state name; todo-ish → backlog).
+  const bucket = {};
+  for (const n of G.nodes) {
+    if (inflight[n.id]) bucket[n.id] = "in_progress";
+    else if (recent[n.id]) bucket[n.id] = recent[n.id].status === "completed" ? "done" : "failed";
+    else if (stuck[n.id]) bucket[n.id] = "blocked";
+    else if (n.inCycle) bucket[n.id] = "in_cycle";
+    else bucket[n.id] = lifecycleFromState(n.bstate);
+  }
+  // pass 2 — split the todo-ish bucket: all blockers done (or none) → ready, else backlog
+  // (mirrors the orchestrator's eligibility; the node carries no Linear node-level state_type).
+  for (const n of G.nodes) {
+    if (bucket[n.id] !== "backlog") continue;
+    if ((G.preds[n.id] || []).every(function (p) { return bucket[p] === "done"; })) bucket[n.id] = "ready";
+  }
+  // pass 3 — paint the cards + accumulate the header counts.
   const counts = { total: G.nodes.length, done: 0, in_progress: 0, blocked: 0, failed: 0 };
   for (const n of G.nodes) {
     if (!n.dom) continue;
-    let cls = lifecycleFromState(n.bstate);
-    const fl = inflight[n.id];
-    if (fl) cls = "in_progress";                     // live state wins; recent→done/failed; stuck→blocked
-    else if (recent[n.id]) cls = (recent[n.id].status === "completed") ? "done" : "failed";
-    else if (stuck[n.id]) cls = "blocked";
-    if (n.inCycle) cls += " in_cycle";               // cycle ring (composes over the bucket)
-    setLifecycle(n.dom, cls);                        // preserves dimmed/collapsed across a repaint
-    const primary = cls.split(" ")[0];
-    if (counts[primary] !== undefined) counts[primary]++;
+    const b = bucket[n.id];
+    setLifecycle(n.dom, b);                          // preserves dimmed/collapsed across a repaint
+    if (counts[b] !== undefined) counts[b]++;
     const badge = n.dom.querySelector(".node-badge");
-    if (badge) badge.textContent = BADGE[primary] || primary;
+    if (badge) badge.textContent = BADGE[b] || b;
     const meta = n.dom.querySelector(".node-meta");
-    if (meta) {                                      // in-flight: phase · Nt readout (token VALUE; M3 refines)
-      const t = fl && fl.tokens;
+    if (meta) {                                      // in-flight: phase · Nt readout
+      const fl = inflight[n.id], t = fl && fl.tokens;
       meta.textContent = fl ? ((fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "")) : "";
     }
   }
+  for (const e of G.edges) {                         // edges: colour by endpoint lifecycle (R4)
+    if (e.dom) setEdgeClass(e.dom, edgeClass(bucket[e.from], bucket[e.to]));
+  }
+  paintTransient(inflight);                          // union just-claimed tickets not yet in the board snapshot
   updateHeader(counts);
   if (focusOn) applyFocus();                         // re-dim settled nodes after the repaint
 }
@@ -796,17 +844,19 @@ async function loadBoard() {
   G.nodes = layout(view);
   G.byId = {}; for (const n of G.nodes) G.byId[n.id] = n;
   G.edges = edges.map(e => ({ from: e.from, to: e.to, dom: null }));
+  G.preds = {}; for (const e of G.edges) (G.preds[e.to] = G.preds[e.to] || []).push(e.from);
   renderGraph();
+  applyCollapsed();                                 // re-apply persisted collapse across a topology rebuild
   window.__graph = {                                // introspection hook (replaces window.cy)
     nodes: G.nodes.map(n => ({ id: n.id, layer: n.layer, cls: n.cls, label: n.label })),
     edges: G.edges.map(e => ({ from: e.from, to: e.to })) };
   if (firstBuild) fitGraph();                       // frame once; don't fight the user's pan on a refresh
   paintGraph(null);                                 // apply the latest known state to the fresh render
 }
-// Frontier focus (R8): dim the settled (done/cancelled) nodes so the active frontier
-// stands out — non-destructive (dim, not hide), toggleable, re-applied after a repaint.
-// Collapse hides a node's descendant subtree (dbl-click). Both are minimal here; M3 hardens
-// the opt-in semantics + repaint-survival and adds the state-aware edge coloring.
+// Frontier focus (R8): dim the settled (done/cancelled) nodes so the active frontier stands
+// out — non-destructive (dim, not hide), opt-in, re-applied after every repaint. Collapse
+// hides a node's descendant subtree (dbl-click), opt-in and PERSISTED in G.collapsed so it
+// survives a live repaint AND a topology rebuild (re-applied by loadBoard via applyCollapsed).
 let focusOn = false;
 function applyFocus() {
   for (const n of G.nodes) {
@@ -831,12 +881,40 @@ function descendants(id) {                          // node ids reachable from `
     for (const y of (adj[x] || [])) stack.push(y); }
   return seen;
 }
-function toggleCollapse(n) {                         // manual DAG-subtree collapse (descendant-hide)
-  n.collapsed = !n.collapsed;
-  if (n.dom) n.dom.classList.toggle("collapsed", n.collapsed);
-  const desc = descendants(n.id);
-  for (const m of G.nodes) if (desc[m.id] && m.dom) m.dom.style.display = n.collapsed ? "none" : "";
-  for (const e of G.edges) if (e.dom && (desc[e.to] || desc[e.from])) e.dom.style.display = n.collapsed ? "none" : "";
+function applyCollapsed() {                          // re-apply the persisted collapse set (post repaint/rebuild)
+  const hidden = {};
+  for (const n of G.nodes) if (n.dom) n.dom.classList.remove("collapsed");
+  G.collapsed.forEach(function (id) {
+    const c = G.byId[id]; if (!c || !c.dom) return;
+    c.dom.classList.add("collapsed");
+    const d = descendants(id); for (const x in d) hidden[x] = 1;
+  });
+  for (const n of G.nodes) if (n.dom) n.dom.style.display = hidden[n.id] ? "none" : "";
+  for (const e of G.edges) if (e.dom) e.dom.style.display = (hidden[e.to] || hidden[e.from]) ? "none" : "";
+}
+function toggleCollapse(n) {                         // manual DAG-subtree collapse (descendant-hide), opt-in
+  if (G.collapsed.has(n.id)) G.collapsed.delete(n.id); else G.collapsed.add(n.id);
+  applyCollapsed();
+}
+function paintTransient(inflight) {                 // union just-claimed in-flight tickets not yet in the board
+  const want = {};
+  for (const id in inflight) if (!G.byId[id]) want[id] = inflight[id];
+  for (const id in G.transient) if (!want[id]) { G.transient[id].remove(); delete G.transient[id]; }
+  if (!G.canvas) return;
+  const baseY = extent().h + 8; let i = 0;          // a strip just below the laid-out graph
+  for (const id in want) {
+    const fl = want[id];
+    let card = G.transient[id];
+    if (!card) {
+      card = makeCard({ id: id, label: fl.identifier || id, title: "(just claimed)", cls: "in_progress transient" });
+      G.canvas.appendChild(card); G.transient[id] = card;
+    }
+    card.style.left = (PAD + i * STRIDE) + "px"; card.style.top = baseY + "px";
+    const badge = card.querySelector(".node-badge"); if (badge) badge.textContent = "claimed";
+    const meta = card.querySelector(".node-meta"), t = fl.tokens;
+    if (meta) meta.textContent = (fl.phase || "working") + (t && t.total != null ? " · " + t.total + "t" : "");
+    i++;
+  }
 }
 function toggleRail() { $("rail").classList.toggle("hidden"); $("drill").classList.toggle("railhidden"); }
 startStream();

@@ -184,6 +184,26 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   `node in_progress` border `#00d68f` badge `running` meta `running · 20560t`, LIN-1
   `node done` `#16a34a`, LIN-8 `node blocked in_cycle` ring `#a855f7`; cards render `system-ui`.
 
+- [x] (2026-06-27) **M3 — live paint merge + state-aware edges + opt-in focus/collapse.**
+  `paintGraph` rewritten as a 3-pass derivation: (1) primary bucket per node by priority
+  (in_flight→in_progress, recent→done/failed, stuck→blocked, else `in_cycle`, else the board
+  state name via `lifecycleFromState`); (2) the todo-ish bucket splits **ready vs backlog by
+  blocker-doneness** (`G.preds[id].every(p => bucket[p]==='done')` → ready, mirroring scheduler
+  eligibility; the board carries no node-level state_type); (3) paint cards + header counts.
+  State-aware **edge coloring** (`edgeClass` → active green / done dim-green / blocked amber /
+  backlog dashed) from the same bucket map, with a shared SVG `<marker>` arrowhead using
+  `context-stroke` so one def inherits each edge's colour. **Transient union** (`paintTransient`):
+  a just-claimed in-flight ticket not yet in the board snapshot gets a transient-styled card in a
+  strip below the graph, reconciled each paint. **Collapse hardened**: persisted in `G.collapsed`
+  (a Set), re-applied by `applyCollapsed` after both a repaint (paint never touches `display`) and
+  a topology rebuild (`loadBoard`). `makeCard` extracted (shared by graph + transient). Gate
+  **GREEN**; dashboard suite 58/58. Behavioral (:8788 sample): LIN-3 `in_progress`/`running ·
+  20560t`, LIN-1 `done`, LIN-8 `in_cycle`; bucket histogram `done:3 in_progress:2 backlog:2
+  in_cycle:2 ready:1` (ready split verified); edge classes `active:3 done:1 backlog:2 blocked:2`
+  (amber-into-cycle vs green-active coexist) + arrowhead marker present; focus dims done not
+  active (clears on toggle); collapse hides 4 descendants, survives a repaint, restores on
+  re-expand.
+
 ## Surprises & discoveries
 - (M1) The hand-roll is *simpler* than the reference, as predicted: because `/api/v1/board`
   already ships each node's `layer` + the grouped `layers`, the client does zero topology
@@ -194,6 +214,12 @@ the 7-bucket mapping). **Do not re-derive the spec.** Required reading:
   later) overrides only `--bd` to purple + a dashed ring — so "blocked AND cycling" reads in one
   card with no specificity war and no per-combination class. The pulse keyframes reference
   `var(--glow)`, so one `@keyframes` animates every bucket in its own colour.
+- (M3) Making `in_cycle` a *priority bucket* (above the board state name) — per the spec's
+  unambiguous mapping — means LIN-8 flips from M2's composed `blocked in_cycle` (amber + purple
+  ring) to a single `in_cycle` (purple). The spec is explicit ("else `in_cycle:true`→in_cycle"),
+  and it reads better: a node stuck in a dependency *cycle* is shown as cycling, not merely
+  blocked. Live state still wins over in_cycle, so an actively-running cycle member shows
+  in_progress (the cycle is implied by its amber in-edges).
 
 ## Decision log
 - 2026-06-27: Chose incremental in-place rewrite (Approach A) seeded by C — the hand-rolled
