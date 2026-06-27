@@ -632,32 +632,95 @@ class WiringTest(unittest.TestCase):
         self.assertFalse(kw["install_skills"])
 
     def test_real_run_honors_linear_tool_config(self):
-        # a real (non-mock) run picks up the host's linear tool + skill default with no flag
+        # a real (non-mock) run picks up the host's linear tool + skill default with no flag.
+        # A real run defaults to the always-on daemon (ADR 0008), so patch run_forever.
         from director import orchestrator
         _write(self.root, {"director": {"team": "T", "worker": {
             "tools": "linear", "install_skills": True}}})
         board = orchestrator.MockBoard.demo()
         with _chdir(self.root), mock.patch(
-                "director.orchestrator.run_until_drained",
-                return_value={"summaries": [], "passes": 1,
-                              "stopped_reason": "drained", "stuck": []}) as drained:
+                "director.orchestrator.run_forever",
+                return_value={"stopped_reason": "drained"}) as loop:
             orchestrator.main([], board=board)  # team + tooling from config, no flags
-        kw = drained.call_args.kwargs
+        kw = loop.call_args.kwargs
         self.assertIsNotNone(kw["tools"])
         self.assertTrue(kw["install_skills"])
 
     def test_real_run_defaults_install_skills_on(self):
         # the production path installs the methodology by DEFAULT — no worker block, no
         # flag, a real (non-mock) run still threads install_skills=True to the dispatcher.
+        # A real run defaults to the always-on daemon (ADR 0008), so patch run_forever.
         from director import orchestrator
         _write(self.root, {"director": {"team": "T"}})  # no worker block at all
         board = orchestrator.MockBoard.demo()
         with _chdir(self.root), mock.patch(
-                "director.orchestrator.run_until_drained",
-                return_value={"summaries": [], "passes": 1,
-                              "stopped_reason": "drained", "stuck": []}) as drained:
+                "director.orchestrator.run_forever",
+                return_value={"stopped_reason": "drained"}) as loop:
             orchestrator.main([], board=board)  # team from config, no flags
-        self.assertTrue(drained.call_args.kwargs["install_skills"])
+        self.assertTrue(loop.call_args.kwargs["install_skills"])
+
+    # -- run-loop resolution (ADR 0008: daemon is the default; --mock ⇒ bounded) -----
+    def _run_main_loops(self, argv):
+        """Run orchestrator.main with all three loop entrypoints patched (serializable
+        returns so main never blocks). Returns the (forever, drained, once) mocks."""
+        from director import orchestrator
+        board = orchestrator.MockBoard.demo()
+        with _chdir(self.root), \
+                mock.patch("director.orchestrator.run_forever",
+                           return_value={"stopped_reason": "drained"}) as forever, \
+                mock.patch("director.orchestrator.run_until_drained",
+                           return_value={"summaries": [], "passes": 1,
+                                         "stopped_reason": "drained", "stuck": []}) as drained, \
+                mock.patch("director.orchestrator.run_once", return_value=[]) as once:
+            orchestrator.main(argv, board=board)
+        return forever, drained, once
+
+    def test_real_run_defaults_to_daemon(self):
+        # ADR 0008: a real run with no loop flag IS the always-on daemon.
+        forever, drained, once = self._run_main_loops(["--team", "T"])
+        self.assertEqual(forever.call_count, 1)
+        self.assertEqual((drained.call_count, once.call_count), (0, 0))
+
+    def test_mock_run_defaults_to_batch(self):
+        # --mock is an offline fixture (no live board to poll forever) → bounded run_until_drained.
+        forever, drained, once = self._run_main_loops(["--team", "T", "--mock"])
+        self.assertEqual(drained.call_count, 1)
+        self.assertEqual((forever.call_count, once.call_count), (0, 0))
+
+    def test_batch_flag_selects_run_until_drained_even_for_real(self):
+        forever, drained, once = self._run_main_loops(["--team", "T", "--batch"])
+        self.assertEqual(drained.call_count, 1)
+        self.assertEqual((forever.call_count, once.call_count), (0, 0))
+
+    def test_once_flag_selects_run_once(self):
+        forever, drained, once = self._run_main_loops(["--team", "T", "--once"])
+        self.assertEqual(once.call_count, 1)
+        self.assertEqual((forever.call_count, drained.call_count), (0, 0))
+
+    def test_daemon_alias_still_selects_run_forever(self):
+        # --daemon is now a redundant alias of the default; it must still select the daemon.
+        forever, drained, once = self._run_main_loops(["--team", "T", "--daemon"])
+        self.assertEqual(forever.call_count, 1)
+        self.assertEqual((drained.call_count, once.call_count), (0, 0))
+
+    def test_daemon_wins_over_once_backcompat(self):
+        # back-compat: --daemon takes precedence over the bounded fixtures (both → daemon).
+        forever, drained, once = self._run_main_loops(["--team", "T", "--daemon", "--once"])
+        self.assertEqual(forever.call_count, 1)
+        self.assertEqual((drained.call_count, once.call_count), (0, 0))
+
+    def test_mock_daemon_explicit_flag_wins_over_mock_default(self):
+        # --mock defaults to bounded, but an explicit --daemon still wins (precedence:
+        # --daemon > ... > mock-default). Pins the doc claim "an explicit loop flag wins".
+        forever, drained, once = self._run_main_loops(["--team", "T", "--mock", "--daemon"])
+        self.assertEqual(forever.call_count, 1)
+        self.assertEqual((drained.call_count, once.call_count), (0, 0))
+
+    def test_once_wins_over_batch(self):
+        # documented total order: --once is more specific than --batch (--once > --batch).
+        forever, drained, once = self._run_main_loops(["--team", "T", "--once", "--batch"])
+        self.assertEqual(once.call_count, 1)
+        self.assertEqual((forever.call_count, drained.call_count), (0, 0))
 
     def test_reconcile_interval_resolves(self):
         from director import orchestrator

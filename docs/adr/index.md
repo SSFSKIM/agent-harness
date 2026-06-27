@@ -63,3 +63,10 @@ Decisions + why. Register every page here (lint D8).
   (context-budget is model-dependent + can't read usage from a shell hook), and enabling
   `features.hooks=true` would re-open the clone-`.codex/hooks.json` RCE that the always-on
   disable closes (T16, load-bearing). Reversal trigger recorded; cross-links 0005.
+- [One operating mode — Director ⟷ Board](0008-one-operating-mode.md)
+  — refines 0002/0003: finishes the arc by removing the residual multi-mode *framing*.
+  There is ONE operating mode (always-present Director adjudicating an always-present
+  Board); `attended`/`lights-out` are a **property** (human present?), `batch`/`--once`
+  and the pure-code `--autonomous` decider are **fixtures**, and the always-on **daemon
+  is the default**. `--mock` defaults to the bounded loop (offline board has nothing to poll
+  forever). No posture/security change; Daemonized-Claude runtime still a separate track.
