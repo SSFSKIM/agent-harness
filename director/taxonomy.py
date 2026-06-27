@@ -1,4 +1,4 @@
-"""Worker first-turn framing: the operating + terminal contracts (ADR 0005, ADR 0007).
+"""Worker first-turn framing: the operating + terminal contracts (ADR 0005, ADR 0009).
 
 This module owns the two stage-agnostic blocks injected into every worker's FIRST-turn
 prompt by `frame_first_turn`: `WORKER_PROTOCOL` (the single, always-injected operating
@@ -9,12 +9,12 @@ surface is exactly these two PLUS the host's auto-loaded `AGENTS.md` and its inv
 there are no per-stage prompt templates (ADR 0005).
 
 The dev-stage taxonomy (a 5-value `planning/research/design/spec/impl` label → DAG metadata)
-was REMOVED by ADR 0007: its only runtime use was the dispatch gate (DAG sequencing is pure
+was REMOVED by ADR 0009: its only runtime use was the dispatch gate (DAG sequencing is pure
 `blocked_by`; the stage labels never shaped the prompt or sequencing), so it collapsed to a
 single `agent-ready` admission label (`orchestrator.DISPATCH_LABEL`). HOW to do the work —
 research, spec, ExecPlan, or a direct patch — is the worker's judgment, not a label.
 
-See docs/adr/0007-collapse-dispatch-taxonomy.md (supersedes the dispatch/DAG-metadata clause
+See docs/adr/0009-collapse-dispatch-taxonomy.md (supersedes the dispatch/DAG-metadata clause
 of 0005) and docs/adr/0005-no-stage-prompt-templates.md. (The module name is historical —
 it no longer holds a taxonomy; a rename to `worker_protocol` is a deferred cosmetic follow-up.)
 """

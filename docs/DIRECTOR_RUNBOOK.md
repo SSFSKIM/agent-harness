@@ -163,7 +163,7 @@ A malformed block fails **loud at startup**, before any worker spawns.
 ## 4. Prepare the board (one-time)
 
 On the target Linear team, create a single `agent-ready` label and tag each ticket you want
-the Director to pick up. `dispatch_requires_label` is **true by default** (ADR 0007), so an
+the Director to pick up. `dispatch_requires_label` is **true by default** (ADR 0009), so an
 un-tagged ticket is never claimed — onboarding/stray issues are ignored. You do **not**
 pre-classify the work (research vs spec vs build): the worker decides HOW from the ticket's
 goal + the host's `AGENTS.md` + skills. (Set `dispatch_requires_label: false` to claim every

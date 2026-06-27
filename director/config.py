@@ -51,7 +51,7 @@ DEFAULTS: dict = {
     "max_passes": 50,
     "max_dispatched": 200,
     "done_types": ["completed"],
-    # When True (the default — ADR 0007), the orchestrator dispatches ONLY tickets carrying
+    # When True (the default — ADR 0009), the orchestrator dispatches ONLY tickets carrying
     # the `agent-ready` label (orchestrator.DISPATCH_LABEL) — untagged board tickets (Linear's
     # default onboarding issues, or anything a human is still shaping) are skipped, never run
     # as workers (use-all shakedown F1). The label is the explicit "this is agent work" opt-in;

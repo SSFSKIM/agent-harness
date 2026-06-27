@@ -124,7 +124,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(config.load_director_config(root=self.root).read_timeout_s, 45.0)
 
     def test_dispatch_requires_label_default_on_and_opt_out(self):
-        # ADR 0007: default True — the Director dispatches ONLY tickets carrying the
+        # ADR 0009: default True — the Director dispatches ONLY tickets carrying the
         # `agent-ready` label; a host can opt OUT (dispatch every ready ticket) by False.
         self.assertTrue(config.defaults().dispatch_requires_label)
         _write(self.root, {"director": {"dispatch_requires_label": False}})

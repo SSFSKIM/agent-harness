@@ -104,7 +104,7 @@ class EligibilityTest(unittest.TestCase):
         self.assertEqual(out, [])
 
     def test_require_label_drops_without_agent_ready(self):
-        # F1 (ADR 0007): with require_label, ONLY a ticket carrying the `agent-ready`
+        # F1 (ADR 0009): with require_label, ONLY a ticket carrying the `agent-ready`
         # dispatch label survives — an unlabeled ticket AND a ticket with some OTHER label
         # (a stray board label) are both dropped, so non-harness tickets never dispatch.
         ready = {"id": "b", "identifier": "b", "blockers": [], "labels": ["agent-ready"]}
@@ -555,7 +555,7 @@ def _issue(tid, blockers=None, state="st_todo", labels=None):
          "prompt": f"p-{tid}", "state_id": state}
     if blockers:
         d["blockers"] = blockers
-    # A dispatchable mock ticket carries the agent-ready label (ADR 0007: the dispatch gate
+    # A dispatchable mock ticket carries the agent-ready label (ADR 0009: the dispatch gate
     # is on by default). Callers pass `labels` explicitly only to test a different set.
     d["labels"] = list(labels) if labels else ["agent-ready"]
     return d
@@ -670,7 +670,7 @@ class RunUntilDrainedTest(unittest.TestCase):
 
 
 class DispatchPromptTest(unittest.TestCase):
-    """ADR 0007: the dispatch label (`agent-ready`) only ADMITS a ticket; it never shapes the
+    """ADR 0009: the dispatch label (`agent-ready`) only ADMITS a ticket; it never shapes the
     prompt — dispatch passes the ticket's own prompt through unchanged. DAG sequencing is pure
     `blocked_by` (the removed dev-stage taxonomy never typed it)."""
 
@@ -689,7 +689,7 @@ class DispatchPromptTest(unittest.TestCase):
 
     def test_pipeline_sequenced_by_dag_not_by_label(self):
         # Sequencing is the blocked_by chain alone — every ticket carries the SAME agent-ready
-        # label, yet they still drain in dependency order. ADR 0007: the label admits; the DAG
+        # label, yet they still drain in dependency order. ADR 0009: the label admits; the DAG
         # orders. Each worker receives its ticket's raw prompt.
         board = orch.MockBoard([
             _issue("plan"),

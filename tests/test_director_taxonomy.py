@@ -79,7 +79,7 @@ class WorkerProtocolTest(unittest.TestCase):
         self.assertIn("acceptance criteria", low)       # self-contained contract
         self.assertIn("provenance", low)                # link parent + source doc
         self.assertIn("self-contained", low)
-        # ADR 0007: an issued child must carry the agent-ready dispatch label or the
+        # ADR 0009: an issued child must carry the agent-ready dispatch label or the
         # orchestrator's gate will never pick it up.
         self.assertIn("agent-ready", low)
 
