@@ -25,9 +25,8 @@ an error.
 ## How to apply
 
 - **Always pair a codex review verdict with at least one real-code reviewer** (a
-  risk persona, or a `general-purpose` agent carrying the rubric — see
-  [mid-session agents are not dispatchable](mid-session-agents-not-dispatchable.md)),
-  and trust the verdict **only where they corroborate**.
+  risk persona, or a `general-purpose` agent carrying the rubric), and trust the
+  verdict **only where they corroborate**.
 - Treat codex's cited `file:line` / type names as **suspect** unless re-confirmed
   against the code.
 

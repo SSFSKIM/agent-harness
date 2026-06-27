@@ -140,7 +140,7 @@ cite them in findings.
   declined write as written leaves the operator believing they acted when the request is
   still open — the write analog of R12/R14's "never a wrong value / never a false gate".
 - **R19 — Durable handoff precedes the consume-enabling transition; restart GC trusts it,
-  not just board state.** A generalization of [queue: act before consume](design-docs/queue-act-before-consume-ordering.md) to
+  not just board state.** A generalization of [[queue-act-before-consume-ordering]] to
   restart-time cleanup. When finishing a unit of work writes BOTH a board-terminal state
   AND a durable downstream handoff (e.g. `reconcile` marking a ticket `done` AND enqueuing
   its PR to the serialized merger), the **handoff enqueue MUST happen before the terminal

@@ -38,7 +38,7 @@ agent) present?* × *is the human present?* Today's flag is the diagonal:
    Claude-Code-equivalent session (Agent SDK), event-woken, always-ready, still
    able to receive human messages. It is a **separate, in-development track**, OUT
    of scope here. It is **not** the rejected `claude -p`-per-decision spawn:
-   [no-headless Director](../design-docs/no-headless-director-codex-owns-approval.md) is **NOT superseded**. A daemonized
+   [[no-headless-director-codex-owns-approval]] is **NOT superseded**. A daemonized
    *main session* still satisfies "keep the Director the watched main session" — it
    *is* a main session, merely unattended-capable; `DIRECTOR.md §2`'s "no separate
    headless process that decides" stays true (the daemon is the Director, not a

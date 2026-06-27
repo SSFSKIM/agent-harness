@@ -93,7 +93,7 @@ that delivers a crossing-minimized layered layout.
   M2: `director/assets/` (the three pinned bundles), the fixed `_ASSETS` route + `_asset`
   handler, and the `/graph` page that loads them locally. A dashboard test asserts the
   allowlist serves and any non-key/traversal-shaped asset path is a 404.
-- **Re-vendoring is a manual, pinned step** (like [worker-runtime sync is a manual port](../design-docs/worker-runtime-sync-is-manual-port.md)):
+- **Re-vendoring is a manual, pinned step** (like [[worker-runtime-sync-is-manual-port]]):
   the versions above are the provenance; a bump is a deliberate re-download + re-commit,
   not an automatic dependency resolve. No `package.json`, no lockfile.
 - **Scope fence.** This permits vendoring for the **observability dashboard** only. It is
