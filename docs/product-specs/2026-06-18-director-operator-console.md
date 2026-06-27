@@ -80,7 +80,7 @@ console closes both gaps: answer-from-browser + notify-on-park.
   atomically (`write_answer` = temp+`os.replace`, already) and the console
   reports success only after it is durable; answering a request that already has
   an answer is refused (`409`) rather than clobbering a possibly-consumed answer
-  ([[queue-act-before-consume-ordering]]). *Verifiable:* a second `POST` for an
+  ([queue: act before consume](../design-docs/queue-act-before-consume-ordering.md)). *Verifiable:* a second `POST` for an
   already-answered `request_id` returns `409` and leaves the first answer intact.
 - **R7 — Read-only safety preserved; everything fail-soft.** `GET /api/v1/state` is
   byte-unchanged and `GET /`'s read rendering is preserved (the page gains the R3
@@ -172,7 +172,7 @@ console closes both gaps: answer-from-browser + notify-on-park.
 
 ### Integration points & edge cases
 
-- **Act-before-consume** ([[queue-act-before-consume-ordering]]): the answer is
+- **Act-before-consume** ([queue: act before consume](../design-docs/queue-act-before-consume-ordering.md)): the answer is
   the durable side-effect; the console writes it (atomic) and only then returns
   `200`. There is nothing to "consume" on the console side — the worker consumes
   via `wait_for_answer` — so ordering reduces to "write atomically, report after".

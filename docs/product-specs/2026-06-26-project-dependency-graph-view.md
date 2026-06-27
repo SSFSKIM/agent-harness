@@ -182,7 +182,7 @@ GET /assets/<lib>.js → fixed vendored asset            (new, offline)
 ```
 
 `board.json` is the only new backend artifact; the LINEAR_API_KEY stays Director-side
-and the dashboard still issues **no network** call ([[cc-codex-appserver-drop-in-verified]]
+and the dashboard still issues **no network** call ([cc-codex-appserver drop-in](../design-docs/cc-codex-appserver-drop-in-verified.md)
 keeps the key Director-side).
 
 ### Components & files

@@ -145,7 +145,7 @@ owner: harness
   elicitation/mergeReview; `mergeRequest` read-only) → the blocked worker's
   `wait_for_answer` unblocks. Write-surface fencing = `127.0.0.1` + per-server CSRF
   token + Origin/Host check (the deferred "write fencing" concern); act-durably +
-  refuse-double-answer (R6, [[queue-act-before-consume-ordering]]). New
+  refuse-double-answer (R6, [queue: act before consume](../design-docs/queue-act-before-consume-ordering.md)). New
   `director/notify.py` tails the queue (reusing `watch.new_pending` dedup) and POSTs
   a **webhook** ($DIRECTOR_WEBHOOK_URL/`--webhook`, secret kept in `.env`) once per
   new human-bound pending request — the lights-out "you're needed" ping. Additive:
