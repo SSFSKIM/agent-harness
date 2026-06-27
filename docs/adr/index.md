@@ -1,6 +1,6 @@
 ---
 status: stable
-last_verified: 2026-06-21
+last_verified: 2026-06-28
 owner: harness
 ---
 # ADR index
@@ -46,3 +46,10 @@ Decisions + why. Register every page here (lint D8).
   checked-in JS bundles (Cytoscape + dagre + cytoscape-dagre) from a constant `/assets/*`
   route — offline (never a CDN), zero-traversal (fixed map), Python stdlib-only untouched.
   Not a general license to add deps elsewhere under `director/`.
+- [No Director-authored worker hooks — `features.hooks=false` is settled, not deferred](0007-no-director-authored-worker-hooks.md)
+  — closes the codex-worker-config lineage's deferred "Phase 3 = Codex hooks": the Director
+  authors no tool-use hooks for either worker. No symmetry to restore (neither worker gets
+  vendored hooks today), the candidate payloads are already served elsewhere or proved weak
+  (context-budget is model-dependent + can't read usage from a shell hook), and enabling
+  `features.hooks=true` would re-open the clone-`.codex/hooks.json` RCE that the always-on
+  disable closes (T16, load-bearing). Reversal trigger recorded; cross-links 0005.

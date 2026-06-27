@@ -57,8 +57,10 @@ NETWORK = "sandbox_workspace_write.network_access=true"   # full outbound (exfil
 # loading outright, closing that vector deterministically (this is LOAD-BEARING, not just
 # defence-in-depth, precisely because the auto-trust cannot be turned off). The sibling
 # `mcp_servers` config-exec vector is NOT closable in-process (no override clears a project
-# mcp table) — it is a T11-class residual retired by OS isolation (SECURITY.md T16). Re-enable
-# hooks selectively if the Director ever authors its own Codex hooks.
+# mcp table) — it is a T11-class residual retired by OS isolation (SECURITY.md T16). This is a
+# SETTLED posture, not a deferral: the Director authors NO worker hooks (ADR 0007, decided
+# 2026-06-28 — docs/adr/0007-no-director-authored-worker-hooks.md), so the disable is permanent;
+# re-enabling would only be revisited under that ADR's reversal trigger.
 DISABLE_HOOKS = "features.hooks=false"
 
 
