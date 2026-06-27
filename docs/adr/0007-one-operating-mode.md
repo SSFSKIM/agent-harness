@@ -44,8 +44,8 @@ Two sub-decisions make this concrete:
    is what makes "daemon = default" safe to ship.
 
 The **status `mode` field is kept but reframed**: it is a runtime *heartbeat label*
-(`daemon` for the always-on loop, `batch` for the bounded fixture, `None` when not a
-polling loop) — not a user-chosen mode. No schema change.
+(`daemon` for the always-on loop; the bounded `--batch`/`--once` fixtures don't poll, so
+they emit no heartbeat and `mode` stays `None`) — not a user-chosen mode. No schema change.
 
 ## Why
 

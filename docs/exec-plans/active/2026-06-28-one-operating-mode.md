@@ -201,5 +201,17 @@ A novice needs these to execute from the plan alone:
   a chosen mode). No schema change.
 
 ## Feedback (from completion gate)
+- **review-spec-compliance: SATISFIED.** All 6 DoD items verified; scope honored (only specified
+  files touched; `--batch` the one new flag, specified in M2). Full suite 851 tests OK.
+  - **P2 (found + FIXED inline):** the `mode="batch"` heartbeat label was documented (ADR 0007 +
+    `director/status.py` docstrings) but never emitted — `run_until_drained`/`run_once` call
+    `status.wave()`, not `polled()`, so bounded fixtures keep `mode=None`. Fixed the ADR line +
+    both status.py docstrings to state bounded fixtures emit no heartbeat (`mode=None`), matching
+    the "no schema change" decision. Doc-only; no behavioral impact.
+  - **Note (acceptance wording):** M1's acceptance cited `nav.py backlinks` to show the 0002/0003
+    cross-refs, but `nav.py` indexes only Markdown `[text](path)` links, not `[[wikilinks]]` (the
+    ADR cross-ref convention). The cross-refs genuinely exist and resolve (check.py link-integrity
+    GREEN); the right tool to demonstrate wikilink ADR cross-refs is check.py link-integrity, not
+    `nav.py backlinks`. Recorded as a one-off learning (not deferred work).
 
 ## Outcomes & retrospective

@@ -97,10 +97,10 @@ class StatusWriter:
         self._recent_max = recent_max
         self._now = now
         # `mode`/`phase`/`last_poll_at`/`polls` are the always-on loop's live heartbeat
-        # (additive). `mode` is a runtime LABEL (`daemon` for the default always-on loop,
-        # `batch` for the bounded fixture, `None` when not a polling loop) — NOT a
-        # user-chosen mode (ADR 0007). Non-polling paths never call `polled()`, so they keep
-        # mode=None/phase=None — back-compatible for every existing reader.
+        # (additive). `mode` is a runtime LABEL (`daemon` for the default always-on loop) —
+        # NOT a user-chosen mode (ADR 0007). The bounded `--batch`/`--once` fixtures don't
+        # poll, so they never call `polled()` and keep mode=None/phase=None — back-compatible
+        # for every existing reader.
         self._run: dict = {"started_at": None, "pass": 0, "stopped_reason": None,
                            "mode": None, "phase": None, "last_poll_at": None, "polls": 0}
         self._in_flight: dict[str, dict] = {}
@@ -219,11 +219,11 @@ class StatusWriter:
         self._flush()
 
     def polled(self, *, phase: str, mode: str = "daemon") -> None:
-        """Daemon heartbeat (gap #2): record one tick's board poll — `mode`
-        (daemon|batch), `phase` (active|idle|draining|stopped), a fresh
-        `last_poll_at`, and a monotonic `polls` count. Called only by the daemon
-        loop on the MAIN tick thread, so the single-writer invariant (R13) holds —
-        like every other transition here. Additive: it touches only the new `run`
+        """Daemon heartbeat (gap #2): record one tick's board poll — `mode` (the polling-loop
+        label, `daemon` for the always-on default; ADR 0007), `phase`
+        (active|idle|draining|stopped), a fresh `last_poll_at`, and a monotonic `polls` count.
+        Called only by the daemon loop on the MAIN tick thread, so the single-writer invariant
+        (R13) holds — like every other transition here. Additive: it touches only the new `run`
         fields, never the in_flight/recent/stuck/aggregate state."""
         self._run["mode"] = mode
         self._run["phase"] = phase
