@@ -48,14 +48,17 @@ it stops. Run it on demand when choosing what's next.
      + outward evidence with citations), the judge's score sheet, the suggested
      first wedge.
    - **Tier 2 — foundational challenges** (rare, flagged). Each: the idea, the
-     exact Mission clause / axiom it strains, and why the *constraint* deserves a
+     exact charter commitment it strains — a Mission clause, a Core Axiom, **or a
+     load-bearing design-philosophy / identity commitment** (e.g. lean &
+     dogfood-first vs. ecosystem-steward) — and why the *constraint* deserves a
      human re-decision.
    - **Dropped** — one line each with reason, so the human sees what was weighed
      and cut.
 
 5. **Write + commit.** Write `docs/horizons/YYYY-MM-DD-<slug>.md` (`type: horizon`,
    a one-line `description`, **no `phase`** — a horizon is not a roadmap node),
-   register it newest-first in `docs/horizons/index.md`, run the gate to GREEN
+   register it newest-first in `docs/horizons/index.md` (create that index if it
+   does not exist yet — a ported host won't have one until the first run), run the gate to GREEN
    (command in `docs/design-docs/agent-harness.md`), and commit with a scoped
    `git add docs/horizons/` (never `-A`). Then surface the proposal — choosing a
    Tier-1 pick, or weighing a Tier-2 challenge, is the human's call.
@@ -66,8 +69,12 @@ it stops. Run it on demand when choosing what's next.
   index line. Do not create product-specs, ExecPlans, or tickets, and do not edit
   the charter — a chosen Tier-1 initiative becomes a spec via the `product-design`
   skill, in a *separate*, human-initiated run.
-- **Main-session / Director-side only** — not vendored to workers; workers execute
-  tickets, they do not set direction.
+- **Main-session / Director-side by intent.** The scout *sets direction*, which
+  ticket-executing workers do not — so a worker never invokes it. Note this is a
+  documented intent, **not a mechanically-enforced exclusion**: today
+  `install_worker_methodology` blanket-copies every skill/agent into worker
+  runtimes, so the files do land there. A per-component `scope: director` exclusion
+  is tracked tech-debt, best landed with the in-flight worker-vendoring redesign.
 - **Mid-session dogfood note.** A freshly-authored agent type is not dispatchable
   by `subagent_type` until the next session (the registry loads at session start).
   If `workstream-scout` / `vision-judge` were just created, drive the panel for

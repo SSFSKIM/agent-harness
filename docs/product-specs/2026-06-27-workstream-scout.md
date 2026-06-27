@@ -55,13 +55,16 @@ human happens to think about it. Three gaps, observably:
   every vision against a fixed rubric — Mission-alignment, axiom-fit,
   competitive edge, leverage, feasibility — and **routes** each to exactly one of:
   **Tier 1** (actionable initiative, within Mission + all axioms), **Tier 2** (a
-  *foundational challenge* — compelling but requires evolving the Mission or an
-  axiom), or **dropped** (with reason). (Verify: every vision has an independent
+  *foundational challenge* — compelling but requires evolving a charter
+  commitment: a Mission clause, a Core Axiom, or a load-bearing
+  design-philosophy / identity commitment), or **dropped** (with reason). (Verify:
+  every vision has an independent
   score sheet and a tier with justification; no generator grades its own vision.)
 - **R5.** The `horizon` proposal doc has two tiers: **Tier 1** ranked initiatives
   (each: the vision, why it wins, the rubric scores, and a suggested first
   wedge), and **Tier 2** flagged foundational challenges (each: the idea, which
-  Mission clause / axiom it strains, and why it might be worth the human
+  charter commitment it strains — a Mission clause, a Core Axiom, or a load-bearing
+  design-philosophy / identity commitment — and why it might be worth the human
   re-deciding). Tier 2 is **rare and explicitly marked**. (Verify: read the doc;
   both tiers present with the required fields, Tier 2 names the strained
   axiom/clause.)
@@ -105,8 +108,13 @@ context). Procedure:
    a `docs/horizons/index.md`, run the gate to GREEN, commit (scoped `git add`,
    never `-A`).
 
-The skill is **Director/main-session-side only** — it is *not* vendored to
-workers (workers execute tickets; they do not set direction). Cadence is
+The skill is **Director/main-session-side by intent** — the scout sets direction,
+which ticket-executing workers do not, so a worker never invokes it. This is a
+documented intent, **not a mechanically-enforced exclusion**: `install_worker_methodology`
+currently blanket-copies all skills/agents into worker runtimes, so the files do
+land there (harmless — a worker only runs a skill its ticket names). A per-component
+`scope: director` exclusion is tracked tech-debt, best landed with the in-flight
+worker-vendoring redesign. Cadence is
 **on-demand** (the human runs it when thinking about what's next); periodic /
 completion-triggered invocation is a Non-goal here (follow-up).
 
@@ -196,7 +204,9 @@ a normal product-spec via the existing `product-design` flow.
   Add it only if redundancy proves wasteful.
 - **No new charter Initiative** — the scout anchors under the existing Methodology
   initiative; it earns its own initiative only if it grows past one skill.
-- **Not vendored to workers** — Director/main-session-side only.
+- **Director/main-session-side by intent** — not a mechanically-enforced
+  worker-exclusion (see Design Component 1); per-component vendoring scope is
+  tracked tech-debt.
 
 ## Acceptance criteria
 

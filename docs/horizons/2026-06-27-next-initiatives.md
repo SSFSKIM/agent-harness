@@ -76,8 +76,9 @@ it runs on a repo *without* written law — so the **bootstrap-law path**
 
 ## Tier 2 — foundational challenges (escalated, not enacted)
 
-Each was compelling on Mission-fit, edge, or leverage, but its core **strains the
-Mission's scope or a named Core Axiom** — so the judge routed it here. These are
+Each was compelling on Mission-fit, edge, or leverage, but its core **strains a
+charter commitment — the Mission's scope, a named Core Axiom, or a load-bearing
+design-philosophy / identity commitment** — so the judge routed it here. These are
 questions for the human: *should the constraint move?* Each carries a Tier-1-able
 **carve-out wedge** that tests the thesis cheaply *without* committing to the
 challenge.

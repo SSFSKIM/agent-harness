@@ -19,8 +19,9 @@ on absolute merits, not relative ranking (the skill ranks).
 Score it on five axes (1–5, each with a one-line justification):
 1. **Mission-alignment** — does it move the project toward *govern-by-intent /
    human-touches-only-forks*? A vision that is impressive but off-Mission scores low.
-2. **Axiom-fit** — does it respect all three Core Axioms (agents-write-everything;
-   not-in-repo-doesn't-exist; general-by-identity)? Name any it strains.
+2. **Axiom-fit** — does it respect the Core Axioms (today, per `docs/CHARTER.md`:
+   agents-write-everything; not-in-repo-doesn't-exist; general-by-identity — re-read
+   the charter, the set can change)? Name any it strains.
 3. **Competitive edge** — is the asymmetry/moat real or wishful? If a cited claim
    is load-bearing and doubtful, verify it with WebFetch.
 4. **Leverage** — what does it unlock; is it high-leverage or merely incremental?
@@ -31,10 +32,13 @@ Then **route** the vision to exactly one tier:
 - **TIER 1 — actionable initiative.** It clears the Mission *and* violates no
   axiom. A do-able, aligned bet. Note the single highest-value first wedge.
 - **TIER 2 — foundational challenge.** It is genuinely compelling (high
-  Mission-alignment + edge + leverage) **but its core requires evolving the
-  Mission or bending a specific axiom.** Name the exact clause/axiom it strains and
-  articulate why the *constraint* — not the idea — is what deserves a human
-  re-decision. This is the keystone: a brilliant axiom-breaking idea is neither
+  Mission-alignment + edge + leverage) **but its core requires evolving a charter
+  commitment — a Mission clause, a specific Core Axiom, or a load-bearing
+  design-philosophy / identity commitment** (e.g. lean & dogfood-first vs.
+  becoming an ecosystem-steward; portability vs. intent-native-first). Name the
+  exact clause/axiom/commitment it strains and articulate why the *constraint* —
+  not the idea — is what deserves a human re-decision. This is the keystone: a
+  brilliant charter-straining idea is neither
   silently killed nor silently enacted; it is **escalated** to the human, who
   alone sets the north star. Tier 2 is **rare** — reserve it for ideas strong
   enough that you'd genuinely ask "should this axiom move?"
