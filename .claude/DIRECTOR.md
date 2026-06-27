@@ -210,8 +210,8 @@ the queue**. This is the `--mock` / CI / truly-detached niche (§5); in producti
 Director (attended or lights-out) is always present and answers. The security boundary is
 then Codex's sandbox + `auto_review` + the T10 Linear guardrail — not a judge.
 
-(The *run loop* is a second property — the always-on **daemon is the default and the
-mode**; `--batch`/`--once` are bounded dev/test/CI fixtures. See §12.)
+(The *run loop* is the other axis — the always-on **daemon IS the mode and the default**;
+`--batch`/`--once` are bounded dev/test/CI fixtures, not modes. See §12.)
 
 ## 7. Handling a merge escalation (the merger raised a PR)
 
@@ -399,8 +399,9 @@ The always-on daemon **is the operating mode and the default**: a real run with 
 flag runs forever (Symphony's identity; spec
 `docs/product-specs/2026-06-17-continuous-daemon-loop.md`). The **bounded fixtures** —
 `--batch` (drain ready work across DAG-aware passes, then exit) and `--once` (a single
-pass) — are for dev / test / CI; `--mock` implies `--batch`. `--daemon` survives only as a
-redundant, **deprecated alias** of the default (ADR 0007). The launch command (just run it,
+pass) — are for dev / test / CI; `--mock` **defaults** to `--batch` (an explicit loop flag
+still wins — order `--daemon` > `--once` > `--batch` > mock-default). `--daemon` survives
+only as a redundant, **deprecated alias** of the default (ADR 0007). The launch command (just run it,
 optionally `[--poll-interval N]`) is in the runbook
 ([`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md) §9); the *semantics* you must
 understand to operate it are here:

@@ -1251,7 +1251,8 @@ def main(argv=None, *, board=None) -> int:
                     help="bounded fixture: drain ready work across DAG-aware re-poll passes, "
                          "then exit (run_until_drained). The default operating mode is the "
                          "always-on daemon (ADR 0007); --batch/--once are dev/test/CI "
-                         "fixtures. --mock implies --batch")
+                         "fixtures. --mock defaults to --batch unless an explicit loop flag "
+                         "is given; precedence: --daemon > --once > --batch > mock-default")
     ap.add_argument("--max-passes", type=int, default=None,
                     help="--batch (run_until_drained) safety bound on re-poll passes")
     ap.add_argument("--max-dispatched", type=int, default=None,

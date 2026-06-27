@@ -212,18 +212,18 @@ worker continues. You do not poll. (The *judgment* — what to answer — is
 
 ```bash
 set -a; . ./.env; set +a
-python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --turn-review-timeout 3600
-#   --once                      # bounded: drain ready work in ONE pass, then exit
+python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --once --turn-review-timeout 3600
+#   (omit --once)               # the always-on daemon — the default operating mode (§9)
 #   --batch                     # bounded: drain ready work across DAG-aware passes, then exit
 #   --concurrency 1             # one worker at a time for a clean first run
 #   --worker claude             # claude runtime (default: codex)
 ```
 Run it as a **background task** so the session stays free to answer. `--turn-review-timeout
-3600` keeps a worker from timing out while you deliberate. **The bare command is the
-always-on daemon — the default operating mode (ADR 0007); it never exits on a drained board
-(§9).** For a *bounded* first run add `--once` (a single pass — ideal for validating one
-canary ticket) or `--batch` (multi-pass drain-and-exit). (`--daemon` still works but is now
-a redundant, deprecated alias of the default.)
+3600` keeps a worker from timing out while you deliberate. This first-run command uses
+**`--once`** — a single bounded pass, ideal for validating one canary ticket (`--batch` is
+the multi-pass bounded drain). **Omit the bounded flag and the bare command is the always-on
+daemon — the default operating mode (ADR 0007), which never exits on a drained board (§9).**
+(`--daemon` still works but is now a redundant, deprecated alias of the default.)
 
 **2. Arm the queue Monitor** — emits one line per newly-pending request + one `runReport`
 per run-level terminal, so each becomes a session notification (the polling lives in this

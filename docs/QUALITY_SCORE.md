@@ -103,5 +103,5 @@ director grade notes:
   autonomy), grounded in ~611 director unittests + 11 TS app-server suites and the
   review-gated ExecPlan history. Mostly B (solid, shipped, review-gated); board
   adapter docs C (Linear-only, no pluggable adapters) and lights-out scripts C (the
-  Daemonized Claude Code runtime is unbuilt — watched mode only in live use). Paired
+  Daemonized Claude Code runtime is unbuilt — attended only in live use). Paired
   with the `symphony-parity-gap.md` refresh (substrate gaps #1–#5 CLOSED).

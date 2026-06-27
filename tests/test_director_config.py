@@ -709,6 +709,19 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(forever.call_count, 1)
         self.assertEqual((drained.call_count, once.call_count), (0, 0))
 
+    def test_mock_daemon_explicit_flag_wins_over_mock_default(self):
+        # --mock defaults to bounded, but an explicit --daemon still wins (precedence:
+        # --daemon > ... > mock-default). Pins the doc claim "an explicit loop flag wins".
+        forever, drained, once = self._run_main_loops(["--team", "T", "--mock", "--daemon"])
+        self.assertEqual(forever.call_count, 1)
+        self.assertEqual((drained.call_count, once.call_count), (0, 0))
+
+    def test_once_wins_over_batch(self):
+        # documented total order: --once is more specific than --batch (--once > --batch).
+        forever, drained, once = self._run_main_loops(["--team", "T", "--once", "--batch"])
+        self.assertEqual(once.call_count, 1)
+        self.assertEqual((forever.call_count, drained.call_count), (0, 0))
+
     def test_reconcile_interval_resolves(self):
         from director import orchestrator
         cfg = config._build({"reconcile_interval_s": 3.0})

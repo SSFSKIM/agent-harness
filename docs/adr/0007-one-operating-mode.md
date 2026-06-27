@@ -37,11 +37,13 @@ Two sub-decisions make this concrete:
    now selects the default) — removed in a later cleanup once invocations/runbook
    no longer reference it.
 
-2. **`--mock` implies the bounded loop.** The offline fixture has no live board to
-   poll forever, so `--mock` runs drain-and-exit — one more `--mock` override
-   beside the ones it already applies (the no-judge decider, `install_skills=False`,
-   `tools="none"`, hooks off). This keeps tests and quick offline runs bounded and
-   is what makes "daemon = default" safe to ship.
+2. **`--mock` defaults to the bounded loop.** The offline fixture has no live board to
+   poll forever, so `--mock` with no loop flag runs drain-and-exit — one more `--mock`
+   default beside the ones it already applies (the no-judge decider, `install_skills=False`,
+   `tools="none"`, hooks off). An explicit loop flag still wins (total order:
+   `--daemon` > `--once` > `--batch` > the mock-default), so `--mock --daemon` is an
+   honored, if niche, request for the daemon over the mock board. This keeps tests and
+   quick offline runs bounded and is what makes "daemon = default" safe to ship.
 
 The **status `mode` field is kept but reframed**: it is a runtime *heartbeat label*
 (`daemon` for the always-on loop; the bounded `--batch`/`--once` fixtures don't poll, so
@@ -90,9 +92,14 @@ they emit no heartbeat and `mode` stays `None`) — not a user-chosen mode. No s
   forward "refined by 0007" pointer.
 - **Live risk to watch:** the daemon-default flip is a real CLI behavior change — a
   bare real run now never exits without a signal. Mitigations: `--mock`/`--batch`/
-  `--once` cover bounded needs; Ctrl-C → graceful drain already exists; the runbook
-  is updated in the same change. A stray invocation that expected drain-and-exit now
-  runs on — caught by the runbook update and the deprecated-`--daemon` continuity.
+  `--once` cover bounded needs; the runbook is updated in the same change; a stray
+  invocation that expected drain-and-exit is caught by the runbook update and the
+  deprecated-`--daemon` continuity. **Caveat — it promotes an open teardown gap to the
+  default path:** the graceful Ctrl-C/SIGTERM drain currently does NOT reap the spawned
+  worker process tree (tech-debt **F4**, Important, open) — orphaned `codex`/`claude`
+  app-server children keep burning tokens after `stopped_reason: shutdown`. Under the
+  old opt-in `--daemon` this was a niche cost; as the *default* loop it is on every
+  un-bounded run, so F4's priority rises with this change (tracked, not fixed here).
 - Runs the standard ExecPlan completion gate (spec-compliance + code-quality +
   review-arch + review-reliability). Plan:
-  `docs/exec-plans/active/2026-06-28-one-operating-mode.md`.
+  `docs/exec-plans/completed/2026-06-28-one-operating-mode.md`.
