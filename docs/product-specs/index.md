@@ -343,3 +343,17 @@ owner: harness
   하지도 않고 인간에게 escalate), 스킬이 own-context 로 종합해 2-tier `type: horizon` 제안 doc
   (`docs/horizons/`)을 씀. **propose, never enact**. on-demand v1(주기·완료트리거·auto-enact·
   Workflow-tool 의존·worker 벤더링은 Non-goal). phase methodology/02-workstream-scout.
+- [Ideation Partner — the cabinet's first new role](2026-06-28-ideation-partner-cabinet.md)
+  — adds the **front-of-pipeline** owner the system lacks (scout is one-shot, product-design
+  avoids dialogue, the Director is operational): the **Partner**, a persistent human-surface
+  ideation agent on the built-in daemon (`claude agents`). Mode 1 = on-demand dialogue that
+  crystallizes a raw intuition into a **pre-spec brief** (optionally `scout`/`deep-research`)
+  and drops it as one board ticket — loose-coupled, the existing orchestrator claims it; Mode 2
+  = a self-scheduled (`CronCreate durable`) proactive pass that *surfaces* next initiatives
+  (`PushNotification`), never enacts. Stops at the brief (no spec/decompose/code/merge), board
+  write = `issueCreate` only (orchestrator owns lifecycle), direction/taste human-owned
+  (consults `PRINCIPLES.md`, surfaces uncovered forks). Reframes the center from a single
+  Director into a **named-role cabinet** (ADR 0010 supersedes DIRECTOR.md §14 "exactly two").
+  Substrate = the Daemonized-Claude runtime ADR 0003 named as a separate track, now shipped +
+  verified live (v2.1.195). Doc-only config v1; declarative `partner` block / second role /
+  Partner lights-out are Non-goals. phase methodology/03-ideation-partner. draft.
