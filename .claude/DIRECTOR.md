@@ -478,10 +478,16 @@ so the parked set shrinks over time.
 
 ## 14. The two agent profiles (where each is configured)
 
-The harness runs exactly two kinds of agent — **you, the Director** (this watched
-session) and the **Codex workers** you dispatch (one per ticket). Each has **one
-settable source of truth + this guide**; neither is configured anywhere else. There is
-deliberately no `agents/` directory — each profile's home already exists.
+The harness's **central agents form a named-role cabinet** — today **you, the Director**
+(operations: this watched session) and the **Partner** (ideation/strategy: the
+front-of-pipeline human surface, `.claude/PARTNER.md`), with room for more
+([ADR 0010](../docs/adr/0010-cabinet-of-central-roles.md)). Alongside them run the
+**Codex workers** you dispatch (one per ticket). Each profile has **one settable source
+of truth + its guide**; none is configured anywhere else. There is deliberately no
+`agents/` directory — each profile's home already exists. This section configures the
+**two profiles that orchestrate work** — you (below) and the worker; the Partner's
+profile is its own doc (`PARTNER.md`, identity-half only — no `.harness.json` block in
+v1).
 
 ### Director profile — two config halves + the env contract
 

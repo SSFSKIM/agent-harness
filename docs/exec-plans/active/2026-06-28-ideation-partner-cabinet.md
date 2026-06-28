@@ -133,7 +133,11 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   to use at runtime.)
 
 ## Progress log
-- [ ] M1 — cabinet reframe (ADR 0010 + §14 + index)
+- [x] (2026-06-28) M1 — cabinet reframe. Wrote `docs/adr/0010-cabinet-of-central-roles.md`
+  (named-role cabinet, supersedes §14 "exactly two", loose board-mediated coupling, Partner
+  no-lights-out). Edited `.claude/DIRECTOR.md` §14 intro → cabinet framing + `[ADR 0010]`
+  cross-link (Director/worker config halves untouched). Registered 0010 in `docs/adr/index.md`.
+  Acceptance: `grep -c "exactly two" .claude/DIRECTOR.md` = 0; both cross-links present; gate GREEN.
 - [ ] M2 — `.claude/PARTNER.md`
 - [ ] M3 — scheduler-persistence PoC + vendoring fence note
 

@@ -70,3 +70,12 @@ Decisions + why. Register every page here (lint D8).
   gate **on by default**. A ticket carries the goal; *whether* an agent takes it is the one bit
   a human owns — HOW (research/spec/ExecPlan/patch) is the worker's judgment. Supersedes the
   dispatch/DAG-metadata clause of 0005.
+- [Cabinet of central roles — the Director is one of several](0010-cabinet-of-central-roles.md)
+  — the harness's central layer is a **named-role cabinet**, not a single Director: the
+  Director (operations) gains a sibling, the **Partner** (ideation/strategy — the
+  front-of-pipeline human surface that crystallizes an intuition into a pre-spec brief,
+  drops it as a board ticket, and proactively surfaces next initiatives; `.claude/PARTNER.md`).
+  Supersedes DIRECTOR.md §14's "exactly two kinds of agent"; config model unchanged; loose
+  board-mediated coupling (Partner creates tickets, never transitions lifecycle). Substrate =
+  the Daemonized-Claude runtime 0003 named as a separate track, now shipped (v2.1.195);
+  no-headless memory stands (stateful session, not a spawn). Doc-only v1.
