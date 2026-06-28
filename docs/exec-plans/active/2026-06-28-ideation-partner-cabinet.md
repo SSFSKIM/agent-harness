@@ -142,7 +142,14 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   §3 Mode 2, §4 guardrails G1–G5, §5 brief format, §6 cabinet seams, §7 config), mirroring
   DIRECTOR.md's second-person guide voice. All 9 cross-links resolve; gate GREEN. Behavioral
   smoke PASSED (see Surprises).
-- [ ] M3 — scheduler-persistence PoC + vendoring fence note
+- [x] (2026-06-28) M3 — scheduler-persistence PoC + vendoring fence note. PoC RAN (see
+  Surprises): `CronCreate`/`CronList`/`CronDelete` session scheduling works; **`durable: true`
+  is NOT honored in this env** (one-shot AND recurring both reported `session-only`, no
+  `.claude/scheduled_tasks.json` written at project or user scope). Corrected `PARTNER.md` §3 to
+  make **session-start re-arm load-bearing** (durable = best-effort). Vendoring fence: amended
+  the existing `scope: director` tracker row (line ~160) to generalize to the cabinet class —
+  noting `PARTNER.md` is already non-vendored (in `.claude/`, outside the copy loop, like
+  `DIRECTOR.md`), so G3 holds for the doc; only `scout` rides the tracked gap. Gate GREEN.
 
 ## Surprises & discoveries
 - **M2 behavioral smoke (PASS).** A fresh `general-purpose` subagent given only
@@ -154,6 +161,16 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   (G4); (d) **refused** to write the spec (G2) and to implement (G2/G3), citing the guardrails
   by number. Confirms the role doc induces correct Partner behavior incl. the fences, with no
   scaffolding beyond the doc itself.
+- **M3 scheduler PoC — durable persistence NOT honored here (negative finding).** Probed
+  `CronCreate` with `durable: true`: a one-shot reported `session-only` (expected — one-shots
+  never persist); a **recurring** `durable:true` job ALSO reported "Session-only (not written
+  to disk)" and no `.claude/scheduled_tasks.json` appeared at project OR user scope. So the
+  spec's R6 / Verification claim that `durable:true` persists to `.claude/scheduled_tasks.json`
+  is **not true in this runtime** (a background-job session). Caught before it became a silent
+  production failure. The design already carried the mitigation (re-arm), now promoted to
+  load-bearing in `PARTNER.md` §3: **the session-start re-arm — not durable persistence — is
+  what guarantees the proactive pass survives a recycle.** Session-scoped scheduling itself
+  (create/list/delete, idle-only firing) is real and works.
 
 ## Decision log
 - 2026-06-28: Chose Approach A (doc-first, scheduler-as-prose) over declarative-config —
@@ -164,7 +181,19 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   session). Full live fire is the post-merge dogfood.
 - 2026-06-28: PARTNER.md documents re-arm on BOTH final-fire and session-start (idempotent
   belt-and-suspenders) to close the 7-day recurring-expiry window either alone leaves.
+- 2026-06-28: After the M3 probe showed `durable:true` is not honored in this env, made
+  session-start re-arm the *load-bearing* mechanism (durable demoted to best-effort) rather
+  than treating durable as the persistence guarantee — honest-to-the-probe over honest-to-the-
+  tool-contract.
 
 ## Feedback (from completion gate)
+- **Spec drift (P2) — `durable` persistence claim.** The committed spec
+  [ideation-partner-cabinet](../../product-specs/2026-06-28-ideation-partner-cabinet.md) R6 +
+  Verification assert `CronCreate(durable:true)` persists to `.claude/scheduled_tasks.json`
+  ("confirmed from the tool contract + a writability/baseline probe"). The M3 *behavioral* probe
+  contradicts this in a background-job session (session-only, nothing written). PARTNER.md was
+  corrected; the spec wording should be softened to "durable is best-effort; session-start
+  re-arm is the guarantee" in a follow-up (the spec is committed + human-reviewed, so flag
+  rather than silently rewrite). Belongs in a doc-gardening reconciliation pass.
 
 ## Outcomes & retrospective

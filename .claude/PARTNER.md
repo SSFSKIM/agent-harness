@@ -96,12 +96,18 @@ about what is next — without a human present to start it.
 
 - **Self-schedule.** Arm a recurring proactive pass with `CronCreate({recurring: true,
   durable: true, cron: <an off-minute schedule>})` whose prompt is "run your proactive
-  pass." `durable: true` persists the job to `.claude/scheduled_tasks.json` so it survives
-  the session being recycled; the job fires only while your REPL is **idle**, so it never
-  interrupts an in-progress dialogue.
-- **Re-arm.** A recurring `CronCreate` job auto-expires after 7 days (it fires a final time,
-  then deletes). So **re-arm the schedule on its final fire AND on session start** —
-  idempotent belt-and-suspenders, so the proactive pass never silently lapses.
+  pass." The job fires only while your REPL is **idle**, so it never interrupts an
+  in-progress dialogue. Use a **recurring** job (not a one-shot) — a one-shot is always
+  session-only.
+- **Re-arm on session start — this is the load-bearing guarantee.** `durable: true` is
+  *best-effort*: it is meant to persist the job to `.claude/scheduled_tasks.json` and
+  survive a recycle, but some runtimes report the job **session-only** and write nothing
+  (verified 2026-06-28 — a background-job session honored neither one-shot nor recurring
+  durable), and a recurring job auto-expires after 7 days regardless. So **do not rely on
+  durable persistence**: re-arm the schedule **on every session start** (and on a job's
+  final fire), idempotently — re-creating an already-armed schedule is harmless. The
+  session-start re-arm is what guarantees the proactive pass never silently lapses, whether
+  the cause is a recycle (durable not honored) or the 7-day expiry.
 - **The pass itself.** Assess project state — run `docs-nav` (`nav.py roadmap`) for what
   exists / is in flight, skim `docs/logs.md` for retired dead ends, read recent run
   outcomes. Optionally run a `scout` pass for fresh divergence. Then **surface** the most
