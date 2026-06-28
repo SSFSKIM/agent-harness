@@ -195,5 +195,25 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   corrected; the spec wording should be softened to "durable is best-effort; session-start
   re-arm is the guarantee" in a follow-up (the spec is committed + human-reviewed, so flag
   rather than silently rewrite). Belongs in a doc-gardening reconciliation pass.
+- **review-arch P1 (FIXED in-gate) — handoff ignored the `agent-ready` dispatch gate.**
+  PARTNER.md/ADR 0010 said the orchestrator "claims and executes" a fresh brief ticket, but
+  under the default-on `agent-ready` gate (ADR 0009; `config.py` `dispatch_requires_label:
+  True`; `orchestrator.py` `eligible_tickets(require_label=True)`) an un-tagged ticket is
+  never dispatched — and `agent-ready` *is* the human-owned "pursue this?" bit, exactly what
+  the Partner's no-lights-out identity reserves for the human. Fixed: the Partner now creates
+  the brief **without** `agent-ready` (a proposal); the human admits it by marking
+  `agent-ready`, which triggers the orchestrator — making loose-coupling, ADR 0009, and
+  G1/G5 cohere. Edited Identity, §2 step 4, G4, §6, and ADR 0010's coupling paragraph. **Spec
+  reconciliation (P2):** the spec's R3/Mode-1 handoff has the same omission — soften it to
+  route through the `agent-ready` human admission in the doc-gardening pass.
+- **P2 (FIXED in-gate, both Minor):** DIRECTOR.md §14 heading dropped "two" ("Agent profiles —
+  where each is configured") so the TOC no longer contradicts the cabinet intro; ADR 0010's
+  basename-ambiguous `[[…]]` spec wikilink replaced with an explicit relative path.
+- **Proposed rules (doc-gardener — not blocking):** (a) a doc-only methodology spec should
+  state which acceptance criteria are gate-verifiable vs deferred-to-live-dogfood
+  (spec-compliance); (b) a role doc quoting a sibling's prose verbatim should be grep-anchored
+  at authoring time — a DESIGN.md twin of "retire = grep the surviving bodies" (code-quality);
+  (c) a reframe of a load-bearing count should reconcile the section *header* too, and dated
+  `logs.md` entries are historical lineage exempt from the surviving-bodies sweep (review-arch).
 
 ## Outcomes & retrospective

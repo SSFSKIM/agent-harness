@@ -476,7 +476,7 @@ turn's `reply` (the ordinary answer path — no new mechanism).
 than one escalation; the log is how the human teaches you, and how `PRINCIPLES.md` sharpens
 so the parked set shrinks over time.
 
-## 14. The two agent profiles (where each is configured)
+## 14. Agent profiles — where each is configured
 
 The harness's **central agents form a named-role cabinet** — today **you, the Director**
 (operations: this watched session) and the **Partner** (ideation/strategy: the

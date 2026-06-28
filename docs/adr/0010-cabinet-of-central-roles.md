@@ -38,11 +38,15 @@ agent is configured by an identity half in `.claude/` plus its guide, and the wo
 `director/config.py` `DEFAULTS` (§14's two-profile config detail still stands for the
 Director and the worker).
 
-**Coupling is loose and board-mediated.** The Partner and Director share no session and no
-state; they coordinate only through the board — the Partner `issueCreate`s a brief ticket,
-and the existing orchestrator/Director claims and executes it. The Partner **creates**
-tickets but never **transitions** lifecycle state — the orchestrator owns that
-([[0003-lights-out-director]] `issueUpdate` ceiling) — so the coupling stays race-free.
+**Coupling is loose, board-mediated, and human-gated.** The Partner and Director share no
+session and no state; they coordinate only through the board — the Partner `issueCreate`s a
+brief ticket **without** the `agent-ready` dispatch label, a human admits it by marking it
+`agent-ready` ([[0009-collapse-dispatch-taxonomy]]: admission is the human-owned bit), and
+only then does the orchestrator claim and execute it. The Partner **creates** the proposal
+but never **admits** it (`agent-ready` is the human's) and never **transitions** lifecycle
+state (the orchestrator's — [[0003-lights-out-director]] `issueUpdate` ceiling) — so the
+coupling stays race-free **and** keeps direction human-owned, consistent with the Partner
+having no lights-out mode.
 
 ## Why
 
@@ -72,8 +76,8 @@ tickets but never **transitions** lifecycle state — the orchestrator owns that
   cross-linking this ADR. The Director's role, config split, and env contract are
   otherwise untouched.
 - **New role doc `.claude/PARTNER.md`** — central, never host-seeded (like `DIRECTOR.md`).
-  Built from the [[2026-06-28-ideation-partner-cabinet]] spec; ExecPlan
-  `docs/exec-plans/active/2026-06-28-ideation-partner-cabinet.md`.
+  Built from the [ideation-partner-cabinet spec](../product-specs/2026-06-28-ideation-partner-cabinet.md);
+  ExecPlan `docs/exec-plans/active/2026-06-28-ideation-partner-cabinet.md`.
 - **The Partner joins the `scope: director` worker-vendoring exclusion** — `PARTNER.md`
   and the Partner's skills are not copied into worker runtimes (it sets direction; a
   worker does not). Rides the tracked tech-debt the `scout` skill already names.
