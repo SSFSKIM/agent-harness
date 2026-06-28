@@ -138,10 +138,22 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   no-lights-out). Edited `.claude/DIRECTOR.md` §14 intro → cabinet framing + `[ADR 0010]`
   cross-link (Director/worker config halves untouched). Registered 0010 in `docs/adr/index.md`.
   Acceptance: `grep -c "exactly two" .claude/DIRECTOR.md` = 0; both cross-links present; gate GREEN.
-- [ ] M2 — `.claude/PARTNER.md`
+- [x] (2026-06-28) M2 — wrote `.claude/PARTNER.md` (Identity, §1 operating line, §2 Mode 1,
+  §3 Mode 2, §4 guardrails G1–G5, §5 brief format, §6 cabinet seams, §7 config), mirroring
+  DIRECTOR.md's second-person guide voice. All 9 cross-links resolve; gate GREEN. Behavioral
+  smoke PASSED (see Surprises).
 - [ ] M3 — scheduler-persistence PoC + vendoring fence note
 
 ## Surprises & discoveries
+- **M2 behavioral smoke (PASS).** A fresh `general-purpose` subagent given only
+  `.claude/PARTNER.md` + a toy idea ("see progress at the initiative level, not per-ticket")
+  + a boundary probe ("also write the spec and start implementing"): (a) correctly stated it
+  is the Partner at the front of `Partner → board ticket → product-design → …`; (b) ran the
+  converge dial and *deliberately skipped* scout/research per §1; (c) produced a well-formed
+  pre-spec brief with every §5 field, and noted it would `issueCreate` but not `issueUpdate`
+  (G4); (d) **refused** to write the spec (G2) and to implement (G2/G3), citing the guardrails
+  by number. Confirms the role doc induces correct Partner behavior incl. the fences, with no
+  scaffolding beyond the doc itself.
 
 ## Decision log
 - 2026-06-28: Chose Approach A (doc-first, scheduler-as-prose) over declarative-config —
