@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-28
 owner: harness
 type: exec-plan
@@ -217,3 +217,37 @@ pages. This plan is **doc-only** — no `director/` Python changes (the declarat
   `logs.md` entries are historical lineage exempt from the surviving-bodies sweep (review-arch).
 
 ## Outcomes & retrospective
+
+**Shipped (doc-only v1):** the cabinet reframe ([ADR 0010](../../adr/0010-cabinet-of-central-roles.md))
+and the Partner role doc (`.claude/PARTNER.md`), a sibling to `DIRECTOR.md`. The center is
+now a named-role cabinet (Director = operations, Partner = ideation/strategy); `DIRECTOR.md`
+§14 reframed; both indexes registered; the `scope: director` vendoring fence generalized to
+the cabinet class. Gate GREEN throughout.
+
+**Verification done:** M2 behavioral smoke PASSED (a fresh subagent reading only `PARTNER.md`
+produced a correct pre-spec brief and refused to write spec/code, citing G2/G3/G4). M3
+scheduler PoC RAN and produced a **negative finding** that improved the design: `durable:true`
+is not honored in this runtime, so `PARTNER.md` §3 was corrected to make the session-start
+**re-arm** the load-bearing guarantee (durable demoted to best-effort). The full end-to-end
+orchestration dogfood (Partner brief → human `agent-ready` → orchestrator → `product-design`
+spec) is **deferred to a live run** — it needs a running orchestrator + Linear board + workers,
+out of this doc-only plan's scope (recorded, not silently skipped).
+
+**Completion gate:** review-spec-compliance SATISFIED; review-code-quality SATISFIED;
+review-arch NOT-SATISFIED → P1 (handoff ignored the `agent-ready` human-admission gate)
+FIXED in-gate → review-arch re-review SATISFIED (verified against `config.py` +
+`orchestrator.py`). All gate P2s either fixed inline (§14 heading, ADR 0010 wikilink, the
+ADR 0009 verbatim quote) or tracked in Feedback (spec reconciliation: durable + agent-ready
+wording; three proposed doc-gardener rules).
+
+**Retro:** the adversarial review earned its keep — review-arch caught that the original
+"orchestrator auto-claims the brief" handoff both misstated the runtime AND contradicted the
+Partner's own human-owns-direction identity; routing through `agent-ready` made loose-coupling,
+ADR 0009, and the no-lights-out principle cohere. The doc-only scope held — zero `director/`
+Python changed — and the one runtime primitive the role leans on (self-scheduling) was probed
+rather than assumed, catching the durable-persistence gap before it could fail silently.
+
+**Follow-ups (tracked, not blocking):** reconcile the committed spec's R3/Mode-1 handoff
+(add the `agent-ready` admission) and R6/Verification (`durable` best-effort) wording; the
+live end-to-end dogfood; a possible QUALITY_SCORE cabinet/Partner row; the three proposed
+DESIGN.md rules — all doc-gardener material.

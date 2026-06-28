@@ -77,7 +77,7 @@ having no lights-out mode.
   otherwise untouched.
 - **New role doc `.claude/PARTNER.md`** — central, never host-seeded (like `DIRECTOR.md`).
   Built from the [ideation-partner-cabinet spec](../product-specs/2026-06-28-ideation-partner-cabinet.md);
-  ExecPlan `docs/exec-plans/active/2026-06-28-ideation-partner-cabinet.md`.
+  ExecPlan `docs/exec-plans/completed/2026-06-28-ideation-partner-cabinet.md`.
 - **The Partner joins the `scope: director` worker-vendoring exclusion** — `PARTNER.md`
   and the Partner's skills are not copied into worker runtimes (it sets direction; a
   worker does not). Rides the tracked tech-debt the `scout` skill already names.
