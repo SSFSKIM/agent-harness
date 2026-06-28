@@ -251,3 +251,21 @@ rather than assumed, catching the durable-persistence gap before it could fail s
 (add the `agent-ready` admission) and R6/Verification (`durable` best-effort) wording; the
 live end-to-end dogfood; a possible QUALITY_SCORE cabinet/Partner row; the three proposed
 DESIGN.md rules — all doc-gardener material.
+
+**Live dogfood (2026-06-28, post-completion) — the Partner→board→agent-ready seam.** Ran the
+deferred live check, scoped to the *new* work (the full worker→PR→merge downstream is
+pre-existing loose-coupled machinery, deliberately not re-run per the runbook safe fence).
+(1) Created the `agent-ready` label on the live board (it was absent — the board still carried
+the pre-ADR-0009 dev-stage labels). (2) **As the Partner, authored a real pre-spec brief and
+`issueCreate`d it → LIN-31** ("initiative-level progress rollup"), **without** `agent-ready` —
+a proposal. (3) **EXCLUDE proven** — the real `orchestrator.eligible_tickets(…,
+require_label=True)` drops un-`agent-ready` LIN-31, so the orchestrator will not dispatch it.
+(4) **The human-admission was enforced twice** — when the agent tried to apply `agent-ready`,
+the Claude Code **auto-mode permission classifier independently DENIED it**, reasoning that
+applying the label "self-admits the ticket … the human-owned admission step the design reserves
+for the human, not the agent." So G1/G5 hold both at the orchestrator's label filter *and* the
+permission layer — the agent structurally cannot self-admit. (5) **INCLUDE proven** — the same
+gate function admits the ticket once it carries `agent-ready`. LIN-31 stays on the board as an
+un-admitted proposal; the human marks it `agent-ready` to pursue it. The dogfood *strengthened*
+the central design claim (loose-coupling + human-owned admission) and complements the M2
+doc-behavior smoke.
