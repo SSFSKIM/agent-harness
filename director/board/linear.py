@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 from typing import Callable
@@ -98,6 +99,25 @@ query DirectorIssueLabels($ids: [ID!]) {
   }
 }
 """.strip()
+
+_ISSUE_LABELS_ONE = """
+query DirectorIssueLabelsOne($id: String!) {
+  issue(id: $id) { id identifier labels { nodes { name } } }
+}
+""".strip()
+
+# A Linear human identifier — TEAMKEY-NUMBER, e.g. "LIN-31", "ENG-1234": an uppercase
+# team key (letter then letters/digits) + dash + digits. The batch `id: { in: [...] }`
+# filter matches UUID node ids ONLY, so an identifier must be resolved via `issue(id:)`
+# (which accepts both forms). A UUID node id (hex groups, lowercase, letters after the
+# dashes) deliberately does NOT match this pattern — the two id shapes are disjoint.
+_IDENTIFIER_RE = re.compile(r"^[A-Z][A-Z0-9]*-[0-9]+$")
+
+
+def _looks_like_identifier(s: str) -> bool:
+    """True for a Linear human identifier (`LIN-31`) — routes the id to a per-id
+    `issue(id:)` resolve rather than the UUID-only batch filter."""
+    return bool(_IDENTIFIER_RE.match(s or ""))
 
 
 def load_api_key(env_path: str | Path = ".env") -> str | None:
@@ -317,28 +337,63 @@ def fetch_issue_states_by_ids(issue_ids, *, api_key: str | None = None,
     return out
 
 
+def _fetch_one_issue_labels(rid: str, *, api_key: str | None, endpoint: str,
+                            http_post: Callable[[str, bytes, dict], dict]) -> list[str] | None:
+    """Resolve ONE reported id — a UUID node id OR a human identifier (`LIN-31`) — to its
+    label names via `issue(id:)`, which accepts both forms (the same query `read_issue`
+    relies on). Returns the labels, or **None** when the board has no such issue (a clean
+    `{issue: null}` not-found is absent, not a raise). A transport/GraphQL error
+    propagates — the caller's verify guard then fail-opens (trusts the report), which is
+    the safe direction (never a false escalate on unverifiable data)."""
+    data = _post(_ISSUE_LABELS_ONE, {"id": rid},
+                 api_key=api_key, endpoint=endpoint, http_post=http_post)
+    issue = data.get("issue")
+    return _parse_labels(issue) if issue else None
+
+
 def fetch_issue_labels_by_ids(issue_ids, *, api_key: str | None = None,
                               endpoint: str = DEFAULT_ENDPOINT,
                               http_post: Callable[[str, bytes, dict], dict] = urllib_post
                               ) -> dict[str, list[str]]:
-    """Label names of each given issue id, as `{id: [label_name, …]}` — the spawned-id
-    validation read (reconcile checks that a worker's reported child tickets exist AND
-    carry the `agent-ready` dispatch label). Only ids the board actually returns appear
+    """Label names of each given issue, keyed by the **exact id the caller passed** — the
+    spawned-id validation read (reconcile checks a worker's reported child tickets exist
+    AND carry the `agent-ready` dispatch label). A reported id may be a UUID **node id**
+    (what `issueCreate` returns) OR a human **identifier** (`LIN-31`, what a worker is more
+    likely to echo). Node ids are matched in ONE batched `issues(id:{in:})` read (Linear's
+    `IDComparator` keys on UUIDs); identifiers — which that filter cannot match — are each
+    resolved via `issue(id:)` (accepts both forms). Only ids the board actually has appear
     in the map, so a **missing id ⇒ absent key ⇒ the ticket does not exist** (the caller
     treats an absent key as "no such ticket"). An **empty `issue_ids` makes NO API call**
     (returns `{}`; mirrors `fetch_issue_states_by_ids`'s empty-guard, §17.3)."""
     ids = list(issue_ids)
     if not ids:
         return {}
-    data = _post(_ISSUE_LABELS, {"ids": ids},
-                 api_key=api_key, endpoint=endpoint, http_post=http_post)
-    nodes = ((data.get("issues") or {}).get("nodes")) or []
     out: dict[str, list[str]] = {}
-    for n in nodes:
-        iid = n.get("id")
-        if iid is None:
+    # Node ids → one batched filter read (the common issueCreate-returns-node-id case stays
+    # a single POST). Identifier-shaped ids are split out — the filter would read them as
+    # "missing" — and resolved one-by-one below.
+    node_ids = [i for i in ids if not _looks_like_identifier(i)]
+    if node_ids:
+        data = _post(_ISSUE_LABELS, {"ids": node_ids},
+                     api_key=api_key, endpoint=endpoint, http_post=http_post)
+        nodes = ((data.get("issues") or {}).get("nodes")) or []
+        by_node: dict[str, list[str]] = {}
+        for n in nodes:
+            iid = n.get("id")
+            if iid is not None:
+                by_node[iid] = _parse_labels(n)
+        for i in node_ids:
+            if i in by_node:           # absent ⇒ no such node id ⇒ leave it out (invalid)
+                out[i] = by_node[i]
+    # Human identifiers (LIN-31) → per-id `issue(id:)` resolve (both-forms). A genuinely
+    # absent identifier yields None ⇒ no key ⇒ invalid; a real one validates correctly.
+    for i in ids:
+        if i in out or not _looks_like_identifier(i):
             continue
-        out[iid] = _parse_labels(n)
+        labels = _fetch_one_issue_labels(i, api_key=api_key, endpoint=endpoint,
+                                         http_post=http_post)
+        if labels is not None:
+            out[i] = labels
     return out
 
 

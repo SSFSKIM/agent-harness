@@ -167,6 +167,19 @@ Read it (and the `--request` join), then answer **free-form** with a disposition
 - **Escalate — `{"kind": "escalate", "reason": "..."}`.** A real product/taste fork —
   you must not choose the direction yourself. Surfaces to the human; ticket stays visible.
 
+**A `blocked` or `escalate`/park does NOT auto-resume — it needs a manual re-ready.**
+Neither outcome is self-clearing: a `blocked` lands the ticket in a configured `blocked`
+state (or stays In Progress when none is configured), an `escalate`/park keeps it In
+Progress — and **a daemon restart will not re-run it** (a ticket parked in In Progress is
+recorded in the durable parked-set, so orphan-reattach skips it; a configured `blocked`
+state is never a re-attach candidate either). Re-readying is a **human** act: move the
+ticket back to the ready state, or answer its next turn with a `reply` directive that
+drives a fresh terminal. **Until then any child `blocked_by` it stays ineligible** —
+`eligible_tickets` requires every blocker in a *completed* state-type, so one parked
+parent silently stalls its whole subtree. (A `blocked` that claims spawned children but
+has *none* valid/dispatchable is auto-surfaced as an `escalate` instead — same re-ready
+requirement; the daemon also escalates a long-parked ticket once, §12.)
+
 The taste-vs-handle line (§2) decides which: *"A 냐 B 냐"* is **usually non-taste** — a
 technical choice you answer with a `reply`. A product-direction/irreversible fork is
 **taste** — `escalate`. Most forks the worker raises are yours to answer, not the human's.
@@ -426,9 +439,14 @@ understand to operate it are here:
   = `daemon`; `phase` = `active` (workers running), `idle` (nothing to do — keeps polling),
   or `draining` (shutting down); `last_poll_at` / `polls` show it is alive and ticking. When
   `phase` is `idle` **and** `stuck` is non-empty, every remaining ticket is blocked (a failed
-  blocker or a dependency cycle) — the daemon will not make progress until **you** unblock it
-  (move/fix a blocker). Unlike a batch run, "stuck" does **not** stop the daemon; it is a
-  signal for you to act, and the §9 run-report pull still surfaces it.
+  blocker, a dependency cycle, or a **parked** `blocked`/`escalate` parent) — the daemon will
+  not make progress until **you** act: fix/move a blocker, or **re-ready a parked ticket**
+  (§4 — a `blocked`/escalate never self-clears). A stuck entry flagged `stranded` (with a
+  `polls` count) is the daemon's **once-per-lifetime** escalation of a ticket parked with no
+  eligible progress for `strand_escalation_polls` idle polls (it also posts a `🚷 stranded`
+  board comment) — that one wants a human re-ready, not just a blocker fix. Unlike a batch
+  run, "stuck" does **not** stop the daemon; it is a signal for you to act, and the §9
+  run-report pull still surfaces it.
 - **Active-run reconciliation still applies** (it applies to every run — the daemon or a
   bounded fixture): move a ticket out of `In Progress` in Linear and its worker is stopped
   within `reconcile_interval_s`.

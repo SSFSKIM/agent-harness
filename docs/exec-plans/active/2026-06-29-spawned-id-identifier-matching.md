@@ -161,10 +161,32 @@ gate is GREEN; the always-on + standard review personas return SATISFIED.
   why its subtree is stalled. No runnable surface → behavioral QA is N/A (docs only).
 
 ## Progress log
-- [ ] (2026-06-29) Plan created; base_commit `e1c23c1`; gate GREEN.
+- [x] (2026-06-29) Plan created (`845ff37`); base_commit `e1c23c1`; gate GREEN.
+- [x] (2026-06-29) M1 — `director/board/linear.py`: `_ISSUE_LABELS_ONE` query +
+  `_looks_like_identifier`/`_IDENTIFIER_RE` + `_fetch_one_issue_labels`; rewrote
+  `fetch_issue_labels_by_ids` to route node ids → batch, identifiers → per-id
+  `issue(id:)` resolve, keyed by the exact reported string. `MockBoard.
+  fetch_issue_labels_by_ids` mirrors both-forms resolution; `_validate_spawned` takes
+  the parent identifier and excludes it too (threaded `label` from both call sites).
+  2 new linear tests (identifier resolves via the single query; an identifier not-found
+  is absent AND makes no batch call) + 3 orchestrator tests
+  (blocked-claims-real-child-by-identifier stays blocked; done-followup-by-identifier
+  validates; self-spawn-by-identifier escalates). 27 linear + 142 orchestrator green
+  (full suite 880, gate GREEN).
+- [x] (2026-06-29) M2 — operator re-ready note: `.claude/DIRECTOR.md` §4 (a new
+  paragraph: a `blocked`/escalate parks the ticket, no auto-resume even across a daemon
+  restart, children `blocked_by` it stay ineligible until it reaches a completed state,
+  re-ready is a human act) + §12 (the idle/stuck heartbeat now names parked parents and
+  the `stranded`/`polls` flag); `docs/DIRECTOR_RUNBOOK.md` §11 troubleshooting row. Docs
+  only → behavioral QA N/A.
 
 ## Surprises & discoveries
-- (to fill as I work)
+- The test `MockBoard.fetch_issue_labels_by_ids` previously conflated node id and
+  identifier (seeded children use `id == identifier`), so the identifier path was
+  *untestable* at the orchestrator level until the mock mirrored the real both-forms
+  resolution — a `_seed_ident` helper seeds a child with a node id that DIFFERS from its
+  identifier to actually exercise the gap. A mock that's too convenient hides the bug
+  it's meant to prove.
 
 ## Decision log
 - 2026-06-29: Chose approach A (UUID→batch / identifier→single `issue(id:)`) over an

@@ -227,6 +227,45 @@ class LinearWriteMethodsTest(unittest.TestCase):
         self.assertEqual(out, {"u1": ["agent-ready"]})
         self.assertNotIn("ghost", out)
 
+    def test_fetch_issue_labels_by_ids_resolves_human_identifier(self):
+        # gap #1a: a worker may report a child by its HUMAN identifier (LIN-31), which the
+        # batch `issues(id:{in:})` filter cannot match (it keys on UUID node ids). Such ids
+        # are resolved one-by-one via `issue(id:)`, which accepts both forms. Node ids still
+        # take the single batched read.
+        bodies = []
+
+        def post(url, data, headers):
+            body = json.loads(data.decode("utf-8"))
+            bodies.append(body)
+            if "issue(id:" in body["query"].replace(" ", ""):          # single resolve
+                return {"data": {"issue": {"id": "uuid-x", "identifier": "LIN-31",
+                                           "labels": {"nodes": [{"name": "agent-ready"}]}}}}
+            return {"data": {"issues": {"nodes": [                       # batch
+                {"id": "node-1", "labels": {"nodes": [{"name": "agent-ready"},
+                                                      {"name": "Bug"}]}}]}}}
+
+        out = linear.fetch_issue_labels_by_ids(["node-1", "LIN-31"], api_key="k", http_post=post)
+        self.assertEqual(out["node-1"], ["agent-ready", "Bug"])         # node id via batch
+        self.assertEqual(out["LIN-31"], ["agent-ready"])                # identifier via single
+        self.assertEqual(len(bodies), 2)                               # one batch + one single
+        self.assertEqual(bodies[0]["variables"], {"ids": ["node-1"]})  # identifier excluded from batch
+        self.assertEqual(bodies[1]["variables"], {"id": "LIN-31"})
+
+    def test_fetch_issue_labels_by_ids_identifier_not_found_is_absent(self):
+        # a hallucinated identifier resolves to {issue: null} → absent key → the caller reads
+        # it as invalid. An all-identifier input makes NO batch call (only the single resolve).
+        calls = []
+
+        def post(url, data, headers):
+            q = json.loads(data.decode("utf-8"))["query"].replace(" ", "")
+            calls.append(q)
+            self.assertIn("issue(id:", q)            # never the batch filter for an all-id input
+            return {"data": {"issue": None}}
+
+        out = linear.fetch_issue_labels_by_ids(["GHOST-9"], api_key="k", http_post=post)
+        self.assertEqual(out, {})
+        self.assertEqual(len(calls), 1)              # one single resolve, no batch
+
     def test_linear_board_binds_key_and_delegates(self):
         cap = {}
         resp = {"data": {"issues": {"nodes": []}}}

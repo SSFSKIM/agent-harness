@@ -136,22 +136,27 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
         return False
 
 
-def _validate_spawned(board, parent_tid: str, spawned: list, errs: list) -> dict:
+def _validate_spawned(board, parent_tid: str, parent_ident: str, spawned: list,
+                      errs: list) -> dict:
     """Verify a worker's reported `spawned_ticket_ids` against the board. Returns
     `{"valid": [...], "invalid": [...], "verified": bool}`. **valid** = the board has the
     ticket AND it carries the `agent-ready` dispatch label (so it will actually dispatch)
-    AND it is not the parent itself; **invalid** = claimed-but-missing / unlabeled /
-    self-referential — a child the worker asserted that will never run (a failed/refused/
-    hallucinated `issueCreate`). **verified** is False only when the board read raised: the
-    caller then trusts the reported ids as-is (today's behavior) and never escalates on
-    unverifiable data (fail-open to the prior behavior, recorded in `errs`)."""
+    AND it is not the parent itself (by node id OR human identifier); **invalid** =
+    claimed-but-missing / unlabeled / self-referential — a child the worker asserted that
+    will never run (a failed/refused/hallucinated `issueCreate`). The board lookup
+    resolves a reported id in EITHER form (UUID node id or human identifier like `LIN-31`),
+    so a real child reported by identifier is no longer mis-read as missing. **verified**
+    is False only when the board read raised: the caller then trusts the reported ids as-is
+    (today's behavior) and never escalates on unverifiable data (fail-open to the prior
+    behavior, recorded in `errs`)."""
     if not spawned:
         return {"valid": [], "invalid": [], "verified": True}
+    parent = {parent_tid, parent_ident}
     try:
         labels = board.fetch_issue_labels_by_ids(spawned)
         valid, invalid = [], []
         for sid in spawned:
-            if sid != parent_tid and DISPATCH_LABEL in (labels.get(sid) or []):
+            if sid not in parent and DISPATCH_LABEL in (labels.get(sid) or []):
                 valid.append(sid)
             else:
                 invalid.append(sid)
@@ -262,7 +267,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             # a `done`'s primary work is complete regardless, so the transition NEVER
             # changes — but the comment/summary must name real vs claimed-but-not-real ids
             # honestly (no false audit trail).
-            sv = _validate_spawned(board, tid, spawned, errs)
+            sv = _validate_spawned(board, tid, label, spawned, errs)
             spawned_valid, spawned_invalid = sv["valid"], sv["invalid"]
             follow = _follow_note(spawned_valid, spawned_invalid, sv["verified"])
             # Act-before-consume ([[queue-act-before-consume-ordering]], review-reliability
@@ -302,7 +307,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                                     **_spawned_summary(spawned_valid, spawned_invalid))
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
-            sv = _validate_spawned(board, tid, spawned, errs)
+            sv = _validate_spawned(board, tid, label, spawned, errs)
             spawned_valid, spawned_invalid = sv["valid"], sv["invalid"]
             # A `blocked` that CLAIMS children but has NONE valid is the silent-strand /
             # false-audit-trail case (a failed/refused/hallucinated issueCreate): parking
@@ -1295,12 +1300,16 @@ class MockBoard:
         return out
 
     def fetch_issue_labels_by_ids(self, issue_ids) -> dict:
-        """Current {id: [label_name, …]} for the given ids present in the board
-        (spawned-id validation read). Ids absent from the board are omitted, so an
-        absent key means "no such ticket" — mirrors board.fetch_issue_labels_by_ids."""
+        """Current {reported_id: [label_name, …]} for the given ids present in the board,
+        keyed by the EXACT reported string — a reported id matches an issue by its node id
+        OR its human identifier (mirrors board.fetch_issue_labels_by_ids resolving both
+        forms). Ids with no matching issue are omitted, so an absent key means "no such
+        ticket"."""
+        by_ident = {iss.get("identifier"): iss for iss in self._issues.values()
+                    if iss.get("identifier")}
         out: dict = {}
         for iid in issue_ids:
-            iss = self._issues.get(iid)
+            iss = self._issues.get(iid) or by_ident.get(iid)
             if iss is None:
                 continue
             out[iid] = list(iss.get("labels", []))

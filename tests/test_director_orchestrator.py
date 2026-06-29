@@ -1130,6 +1130,42 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertIn("unverified", "\n".join(self.board.comments["u1"]))
         self.assertIn("spawned-id verify failed", out["summary"]["reconcile_error"])
 
+    # --- spawned-id identifier matching (gap #1a) ------------------------------------
+    def _seed_ident(self, node_id, identifier, *, labels=("agent-ready",)):
+        """Seed a child whose node id DIFFERS from its human identifier, so a worker
+        reporting the identifier exercises the both-forms board lookup (not the
+        id==identifier conflation the other tests use)."""
+        self.board._issues[node_id] = {"id": node_id, "identifier": identifier,
+                                       "title": "child", "description": "", "prompt": "",
+                                       "state_id": "st_todo", "labels": list(labels)}
+
+    def test_blocked_claiming_real_child_by_identifier_stays_blocked(self):
+        # gap #1a: the worker reports a real agent-ready child by its HUMAN identifier
+        # (LIN-31), not its UUID node id. The lookup resolves both forms, so the child
+        # validates as valid → blocked stays blocked (was: a false escalate when the
+        # filter matched node ids only).
+        self._seed_ident("uuid-child", "LIN-31")
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["LIN-31"]))
+        self.assertEqual(out["summary"]["status"], "blocked")            # NOT escalated
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["LIN-31"])
+        self.assertNotIn("spawned_invalid", out["summary"])
+
+    def test_done_followup_by_identifier_validates(self):
+        # the done path resolves identifiers too — a real follow-up reported by identifier
+        # is surfaced as a valid spawned id, not a misleading "claimed but not found".
+        self._seed_ident("uuid-9", "LIN-9")
+        out = self._reconcile(self._done(spawned_ticket_ids=["LIN-9"]))
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["LIN-9"])
+        self.assertNotIn("spawned_invalid", out["summary"])
+        self.assertIn("LIN-9", "\n".join(self.board.comments["u1"]))
+
+    def test_blocked_self_referential_spawn_by_identifier_escalates(self):
+        # reporting the ticket's OWN human identifier (D-1), not just its node id, is no
+        # real continuation either → excluded from valid → escalate.
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["D-1"]))
+        self.assertEqual(out["summary"]["status"], "escalated")
+        self.assertEqual(out["summary"].get("spawned_invalid"), ["D-1"])
+
     # --- restart-safety: parked-set recording (poll-loop-strand-safety M2) -----------
     def test_blocked_in_started_records_park(self):
         # no configured blocked-state (default) → blocked stays in `started` → recorded parked
