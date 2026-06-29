@@ -31,14 +31,23 @@ TERMINAL_CONTRACT = """\
 This ticket may take several turns on one thread; keep working across turns until the \
 work is genuinely done — do not stop merely because a turn ends. YOU signal the \
 terminal outcome by calling the `report_outcome` tool, and only when the work truly ends:
-- done — the ticket is fully complete: report_outcome(status="done", reason="…"). If \
-you filed non-blocking follow-up tickets while working (deferred/out-of-scope work, \
-tech debt, extra hardening), include their ids in spawned_ticket_ids so they surface \
-on the board.
-- blocked — you cannot proceed and have filed follow-up child tickets: \
-report_outcome(status="blocked", reason="…", spawned_ticket_ids=["…"]).
+- done — the ticket's purpose is complete, INCLUDING the case where you decomposed it. \
+A child blocked_by this ticket only becomes dispatchable once this ticket reaches done, \
+so a genuine-size split where filing the children WAS the work ends in done, never \
+blocked. report_outcome(status="done", reason="…"); if you filed any follow-up tickets \
+(the decomposition children, or non-blocking deferred/out-of-scope work, tech debt, \
+hardening) include their ids in spawned_ticket_ids so they surface on the board.
+- blocked — you genuinely cannot proceed and no continuation is possible without a \
+human: report_outcome(status="blocked", reason="…", spawned_ticket_ids=["…"]). A blocked \
+ticket is PARKED for a human — it does not auto-resume, and any child blocked_by it will \
+NOT dispatch until a human re-readies this ticket. So never use blocked to "hand off" \
+remaining work you split into children (that strands them) — use done. Reserve blocked \
+for a true external block a human must clear.
 - needs_human — a product/taste decision is genuinely required: \
 report_outcome(status="needs_human", reason="…").
+Only put an id in spawned_ticket_ids AFTER the create succeeded (issueCreate returned that \
+id) — never a planned-but-unfiled or assumed id; a fabricated id parks this ticket while \
+no child actually runs. \
 Do NOT call report_outcome to ask whether to continue. If you need to pause and ask, \
 just end your turn with the question — you will receive a directive and continue on the \
 same thread. Call report_outcome exactly once, at the end."""
@@ -80,14 +89,20 @@ board.
 - A ticket is one purpose; keep the whole pipeline inside it. Do NOT split a ticket by \
 stage. You issue a NEW ticket on exactly two triggers, and otherwise stay on this one: \
 (1) genuine size — the work divides into independently shippable sub-projects/slices, \
-each its own spec→ExecPlan cycle, as a child ticket blocked_by this one; or (2) deferred \
+each its own spec→ExecPlan cycle, as a child ticket blocked_by this one (for a serial \
+chain, blocked_by the prior slice — not all on this ticket — so they dispatch in order); \
+or (2) deferred \
 work surfaced while working — out of scope, OR in-scope tech debt / additional production \
 tests / hardening whose inline fix would break your momentum. Anything smaller stays in \
 this ticket's scope. Every ticket you issue must be self-contained: a clear title, a \
 description of the work, acceptance criteria, and provenance — link the parent ticket and \
 the source doc (spec / design / research) it derives from — so a fresh worker can start \
-from the ticket alone. Create it with the linear skill, labeled `agent-ready` (so the \
-orchestrator will pick it up) and blocked_by/related to this one, and note it.
+from the ticket alone. Create it with the linear skill and ALWAYS label it `agent-ready`: \
+the orchestrator dispatches ONLY agent-ready tickets, so a child you forget to label is \
+silently never picked up (no error — it just never runs). Set blocked_by/related to this \
+one, confirm the create returned an id, and note it. When a genuine-size split means \
+filing the children IS the remaining work, finish by reporting done, not blocked — \
+blocked parks this ticket and strands those children (see the TURN PROTOCOL).
 - Proportional context — orient only as much as THIS ticket needs. Do NOT survey the whole \
 repo for a focused change. Orientation is a tool, not a mandatory step: for a broad or \
 unfamiliar change the `docs-nav` skill (`nav.py map`/`catalog`/`tree`/`backlinks`) surfaces \
