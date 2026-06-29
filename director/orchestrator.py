@@ -235,6 +235,18 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
         s.update(extra)
         return s
 
+    def park():
+        # Restart-safety (gap #2): record a ticket the disposition PARKS in `started` (an
+        # escalate, or a blocked with no configured blocked-state) so startup orphan-reattach
+        # SKIPS re-running it on a daemon restart. Best-effort — a write failure is recorded,
+        # never raised (mirrors the board-write discipline). No-op without a queue.
+        if queue_base is None:
+            return
+        try:
+            dq.append_parked(tid, base=queue_base)
+        except Exception as exc:
+            errs.append(f"park record: {exc}")
+
     if kind == "terminal":
         outcome = disp.get("outcome") or {}
         ostatus = outcome.get("status")
@@ -304,6 +316,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                         f"{', '.join(spawned_invalid)}) — {outcome.get('reason')}")
                 summary = summarize("escalated", "started",
                                     **_spawned_summary([], spawned_invalid))
+                park()  # left in `started` for the human → restart-safe (gap #2)
             else:
                 final = "started"
                 if states.get("blocked"):
@@ -313,6 +326,8 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                 comment(f"⛔ worker blocked after {turns} turn(s): {outcome.get('reason')}{note}")
                 summary = summarize("blocked", final,
                                     **_spawned_summary(spawned_valid, spawned_invalid))
+                if final == "started":  # no configured blocked-state → parked in `started`
+                    park()              # restart-safe (gap #2); a configured blocked-state is already orphan-safe
         else:
             # A terminal with an unrecognized/missing status must NEVER silently mark
             # Done (R4: code never falsely completes). The standard paths only ever
@@ -325,6 +340,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     elif kind == "escalate":
         comment(f"🙋 escalated to human after {turns} turn(s): {disp.get('reason')}")
         summary = summarize("escalated", "started")  # stays visible; human acts async
+        park()  # left in `started` for the human → restart-safe (gap #2)
     elif kind == "cancelled":
         # Active-run reconciliation stopped this worker: its ticket left `started`
         # (a human moved it). The human OWNS the new state, so we do NOT re-transition
@@ -403,16 +419,23 @@ def eligible_tickets(tickets: list[dict], *, done_types=("completed",),
     return out
 
 
-def _stuck_report(pending: list[dict], done_set: set) -> list[dict]:
+def _stuck_report(pending: list[dict], done_set: set, *, stranded_ids=frozenset()) -> list[dict]:
     """Each pending-but-blocked ticket with its not-yet-done blockers — the operator's
     "why is nothing progressing" view (R7). A None state_type (an unreadable blocker)
     surfaces here too. Pure; shared by `run_until_drained` (its terminal "stuck" report)
-    and the daemon's idle heartbeat (stuck-as-status, D-66)."""
-    return [{"ticket": t.get("identifier") or t["id"],
-             "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
-                            for b in t.get("blockers", [])
-                            if b.get("state_type") not in done_set]}
-            for t in pending]
+    and the daemon's idle heartbeat (stuck-as-status, D-66). `stranded_ids` (ticket ids past
+    the daemon's strand-age threshold) flags those items `stranded: True`, so the dashboard /
+    operator can tell a long-running strand from a freshly-blocked ticket (gap #3)."""
+    out = []
+    for t in pending:
+        item = {"ticket": t.get("identifier") or t["id"],
+                "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
+                               for b in t.get("blockers", [])
+                               if b.get("state_type") not in done_set]}
+        if t["id"] in stranded_ids:
+            item["stranded"] = True
+        out.append(item)
+    return out
 
 
 def _backoff_s(n: int, *, base: float, cap: float) -> float:
@@ -600,6 +623,12 @@ class _RunState:
             return False
         self.attempts[tid] = 1
         self.in_flight.add(tid)
+        # gap #2: a re-claimed ticket is a fresh attempt that must be orphan-recoverable
+        # again — drop any parked marker it carried (best-effort).
+        try:
+            dq.clear_parked(tid, base=self.queue_base)
+        except Exception:
+            pass
         self.status.claimed(ticket, wave=wave, attempt=1)
         self.submit(ticket)
         return True
@@ -892,8 +921,22 @@ def _startup_recovery(board, states: dict, *, team: str, workspace_root, queue_b
         # (matches the poll_failed/poll_recovered convention below).
         print(json.dumps({"daemon": "startup_cleanup_skipped", "error": str(exc)}),
               file=sys.stderr)
-    try:  # (b) orphan re-attach
-        for ticket in board.fetch_issues_by_states(team, [states["started"]]):
+    try:  # (b) orphan re-attach — skip PARKED tickets (gap #2 restart-safety)
+        started = board.fetch_issues_by_states(team, [states["started"]])
+        # GC the parked set to those still in `started` (a parked ticket a human moved out of
+        # `started` is no longer parked), then SKIP re-readying the rest: they are
+        # parked-for-human (an escalate / a blocked left in `started`), NOT crash orphans, so
+        # re-running them would duplicate work/children. Fail-open — a parked-set read error
+        # degrades to an empty set → re-ready all (today's behavior), never strands an orphan.
+        try:
+            parked = dq.gc_parked({t["id"] for t in started}, base=queue_base)
+        except Exception as exc:
+            parked = set()
+            print(json.dumps({"daemon": "parked_read_skipped", "error": str(exc)}),
+                  file=sys.stderr)
+        for ticket in started:
+            if ticket["id"] in parked:
+                continue  # parked-for-human, not a crash orphan — leave it for the human
             try:
                 board.update_issue_state(ticket["id"], states["ready"])
             except Exception as exc:
@@ -960,6 +1003,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 poll_interval_s: float = config.DEFAULTS["poll_interval_s"],
                 backoff_base_s: float = config.DEFAULTS["backoff_base_s"],
                 backoff_cap_s: float = config.DEFAULTS["backoff_cap_s"],
+                strand_escalation_polls: int = config.DEFAULTS["strand_escalation_polls"],
                 shutdown_event=None, force_event=None, install_signals: bool = True,
                 max_ticks: int | None = None,
                 hooks: dict | None = None, hook_timeout_s: float = 60.0,
@@ -1009,6 +1053,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
     pending_retry: dict = {}  # tid -> (ticket, retry_at) — scheduled retry backoff (A)
     claim_retry_at: dict = {}  # tid -> when a claim-failed ticket may be re-admitted (D)
     claim_fails: dict = {}     # tid -> consecutive claim-failure count (exponential input)
+    strand_streak: dict = {}   # tid -> idle polls spent blocked (paused while busy; gap #3)
 
     def schedule_retry(ticket):
         # Retry backoff (A, §8.4): instead of re-dispatching now (the batch default), hold
@@ -1103,7 +1148,32 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 # Refresh the stuck heartbeat every poll so it tracks LIVE state (D-66):
                 # the blocked set only when fully idle, else cleared (work IS progressing —
                 # not stuck). Without the clear, a resolved stuck set lingers in status.json.
-                state.status.stuck(_stuck_report(blocked, done_set) if not state.futures else [])
+                # Strand-age escalation (gap #3): `blocked` is a true no-progress signal only
+                # when IDLE. Bump each blocked ticket's idle-poll count, reset a ticket that
+                # progressed (left the blocked set), and escalate ONCE — a board comment + a
+                # `stranded` status flag — when a count first crosses the threshold. Busy ticks
+                # pause the count (work IS progressing); fail-soft on the comment.
+                stranded_ids: set = set()
+                if not state.futures and strand_escalation_polls:
+                    blocked_ids = {t["id"] for t in blocked}
+                    for tid in [t for t in strand_streak if t not in blocked_ids]:
+                        strand_streak.pop(tid, None)                 # progressed → reset
+                    for t in blocked:
+                        tid = t["id"]
+                        strand_streak[tid] = strand_streak.get(tid, 0) + 1
+                        if strand_streak[tid] >= strand_escalation_polls:
+                            stranded_ids.add(tid)
+                        if strand_streak[tid] == strand_escalation_polls:  # crossed → comment once
+                            try:
+                                board.comment_issue(
+                                    tid, f"🚷 stranded — blocked {strand_escalation_polls} idle "
+                                         f"polls with no eligible progress; needs human")
+                            except Exception as exc:
+                                print(json.dumps({"daemon": "strand_comment_failed",
+                                                  "ticket": t.get("identifier") or tid,
+                                                  "error": str(exc)}), file=sys.stderr)
+                state.status.stuck(_stuck_report(blocked, done_set, stranded_ids=stranded_ids)
+                                   if not state.futures else [])
             else:
                 state.status.polled(phase="draining")
 
@@ -1284,6 +1354,8 @@ def resolve_settings(args, cfg) -> dict:
         "board_snapshot_interval_s": cfg.board_snapshot_interval_s,
         "backoff_base_s": _pick(args.backoff_base, cfg.backoff_base_s),
         "backoff_cap_s": _pick(args.backoff_cap, cfg.backoff_cap_s),
+        # strand-age escalation threshold (daemon only; config-only knob, like the snapshot cadence)
+        "strand_escalation_polls": cfg.strand_escalation_polls,
         "codex_command": (args.codex if args.codex is not None
                           else config.resolve_worker_command(cfg, getattr(args, "worker", None))),
         # Effective OS-sandbox posture for the dispatched runtime (per-runtime override →
@@ -1514,7 +1586,8 @@ def main(argv=None, *, board=None) -> int:
         # apply — the daemon is unbounded by design.
         result = run_forever(board, command, poll_interval_s=s["poll_interval_s"],
                              backoff_base_s=s["backoff_base_s"],
-                             backoff_cap_s=s["backoff_cap_s"], **kwargs)
+                             backoff_cap_s=s["backoff_cap_s"],
+                             strand_escalation_polls=s["strand_escalation_polls"], **kwargs)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     if loop == "once":

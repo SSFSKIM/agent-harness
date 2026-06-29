@@ -140,9 +140,28 @@ return SATISFIED.
   configured-state; (e) read failure → re-ready all (fail-soft).
 
 ## Progress log
-- [ ] (2026-06-29) Plan created; base_commit recorded; gate + commit pending.
+- [x] (2026-06-29) Plan created (`3969e72`); base_commit `de19555`; gate GREEN.
+- [x] (2026-06-29) M1 — `strand_escalation_polls` config knob (default 6, 0=off) threaded
+  DEFAULTS→`DirectorConfig`→`_build`→main→`run_forever`; `strand_streak` tracker in
+  `run_forever`; `_stuck_report` gained a `stranded_ids` flag. 3 daemon tests
+  (escalate-once / disabled-at-0 / reset-on-progress).
+- [x] (2026-06-29) M2 — `director.queue` parked-set (`read_/append_/clear_/gc_parked`,
+  atomic); `reconcile` `park()` on escalate / blocked-in-started / blocked→escalate
+  downgrade (NOT a configured blocked-state); `_startup_recovery` skips parked + GCs to
+  `parked ∩ started`; `claim_and_submit` clears on reclaim. 3 queue + 4 startup-recovery
+  + 5 reconcile-park + 1 claim-clear tests. Full suite (236) + gate GREEN.
+- [ ] Completion gate: always-on (spec-compliance → code-quality) + standard (arch +
+  reliability — recovery code) pending.
 
 ## Surprises & discoveries
+- Two `queue` namespaces in `orchestrator.py`: the stdlib `import queue` (for `queue.Queue`)
+  AND `import director.queue as dq` — the park helper must use `dq`, not `queue`.
+- `_issue(tid)` test helper uppercases the identifier (`b`→`B`); a `stuck` entry's `ticket`
+  field is the identifier, while a board comment keys on the lowercase id — the strand test
+  must match on the right one.
+- `summary["spawned_ticket_ids"]` having no structured consumer (verified last plan) and the
+  bounded `status.json recent[]` together ruled out reusing status for the parked record — a
+  dedicated durable set was required.
 
 ## Decision log
 - 2026-06-29: gap #3 surface = board comment + stuck-status flag (approach A), not a new

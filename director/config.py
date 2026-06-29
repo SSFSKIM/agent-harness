@@ -84,6 +84,13 @@ DEFAULTS: dict = {
     # default daemon loop (ADR 0008); the bounded `--batch`/`--once` fixtures ignore it.
     "backoff_base_s": 10.0,
     "backoff_cap_s": 300.0,
+    # Strand-age escalation (daemon only): a ticket that stays blocked with no eligible
+    # progress across this many IDLE daemon polls (busy polls pause the count; progress
+    # resets it) is escalated ONCE — a board comment + a `stranded` flag on its stuck status
+    # — instead of sitting silent in the idle heartbeat forever. Idle polls back off
+    # exponentially, so this is a coarse "stuck a while" nudge, not a precise SLA. 0 (or null)
+    # disables it. The bounded `--batch`/`--once` fixtures ignore it (they report `stuck` + exit).
+    "strand_escalation_polls": 6,
     "codex_command": "codex app-server",
     # Worker-runtime toggle (default-codex). `worker_runtimes` is a {name: command}
     # map of selectable worker binaries; `worker_runtime` is the default selector and
@@ -196,6 +203,7 @@ class DirectorConfig:
     board_snapshot_interval_s: float | None  # None = track poll_interval_s
     backoff_base_s: float
     backoff_cap_s: float
+    strand_escalation_polls: int  # 0 = disabled (daemon strand-age escalation)
     codex_command: str
     worker_runtime: str
     worker_runtimes: dict   # {name: command}; always contains "codex" (= codex_command)
@@ -409,6 +417,9 @@ def _build(raw: dict) -> DirectorConfig:
     # value is a positive number (fail-loud, named) — same discipline as the other knobs.
     bsi = raw.get("board_snapshot_interval_s", DEFAULTS["board_snapshot_interval_s"])
     board_snapshot_interval_s = None if bsi is None else _pos_num(bsi, "board_snapshot_interval_s")
+    # strand_escalation_polls: 0/null disables; otherwise a positive poll count (fail-loud on junk).
+    sep = raw.get("strand_escalation_polls", DEFAULTS["strand_escalation_polls"])
+    strand_escalation_polls = 0 if not sep else _pos_int(sep, "strand_escalation_polls")
 
     return DirectorConfig(
         team=_str_or_none(raw.get("team", DEFAULTS["team"]), "team"),
@@ -431,6 +442,7 @@ def _build(raw: dict) -> DirectorConfig:
                                         DEFAULTS["backoff_base_s"]), "backoff_base_s"),
         backoff_cap_s=_pos_num(raw.get("backoff_cap_s",
                                        DEFAULTS["backoff_cap_s"]), "backoff_cap_s"),
+        strand_escalation_polls=strand_escalation_polls,
         codex_command=codex_command,
         worker_runtime=worker_runtime, worker_runtimes=worker_runtimes,
         worker_runtime_sandbox=worker_runtime_sandbox,

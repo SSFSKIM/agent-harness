@@ -46,6 +46,29 @@ class DirectorQueueTest(unittest.TestCase):
         self.assertFalse(dq.append_request(_req(), base=self.base))  # same id -> no-op
         self.assertEqual(len(dq.read_requests(base=self.base)), 1)
 
+    def test_parked_append_read_clear(self):
+        self.assertEqual(dq.read_parked(base=self.base), set())      # missing file → empty
+        dq.append_parked("t1", base=self.base)
+        dq.append_parked("t2", base=self.base)
+        dq.append_parked("t1", base=self.base)                       # idempotent
+        self.assertEqual(dq.read_parked(base=self.base), {"t1", "t2"})
+        dq.clear_parked("t1", base=self.base)
+        self.assertEqual(dq.read_parked(base=self.base), {"t2"})
+        dq.clear_parked("absent", base=self.base)                    # no-op
+        self.assertEqual(dq.read_parked(base=self.base), {"t2"})
+
+    def test_parked_gc_intersects_with_keep(self):
+        for t in ("a", "b", "c"):
+            dq.append_parked(t, base=self.base)
+        kept = dq.gc_parked({"b", "c", "z"}, base=self.base)         # z unparked; a dropped
+        self.assertEqual(kept, {"b", "c"})
+        self.assertEqual(dq.read_parked(base=self.base), {"b", "c"})
+
+    def test_parked_read_tolerates_corrupt_file(self):
+        dq.append_parked("t1", base=self.base)
+        (self.base / "parked.json").write_text("not json{", encoding="utf-8")
+        self.assertEqual(dq.read_parked(base=self.base), set())      # corrupt → empty (fail-open)
+
     def test_answer_is_atomic_overwrite(self):
         dq.write_answer({"request_id": "r", "decision": "accept",
                          "answered_by": "director", "answered_at": "t1"}, base=self.base)

@@ -1130,6 +1130,32 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertIn("unverified", "\n".join(self.board.comments["u1"]))
         self.assertIn("spawned-id verify failed", out["summary"]["reconcile_error"])
 
+    # --- restart-safety: parked-set recording (poll-loop-strand-safety M2) -----------
+    def test_blocked_in_started_records_park(self):
+        # no configured blocked-state (default) → blocked stays in `started` → recorded parked
+        self._reconcile(self._blocked())
+        self.assertIn("u1", dq.read_parked(base=self.qbase))
+
+    def test_blocked_in_configured_state_does_not_record_park(self):
+        # a configured blocked board-state moves the ticket OUT of `started` → orphan-safe → not parked
+        states = dict(self.states); states["blocked"] = "st_blocked"
+        orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"}, self._blocked(),
+                       1, states, 1, queue_base=self.qbase, workspace_root=self.tmp / "wsr")
+        self.assertNotIn("u1", dq.read_parked(base=self.qbase))
+
+    def test_escalate_kind_records_park(self):
+        self._reconcile({"kind": "escalate", "reason": "taste", "turns": 1})
+        self.assertIn("u1", dq.read_parked(base=self.qbase))
+
+    def test_blocked_escalate_downgrade_records_park(self):
+        # the gap-#1 downgrade leaves the ticket in `started` (escalated) → also restart-parked
+        self._reconcile(self._blocked(spawned_ticket_ids=["GHOST-X"]))
+        self.assertIn("u1", dq.read_parked(base=self.qbase))
+
+    def test_done_does_not_record_park(self):
+        self._reconcile(self._done())
+        self.assertEqual(dq.read_parked(base=self.qbase), set())
+
     def test_explicit_ticket_workspace_is_used(self):
         orch.reconcile(self.board, {"id": "u1", "workspace": "/custom/ws"},
                        self._done(pr_url="u", pr_branch="b"), 1, self.states, 1,
@@ -1314,6 +1340,59 @@ class StartupRecoveryTest(unittest.TestCase):
         # the orphan was moved back to ready so the first poll re-dispatches it
         self.assertEqual(board._issues["o1"]["state_id"], states["ready"])
         self.assertIn(states["ready"], board.transitions["o1"])
+
+    def test_parked_started_ticket_is_not_reattached(self):
+        # gap #2: a ticket the orchestrator PARKED in `started` (escalate / blocked-in-started)
+        # is left alone on restart — it is parked-for-human, not a crash orphan — while a
+        # genuine orphan beside it is still recovered.
+        board = orch.MockBoard([
+            {"id": "parked", "identifier": "P-1", "state_id": "st_prog", "prompt": "p"},
+            {"id": "orphan", "identifier": "O-1", "state_id": "st_prog", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        dq.append_parked("parked", base=self.qbase)
+        orch._startup_recovery(board, states, team="T",
+                               workspace_root=self.wsroot, queue_base=self.qbase)
+        self.assertEqual(board._issues["parked"]["state_id"], "st_prog")  # left in started
+        self.assertNotIn("parked", board.transitions)                     # never re-readied
+        self.assertEqual(board._issues["orphan"]["state_id"], states["ready"])  # orphan recovered
+
+    def test_parked_set_gc_drops_tickets_no_longer_started(self):
+        # a parked tid that has LEFT `started` (a human moved it) is GC'd from the set, so it
+        # can never suppress a future orphan-recovery of a different ticket reusing the id.
+        board = orch.MockBoard([
+            {"id": "moved", "identifier": "M-1", "state_id": "st_todo", "prompt": "p"}])  # ready, not started
+        states = orch.resolve_states(board, "T")
+        dq.append_parked("moved", base=self.qbase)
+        orch._startup_recovery(board, states, team="T",
+                               workspace_root=self.wsroot, queue_base=self.qbase)
+        self.assertEqual(dq.read_parked(base=self.qbase), set())          # GC'd (not in started)
+
+    def test_parked_read_failure_falls_back_to_reready_all(self):
+        # fail-open: a parked-set read error degrades to re-ready all (today's behavior),
+        # never strands a real orphan behind an unreadable set.
+        board = orch.MockBoard([
+            {"id": "o1", "identifier": "O-1", "state_id": "st_prog", "prompt": "p"}])
+        states = orch.resolve_states(board, "T")
+        with mock.patch("director.queue.gc_parked", side_effect=RuntimeError("disk")):
+            orch._startup_recovery(board, states, team="T",
+                                   workspace_root=self.wsroot, queue_base=self.qbase)
+        self.assertEqual(board._issues["o1"]["state_id"], states["ready"])  # re-readied anyway
+
+    def test_claim_and_submit_clears_parked_marker(self):
+        # gap #2: claiming a ticket (a fresh attempt) drops its parked marker, so a later
+        # crash recovers it — the within-lifetime path the startup GC never sees (no restart).
+        board = orch.MockBoard([_issue("a")])
+        states = orch.resolve_states(board, "T")
+        dq.append_parked("a", base=self.qbase)
+        with mock.patch("director.orchestrator.dispatch", lambda *a, **k: _DONE):
+            state = orch._RunState(board=board, states=states, status=None, retry_budget=1,
+                                   concurrency=1, queue_base=self.qbase,
+                                   workspace_root=self.wsroot, command=["x"])
+            try:
+                self.assertTrue(state.claim_and_submit(_issue("a"), wave=1))
+                self.assertNotIn("a", dq.read_parked(base=self.qbase))  # cleared on claim
+            finally:
+                state.shutdown()
 
     def test_fetch_failure_is_fail_soft(self):
         class _Boom(orch.MockBoard):
@@ -1505,6 +1584,78 @@ class DaemonLoopTest(unittest.TestCase):
                 self.assertEqual([s["ticket"] for s in snap["stuck"]], ["B"])
                 self.assertEqual(snap["stuck"][0]["blocked_by"][0]["id"], "a")
                 self.assertTrue(th.is_alive())  # R5: stuck did NOT terminate the daemon
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_strand_escalates_once_past_threshold(self):
+        # gap #3: a ticket blocked with no eligible progress for `strand_escalation_polls`
+        # idle polls is escalated ONCE — a board comment + a `stranded` status flag — then
+        # never re-fired no matter how long it keeps idling.
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            fail = {"kind": "failed", "status": "failed", "turn_id": None, "turns": 0}
+            shutdown, force, th, result = self._run_bg(
+                board, lambda *a, **k: fail, retry_budget=0, status=w,
+                strand_escalation_polls=2)
+            def _b_stranded():
+                # the b stuck-entry on an IDLE-tick snapshot (a busy tick writes stuck=[]).
+                # stuck "ticket" is the IDENTIFIER ("B"); the comment keys on the id ("b").
+                snap = ds.read_status(base=st) or {}
+                return next((s for s in snap.get("stuck", [])
+                             if s["ticket"] == "B" and s.get("stranded")), None)
+            try:
+                _wait_for(lambda: _b_stranded() is not None, msg="b never flagged stranded")
+                self.assertTrue(_b_stranded()["stranded"])
+                strand = [c for c in board.comments.get("b", []) if "stranded" in c]
+                self.assertEqual(len(strand), 1)              # escalated exactly once
+                self.assertIn("needs human", strand[0])
+                polls0 = (ds.read_status(base=st) or {})["run"]["polls"]
+                _wait_for(lambda: (ds.read_status(base=st) or {})["run"]["polls"] >= polls0 + 4,
+                          msg="daemon did not keep polling")
+                self.assertEqual(                              # still once — no re-fire
+                    len([c for c in board.comments.get("b", []) if "stranded" in c]), 1)
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_strand_escalation_disabled_at_zero(self):
+        # strand_escalation_polls=0 → never escalate; stuck entries carry no `stranded` flag.
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            fail = {"kind": "failed", "status": "failed", "turn_id": None, "turns": 0}
+            shutdown, force, th, result = self._run_bg(
+                board, lambda *a, **k: fail, retry_budget=0, status=w,
+                strand_escalation_polls=0)
+            try:
+                _wait_for(lambda: (ds.read_status(base=st) or {}).get("stuck"),
+                          msg="stuck never recorded")
+                polls0 = (ds.read_status(base=st))["run"]["polls"]
+                _wait_for(lambda: (ds.read_status(base=st) or {})["run"]["polls"] >= polls0 + 5,
+                          msg="daemon did not keep polling")
+                self.assertEqual(
+                    [c for c in board.comments.get("b", []) if "stranded" in c], [])
+                self.assertFalse(
+                    any(s.get("stranded") for s in (ds.read_status(base=st))["stuck"]))
+            finally:
+                shutdown.set()
+                th.join(timeout=2.0)
+
+    def test_strand_streak_resets_when_ticket_progresses(self):
+        # a ticket that becomes eligible before the threshold never escalates: `a` completes,
+        # `b` unblocks and dispatches well under a high threshold (the streak reset on progress).
+        board = orch.MockBoard([_issue("a"), _issue("b", ["a"])])
+        with tempfile.TemporaryDirectory() as st:
+            w = ds.StatusWriter(base=st)
+            shutdown, force, th, result = self._run_bg(
+                board, lambda *a, **k: _DONE, status=w, strand_escalation_polls=10)
+            try:
+                _wait_for(lambda: board.state_name("b") in ("In Progress", "Done"),
+                          msg="b never progressed after a completed")
+                self.assertEqual(
+                    [c for c in board.comments.get("b", []) if "stranded" in c], [])
             finally:
                 shutdown.set()
                 th.join(timeout=2.0)

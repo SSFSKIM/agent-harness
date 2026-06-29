@@ -200,6 +200,77 @@ def read_answer(request_id: str, base: Path | str | None = None) -> dict | None:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+# -- Parked-ticket set (restart-safety, gap #2) ------------------------------
+# A durable set of ticket ids the orchestrator PARKED in `started` (an `escalate`, or a
+# `blocked` left in `started` because no blocked board-state is configured). Startup
+# orphan-reattach reads it to SKIP re-readying a parked ticket — it is parked-for-human,
+# not a crash orphan — so a daemon restart never re-runs a parked worker (which could
+# duplicate its already-filed children). Stored as a JSON id list; atomic temp+replace
+# under the same `_APPEND_LOCK` as `append_request`, so the read-modify-write never races.
+
+def _parked_path(root: Path) -> Path:
+    return root / "parked.json"
+
+
+def read_parked(base: Path | str | None = None) -> set[str]:
+    """The parked ticket-id set. Empty on a missing/corrupt file — fail-open to 'nothing
+    parked' (i.e. today's re-ready-all recovery), never a crash."""
+    p = _parked_path(_root(base))
+    if not p.exists():
+        return set()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return set(data) if isinstance(data, list) else set()
+    except Exception:
+        return set()
+
+
+def _write_parked(ids: set[str], root: Path) -> None:
+    _ensure(root)
+    fd, tmp = tempfile.mkstemp(dir=str(root), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(sorted(ids), f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, _parked_path(root))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def append_parked(tid: str, base: Path | str | None = None) -> None:
+    """Record `tid` as parked-in-`started`. Idempotent; atomic under the append lock."""
+    root = _root(base)
+    with _APPEND_LOCK:
+        ids = read_parked(base)
+        if tid not in ids:
+            ids.add(tid)
+            _write_parked(ids, root)
+
+
+def clear_parked(tid: str, base: Path | str | None = None) -> None:
+    """Drop `tid` from the parked set — called when the ticket is re-claimed (a fresh
+    attempt that must be orphan-recoverable again). No-op when absent."""
+    root = _root(base)
+    with _APPEND_LOCK:
+        ids = read_parked(base)
+        if tid in ids:
+            ids.discard(tid)
+            _write_parked(ids, root)
+
+
+def gc_parked(keep: set[str], base: Path | str | None = None) -> set[str]:
+    """Intersect the parked set with `keep` (the tids still in `started`) and persist —
+    dropping entries for tickets that have since LEFT `started` (a human re-readied/moved
+    them). Returns the kept set. Run once at startup recovery to keep the set honest."""
+    root = _root(base)
+    with _APPEND_LOCK:
+        ids = read_parked(base) & set(keep)
+        _write_parked(ids, root)
+    return ids
+
+
 def read_pending(base: Path | str | None = None) -> list[dict]:
     """Requests that have no answer yet (what the Director must act on)."""
     return [r for r in read_requests(base)
