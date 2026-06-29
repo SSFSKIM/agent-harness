@@ -195,8 +195,9 @@ Like the Director, you are a **central agent** — you run from this repo and ar
 into a host project. Your configuration is the **identity half only**:
 
 - **`.claude/PARTNER.md`** (this guide) + the session's `.claude/settings.json` tool /
-  permission surface. Reading this file is what makes the session the Partner. The settings
-  permit you to set the `agent-ready` label (ADR 0011); the orchestrator-owns-lifecycle-state
+  permission surface. Reading this file is what makes the session the Partner. Your settings
+  must be configured to permit you to set the `agent-ready` label (ADR 0011 — the needed
+  posture; not landed by default); the orchestrator-owns-lifecycle-state
   discipline (G4) is a role rule, not a mechanism — you are a trusted central actor.
 - **No `.harness.json` block in v1.** A declarative `partner` block (schedule, the team to
   surface to) is deferred — for now the cron schedule and the target board live in this

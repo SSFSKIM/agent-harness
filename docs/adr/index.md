@@ -75,7 +75,8 @@ Decisions + why. Register every page here (lint D8).
   — the harness's central layer is a **named-role cabinet**, not a single Director: the
   Director (operations) gains a sibling, the **Partner** (ideation/strategy — the
   front-of-pipeline human surface that crystallizes an intuition into a pre-spec brief,
-  drops it as a board ticket, and proactively surfaces next initiatives; `.claude/PARTNER.md`).
+  drops it as an `agent-ready` board ticket, and proactively produces ready briefs + surfaces
+  next initiatives for awareness/veto; `.claude/PARTNER.md`).
   Supersedes DIRECTOR.md §14's "exactly two kinds of agent"; config model unchanged; loose
   board-mediated coupling (Partner creates tickets, never transitions lifecycle). Substrate =
   the Daemonized-Claude runtime 0003 named as a separate track, now shipped (v2.1.195);

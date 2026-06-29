@@ -27,8 +27,8 @@ today, with room for more:
 - **Partner — ideation / strategy.** The *front* of the pipeline: a persistent
   human-surface role that crystallizes a raw human (or AI) intuition into a **pre-spec
   brief** through dialogue (optionally researching, optionally invoking `scout`), delivers
-  it as a board ticket, and on a self-scheduled pass proactively *surfaces* next
-  initiatives. It **stops at the brief** — it never writes a spec, decomposes, codes, or
+  it as an **`agent-ready`** board ticket, and on a self-scheduled pass produces `agent-ready`
+  briefs and surfaces next initiatives for awareness/veto. It **stops at the brief** — it never writes a spec, decomposes, codes, or
   merges (`.claude/PARTNER.md`).
 
 This ADR establishes the **category**, not a fixed roster — future human-surface roles get
