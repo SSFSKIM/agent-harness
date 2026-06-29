@@ -56,7 +56,7 @@ an ExecPlan, or a direct patch — is the worker's call, via `AGENTS.md` + skill
 
 The F1 shakedown bug (the Director ran Linear's default onboarding issues as ~700k-token
 workers) was fixed by an *opt-in* gate. With a single explicit opt-in label the safe default
-inverts: **dispatch nothing unless a human tagged it `agent-ready`**. Untagged tickets —
+inverts: **dispatch nothing unless an agent or human tagged it `agent-ready`** (0011). Untagged tickets —
 onboarding junk, half-shaped human WIP — are ignored out of the box. A host that wants the old
 permissive "dispatch every ready ticket" sets `dispatch_requires_label: false`.
 

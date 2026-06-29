@@ -22,6 +22,13 @@ This spec was itself produced by running the Partner flow by hand (a brainstormi
 dialogue that crystallized this design, now handed to `product-design`) — the meta
 dogfood that motivates building it as a standing role.
 
+> **Reconciled 2026-06-29 with [ADR 0011](../adr/0011-agent-ready-is-agent-governed.md).** A
+> human directive reversed this spec's original *human-owned-admission* framing: `agent-ready`
+> is **agent-governed** — the Partner marks its own briefs ready and the human curates at the
+> edges, not as a per-ticket gate (least human in loop). The requirements, guardrails, and
+> non-goals below are updated to match; `.claude/PARTNER.md` + ADR 0011 are authoritative where
+> any residual "human owns direction / surfaces-never-enact / no lights-out" wording survives.
+
 ## Problem
 
 Three convergent gaps leave the pipeline's front unowned:
@@ -62,31 +69,31 @@ Each is independently checkable.
   - **Mode 1 (on-demand dialogue, human-woken):** the human reaches the Partner; it runs
     a brainstorming-style crystallization (understand → optionally diverge via `scout` or
     `deep-research` *only when warranted* → converge), and on reaching pre-spec clarity
-    writes the brief and drops it as **one board ticket** (`issueCreate`). Done — the
-    existing orchestrator claims it (loose coupling; **no** direct Director handoff).
+    writes the brief, drops it as **one board ticket** (`issueCreate`), and **marks it
+    `agent-ready`** itself (ADR 0011); the existing orchestrator claims it (loose coupling;
+    **no** direct Director handoff).
   - **Mode 2 (proactive pass, schedule/event-woken):** on a self-scheduled wake the
     Partner assesses project state (`docs-nav` roadmap, `logs.md`, recent run outcomes),
-    optionally runs a `scout`-style pass, and **surfaces** candidate next initiatives to
-    the human (`PushNotification`). It does **not** create work — it invites the human
-    into Mode 1.
+    optionally runs a `scout`-style pass, and for initiatives worth doing **produces
+    `agent-ready` briefs** (the pipeline runs) and **surfaces** them to the human
+    (`PushNotification`) for *awareness/veto*, not permission (ADR 0011).
 
 - **R4 — Guardrails (stated in `PARTNER.md`, checkable by inspection).**
-  - **G1** proactive Mode 2 *surfaces*, never auto-creates a brief for an un-endorsed
-    direction (scout's "propose, never enact" on the proactive path);
+  - **G1** the Partner governs `agent-ready` and sets direction within the guardrails,
+    without per-ticket human permission; Mode 2 surfaces new directions for *awareness/veto*,
+    not approval (ADR 0011);
   - **G2** the Partner stops at the brief — it never writes a `docs/product-specs/` spec,
     never decomposes into an ExecPlan, never edits code, never merges;
   - **G3** no worker invokes the Partner, and `PARTNER.md` + the Partner's skills are not
     vendored into worker runtimes (joins the existing `scope: director` exclusion —
     [workstream-scout](2026-06-27-workstream-scout.md) Fences);
-  - **G4** the Partner's board write is limited to `issueCreate` (+ `commentCreate`); it
-    **creates** tickets but never transitions lifecycle state — the orchestrator owns
-    that ([ADR 0003](../adr/0003-lights-out-director.md) `issueUpdate` ceiling), so the
-    loose coupling stays race-free;
-  - **G5** direction and taste are human-owned — on an uncovered product-direction fork
-    the Partner consults `docs/PRINCIPLES.md` and, if it does not clearly determine the
-    call, **surfaces** rather than decides (the analog of the Director's lights-out park).
-    The Partner has no autonomous-direction mode; its autonomy is in thinking, research,
-    and framing only.
+  - **G4** the Partner's board write covers `issueCreate`, `commentCreate`, and the
+    `agent-ready` label it governs (ADR 0011); it never transitions lifecycle **state** —
+    the orchestrator owns that ([ADR 0003](../adr/0003-lights-out-director.md) `issueUpdate`
+    ceiling, a *race-freedom* invariant), so the loose coupling stays race-free;
+  - **G5** the Partner is autonomous (symmetric with the Director, ADR 0011): it decides
+    what `docs/PRINCIPLES.md` and the merits cover, and **parks** only a genuinely-uncovered,
+    high-stakes taste fork (the Director's lights-out fail-safe) — not a per-ticket human gate.
 
 - **R5 — Brief format.** The brief is a **pre-spec** carried as the `issueCreate` ticket
   body: problem/intent · the crystallized idea (what + why + macro-shape) ·
@@ -194,9 +201,10 @@ Mode 2:  CronCreate(durable) idle wake
 - **A `docs/briefs/` mirror** — the brief lives in the ticket; durability comes from the
   `product-design` promotion.
 - **A second human-surface role** — the cabinet has room, but v1 builds only the Partner.
-- **Partner lights-out autonomy** — the Partner never decides a direction without the
-  human; there is no human-absent decide mode (unlike the Director's §13).
-- **Proactive auto-enact** — Mode 2 surfaces, never creates work.
+- **A per-ticket human admission gate** — `agent-ready` is agent-governed, not a human gate
+  ([ADR 0011](../adr/0011-agent-ready-is-agent-governed.md)); the human curates at the edges.
+  (This *reverses* two of the original non-goals — "Partner lights-out autonomy" and
+  "proactive auto-enact" — which ADR 0011 folded into the design.)
 - **`Workflow`-tool dependency** — the proactive pass uses the existing `scout` skill;
   no orchestration-tool requirement.
 

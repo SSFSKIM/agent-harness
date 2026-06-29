@@ -67,9 +67,10 @@ Decisions + why. Register every page here (lint D8).
   no structure: DAG sequencing is pure `blocked_by`, `child_types` was dead, and the label never
   shaped the prompt (0005) — its whole runtime footprint was the dispatch gate. Delete the
   taxonomy code; admit a ticket iff it carries `agent-ready` (`orchestrator.DISPATCH_LABEL`),
-  gate **on by default**. A ticket carries the goal; *whether* an agent takes it is the one bit
-  a human owns — HOW (research/spec/ExecPlan/patch) is the worker's judgment. Supersedes the
-  dispatch/DAG-metadata clause of 0005.
+  gate **on by default**. A ticket carries the goal; HOW (research/spec/ExecPlan/patch) is the
+  worker's judgment. (The original "whether an agent takes it is the one bit a human owns"
+  framing was **reframed by 0011** → `agent-ready` is agent-governed, human-curated at the
+  edges; the gate mechanism is unchanged.) Supersedes the dispatch/DAG-metadata clause of 0005.
 - [Cabinet of central roles — the Director is one of several](0010-cabinet-of-central-roles.md)
   — the harness's central layer is a **named-role cabinet**, not a single Director: the
   Director (operations) gains a sibling, the **Partner** (ideation/strategy — the
