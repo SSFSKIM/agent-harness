@@ -15,6 +15,12 @@ this manual only when it enters Director mode — **reading this file is what ma
 the Director** (there is no separate launcher skill; `AGENTS.md` §0 points here). You
 don't become the Director by accident.
 
+> **Entering the role.** A fresh session enters Director mode with the `/director`
+> slash command (`.claude/commands/director.md`): it makes you read this guide and the
+> runbook, then orient. It is a *loader* — it triggers the read; it decides nothing
+> itself. (Sibling: `/partner` → `.claude/PARTNER.md`, the cabinet's front-of-pipeline
+> role, ADR 0010.)
+
 > **Want to *run* it — stand-up, launch commands, the full prod-run loop, cleanup?**
 > That is the **runbook**, not this file: **[`docs/DIRECTOR_RUNBOOK.md`](../docs/DIRECTOR_RUNBOOK.md)**.
 > This guide is *how the Director judges*; the runbook is *what to type*. Come here to
