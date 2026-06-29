@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-29
 owner: harness
 type: exec-plan
@@ -179,6 +179,13 @@ gate is GREEN; the always-on + standard review personas return SATISFIED.
   re-ready is a human act) + §12 (the idle/stuck heartbeat now names parked parents and
   the `stranded`/`polls` flag); `docs/DIRECTOR_RUNBOOK.md` §11 troubleshooting row. Docs
   only → behavioral QA N/A.
+- [x] (2026-06-29) Impl committed (`3947594`); gate GREEN (880).
+- [x] (2026-06-29) Completion gate: all 4 personas SATISFIED, 0 P1. 3 P2s fixed inline
+  (consolidated): bounded the per-id identifier fan-out (`_MAX_IDENTIFIER_RESOLVES=16` →
+  fail-open over-large set), a single `dict.fromkeys` partition pass (classify once, dedup
+  both forms), + 3 coverage tests (realistic-UUID disjointness, repeated-identifier dedup,
+  the cap). 30 linear + 142 orchestrator; full suite 883; gate GREEN. 5 proposed rules
+  tracked for the doc-gardener (see Feedback + tech-debt-tracker).
 
 ## Surprises & discoveries
 - The test `MockBoard.fetch_issue_labels_by_ids` previously conflated node id and
@@ -196,9 +203,74 @@ gate is GREEN; the always-on + standard review personas return SATISFIED.
   per-id catch) — preserves "never falsely escalate a real worker."
 - 2026-06-29: Exclude the parent **identifier** as well as its node id from the valid
   set (symmetric self-reference guard).
+- 2026-06-29 (gate): bound the identifier fan-out (`_MAX_IDENTIFIER_RESOLVES=16`) and
+  fail-open an over-large set, restoring the single-batch's bounded-load property on the
+  main thread — chosen over per-id isolation (which would risk a false escalate on a blip)
+  and over an unbounded loop (the as-shipped regression review-reliability flagged).
 
 ## Feedback (from completion gate)
-- (to fill at the gate)
+
+All four personas **SATISFIED**, zero P1. Each verified its behavioral claims against the
+live code (not the progress log) — spec-compliance, arch, and reliability all independently
+confirmed the `eligible_tickets` "completed state-type" and `park()`/orphan-reattach claims
+in the §4/§12 doc note are accurate, not confabulated.
+
+**Fixed inline (P2) — one consolidated `fetch_issue_labels_by_ids` refactor + tests:**
+- review-reliability — the new per-id `issue(id:)` fan-out is unbounded on the orchestrator
+  main thread (R13 single-writer); a worker reporting many identifiers under a slow/timing-out
+  board could serialize N×30s POSTs and stall every other ticket (pre-change: one batch POST
+  regardless of count). Bounded it: `_MAX_IDENTIFIER_RESOLVES=16`; an over-large identifier
+  set fail-opens (raise → `_validate_spawned`'s guard trusts the report, unverified) before
+  any POST. Well above any legitimate per-ticket decomposition.
+- review-code-quality — `_looks_like_identifier` was evaluated twice per id and node-id dupes
+  were forwarded to the batch while identifier dupes were deduped (asymmetry). Replaced with a
+  single `dict.fromkeys(ids)` partition pass: classify once, dedup both forms uniformly.
+- review-code-quality — coverage gap: the regex disjointness was only pinned against a
+  contrived `"node-1"`, and the repeated-identifier dedup was unpinned. Added 3 tests (a
+  realistic `8-4-4-4-12` UUID takes the batch; a repeated identifier makes one POST; the
+  fan-out cap raises).
+
+**Tracked fix-forward — 5 proposed rules (doc-gardener / tech-debt-tracker):**
+- review-reliability (RELIABILITY): (a) a control-path read-backed gate that can ESCALATE
+  must fail-open, gated on a `verified` flag — degrade a raised read to "no gate" (trust the
+  report), never to a gate firing on unverifiable data (generalizes R12's "instrumentation is
+  never a gate" to "a gate that degrades to non-gating"); (b) a control-path read that fans
+  out into per-element sub-reads must bound the fan-out against an unbounded external-reported
+  set (generalizes R20 loop-termination + R13 main-thread single-writer; anchors the cap above).
+- review-arch (ARCHITECTURE `director/` invariant): provider-specific id/identifier *format*
+  parsing (the Linear `TEAMKEY-NUMBER` regex) lives in `director/board/` and never in the
+  orchestrator — pin so a future caller doesn't sniff identifier shape in `orchestrator.py`.
+- review-arch (DESIGN test-taste): a test double honors the production contract's distinctions,
+  not the convenient conflation — a mock must preserve the distinction it is meant to exercise
+  (here node id ≠ identifier; the plan's own "a mock that's too convenient hides the bug"
+  surprise).
+- review-code-quality (DESIGN docs-taste): how deep an operator-facing doc may reach into
+  runtime internals before a `[[pointer]]` is preferred — candidate one-liner "operator docs
+  state the observable consequence + the action; link the design-doc for the mechanism."
 
 ## Outcomes & retrospective
-- (to fill at completion)
+
+Shipped both tracked fix-forwards from the [reconcile-spawned-ticket-validation](../completed/2026-06-29-reconcile-spawned-ticket-validation.md)
+gate. **Gap #1a:** `fetch_issue_labels_by_ids` now resolves a worker's reported child by
+EITHER a UUID node id (batched `issues(id:{in:})`) OR a human identifier `LIN-31` (per-id
+`issue(id:)` resolve — the both-forms query `read_issue` already relies on), keyed by the
+exact reported string; `_validate_spawned` excludes the parent identifier too. So a real
+agent-ready child reported as `LIN-31` validates as valid — no more false escalate on
+blocked / misleading "not found" on done. **Operator-doc note:** DIRECTOR.md §4/§12 +
+runbook §11 now state that a `blocked`/escalate/park terminal is parked (no auto-resume,
+even across a daemon restart), that children `blocked_by` it stay ineligible until it
+reaches a completed state, and that the daemon's `stranded` flag marks one needing a manual
+re-ready. Closes the worker-issuance lineage's last two OPEN items.
+
+Behavioral QA: M1 is exercised end-to-end at the fixture level (the mock board, taught to
+resolve both forms, drives reconcile through the identifier path with fail-before/pass-after
+tests); a live worker dogfood stays deferred (codex CLI unavailable in-env). M2 is docs-only
+→ N/A. 5 new tests; full suite 883 + gate GREEN; all four review personas SATISFIED.
+
+Retrospective: the four-persona panel earned its keep again — reliability caught a real
+load-amplification regression I'd introduced (the unbounded main-thread fan-out the single
+batch POST never had), and code-quality's DRY single-partition-pass folded the cap, the
+dedup, and the double-regex-eval into one clean change. The sharpest reusable lesson is the
+plan's own: a test double that conflates the two forms it's meant to distinguish (the old
+`id==identifier` MockBoard) makes the very bug untestable — `_seed_ident` (node id ≠
+identifier) is the minimum fidelity that actually proves the fix.

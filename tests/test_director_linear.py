@@ -266,6 +266,43 @@ class LinearWriteMethodsTest(unittest.TestCase):
         self.assertEqual(out, {})
         self.assertEqual(len(calls), 1)              # one single resolve, no batch
 
+    def test_fetch_issue_labels_by_ids_real_uuid_uses_batch(self):
+        # a realistic Linear UUID node id is NOT identifier-shaped → it takes the batched
+        # filter, never the per-id resolve. Pins the regex disjointness the routing relies on.
+        uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        self.assertFalse(linear._looks_like_identifier(uuid))
+        cap = {}
+        resp = {"data": {"issues": {"nodes": [
+            {"id": uuid, "labels": {"nodes": [{"name": "agent-ready"}]}}]}}}
+        out = linear.fetch_issue_labels_by_ids([uuid], api_key="k",
+                                               http_post=_capturing_post(cap, resp))
+        self.assertEqual(out, {uuid: ["agent-ready"]})
+        self.assertEqual(cap["body"]["variables"], {"ids": [uuid]})        # batched, not single
+        self.assertIn("issues(filter:", cap["body"]["query"].replace(" ", ""))
+
+    def test_fetch_issue_labels_by_ids_dedups_repeated_identifier(self):
+        # a repeated identifier resolves with ONE POST (dict.fromkeys dedup), not one per copy
+        calls = []
+
+        def post(url, data, headers):
+            calls.append(json.loads(data.decode("utf-8")))
+            return {"data": {"issue": {"id": "uuid-z", "identifier": "LIN-7",
+                                       "labels": {"nodes": [{"name": "agent-ready"}]}}}}
+
+        out = linear.fetch_issue_labels_by_ids(["LIN-7", "LIN-7"], api_key="k", http_post=post)
+        self.assertEqual(out, {"LIN-7": ["agent-ready"]})
+        self.assertEqual(len(calls), 1)
+
+    def test_fetch_issue_labels_by_ids_caps_identifier_fanout(self):
+        # an over-large identifier set is degenerate → raise (the caller's verify guard then
+        # fail-opens / trusts the report) rather than serialize many control-path POSTs.
+        def boom(url, data, headers):
+            raise AssertionError("must not POST when the identifier fan-out cap is exceeded")
+
+        ids = [f"LIN-{n}" for n in range(linear._MAX_IDENTIFIER_RESOLVES + 1)]
+        with self.assertRaises(RuntimeError):
+            linear.fetch_issue_labels_by_ids(ids, api_key="k", http_post=boom)
+
     def test_linear_board_binds_key_and_delegates(self):
         cap = {}
         resp = {"data": {"issues": {"nodes": []}}}

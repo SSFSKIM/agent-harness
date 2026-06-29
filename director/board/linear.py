@@ -120,6 +120,15 @@ def _looks_like_identifier(s: str) -> bool:
     return bool(_IDENTIFIER_RE.match(s or ""))
 
 
+# Bound the per-id `issue(id:)` fan-out below. Node ids cost ONE batched POST regardless of
+# count, but each human identifier costs a separate timeout-bounded POST on the orchestrator's
+# main thread, and the reported set is worker-controlled (unbounded). This ceiling is well
+# above any legitimate per-ticket decomposition (a worker spawns a handful of children); an
+# over-large set is degenerate, so we fail-open (raise → the caller's verify guard trusts the
+# report unverified) rather than serialize many control-path reads (RELIABILITY R13/R20).
+_MAX_IDENTIFIER_RESOLVES = 16
+
+
 def load_api_key(env_path: str | Path = ".env") -> str | None:
     """LINEAR_API_KEY from the environment, falling back to a repo-root .env line."""
     key = os.environ.get("LINEAR_API_KEY")
@@ -368,11 +377,18 @@ def fetch_issue_labels_by_ids(issue_ids, *, api_key: str | None = None,
     ids = list(issue_ids)
     if not ids:
         return {}
+    # Classify each DISTINCT reported id ONCE (dict.fromkeys dedups, preserving order):
+    # an identifier-shaped id (LIN-31) the batch `id:{in:}` filter cannot match → a per-id
+    # `issue(id:)` resolve; everything else (UUID node ids) → the batched filter.
+    node_ids, idents = [], []
+    for i in dict.fromkeys(ids):
+        (idents if _looks_like_identifier(i) else node_ids).append(i)
+    if len(idents) > _MAX_IDENTIFIER_RESOLVES:
+        raise RuntimeError(f"spawned-id verify: {len(idents)} human-identifier ids exceeds the "
+                           f"per-reconcile resolve cap ({_MAX_IDENTIFIER_RESOLVES})")
     out: dict[str, list[str]] = {}
-    # Node ids → one batched filter read (the common issueCreate-returns-node-id case stays
-    # a single POST). Identifier-shaped ids are split out — the filter would read them as
-    # "missing" — and resolved one-by-one below.
-    node_ids = [i for i in ids if not _looks_like_identifier(i)]
+    # Node ids → one batched filter read (the common issueCreate-returns-node-id case stays a
+    # single POST). An id absent from the response ⇒ no such node id ⇒ left out (invalid).
     if node_ids:
         data = _post(_ISSUE_LABELS, {"ids": node_ids},
                      api_key=api_key, endpoint=endpoint, http_post=http_post)
@@ -383,13 +399,11 @@ def fetch_issue_labels_by_ids(issue_ids, *, api_key: str | None = None,
             if iid is not None:
                 by_node[iid] = _parse_labels(n)
         for i in node_ids:
-            if i in by_node:           # absent ⇒ no such node id ⇒ leave it out (invalid)
+            if i in by_node:
                 out[i] = by_node[i]
     # Human identifiers (LIN-31) → per-id `issue(id:)` resolve (both-forms). A genuinely
     # absent identifier yields None ⇒ no key ⇒ invalid; a real one validates correctly.
-    for i in ids:
-        if i in out or not _looks_like_identifier(i):
-            continue
+    for i in idents:
         labels = _fetch_one_issue_labels(i, api_key=api_key, endpoint=endpoint,
                                          http_post=http_post)
         if labels is not None:
