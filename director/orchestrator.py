@@ -337,6 +337,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             comment(f"⚠️ terminal with unrecognized outcome {ostatus!r} after "
                     f"{turns} turn(s) — left in progress for review")
             summary = summarize("terminal_unknown", "started")
+            park()  # left in `started` for human review → restart-safe (gap #2)
     elif kind == "escalate":
         comment(f"🙋 escalated to human after {turns} turn(s): {disp.get('reason')}")
         summary = summarize("escalated", "started")  # stays visible; human acts async
@@ -386,6 +387,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
     else:  # unknown disposition — never silently drop; surface and stay visible
         comment(f"⚠️ unknown disposition {kind!r} after {turns} turn(s)")
         summary = summarize("unknown", "started")
+        park()  # left in `started` for human review → restart-safe (gap #2)
 
     if errs:
         summary["reconcile_error"] = "; ".join(errs)
@@ -419,21 +421,24 @@ def eligible_tickets(tickets: list[dict], *, done_types=("completed",),
     return out
 
 
-def _stuck_report(pending: list[dict], done_set: set, *, stranded_ids=frozenset()) -> list[dict]:
+def _stuck_report(pending: list[dict], done_set: set, *, stranded=None) -> list[dict]:
     """Each pending-but-blocked ticket with its not-yet-done blockers — the operator's
     "why is nothing progressing" view (R7). A None state_type (an unreadable blocker)
     surfaces here too. Pure; shared by `run_until_drained` (its terminal "stuck" report)
-    and the daemon's idle heartbeat (stuck-as-status, D-66). `stranded_ids` (ticket ids past
-    the daemon's strand-age threshold) flags those items `stranded: True`, so the dashboard /
-    operator can tell a long-running strand from a freshly-blocked ticket (gap #3)."""
+    and the daemon's idle heartbeat (stuck-as-status, D-66). `stranded` (a `{ticket-id:
+    idle-poll-count}` map of tickets past the daemon's strand-age threshold) flags those items
+    `stranded: True` + `polls: <count>`, so the dashboard/operator can tell a long-running
+    strand — and how long — from a freshly-blocked ticket (gap #3)."""
+    stranded = stranded or {}
     out = []
     for t in pending:
         item = {"ticket": t.get("identifier") or t["id"],
                 "blocked_by": [{"id": b.get("id"), "state_type": b.get("state_type")}
                                for b in t.get("blockers", [])
                                if b.get("state_type") not in done_set]}
-        if t["id"] in stranded_ids:
+        if t["id"] in stranded:
             item["stranded"] = True
+            item["polls"] = stranded[t["id"]]
         out.append(item)
     return out
 
@@ -613,6 +618,17 @@ class _RunState:
         shows progress to the watched Director. A write that raises OR returns False is a
         failed claim — never dispatch unclaimed. Returns whether the worker dispatched."""
         tid = ticket["id"]
+        # gap #2: a re-claimed ticket is a fresh attempt that must be orphan-recoverable
+        # again — drop any parked marker it carried BEFORE the claim, so a crash in the
+        # claim→run window leaves no stale suppression (a leftover marker would only ever
+        # guard a not-yet-re-claimed ticket). Best-effort AND logged (review-reliability):
+        # a swallowed clear failure could silently suppress a later orphan recovery.
+        try:
+            dq.clear_parked(tid, base=self.queue_base)
+        except Exception as exc:
+            print(json.dumps({"daemon": "clear_parked_failed",
+                              "ticket": ticket.get("identifier") or tid,
+                              "error": str(exc)}), file=sys.stderr)
         try:
             claimed = self.board.update_issue_state(tid, self.states["started"])
         except Exception as exc:
@@ -623,12 +639,6 @@ class _RunState:
             return False
         self.attempts[tid] = 1
         self.in_flight.add(tid)
-        # gap #2: a re-claimed ticket is a fresh attempt that must be orphan-recoverable
-        # again — drop any parked marker it carried (best-effort).
-        try:
-            dq.clear_parked(tid, base=self.queue_base)
-        except Exception:
-            pass
         self.status.claimed(ticket, wave=wave, attempt=1)
         self.submit(ticket)
         return True
@@ -1150,10 +1160,12 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                 # not stuck). Without the clear, a resolved stuck set lingers in status.json.
                 # Strand-age escalation (gap #3): `blocked` is a true no-progress signal only
                 # when IDLE. Bump each blocked ticket's idle-poll count, reset a ticket that
-                # progressed (left the blocked set), and escalate ONCE — a board comment + a
-                # `stranded` status flag — when a count first crosses the threshold. Busy ticks
-                # pause the count (work IS progressing); fail-soft on the comment.
-                stranded_ids: set = set()
+                # progressed (left the blocked set), and escalate — a board comment + a
+                # `stranded`+`polls` status flag — when a count first crosses the threshold. The
+                # comment fires once per daemon LIFETIME (strand_streak is in-memory): a restart
+                # re-arms it, re-nudging a still-stranded ticket — acceptable for an idempotent,
+                # board-as-truth informational signal. Busy ticks pause the count; fail-soft comment.
+                stranded: dict = {}
                 if not state.futures and strand_escalation_polls:
                     blocked_ids = {t["id"] for t in blocked}
                     for tid in [t for t in strand_streak if t not in blocked_ids]:
@@ -1162,7 +1174,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                         tid = t["id"]
                         strand_streak[tid] = strand_streak.get(tid, 0) + 1
                         if strand_streak[tid] >= strand_escalation_polls:
-                            stranded_ids.add(tid)
+                            stranded[tid] = strand_streak[tid]
                         if strand_streak[tid] == strand_escalation_polls:  # crossed → comment once
                             try:
                                 board.comment_issue(
@@ -1172,7 +1184,7 @@ def run_forever(board, command: list[str], *, team: str, states: dict,
                                 print(json.dumps({"daemon": "strand_comment_failed",
                                                   "ticket": t.get("identifier") or tid,
                                                   "error": str(exc)}), file=sys.stderr)
-                state.status.stuck(_stuck_report(blocked, done_set, stranded_ids=stranded_ids)
+                state.status.stuck(_stuck_report(blocked, done_set, stranded=stranded)
                                    if not state.futures else [])
             else:
                 state.status.polled(phase="draining")

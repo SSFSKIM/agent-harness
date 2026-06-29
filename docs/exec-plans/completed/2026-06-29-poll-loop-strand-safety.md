@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-29
 owner: harness
 type: exec-plan
@@ -35,7 +35,7 @@ return SATISFIED.
 
 - Originating review + the two gaps: [tech-debt-tracker](../tech-debt-tracker.md) top row
   ("Worker ticket-issuance"), gaps (2) and (3); gap (1) was closed by
-  [reconcile-spawned-ticket-validation](../completed/2026-06-29-reconcile-spawned-ticket-validation.md),
+  [reconcile-spawned-ticket-validation](2026-06-29-reconcile-spawned-ticket-validation.md),
   whose completion gate *sharpened* gap #2 (its `blocked`→escalate downgrade is a new entry
   into the restart re-run path) and proposed the two RELIABILITY rules this plan acts on.
 - The daemon: `orchestrator.run_forever` (`director/orchestrator.py:950`). Each idle tick it
@@ -150,8 +150,17 @@ return SATISFIED.
   downgrade (NOT a configured blocked-state); `_startup_recovery` skips parked + GCs to
   `parked ∩ started`; `claim_and_submit` clears on reclaim. 3 queue + 4 startup-recovery
   + 5 reconcile-park + 1 claim-clear tests. Full suite (236) + gate GREEN.
-- [ ] Completion gate: always-on (spec-compliance → code-quality) + standard (arch +
-  reliability — recovery code) pending.
+- [x] (2026-06-29) Completion gate: gate GREEN; behavioral acceptance = the bg-thread
+  daemon + fixture tests (no live worker needed; codex CLI unavailable in-env). All 4
+  personas SATISFIED, 0 P1 (spec-compliance, code-quality, review-arch, review-reliability).
+- [x] (2026-06-29) Post-review fixes (all inline): moved `clear_parked` BEFORE the board
+  claim + logged `clear_parked_failed` (reliability); `gc_parked` skips the write when
+  unchanged — fixes a daemon-test working-tree pollution + the production empty-write
+  (code-quality); added the `polls` count to the `stranded` stuck entry (spec); **parked the
+  two unknown-disposition branches** (`terminal_unknown` + the catch-all) for restart-safety
+  too (spec+arch consistency); documented M1's per-daemon-lifetime once-guarantee (arch+
+  reliability); queue module docstring + a config parse test. 2 new park tests. 239 tests +
+  gate GREEN; no working-tree pollution.
 
 ## Surprises & discoveries
 - Two `queue` namespaces in `orchestrator.py`: the stdlib `import queue` (for `queue.Queue`)
@@ -169,9 +178,62 @@ return SATISFIED.
 - 2026-06-29: gap #2 mechanism = durable parked-set (approach A), not a board label (B) or a
   dedicated parked state (C) — config-light, fail-soft, board-mutation-free in the recovery
   path. The clear-on-reclaim + startup `parked ∩ started` GC keep the set honest.
-- 2026-06-29: only dispositions that leave a ticket in `started` are recorded as parked; a
-  `blocked` moved to a configured `blocked` state is already orphan-safe.
+- 2026-06-29: the dispositions that **park a worker for the human** (and so are restart-safe)
+  are recorded: `escalate`, the `blocked`→escalate downgrade, a `blocked` left in `started`
+  (no configured blocked-state), and — added at the completion gate — `terminal_unknown` and
+  the catch-all `unknown` (both "left for review"). Deliberately NOT parked: a `blocked` in a
+  configured blocked-state (already orphan-safe), and `stuck`/`failed`/`cancelled` (re-running
+  a failure with no children is the intended crash recovery; a `cancelled` ticket already left
+  `started`).
+- 2026-06-29 (gate): M1's "escalate once" is **per-daemon-lifetime** (the `strand_streak`
+  dedupe is in-memory) — a restart re-nudges a still-stranded ticket. Accepted as a conscious
+  decision: the strand comment is idempotent + board-as-truth + state-changing-nothing, so a
+  restart re-surface is acceptable (persisting it is YAGNI). Documented on the knob.
 
 ## Feedback (from completion gate)
 
+All four personas **SATISFIED**, zero P1.
+
+**Fixed inline (P2):**
+- review-reliability — `clear_parked` on re-claim was a silent `except: pass`; moved it BEFORE
+  the board claim (a crash in the claim→run window leaves no stale suppression) and logged
+  `clear_parked_failed` (the one new failure mode the diff added).
+- review-code-quality — `gc_parked` wrote unconditionally, so a daemon test (which ran
+  `run_forever` without a `queue_base`) created `parked.json` in the real working tree;
+  `gc_parked` now writes only when the set shrinks (also kills a production empty-write).
+  Added a `config` parse test for the new knob (was uncovered).
+- review-spec-compliance — added the `polls` count to the `stranded` stuck entry (the
+  milestone's "(+ polls)"); the two unknown-disposition branches now `park()` (consistency).
+- review-arch — queue module docstring now names the parked-set + merge worklist as durable
+  stores it hosts; M1 per-lifetime once-guarantee documented.
+
+**Tracked fix-forward (tech-debt-tracker) — proposed rules for the doc-gardener:**
+- ARCHITECTURE: `director.queue` is the home for orchestrator-owned durable atomic stores
+  (temp+replace, single `_root(base=)`), not just request/answer — keep the docstring honest.
+- RELIABILITY: the *un-mark* of a restart-GC suppression record is reliability-critical — must
+  be logged and fail toward re-running (re-ready), not toward suppressing recovery.
+- RELIABILITY: in-memory dedupe of a human-facing escalation may repeat on restart — acceptable
+  ONLY for idempotent informational signals, never a state-changing action.
+- RELIABILITY: a restart GC keyed on a board read must treat a partial/Byzantine read (no raise)
+  as untrusted (pre-existing trust in `fetch_issues_by_states`; the GC only amplifies it).
+- DESIGN: tests exercising queue-touching paths must inject an explicit `base`/`queue_base`
+  tmpdir — never rely on `_root(None)` resolving to a real `.claude/harness/` path.
+
 ## Outcomes & retrospective
+
+Shipped both poll-loop gaps the worker-behavior review deferred. **Gap #3:** the always-on
+daemon now escalates a ticket blocked with no eligible progress for `strand_escalation_polls`
+idle polls — once per lifetime, a board comment + a `stranded`+`polls` status flag — instead
+of leaving it silent in the idle heartbeat. **Gap #2:** a ticket the orchestrator parked in
+`started` (escalate / blocked-in-started / a malformed terminal left for review) is recorded
+in a durable parked-set so a daemon restart skips re-running it (and duplicating its filed
+children); a genuine crash-orphan is still recovered, and the path is fail-open to today's
+re-ready-all on any parked-set IO error. The completion gate hardened it materially —
+clear-before-claim + logging, the gc write-guard (which also fixed a real test-pollution bug),
+parking the unknown branches, and the `polls` field.
+
+What earned its keep: review-code-quality empirically caught the working-tree pollution
+(`gc_parked` writing `parked.json` into the repo on every daemon-test start); review-reliability
+caught the silent `clear_parked` swallow that could suppress a real orphan recovery; arch +
+spec both flagged the `terminal_unknown` parking-consistency gap. 18 new tests; full suite +
+gate GREEN; no working-tree pollution.

@@ -1156,6 +1156,17 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self._reconcile(self._done())
         self.assertEqual(dq.read_parked(base=self.qbase), set())
 
+    def test_terminal_unknown_records_park(self):
+        # a malformed terminal (unrecognized status) is left in `started` for review → parked
+        self._reconcile({"kind": "terminal", "outcome": {"status": "weird"},
+                         "turns": 1, "turn_id": "t"})
+        self.assertIn("u1", dq.read_parked(base=self.qbase))
+
+    def test_unknown_disposition_records_park(self):
+        # an unknown disposition kind is left in `started` for review → parked
+        self._reconcile({"kind": "bogus", "turns": 1})
+        self.assertIn("u1", dq.read_parked(base=self.qbase))
+
     def test_explicit_ticket_workspace_is_used(self):
         orch.reconcile(self.board, {"id": "u1", "workspace": "/custom/ws"},
                        self._done(pr_url="u", pr_branch="b"), 1, self.states, 1,
@@ -1608,6 +1619,7 @@ class DaemonLoopTest(unittest.TestCase):
             try:
                 _wait_for(lambda: _b_stranded() is not None, msg="b never flagged stranded")
                 self.assertTrue(_b_stranded()["stranded"])
+                self.assertGreaterEqual(_b_stranded()["polls"], 2)   # the streak count rides along
                 strand = [c for c in board.comments.get("b", []) if "stranded" in c]
                 self.assertEqual(len(strand), 1)              # escalated exactly once
                 self.assertIn("needs human", strand[0])

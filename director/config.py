@@ -86,10 +86,12 @@ DEFAULTS: dict = {
     "backoff_cap_s": 300.0,
     # Strand-age escalation (daemon only): a ticket that stays blocked with no eligible
     # progress across this many IDLE daemon polls (busy polls pause the count; progress
-    # resets it) is escalated ONCE — a board comment + a `stranded` flag on its stuck status
-    # — instead of sitting silent in the idle heartbeat forever. Idle polls back off
-    # exponentially, so this is a coarse "stuck a while" nudge, not a precise SLA. 0 (or null)
-    # disables it. The bounded `--batch`/`--once` fixtures ignore it (they report `stuck` + exit).
+    # resets it) is escalated once per daemon LIFETIME — a board comment + a `stranded`+`polls`
+    # flag on its stuck status — instead of sitting silent in the idle heartbeat forever. The
+    # dedupe is in-memory, so a daemon RESTART re-nudges a still-stranded ticket (acceptable for
+    # an idempotent, board-as-truth informational signal). Idle polls back off exponentially, so
+    # this is a coarse "stuck a while" nudge, not a precise SLA. 0 (or null) disables it. The
+    # bounded `--batch`/`--once` fixtures ignore it (they report `stuck` + exit).
     "strand_escalation_polls": 6,
     "codex_command": "codex app-server",
     # Worker-runtime toggle (default-codex). `worker_runtimes` is a {name: command}

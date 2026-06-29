@@ -115,6 +115,17 @@ class LoadConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config.load_director_config(root=self.root)
 
+    def test_strand_escalation_polls_default_disable_and_validate(self):
+        self.assertEqual(config.defaults().strand_escalation_polls, 6)            # default
+        for val, expected in ((0, 0), (None, 0), (3, 3)):                         # 0/null disable; positive kept
+            _write(self.root, {"director": {"strand_escalation_polls": val}})
+            self.assertEqual(
+                config.load_director_config(root=self.root).strand_escalation_polls, expected)
+        for bad in (-1, "x"):                                                     # negative / junk → fail-loud
+            _write(self.root, {"director": {"strand_escalation_polls": bad}})
+            with self.assertRaises(ValueError):
+                config.load_director_config(root=self.root)
+
     # -- use-all shakedown fixes: read_timeout default + dispatch_requires_label -----
     def test_read_timeout_default_is_180(self):
         # F3: the default per-message read budget is 180s (was 30s, which crashed real

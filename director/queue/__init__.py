@@ -1,4 +1,4 @@
-"""Director request/answer queue (Phase 1, M1).
+"""Director request/answer queue + orchestrator durable run-state stores (Phase 1, M1).
 
 A worker that hits a Codex app-server approval/input request writes one *request*
 here and blocks for an *answer*; the Director (the main Claude session) writes the
@@ -7,6 +7,12 @@ harness reliability rules (docs/RELIABILITY.md): requests dedupe by request_id
 (R1/R4 at-least-once), answers are written temp-then-rename (R9 atomic
 mark-before-act). Self-contained — no import of plugin/ machinery, so the host app
 stays decoupled from the portable harness (core-belief: internalize dependencies).
+
+This module is also the home for the orchestrator's other small DURABLE atomic stores
+that share its `_root`/`_ensure`/`_APPEND_LOCK` + temp-then-`os.replace` machinery: the
+merge-request worklist (`append_merge_request`/…) and the restart-safety **parked-ticket
+set** (`read_/append_/clear_/gc_parked`, gap #2) — both orchestrator-owned recovery
+state, not request/answer-shaped.
 
 Schemas (see the product-spec Design section):
   request : {request_id, ticket_id, session_id "<thread>-<turn>", kind, payload,
@@ -263,11 +269,15 @@ def clear_parked(tid: str, base: Path | str | None = None) -> None:
 def gc_parked(keep: set[str], base: Path | str | None = None) -> set[str]:
     """Intersect the parked set with `keep` (the tids still in `started`) and persist —
     dropping entries for tickets that have since LEFT `started` (a human re-readied/moved
-    them). Returns the kept set. Run once at startup recovery to keep the set honest."""
+    them). Returns the kept set. Run once at startup recovery to keep the set honest.
+    Writes ONLY when the set actually shrinks (like append/clear's guards) — so the common
+    nothing-parked startup neither creates the file nor touches disk."""
     root = _root(base)
     with _APPEND_LOCK:
-        ids = read_parked(base) & set(keep)
-        _write_parked(ids, root)
+        cur = read_parked(base)
+        ids = cur & set(keep)
+        if ids != cur:
+            _write_parked(ids, root)
     return ids
 
 
