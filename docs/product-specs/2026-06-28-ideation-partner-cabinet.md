@@ -1,6 +1,6 @@
 ---
 status: draft
-last_verified: 2026-06-28
+last_verified: 2026-06-29
 owner: harness
 phase: methodology/03-ideation-partner
 type: product-spec
@@ -25,9 +25,10 @@ dogfood that motivates building it as a standing role.
 > **Reconciled 2026-06-29 with [ADR 0011](../adr/0011-agent-ready-is-agent-governed.md).** A
 > human directive reversed this spec's original *human-owned-admission* framing: `agent-ready`
 > is **agent-governed** — the Partner marks its own briefs ready and the human curates at the
-> edges, not as a per-ticket gate (least human in loop). The requirements, guardrails, and
-> non-goals below are updated to match; `.claude/PARTNER.md` + ADR 0011 are authoritative where
-> any residual "human owns direction / surfaces-never-enact / no lights-out" wording survives.
+> edges, not as a per-ticket gate (least human in loop). The requirements, guardrails, the
+> Design data-flow, the verification, and the non-goals below are updated to match;
+> `.claude/PARTNER.md` + ADR 0011 are authoritative where any residual "human owns direction /
+> surfaces-never-enact / no lights-out" wording survives.
 
 ## Problem
 
@@ -155,14 +156,16 @@ insufficient), `docs-nav` (state). It does **not** invoke `product-design`/`exec
 ```
 Mode 1:  human intuition
          → Partner dialogue  (scout / deep-research only when warranted)
-         → pre-spec brief    → issueCreate(board)
-         → [loose coupling]  orchestrator claims the ticket
+         → pre-spec brief    → issueCreate(board) + mark agent-ready
+         → [loose coupling]  orchestrator claims the agent-ready ticket
          → worker: product-design → spec → execplan → build → merger
+         (human may veto/redirect at the board edge)
 
 Mode 2:  CronCreate(durable) idle wake
          → assess (docs-nav roadmap + logs.md + recent runs)
          → optional scout pass
-         → PushNotification surfaces candidates → (human engages) → Mode 1
+         → produce pre-spec brief(s) → issueCreate + mark agent-ready → pipeline runs
+         → PushNotification surfaces them for awareness/veto (not permission)
 ```
 
 ### Files to create / modify
@@ -192,8 +195,9 @@ Mode 2:  CronCreate(durable) idle wake
   existing pipeline picks up (orchestrator claims it → a `product-design` worker produces a
   spec) — the end-to-end loose coupling.
 - **Boundary-holds (inspection):** a Mode-1 run's board diff is *exactly* one brief ticket
-  (+ optional comments) — no spec doc, no code, no lifecycle transition (mirrors scout's
-  "a run's diff is exactly the horizon doc + index line" fence).
+  carrying the `agent-ready` label (+ optional comments) — no spec doc, no code, no lifecycle
+  **state** transition (the Partner sets the label, never moves the ticket through states;
+  mirrors scout's "a run's diff is exactly the horizon doc + index line" fence).
 
 ## Non-goals (YAGNI)
 
