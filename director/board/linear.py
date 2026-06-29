@@ -91,6 +91,14 @@ query DirectorIssueStates($ids: [ID!]) {
 }
 """.strip()
 
+_ISSUE_LABELS = """
+query DirectorIssueLabels($ids: [ID!]) {
+  issues(filter: { id: { in: $ids } }) {
+    nodes { id identifier labels { nodes { name } } }
+  }
+}
+""".strip()
+
 
 def load_api_key(env_path: str | Path = ".env") -> str | None:
     """LINEAR_API_KEY from the environment, falling back to a repo-root .env line."""
@@ -309,6 +317,31 @@ def fetch_issue_states_by_ids(issue_ids, *, api_key: str | None = None,
     return out
 
 
+def fetch_issue_labels_by_ids(issue_ids, *, api_key: str | None = None,
+                              endpoint: str = DEFAULT_ENDPOINT,
+                              http_post: Callable[[str, bytes, dict], dict] = urllib_post
+                              ) -> dict[str, list[str]]:
+    """Label names of each given issue id, as `{id: [label_name, …]}` — the spawned-id
+    validation read (reconcile checks that a worker's reported child tickets exist AND
+    carry the `agent-ready` dispatch label). Only ids the board actually returns appear
+    in the map, so a **missing id ⇒ absent key ⇒ the ticket does not exist** (the caller
+    treats an absent key as "no such ticket"). An **empty `issue_ids` makes NO API call**
+    (returns `{}`; mirrors `fetch_issue_states_by_ids`'s empty-guard, §17.3)."""
+    ids = list(issue_ids)
+    if not ids:
+        return {}
+    data = _post(_ISSUE_LABELS, {"ids": ids},
+                 api_key=api_key, endpoint=endpoint, http_post=http_post)
+    nodes = ((data.get("issues") or {}).get("nodes")) or []
+    out: dict[str, list[str]] = {}
+    for n in nodes:
+        iid = n.get("id")
+        if iid is None:
+            continue
+        out[iid] = _parse_labels(n)
+    return out
+
+
 class LinearBoard:
     """Stateful board adapter binding auth + endpoint, exposing the orchestrator's
     read/claim/reconcile surface over the module functions. The orchestrator depends
@@ -343,4 +376,8 @@ class LinearBoard:
 
     def fetch_issue_states_by_ids(self, issue_ids) -> dict[str, dict]:
         return fetch_issue_states_by_ids(issue_ids, api_key=self.api_key,
+                                         endpoint=self.endpoint, http_post=self.http_post)
+
+    def fetch_issue_labels_by_ids(self, issue_ids) -> dict[str, list[str]]:
+        return fetch_issue_labels_by_ids(issue_ids, api_key=self.api_key,
                                          endpoint=self.endpoint, http_post=self.http_post)

@@ -136,6 +136,58 @@ def _maybe_enqueue_merge(tid, ticket: dict, outcome: dict, queue_base, workspace
         return False
 
 
+def _validate_spawned(board, parent_tid: str, spawned: list, errs: list) -> dict:
+    """Verify a worker's reported `spawned_ticket_ids` against the board. Returns
+    `{"valid": [...], "invalid": [...], "verified": bool}`. **valid** = the board has the
+    ticket AND it carries the `agent-ready` dispatch label (so it will actually dispatch)
+    AND it is not the parent itself; **invalid** = claimed-but-missing / unlabeled /
+    self-referential — a child the worker asserted that will never run (a failed/refused/
+    hallucinated `issueCreate`). **verified** is False only when the board read raised: the
+    caller then trusts the reported ids as-is (today's behavior) and never escalates on
+    unverifiable data (fail-open to the prior behavior, recorded in `errs`)."""
+    if not spawned:
+        return {"valid": [], "invalid": [], "verified": True}
+    try:
+        labels = board.fetch_issue_labels_by_ids(spawned)
+    except Exception as exc:
+        errs.append(f"spawned-id verify failed ({exc}); trusting reported ids")
+        return {"valid": list(spawned), "invalid": [], "verified": False}
+    valid, invalid = [], []
+    for sid in spawned:
+        if sid != parent_tid and DISPATCH_LABEL in (labels.get(sid) or []):
+            valid.append(sid)
+        else:
+            invalid.append(sid)
+    return {"valid": valid, "invalid": invalid, "verified": True}
+
+
+def _follow_note(valid: list, invalid: list, verified: bool) -> str:
+    """The board-comment suffix that honestly names a terminal's follow-up tickets:
+    real (valid) children as follow-ups, and any claimed-but-not-real ids explicitly —
+    so a comment never asserts a child the board does not have. Empty when nothing was
+    reported; "(unverified)" when the board read failed."""
+    if not valid and not invalid:
+        return ""
+    if not verified:                       # board read failed → reported ids, flagged
+        return f" — follow-ups (unverified): {', '.join(valid)}"
+    parts = []
+    if valid:
+        parts.append("follow-ups: " + ", ".join(valid))
+    if invalid:
+        parts.append("claimed but not found/not agent-ready: " + ", ".join(invalid))
+    return " — " + "; ".join(parts)
+
+
+def _spawned_summary(valid: list, invalid: list) -> dict:
+    """Summary fields for spawned tickets: `spawned_ticket_ids` always carries the REAL
+    (valid) follow-ups; `spawned_invalid` is added only when the worker claimed ids that
+    aren't real/dispatchable (an exception signal, absent on the clean path)."""
+    out = {"spawned_ticket_ids": valid}
+    if invalid:
+        out["spawned_invalid"] = invalid
+    return out
+
+
 def reconcile(board, ticket: dict, disp: dict, attempts: int,
               states: dict, retry_budget: int, *, queue_base=None,
               workspace_root=None, external_state=None,
@@ -190,7 +242,13 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
             # silently dropped them. This is a payload enrichment, NOT a new terminal
             # status: the board action is still done/merging (so no new dispatch branch).
             spawned = outcome.get("spawned_ticket_ids") or []
-            follow = f" — follow-ups: {', '.join(spawned)}" if spawned else ""
+            # Verify the claimed follow-ups against the board (spawned-id reconciliation):
+            # a `done`'s primary work is complete regardless, so the transition NEVER
+            # changes — but the comment/summary must name real vs claimed-but-not-real ids
+            # honestly (no false audit trail).
+            sv = _validate_spawned(board, tid, spawned, errs)
+            spawned_valid, spawned_invalid = sv["valid"], sv["invalid"]
+            follow = _follow_note(spawned_valid, spawned_invalid, sv["verified"])
             # Act-before-consume ([[queue-act-before-consume-ordering]], review-reliability
             # P1): ENQUEUE the PR-merge (the durable downstream handoff) BEFORE the terminal
             # `done` transition. A crash between them must never leave a `done`-on-board
@@ -212,7 +270,7 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                 comment(f"🔀 worker done after {turns} turn(s) (turn {disp.get('turn_id')})"
                         f"{reason} — PR queued; awaiting merge to main{follow}")
                 summary = summarize("completed", "merging", merge_enqueued=True,
-                                    spawned_ticket_ids=spawned)
+                                    **_spawned_summary(spawned_valid, spawned_invalid))
             else:
                 # Misfire net (merge-gate-bypass defense-in-depth): a PR-bearing done that
                 # did NOT park in `merging` despite that state being configured means the
@@ -225,16 +283,32 @@ def reconcile(board, ticket: dict, disp: dict, attempts: int,
                 set_state(states["done"])
                 comment(f"✅ worker done after {turns} turn(s) (turn {disp.get('turn_id')}){reason}{follow}")
                 summary = summarize("completed", "done", merge_enqueued=enqueued,
-                                    spawned_ticket_ids=spawned)
+                                    **_spawned_summary(spawned_valid, spawned_invalid))
         elif ostatus == "blocked":
             spawned = outcome.get("spawned_ticket_ids") or []
-            final = "started"
-            if states.get("blocked"):
-                set_state(states["blocked"])
-                final = "blocked"
-            note = f" (spawned {', '.join(spawned)})" if spawned else ""
-            comment(f"⛔ worker blocked after {turns} turn(s): {outcome.get('reason')}{note}")
-            summary = summarize("blocked", final, spawned_ticket_ids=spawned)
+            sv = _validate_spawned(board, tid, spawned, errs)
+            spawned_valid, spawned_invalid = sv["valid"], sv["invalid"]
+            # A `blocked` that CLAIMS children but has NONE valid is the silent-strand /
+            # false-audit-trail case (a failed/refused/hallucinated issueCreate): parking
+            # it `blocked` would wait on children that will never dispatch. Surface it as
+            # an escalate (visible, human-bound) instead. An EMPTY claim is a legitimate
+            # plain blocked; a partially-valid claim keeps blocked (it has a real child).
+            # `verified` False (board read failed) trusts the report — never a false escalate.
+            if spawned and sv["verified"] and not spawned_valid:
+                comment(f"🙋 escalated after {turns} turn(s): worker reported blocked but "
+                        f"no valid agent-ready child exists (claimed: "
+                        f"{', '.join(spawned_invalid)}) — {outcome.get('reason')}")
+                summary = summarize("escalated", "started",
+                                    **_spawned_summary([], spawned_invalid))
+            else:
+                final = "started"
+                if states.get("blocked"):
+                    set_state(states["blocked"])
+                    final = "blocked"
+                note = _follow_note(spawned_valid, spawned_invalid, sv["verified"])
+                comment(f"⛔ worker blocked after {turns} turn(s): {outcome.get('reason')}{note}")
+                summary = summarize("blocked", final,
+                                    **_spawned_summary(spawned_valid, spawned_invalid))
         else:
             # A terminal with an unrecognized/missing status must NEVER silently mark
             # Done (R4: code never falsely completes). The standard paths only ever
@@ -1132,6 +1206,18 @@ class MockBoard:
                 continue
             out[iid] = {"state_id": iss["state_id"], "state_name": self.state_name(iid),
                         "state_type": self._state_type(iid)}
+        return out
+
+    def fetch_issue_labels_by_ids(self, issue_ids) -> dict:
+        """Current {id: [label_name, …]} for the given ids present in the board
+        (spawned-id validation read). Ids absent from the board are omitted, so an
+        absent key means "no such ticket" — mirrors board.fetch_issue_labels_by_ids."""
+        out: dict = {}
+        for iid in issue_ids:
+            iss = self._issues.get(iid)
+            if iss is None:
+                continue
+            out[iid] = list(iss.get("labels", []))
         return out
 
     def fetch_issues_by_states(self, team, state_ids) -> list:

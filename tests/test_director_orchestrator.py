@@ -910,6 +910,14 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
     def _merge_reqs(self):
         return [r for r in dq.read_pending(base=self.qbase) if r["kind"] == "mergeRequest"]
 
+    def _seed(self, *ids, labels=("agent-ready",)):
+        """Put agent-ready child tickets on the board so reconcile's spawned-id
+        validation reads them as real, dispatchable follow-ups."""
+        for i in ids:
+            self.board._issues[i] = {"id": i, "identifier": i, "title": "child",
+                                     "description": "", "prompt": "", "state_id": "st_todo",
+                                     "labels": list(labels)}
+
     def test_done_with_pr_enqueues_a_merge_request(self):
         out = self._reconcile(self._done(pr_url="http://pr/7", pr_branch="feat/x"))
         self.assertEqual(out["summary"]["status"], "completed")
@@ -932,9 +940,12 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         # #2 — deferred/out-of-scope work). Those ids must surface on the done path —
         # summary + board comment — not be dropped (previously only the blocked path
         # consumed spawned_ticket_ids). This is a payload enrichment on done, NOT a new
-        # report_outcome status: the board action is still done.
+        # report_outcome status: the board action is still done. The follow-ups are real
+        # agent-ready children on the board, so spawned-id validation passes them through.
+        self._seed("D-2", "D-3")
         out = self._reconcile(self._done(spawned_ticket_ids=["D-2", "D-3"]))
         self.assertEqual(out["summary"]["spawned_ticket_ids"], ["D-2", "D-3"])
+        self.assertNotIn("spawned_invalid", out["summary"])
         body = "\n".join(self.board.comments["u1"])
         self.assertIn("D-2", body)
         self.assertIn("D-3", body)
@@ -950,6 +961,7 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         # `merging` must still surface its follow-up ids (summary + comment).
         states = dict(self.states)
         states["merging"] = "st_merge"
+        self._seed("D-9")
         out = orch.reconcile(self.board, {"id": "u1", "identifier": "D-1"},
                              self._done(pr_url="http://pr/7", pr_branch="feat/x",
                                         spawned_ticket_ids=["D-9"]),
@@ -1036,6 +1048,75 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
     def test_escalate_does_not_enqueue(self):
         self._reconcile({"kind": "escalate", "reason": "taste", "turns": 1})
         self.assertEqual(self._merge_reqs(), [])
+
+    # --- spawned-id validation (reconcile-spawned-ticket-validation M2) -------------
+    def _blocked(self, **outcome_extra):
+        return {"kind": "terminal",
+                "outcome": {"status": "blocked", "reason": "stuck", **outcome_extra},
+                "turns": 2, "turn_id": "t"}
+
+    def test_blocked_claiming_children_none_valid_escalates(self):
+        # gap #1: a worker reports blocked with spawned ids that aren't real/dispatchable
+        # (a failed/refused/hallucinated issueCreate). Parking it `blocked` would wait on
+        # children that never run; reconcile surfaces it as an ESCALATE instead of a
+        # silent strand with a false audit trail.
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["GHOST-1"]))
+        self.assertEqual(out["summary"]["status"], "escalated")
+        self.assertEqual(out["summary"]["final_state"], "started")
+        self.assertEqual(self.board.transitions.get("u1", []), [])         # not parked
+        self.assertEqual(out["summary"].get("spawned_invalid"), ["GHOST-1"])
+        self.assertIn("escalated", "\n".join(self.board.comments["u1"]))
+        self.assertEqual(self._merge_reqs(), [])
+
+    def test_blocked_with_a_valid_child_stays_blocked(self):
+        # a blocked carrying ≥1 real agent-ready child has a dispatchable continuation —
+        # it stays blocked (no escalate); the valid child is surfaced, the invalid named.
+        self._seed("REAL-1")
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["REAL-1", "GHOST-2"]))
+        self.assertEqual(out["summary"]["status"], "blocked")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["REAL-1"])
+        self.assertEqual(out["summary"].get("spawned_invalid"), ["GHOST-2"])
+
+    def test_blocked_without_children_stays_plain_blocked(self):
+        # an EMPTY claim is a legitimate "genuinely stuck, no children" — NOT escalated.
+        out = self._reconcile(self._blocked())
+        self.assertEqual(out["summary"]["status"], "blocked")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], [])
+        self.assertNotIn("spawned_invalid", out["summary"])
+
+    def test_blocked_self_referential_spawn_escalates(self):
+        # reporting the ticket's OWN id as a child is no real continuation → escalate.
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["u1"]))
+        self.assertEqual(out["summary"]["status"], "escalated")
+
+    def test_blocked_unlabeled_child_is_invalid_and_escalates(self):
+        # F3: a child created WITHOUT the agent-ready label is silently undispatchable, so
+        # it is not a real continuation — reconcile treats it as invalid and escalates.
+        self._seed("NOLABEL-1", labels=())
+        out = self._reconcile(self._blocked(spawned_ticket_ids=["NOLABEL-1"]))
+        self.assertEqual(out["summary"]["status"], "escalated")
+        self.assertEqual(out["summary"].get("spawned_invalid"), ["NOLABEL-1"])
+
+    def test_done_with_invalid_followup_still_completes_but_names_it(self):
+        # a done's primary work is complete regardless — the transition NEVER changes — but
+        # an unreal follow-up id is surfaced honestly (no false audit trail) and NOT counted
+        # as a real spawned ticket.
+        out = self._reconcile(self._done(spawned_ticket_ids=["GHOST-3"]))
+        self.assertEqual(out["summary"]["final_state"], "done")
+        self.assertEqual(out["summary"]["status"], "completed")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], [])
+        self.assertEqual(out["summary"].get("spawned_invalid"), ["GHOST-3"])
+        self.assertIn("claimed but not found", "\n".join(self.board.comments["u1"]))
+
+    def test_spawned_verify_board_error_trusts_report_no_crash(self):
+        # best-effort: a board-read failure degrades to "trust the reported ids" (today's
+        # behavior), records the error, and never escalates on unverifiable data.
+        with mock.patch.object(self.board, "fetch_issue_labels_by_ids",
+                               side_effect=RuntimeError("board down")):
+            out = self._reconcile(self._blocked(spawned_ticket_ids=["MAYBE-1"]))
+        self.assertEqual(out["summary"]["status"], "blocked")               # NOT escalated
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["MAYBE-1"])  # trusted as-is
+        self.assertIn("spawned-id verify failed", out["summary"]["reconcile_error"])
 
     def test_explicit_ticket_workspace_is_used(self):
         orch.reconcile(self.board, {"id": "u1", "workspace": "/custom/ws"},

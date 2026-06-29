@@ -148,9 +148,28 @@ SATISFIED.
   + invalid surfaced; (d) board-read failure → unverified, no crash, errs recorded.
 
 ## Progress log
-- [ ] (2026-06-29) Plan created; base_commit recorded; gate + commit pending.
+- [x] (2026-06-29) Plan created (`bd35d9b`); base_commit `0bb3848`; gate GREEN.
+- [x] (2026-06-29) M1 — `fetch_issue_labels_by_ids` (module fn + `LinearBoard` method,
+  query `_ISSUE_LABELS`) + `MockBoard.fetch_issue_labels_by_ids`; 4 board tests
+  (`test_director_linear`, 25 green).
+- [x] (2026-06-29) M2 — `reconcile` helpers `_validate_spawned`/`_follow_note`/
+  `_spawned_summary`; done path surfaces valid vs invalid honestly (transition
+  unchanged); blocked path with a non-empty-but-zero-valid claim downgrades to escalate;
+  best-effort board read (fail-open + `reconcile_error`). 7 new reconcile tests + 2 done
+  tests reseeded with valid children. Full suite green (149 orchestrator+board); gate GREEN.
+- [ ] Completion gate: self-review + always-on (spec-compliance → code-quality) +
+  standard (arch + reliability) pending.
 
 ## Surprises & discoveries
+- `summary["spawned_ticket_ids"]` has **no downstream logic consumer** (grepped
+  status/dashboard/watch) — it is observability-only — so re-meaning it as "the REAL
+  (valid) follow-ups" is safe; invalid ids go in a new `spawned_invalid` field (present
+  only when non-empty). Two existing done tests asserted unverified ids in
+  `spawned_ticket_ids`; reseeded them with real agent-ready children (the validated path).
+- Escalate-downgrade is deliberately narrow: fires only on `blocked` with a **non-empty**
+  claim where **zero** ids are valid AND the board read **succeeded**. Empty claim → plain
+  blocked; partially-valid → blocked (has a real child); board-read failure → trust the
+  report (no false escalate on unverifiable data).
 
 ## Decision log
 - 2026-06-29: Chose approach A (validate in reconcile) over worker-side (B) or
