@@ -11,5 +11,12 @@
         "path": "."
       }
     }
+  },
+  "permissions": {
+    "allow": [
+      "mcp__plugin_linear_linear__save_issue",
+      "mcp__plugin_linear_linear__create_issue_label",
+      "mcp__plugin_linear_linear__save_comment"
+    ]
   }
 }
