@@ -38,15 +38,15 @@ agent is configured by an identity half in `.claude/` plus its guide, and the wo
 `director/config.py` `DEFAULTS` (§14's two-profile config detail still stands for the
 Director and the worker).
 
-**Coupling is loose, board-mediated, and human-gated.** The Partner and Director share no
+**Coupling is loose, board-mediated, and agent-governed.** The Partner and Director share no
 session and no state; they coordinate only through the board — the Partner `issueCreate`s a
-brief ticket **without** the `agent-ready` dispatch label, a human admits it by marking it
-`agent-ready` ([[0009-collapse-dispatch-taxonomy]]: admission is the human-owned bit), and
-only then does the orchestrator claim and execute it. The Partner **creates** the proposal
-but never **admits** it (`agent-ready` is the human's) and never **transitions** lifecycle
-state (the orchestrator's — [[0003-lights-out-director]] `issueUpdate` ceiling) — so the
-coupling stays race-free **and** keeps direction human-owned, consistent with the Partner
-having no lights-out mode.
+brief ticket and **marks it `agent-ready` itself**
+([[0011-agent-ready-is-agent-governed]]: `agent-ready` is an agent-governed readiness signal,
+not a human gate), and the orchestrator claims and executes it on its next poll. The Partner
+**sets** the `agent-ready` label (which it governs) but never **transitions** lifecycle state
+(the orchestrator's — [[0003-lights-out-director]] `issueUpdate` ceiling, a *race-freedom*
+invariant) — so the coupling stays race-free; the human curates at the board edge (removing
+`agent-ready` to veto/pause), not as a per-ticket gate.
 
 ## Why
 
@@ -83,11 +83,12 @@ having no lights-out mode.
   worker does not). Rides the tracked tech-debt the `scout` skill already names.
 - **Doc-only v1.** No `.harness.json:partner` config block yet (schedule/team live in
   `PARTNER.md` prose); a declarative block is deferred until a second host needs it.
-- **The Partner has no lights-out autonomy.** Unlike the Director's §13 procedure (decide
-  mechanical forks when the human is absent), direction and taste are *always* human-owned:
-  the Partner's proactive pass *surfaces*, never enacts, and on an uncovered taste fork it
-  consults `docs/PRINCIPLES.md` and surfaces rather than decides. Its autonomy is in
-  thinking, research, and framing only.
+- **The Partner is autonomous, symmetric with the Director** (revised by
+  [[0011-agent-ready-is-agent-governed]]). It governs `agent-ready` and sets direction within
+  the guardrails; its proactive pass marks briefs `agent-ready` and surfaces new directions
+  for *awareness/veto* (not permission); and it shares the Director's lights-out fail-safe —
+  decide what `docs/PRINCIPLES.md` and the merits cover, **park** only a genuinely-uncovered
+  high-stakes taste fork. The human governs at the edges.
 - **Reuses `docs/PRINCIPLES.md`** — the Partner consults the same externalized-taste layer
   the Director does; no new taste artifact.
 - Runs the standard ExecPlan completion gate (spec-compliance + code-quality +

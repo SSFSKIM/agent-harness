@@ -45,6 +45,13 @@ A ticket should carry the **goal**; *whether* an agent should pick it up is the 
 still owns, and `agent-ready` expresses exactly that bit. HOW to do it — research, spec design,
 an ExecPlan, or a direct patch — is the worker's call, via `AGENTS.md` + skills.
 
+> **Ownership reframed 2026-06-29 by [[0011-agent-ready-is-agent-governed]]:** "the one bit a
+> human still owns" reads too strong against the project's least-human-in-loop north star.
+> `agent-ready` is an **agent-governed readiness signal** — the Director and Partner set it
+> autonomously (most tickets `agent-ready`); the human curates at the *edges* (remove it to
+> veto/pause, redirect), not as a per-ticket admission gate. The gate *mechanism* below
+> (default-on, `eligible_tickets(require_label=True)`) is unchanged — only this framing flips.
+
 ## Default on
 
 The F1 shakedown bug (the Director ran Linear's default onboarding issues as ~700k-token

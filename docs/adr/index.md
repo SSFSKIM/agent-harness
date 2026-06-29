@@ -79,3 +79,12 @@ Decisions + why. Register every page here (lint D8).
   board-mediated coupling (Partner creates tickets, never transitions lifecycle). Substrate =
   the Daemonized-Claude runtime 0003 named as a separate track, now shipped (v2.1.195);
   no-headless memory stands (stateful session, not a spawn). Doc-only v1.
+- [agent-ready is agent-governed — least human in loop](0011-agent-ready-is-agent-governed.md)
+  — refines [0009](0009-collapse-dispatch-taxonomy.md): `agent-ready` is an **agent-governed
+  readiness signal, not a human-permission gate**. The Director and Partner set it
+  autonomously (most tickets `agent-ready`); the human curates at the **edges** (remove the
+  label to veto/pause, redirect, close), never as a per-ticket admission gate. The dispatch
+  gate *mechanism* (default-on) stands; only the ownership *framing* flips. Makes the Partner
+  symmetric with the Director (autonomous, human-at-edges) — removes its "no lights-out /
+  surface-never-enact" framing while keeping G2 (stop-at-brief) and the
+  orchestrator-owns-lifecycle-*state* race-freedom invariant. Human directive 2026-06-29.

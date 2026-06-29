@@ -269,3 +269,13 @@ gate function admits the ticket once it carries `agent-ready`. LIN-31 stays on t
 un-admitted proposal; the human marks it `agent-ready` to pursue it. The dogfood *strengthened*
 the central design claim (loose-coupling + human-owned admission) and complements the M2
 doc-behavior smoke.
+
+**Interpretation corrected 2026-06-29 ([ADR 0011](../../adr/0011-agent-ready-is-agent-governed.md)).**
+The human rejected the *human-owned-admission* framing this dogfood appeared to validate:
+`agent-ready` is **agent-governed**, not a human gate (least-human-in-loop —
+[ADR 0002](../../adr/0002-graduated-autonomy.md)/[0003](../../adr/0003-lights-out-director.md)).
+So step (4)'s classifier denial was *downstream of the wrong framing* — **not** a validation
+of it; under ADR 0011 the Partner marks its own briefs `agent-ready` (the human curates at the
+edges). Steps (1)–(3) and (5) (the label, the real brief LIN-31, and the gate's exclude/include
+mechanics) stand as factual; only the "human owns admission" reading is retracted. PARTNER.md +
+ADR 0010 were reframed accordingly.
