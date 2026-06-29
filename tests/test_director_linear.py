@@ -204,9 +204,8 @@ class LinearWriteMethodsTest(unittest.TestCase):
     def test_fetch_issue_labels_by_ids_normalizes(self):
         cap = {}
         resp = {"data": {"issues": {"nodes": [
-            {"id": "u1", "identifier": "LIN-1",
-             "labels": {"nodes": [{"name": "agent-ready"}, {"name": "Bug"}]}},
-            {"id": "u2", "identifier": "LIN-2", "labels": {"nodes": []}}]}}}
+            {"id": "u1", "labels": {"nodes": [{"name": "agent-ready"}, {"name": "Bug"}]}},
+            {"id": "u2", "labels": {"nodes": []}}]}}}
         out = linear.fetch_issue_labels_by_ids(["u1", "u2"], api_key="k",
                                                http_post=_capturing_post(cap, resp))
         self.assertEqual(out["u1"], ["agent-ready", "Bug"])
@@ -222,7 +221,7 @@ class LinearWriteMethodsTest(unittest.TestCase):
     def test_fetch_issue_labels_by_ids_omits_unknown(self):
         # a missing id is absent from the map → the caller reads that as "ticket does not exist"
         resp = {"data": {"issues": {"nodes": [
-            {"id": "u1", "identifier": "LIN-1", "labels": {"nodes": [{"name": "agent-ready"}]}}]}}}
+            {"id": "u1", "labels": {"nodes": [{"name": "agent-ready"}]}}]}}}
         out = linear.fetch_issue_labels_by_ids(["u1", "ghost"], api_key="k",
                                                http_post=_capturing_post({}, resp))
         self.assertEqual(out, {"u1": ["agent-ready"]})

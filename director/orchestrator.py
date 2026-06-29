@@ -149,16 +149,20 @@ def _validate_spawned(board, parent_tid: str, spawned: list, errs: list) -> dict
         return {"valid": [], "invalid": [], "verified": True}
     try:
         labels = board.fetch_issue_labels_by_ids(spawned)
+        valid, invalid = [], []
+        for sid in spawned:
+            if sid != parent_tid and DISPATCH_LABEL in (labels.get(sid) or []):
+                valid.append(sid)
+            else:
+                invalid.append(sid)
+        return {"valid": valid, "invalid": invalid, "verified": True}
     except Exception as exc:
+        # ANY failure of the read OR the partition (a raise, OR a malformed non-dict
+        # response that makes `labels.get` throw) degrades to "trust the report" — the
+        # whole verify path is total, so reconcile never raises on unverifiable data
+        # (review-reliability: keep the loop inside the guard, not just the read).
         errs.append(f"spawned-id verify failed ({exc}); trusting reported ids")
         return {"valid": list(spawned), "invalid": [], "verified": False}
-    valid, invalid = [], []
-    for sid in spawned:
-        if sid != parent_tid and DISPATCH_LABEL in (labels.get(sid) or []):
-            valid.append(sid)
-        else:
-            invalid.append(sid)
-    return {"valid": valid, "invalid": invalid, "verified": True}
 
 
 def _follow_note(valid: list, invalid: list, verified: bool) -> str:

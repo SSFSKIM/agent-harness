@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_verified: 2026-06-29
 owner: harness
 type: exec-plan
@@ -128,8 +128,8 @@ SATISFIED.
   test `MockBoard` (look up its own seeded issues by id, return their `labels`). At the
   end: the board client and the mock can answer "for these ids, which exist and what
   labels does each carry." Run `python3 -m unittest discover -s tests`; expect new
-  `test_director_board`/`test_director_orchestrator` label-lookup tests green (exists,
-  missing, multiple, empty).
+  label-lookup tests in `tests/test_director_linear.py` green (the 4 scenarios:
+  exists+multiple+no-labels, missing, empty).
 - **M2 — reconcile validates spawned ids.** In `reconcile`'s terminal branch, add a
   helper that, given the reported `spawned_ticket_ids`, calls the M1 lookup and returns
   `(valid, invalid)` where valid = exists AND `agent-ready` in its labels AND id != this
@@ -150,15 +150,22 @@ SATISFIED.
 ## Progress log
 - [x] (2026-06-29) Plan created (`bd35d9b`); base_commit `0bb3848`; gate GREEN.
 - [x] (2026-06-29) M1 — `fetch_issue_labels_by_ids` (module fn + `LinearBoard` method,
-  query `_ISSUE_LABELS`) + `MockBoard.fetch_issue_labels_by_ids`; 4 board tests
-  (`test_director_linear`, 25 green).
+  query `_ISSUE_LABELS`) + `MockBoard.fetch_issue_labels_by_ids`; 3 new board test methods
+  covering the 4 scenarios (exists+multiple+no-labels / missing / empty) in
+  `tests/test_director_linear.py` (25 green).
 - [x] (2026-06-29) M2 — `reconcile` helpers `_validate_spawned`/`_follow_note`/
   `_spawned_summary`; done path surfaces valid vs invalid honestly (transition
   unchanged); blocked path with a non-empty-but-zero-valid claim downgrades to escalate;
   best-effort board read (fail-open + `reconcile_error`). 7 new reconcile tests + 2 done
   tests reseeded with valid children. Full suite green (149 orchestrator+board); gate GREEN.
-- [ ] Completion gate: self-review + always-on (spec-compliance → code-quality) +
-  standard (arch + reliability) pending.
+- [x] (2026-06-29) Completion gate: gate GREEN; self-review done; behavioral acceptance =
+  fixture-level reconcile tests (the mock board exercises the path end-to-end); live worker
+  dogfood deferred (codex CLI unavailable in-env). All 4 personas SATISFIED, 0 P1
+  (spec-compliance, code-quality, review-arch, review-reliability).
+- [x] (2026-06-29) Post-review inline fixes: hardened `_validate_spawned` (partition loop
+  inside the try → total even on a non-dict board response); dropped the unused `identifier`
+  query field; added the done-path fail-open test; fixed two plan-text nits. 150 tests green;
+  gate GREEN. Remaining P2s tracked fix-forward (see Feedback + tech-debt-tracker).
 
 ## Surprises & discoveries
 - `summary["spawned_ticket_ids"]` has **no downstream logic consumer** (grepped
@@ -183,4 +190,56 @@ SATISFIED.
 
 ## Feedback (from completion gate)
 
+All four personas **SATISFIED**, zero P1.
+
+**Fixed inline (P2):**
+- review-reliability — `_validate_spawned`'s partition loop ran outside the try/except, so a
+  board adapter returning a non-dict (vs raising) could throw out of reconcile; moved the loop
+  inside the guard so the whole verify path is total (fail-open on any failure).
+- review-code-quality — `_ISSUE_LABELS` selected an unused `identifier`; dropped it (nothing
+  speculative). Added `test_done_spawned_verify_board_error_trusts_report` to close the
+  fail-open matrix (was blocked-only).
+- review-spec-compliance — two plan-text nits (test count + module name) corrected above.
+
+**Tracked fix-forward (tech-debt-tracker):**
+- **Identifier-vs-node-id matching** (review-arch P2 + code-quality note + this plan's
+  Assumptions): the lookup filters by Linear node id, so a worker reporting a human identifier
+  (`LIN-31`) gets every real child classed invalid → a false escalate on blocked, a misleading
+  "not found" line on done. Only bites a contract-noncompliant worker (the contract mandates
+  the `issueCreate`-returned id); safe direction (surfacing > silent strand). Fix = an
+  identifier-aware lookup.
+- **Escalate-downgrade ↔ orphan-reattach (gap #2 sharpening)** (review-reliability +
+  review-arch): in a `blocked`-CONFIGURED deployment the downgrade leaves the ticket in
+  `started` (was: parked in `blocked`, which orphan-reattach ignores), so a daemon restart
+  re-dispatches it — a new entry into gap #2's duplicate-on-restart path.
+- **Two proposed RELIABILITY.md rules** (doc-gardener): (a) a control-path board READ newly
+  inserted into reconcile's terminal-transition path must be total AND fail-open to prior
+  behavior (never a stricter verdict on a read failure); (b) a code-synthesized escalate
+  inherits the `started`/restart-redispatchable lifecycle — a human-bound terminal needs a
+  parked state or restart-idempotency (anchors the deferred gap #2 work).
+
+**Accepted as-is (taste):**
+- review-code-quality — `_validate_spawned` returns a dict the two formatters unpack
+  positionally; a defensible decoupling. Left as-is.
+
 ## Outcomes & retrospective
+
+Shipped: `fetch_issue_labels_by_ids` (board by-ids label lookup) + reconcile spawned-id
+validation. A worker's reported `spawned_ticket_ids` are now verified against the board
+(exists + `agent-ready` + not self); a `blocked` whose claimed children are all invalid is
+surfaced as an **escalate** instead of a silent strand with a false audit trail, and both the
+`done` and `blocked` comments/summaries name real vs claimed-but-not-real ids honestly. The
+`done` transition is unchanged; the board read is fail-open (a read failure trusts the report,
+records `reconcile_error`, never a false escalate). Closes mechanism gap #1 from the
+worker-behavior review.
+
+Scope held: gaps #2 (duplicate-on-restart) and #3 (daemon strand-escalation) stay deferred to
+a poll-loop follow-up; the gate sharpened gap #2 (the escalate-downgrade is a new entry into
+its restart path). 12 new tests; full suite + gate GREEN; all four review personas SATISFIED.
+
+Retrospective: the four-persona panel earned its keep — review-reliability caught the
+loop-outside-try totality gap, and arch + code-quality converged on the `identifier` field from
+opposite directions, resolving to "drop now, track identifier-aware matching." The cleanest
+insight: re-meaning an observability-only summary field (`spawned_ticket_ids` → valid-only,
++ `spawned_invalid`) was safe precisely because it had no structured consumer — verified by
+grep before relying on it.

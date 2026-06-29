@@ -94,7 +94,7 @@ query DirectorIssueStates($ids: [ID!]) {
 _ISSUE_LABELS = """
 query DirectorIssueLabels($ids: [ID!]) {
   issues(filter: { id: { in: $ids } }) {
-    nodes { id identifier labels { nodes { name } } }
+    nodes { id labels { nodes { name } } }
   }
 }
 """.strip()

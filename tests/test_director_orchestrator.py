@@ -1118,6 +1118,18 @@ class ReconcileMergeEnqueueTest(unittest.TestCase):
         self.assertEqual(out["summary"]["spawned_ticket_ids"], ["MAYBE-1"])  # trusted as-is
         self.assertIn("spawned-id verify failed", out["summary"]["reconcile_error"])
 
+    def test_done_spawned_verify_board_error_trusts_report(self):
+        # the done path shares the same fail-open helper: a board-read failure trusts the
+        # reported follow-ups (unverified) and still completes — never a crash.
+        with mock.patch.object(self.board, "fetch_issue_labels_by_ids",
+                               side_effect=RuntimeError("board down")):
+            out = self._reconcile(self._done(spawned_ticket_ids=["MAYBE-2"]))
+        self.assertEqual(out["summary"]["final_state"], "done")
+        self.assertEqual(out["summary"]["spawned_ticket_ids"], ["MAYBE-2"])  # trusted as-is
+        self.assertNotIn("spawned_invalid", out["summary"])
+        self.assertIn("unverified", "\n".join(self.board.comments["u1"]))
+        self.assertIn("spawned-id verify failed", out["summary"]["reconcile_error"])
+
     def test_explicit_ticket_workspace_is_used(self):
         orch.reconcile(self.board, {"id": "u1", "workspace": "/custom/ws"},
                        self._done(pr_url="u", pr_branch="b"), 1, self.states, 1,
