@@ -20,6 +20,8 @@ import json
 import os
 import select
 import subprocess
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Callable
 
@@ -66,6 +68,17 @@ class TurnCancelled(RuntimeError):
 # in slices no longer than this, so a cancel is seen within ~_CANCEL_POLL_S even
 # inside a long turn (spec R4), while still enforcing the read_timeout_s budget.
 _CANCEL_POLL_S = 0.5
+
+# Worker stderr is drained into a bounded ring buffer and the TAIL is appended to any
+# "app-server closed" error, so a worker that dies/closes the stream is self-diagnosing
+# instead of opaque (the F11 codex-runtime crash was undiagnosable because stderr was
+# discarded). Bounded by line count AND per-line length so a chatty/panicking worker
+# can't grow memory without limit.
+_STDERR_TAIL_LINES = 50
+_STDERR_LINE_CAP = 2000
+# Grace for the drain thread to flush the dying worker's final stderr before we read the
+# tail: by the time we see stdout EOF the child is exiting, so its stderr EOFs imminently.
+_STDERR_JOIN_S = 2.0
 
 
 def normalize_tool_result(result) -> dict:
@@ -224,6 +237,11 @@ class AppServerClient:
         self._id = 0
         self._proc: subprocess.Popen | None = None
         self._rbuf = b""  # raw stdout bytes awaiting line framing
+        # Bounded tail of the worker's stderr, filled by a daemon drain thread (start()).
+        # deque.append is atomic under the GIL, so the reader (_stderr_suffix, error path)
+        # needs no lock.
+        self._stderr_tail: deque[str] = deque(maxlen=_STDERR_TAIL_LINES)
+        self._stderr_thread: threading.Thread | None = None
 
     # -- lifecycle --------------------------------------------------------
     def start(self) -> "AppServerClient":
@@ -233,12 +251,74 @@ class AppServerClient:
         self._proc = subprocess.Popen(
             self.command, cwd=self.cwd, env=self.env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, bufsize=0)
+            # Capture (don't discard) stderr: a daemon thread drains it into a bounded
+            # ring buffer so (1) a crash is self-diagnosing — the tail is surfaced in any
+            # "app-server closed" error — and (2) the stderr pipe never fills and deadlocks
+            # the child. We select() only on stdout, so stderr must be drained off-thread.
+            stderr=subprocess.PIPE, bufsize=0)
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr, name="appsrv-stderr", daemon=True)
+        self._stderr_thread.start()
         return self
+
+    def _drain_stderr(self) -> None:
+        """Drain the worker's stderr into `self._stderr_tail` until EOF. TOTAL: any read
+        error (the stream closed under us by stop(), a decode edge) just ends the drain —
+        a diagnostics path must never raise into the worker lifecycle (RELIABILITY R8)."""
+        proc = self._proc
+        if proc is None or proc.stderr is None:
+            return
+        buf = b""
+        try:
+            while True:
+                chunk = proc.stderr.read(4096)
+                if not chunk:  # EOF
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    self._append_stderr(line)
+                # A no-newline flood must not grow `buf` without bound — else the unbounded
+                # growth just moves from the kernel pipe into the daemon heap and a panicking
+                # worker (giant single-line JSON, un-terminated trace, binary garbage) could
+                # OOM the long-running Director from a diagnostics-only path. Once the unframed
+                # remainder exceeds the per-line cap, record the capped head and drop the rest
+                # until the next newline. Bounds `buf` to < cap + one read chunk.
+                if len(buf) > _STDERR_LINE_CAP:
+                    self._append_stderr(buf)  # appends buf[:_STDERR_LINE_CAP]
+                    buf = b""
+            self._append_stderr(buf)  # flush any trailing partial line
+        except Exception:
+            pass
+
+    def _append_stderr(self, raw: bytes) -> None:
+        line = raw.decode("utf-8", "replace").rstrip("\r")
+        if line:
+            self._stderr_tail.append(line[:_STDERR_LINE_CAP])
+
+    def _stderr_suffix(self) -> str:
+        """The captured worker-stderr tail formatted for an error message ('' if none).
+        Briefly joins the drain thread first so the dying worker's final stderr is
+        captured before we read it (called only on the close/error path). TOTAL like
+        `_drain_stderr`: this runs on the worker-lifecycle thread at the failure moment, so
+        a raise here would mask the real AppServerError — any failure degrades to no suffix."""
+        try:
+            t = self._stderr_thread
+            if t is not None and t.is_alive():
+                t.join(timeout=_STDERR_JOIN_S)
+            lines = list(self._stderr_tail)
+            if not lines:
+                return ""
+            return " — worker stderr tail:\n" + "\n".join(lines)
+        except Exception:
+            return ""
 
     def stop(self) -> None:
         if self._proc is None:
             return
+        # Close stdin/stdout (NOT stderr — the drain thread is reading it; closing it from
+        # under a blocked read is the platform-dependent case we avoid). Closing stdin EOFs
+        # the worker's input; we read stdout only from this thread, already past its loop.
         for stream in (self._proc.stdin, self._proc.stdout):
             try:
                 if stream:
@@ -254,6 +334,23 @@ class AppServerClient:
                 self._proc.wait(timeout=5)  # reap the child on the hard-kill path
             except Exception:
                 pass
+        # The process is dead now, so its stderr write-end is closed -> the drain thread's
+        # read returns EOF and the thread exits. Join (daemon, so a stuck join never hangs
+        # exit). Close the read-end stderr ONLY once the drain thread has actually exited —
+        # if the join timed out (e.g. a surviving grandchild still holds the write-end open,
+        # so the pipe never EOFs and the daemon read() stays blocked), closing the fd under
+        # that blocked read is the close-while-reading + fd-reuse hazard we avoid; we accept
+        # the bounded fd leak on that rare path instead.
+        drain_alive = False
+        if self._stderr_thread is not None:
+            self._stderr_thread.join(timeout=_STDERR_JOIN_S)
+            drain_alive = self._stderr_thread.is_alive()
+            self._stderr_thread = None
+        try:
+            if self._proc.stderr and not drain_alive:
+                self._proc.stderr.close()
+        except Exception:
+            pass
         self._proc = None
 
     def __enter__(self):
@@ -343,7 +440,7 @@ class AppServerClient:
         while True:
             msg = self._read_msg()
             if msg is None:
-                raise AppServerError(f"app-server closed during {method}")
+                raise AppServerError(f"app-server closed during {method}{self._stderr_suffix()}")
             if msg.get("method") is not None:
                 if "id" in msg:
                     self._handle_server_initiated(msg)
@@ -403,7 +500,7 @@ class AppServerClient:
         while True:
             msg = self._read_msg()
             if msg is None:
-                raise AppServerError("app-server closed during turn")
+                raise AppServerError("app-server closed during turn" + self._stderr_suffix())
             method = msg.get("method")
             if method is not None and "id" in msg:        # server-initiated request (seam)
                 self._handle_server_initiated(msg)

@@ -228,5 +228,66 @@ class CancelTest(unittest.TestCase):
             c.stop()
 
 
+class WorkerStderrCaptureTest(unittest.TestCase):
+    """A worker that dies/closes the stream must be self-diagnosing: the harness drains the
+    worker subprocess stderr and appends its tail to the "app-server closed" error. Before
+    this, stderr was piped to DEVNULL, so the F11 codex crash surfaced only as an opaque
+    "app-server closed during turn" and root-cause required mining the codex rollout."""
+
+    def _dying_server(self, body: str):
+        # A fake app-server: runs `body` (e.g. writes to stderr), consumes the initialize
+        # request line so the client's _send doesn't BrokenPipe, then exits WITHOUT writing
+        # stdout -> the client reads stdout EOF and raises "app-server closed during ...".
+        script = f"import sys, os\n{body}\nsys.stdin.readline()\nos._exit(0)\n"
+        return appsrv.AppServerClient([sys.executable, "-c", script],
+                                      cwd=tempfile.gettempdir(), read_timeout_s=5.0)
+
+    def test_stderr_tail_surfaced_on_close(self):
+        c = self._dying_server("sys.stderr.write('DIAG_BOOM_SENTINEL\\n'); sys.stderr.flush()")
+        with c:
+            with self.assertRaises(appsrv.AppServerError) as cm:
+                c.initialize()
+        msg = str(cm.exception)
+        self.assertIn("app-server closed during initialize", msg)
+        self.assertIn("worker stderr tail", msg)
+        self.assertIn("DIAG_BOOM_SENTINEL", msg)  # the actual reason, no longer discarded
+
+    def test_no_stderr_keeps_message_clean(self):
+        # A close with NO stderr must not append an empty "tail" noise suffix.
+        c = self._dying_server("pass")
+        with c:
+            with self.assertRaises(appsrv.AppServerError) as cm:
+                c.initialize()
+        self.assertNotIn("worker stderr tail", str(cm.exception))
+
+    def test_stderr_tail_is_bounded(self):
+        # A chatty/panicking worker can't grow the buffer without limit: only the last
+        # _STDERR_TAIL_LINES survive (oldest dropped), so the tail shows the final state.
+        body = f"[sys.stderr.write('L%d\\n' % i) for i in range({appsrv._STDERR_TAIL_LINES + 150})]; sys.stderr.flush()"
+        c = self._dying_server(body)
+        with c:
+            with self.assertRaises(appsrv.AppServerError):
+                c.initialize()
+        tail = list(c._stderr_tail)
+        self.assertLessEqual(len(tail), appsrv._STDERR_TAIL_LINES)
+        self.assertIn(f"L{appsrv._STDERR_TAIL_LINES + 149}", tail)  # newest kept
+        self.assertNotIn("L0", tail)                                # oldest dropped
+
+    def test_stderr_no_newline_flood_is_bounded(self):
+        # P1 (reliability review): a no-newline flood must not grow the in-flight drain
+        # accumulator without bound (that would just move the unbounded growth from the
+        # kernel pipe into the daemon heap). The drain caps the unframed remainder, so every
+        # captured line stays <= the per-line cap even with zero newlines in the stream.
+        n = appsrv._STDERR_LINE_CAP * 4
+        c = self._dying_server(f"sys.stderr.write('x' * {n}); sys.stderr.flush()")
+        with c:
+            with self.assertRaises(appsrv.AppServerError):
+                c.initialize()
+        tail = list(c._stderr_tail)
+        self.assertTrue(tail)  # the flood was captured (not dropped wholesale)
+        self.assertTrue(all(len(ln) <= appsrv._STDERR_LINE_CAP for ln in tail),
+                        "every captured stderr line must be bounded by _STDERR_LINE_CAP")
+
+
 if __name__ == "__main__":
     unittest.main()
