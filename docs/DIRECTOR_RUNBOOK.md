@@ -46,12 +46,15 @@ Jump to §5/§6.
 ## 1. Prerequisites + the env contract (one-time)
 
 **Binaries / connections:**
-- **`codex` CLI** on PATH — the default worker runtime (`codex app-server` is each
-  worker spawn). Check: `codex --version` (validated against 0.142.0; the spawn shape is
-  stable across the 0.13x–0.14x line).
-- *(optional)* the **claude worker runtime** — vendored in-repo, built once:
-  `bash worker-runtime/setup.sh` (needs Node + npm; produces
-  `worker-runtime/app-server/dist/bin.js`). Enables `--worker claude`. Default stays codex.
+- **the `claude` worker runtime — the DEFAULT** (`.harness.json` `director.worker_runtime: "claude"`).
+  Vendored in-repo, built once: `bash worker-runtime/setup.sh` (needs Node + npm; produces
+  `worker-runtime/app-server/dist/bin.js`). Uses `CLAUDE_CODE_OAUTH_TOKEN`. Each worker spawn is a
+  `node …/bin.js app-server`.
+- *(optional / currently blocked)* the **`codex` CLI** on PATH — the original default, switched off
+  because it is **broken against codex 0.142.3/0.142.4**: its app-server silently crashes the instant
+  the model invokes its built-in `exec` tool (**F11** in `docs/exec-plans/tech-debt-tracker.md` —
+  ruled out sandbox/approval/config/plugins; a codex-side regression, validated baseline was 0.142.0).
+  Re-enable with `--worker codex` ONLY on a compatible (≤0.142.0-era) codex. Check: `codex --version`.
 - **`gh` authenticated** for the target repo with a token that can **open and merge** PRs:
   `gh auth status`. The merger squash-merges, so merge rights are required.
 - **Linear MCP** connected in *this* session (the Director reads/writes the board), plus
@@ -179,7 +182,7 @@ decider (no live Director answers turn-ends, never polls the board). Best first 
 ```bash
 set -a; . ./.env; set +a
 python3 -m director.run --linear LIN-23 --tools linear --install-skills
-# --worker claude        # opt into the claude runtime (default: codex)
+# (worker runtime defaults to claude; --worker codex only on a ≤0.142.0-era codex — F11)
 # --max-turns 8          # bound the multi-turn drive
 ```
 
@@ -218,7 +221,7 @@ python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --once --turn-review-ti
 #   (omit --once)               # the always-on daemon — the default operating mode (§9)
 #   --batch                     # bounded: drain ready work across DAG-aware passes, then exit
 #   --concurrency 1             # one worker at a time for a clean first run
-#   --worker claude             # claude runtime (default: codex)
+#   --worker codex              # the original codex runtime (broken — F11; default is now claude)
 ```
 Run it as a **background task** so the session stays free to answer. `--turn-review-timeout
 3600` keeps a worker from timing out while you deliberate. This first-run command uses
@@ -407,7 +410,7 @@ behind (a `pending` ghost from a prior run will show on the next dashboard).
 | Worker can't `gh`/clone; `LINEAR_API_KEY` errors | `.env` not sourced into the launching shell | `set -a; . ./.env; set +a` **before** launch (§1) |
 | Worker workspace is empty; nothing to build | no `after_create` clone hook (or `--mock`) | add the clone hook (§3); only `--mock` is hook-free |
 | `codex: command not found` in the worker | codex CLI not on PATH for the launching env | install/PATH the `codex` CLI; `codex --version` |
-| Worker turn fails + re-dispatches after a long silent gap; the retry's `before_run` wipes its uncommitted work → it redoes from scratch | `read_timeout` (default **180s**) too short for a heavyweight / over-orienting worker that goes quiet during a long op | raise it **per-runtime**: `director.worker_runtime_sandbox`-style knob `worker_runtime_read_timeout: {"codex": 600}` in `.harness.json` (or `--read-timeout`); and write tickets so the worker commits/pushes early — a retry resets the workspace to `origin/main`, so only **pushed** work survives |
+| Worker turn fails + re-dispatches after a long silent gap; the retry's `before_run` wipes its uncommitted work → it redoes from scratch | `read_timeout` (default **180s**) too short for a heavyweight / over-orienting worker that goes quiet during a long op | raise it **per-runtime**: `director.worker_runtime_sandbox`-style knob `worker_runtime_read_timeout: {"claude": 600}` in `.harness.json` (or `--read-timeout`); and write tickets so the worker commits/pushes early — a retry resets the workspace to `origin/main`, so only **pushed** work survives |
 | Worker returns empty turns (0 messages/calls) | Codex/Claude **rate window** exhausted | check the rollout's `rate_limits`; wait for reset (DIRECTOR.md §13 park) |
 | Ticket sits `blocked`/`escalated`/In-Progress and its children never dispatch (even after a daemon restart) | working as designed: a `blocked`/escalate/park is **parked** awaiting a human — it does not auto-resume, and a child `blocked_by` it stays ineligible until the parent reaches a *completed* state (DIRECTOR.md §4) | **re-ready it**: move the parent back to the ready state, or answer its turn with a `reply` directive that drives it to `done`. A `stranded`-flagged stuck entry (§9 / DIRECTOR.md §12) is the daemon flagging exactly this |
 | Merger won't land; `mergeReview` posted | hygiene gate (red CI / unresolved thread) or preservation tripwire | resolve + `dm.requeue_merge(review, note=...)` (DIRECTOR.md §7) |

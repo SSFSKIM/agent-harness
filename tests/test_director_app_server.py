@@ -289,5 +289,45 @@ class WorkerStderrCaptureTest(unittest.TestCase):
                         "every captured stderr line must be bounded by _STDERR_LINE_CAP")
 
 
+class ProtocolTailTest(unittest.TestCase):
+    """For a SILENT close (the F11 class: codex exits mid-turn with empty stderr, no JSON-RPC
+    error), the last received protocol messages are the actual diagnostic — they show the close
+    happened mid-stream, not that the harness mishandled a request. They are appended to the
+    'app-server closed' error so the next such failure is self-diagnosing from the disposition."""
+
+    def _server_that_streams_then_closes(self, lines: str):
+        # Fake app-server: consume the initialize request, emit `lines` (raw stdout JSON-RPC),
+        # then exit WITHOUT the initialize result -> the client reads those messages then EOF.
+        script = ("import sys, json, os\n"
+                  "sys.stdin.readline()\n"
+                  f"{lines}\n"
+                  "sys.stdout.flush()\n"
+                  "os._exit(0)\n")
+        return appsrv.AppServerClient([sys.executable, "-c", script],
+                                      cwd=tempfile.gettempdir(), read_timeout_s=5.0)
+
+    def test_close_error_lists_last_protocol_messages(self):
+        lines = (r"sys.stdout.write(json.dumps({'method':'thread/started','params':{}})+'\n')" "\n"
+                 r"sys.stdout.write(json.dumps({'method':'item/completed','params':{'item':{'type':'agentMessage'}}})+'\n')")
+        c = self._server_that_streams_then_closes(lines)
+        with c:
+            with self.assertRaises(appsrv.AppServerError) as cm:
+                c.initialize()
+        msg = str(cm.exception)
+        self.assertIn("last app-server messages", msg)
+        self.assertIn("thread/started", msg)
+        self.assertIn("item/completed[agentMessage]", msg)  # item TYPE surfaced (the F11 signal)
+
+    def test_clean_message_when_nothing_received(self):
+        # A close with no received messages must not append an empty tail suffix.
+        c = appsrv.AppServerClient(
+            [sys.executable, "-c", "import sys, os; sys.stdin.readline(); os._exit(0)"],
+            cwd=tempfile.gettempdir(), read_timeout_s=5.0)
+        with c:
+            with self.assertRaises(appsrv.AppServerError) as cm:
+                c.initialize()
+        self.assertNotIn("last app-server messages", str(cm.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

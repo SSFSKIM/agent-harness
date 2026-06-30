@@ -76,6 +76,12 @@ _CANCEL_POLL_S = 0.5
 # can't grow memory without limit.
 _STDERR_TAIL_LINES = 50
 _STDERR_LINE_CAP = 2000
+# Bounded tail of the last RECEIVED protocol messages (compact summaries), appended to any
+# "app-server closed" error. For a SILENT close (the F11 class: codex exits mid-turn with
+# empty stderr, no JSON-RPC error), stderr reveals nothing — the wire-tail (what last crossed
+# the stdout protocol stream) is the actual diagnostic, e.g. `… → item/completed[agentMessage]`
+# right before EOF says codex died mid-turn, NOT that the harness mishandled a request.
+_MSG_TAIL_N = 12
 # Grace for the drain thread to flush the dying worker's final stderr before we read the
 # tail: by the time we see stdout EOF the child is exiting, so its stderr EOFs imminently.
 _STDERR_JOIN_S = 2.0
@@ -242,6 +248,9 @@ class AppServerClient:
         # needs no lock.
         self._stderr_tail: deque[str] = deque(maxlen=_STDERR_TAIL_LINES)
         self._stderr_thread: threading.Thread | None = None
+        # Bounded tail of received protocol-message summaries (filled in `_read_msg`, read on
+        # the close/error path). deque.append is atomic under the GIL — no lock needed.
+        self._msg_tail: deque[str] = deque(maxlen=_MSG_TAIL_N)
 
     # -- lifecycle --------------------------------------------------------
     def start(self) -> "AppServerClient":
@@ -400,13 +409,55 @@ class AppServerClient:
                 line = raw.strip()
                 if not line:
                     continue
-                return json.loads(line.decode("utf-8"))
+                m = json.loads(line.decode("utf-8"))
+                self._note_msg(m)
+                return m
             self._wait_readable()  # blocks until readable; raises ReadTimeout/TurnCancelled
             chunk = os.read(self._proc.stdout.fileno(), 65536)
             if not chunk:  # EOF — flush any trailing line
                 rest, self._rbuf = self._rbuf.strip(), b""
-                return json.loads(rest.decode("utf-8")) if rest else None
+                if not rest:
+                    return None
+                m = json.loads(rest.decode("utf-8"))
+                self._note_msg(m)
+                return m
             self._rbuf += chunk
+
+    def _note_msg(self, m: dict) -> None:
+        """Record a compact summary of a received protocol message in the bounded tail. TOTAL:
+        runs on the hot read path, so a malformed message must never break the turn."""
+        try:
+            self._msg_tail.append(self._msg_summary(m))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _msg_summary(m: dict) -> str:
+        """A short one-token descriptor of a protocol message — `method[itemType]` for an
+        `item/*` notification (the F11 signal lived in the item TYPE), else the method, else a
+        result/error marker. Kept tiny so the tail can't grow per-entry."""
+        method = m.get("method")
+        if method:
+            params = m.get("params")
+            item = params.get("item") if isinstance(params, dict) else None
+            t = item.get("type") if isinstance(item, dict) else None
+            return f"{method}[{t}]" if t else method
+        if "error" in m:
+            return f"error(id={m.get('id')})"
+        if "result" in m:
+            return f"result(id={m.get('id')})"
+        return "msg"
+
+    def _protocol_suffix(self) -> str:
+        """The last received protocol messages, for an 'app-server closed' error ('' if none).
+        TOTAL like `_stderr_suffix` — never raises on the failure path."""
+        try:
+            msgs = list(self._msg_tail)
+            if not msgs:
+                return ""
+            return " — last app-server messages: " + " → ".join(msgs)
+        except Exception:
+            return ""
 
     def _handle_server_initiated(self, msg: dict) -> None:
         """Reply to a server-initiated request: a Codex dynamic-tool call
@@ -440,7 +491,8 @@ class AppServerClient:
         while True:
             msg = self._read_msg()
             if msg is None:
-                raise AppServerError(f"app-server closed during {method}{self._stderr_suffix()}")
+                raise AppServerError(
+                    f"app-server closed during {method}{self._protocol_suffix()}{self._stderr_suffix()}")
             if msg.get("method") is not None:
                 if "id" in msg:
                     self._handle_server_initiated(msg)
@@ -500,7 +552,8 @@ class AppServerClient:
         while True:
             msg = self._read_msg()
             if msg is None:
-                raise AppServerError("app-server closed during turn" + self._stderr_suffix())
+                raise AppServerError(
+                    "app-server closed during turn" + self._protocol_suffix() + self._stderr_suffix())
             method = msg.get("method")
             if method is not None and "id" in msg:        # server-initiated request (seam)
                 self._handle_server_initiated(msg)

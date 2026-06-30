@@ -5,11 +5,15 @@
     "capabilities": []
   },
   "director": {
+    "worker_runtime": "claude",
     "worker_runtimes": {
       "claude": "node {harness_root}/worker-runtime/app-server/dist/bin.js app-server"
     },
     "worker_runtime_sandbox": {
       "claude": "danger-full-access"
+    },
+    "worker_runtime_read_timeout": {
+      "claude": 600
     },
     "worker": {
       "tools": "linear",
