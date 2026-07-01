@@ -50,11 +50,13 @@ Jump to §5/§6.
   Vendored in-repo, built once: `bash worker-runtime/setup.sh` (needs Node + npm; produces
   `worker-runtime/app-server/dist/bin.js`). Uses `CLAUDE_CODE_OAUTH_TOKEN`. Each worker spawn is a
   `node …/bin.js app-server`.
-- *(optional / currently blocked)* the **`codex` CLI** on PATH — the original default, switched off
-  because it is **broken against codex 0.142.3/0.142.4**: its app-server silently crashes the instant
-  the model invokes its built-in `exec` tool (**F11** in `docs/exec-plans/tech-debt-tracker.md` —
-  ruled out sandbox/approval/config/plugins; a codex-side regression, validated baseline was 0.142.0).
-  Re-enable with `--worker codex` ONLY on a compatible (≤0.142.0-era) codex. Check: `codex --version`.
+- *(optional / version-gated)* the **`codex` CLI** on PATH — the original default, kept off-by-default
+  because it is **broken on codex 0.142.3/0.142.4**: its app-server silently crashes the instant the
+  model invokes its built-in `exec` tool (**F11** in `docs/exec-plans/tech-debt-tracker.md` — ruled out
+  sandbox/approval/config/plugins; a codex 0.142.1–0.142.4 regression). **Validated GREEN end-to-end on
+  codex 0.140.0** (2026-07-01 re-dogfood, LIN-34 → PR #6): select it with `--worker codex` on any
+  ≤0.142.0-era build. `claude` stays the default because it is version-independent — a codex upgrade
+  back into the 0.142.1–0.142.4 window silently re-breaks the codex runtime. Check first: `codex --version`.
 - **`gh` authenticated** for the target repo with a token that can **open and merge** PRs:
   `gh auth status`. The merger squash-merges, so merge rights are required.
 - **Linear MCP** connected in *this* session (the Director reads/writes the board), plus
@@ -221,7 +223,7 @@ python3 -m director.orchestrator --team "$DIRECTOR_TEAM" --once --turn-review-ti
 #   (omit --once)               # the always-on daemon — the default operating mode (§9)
 #   --batch                     # bounded: drain ready work across DAG-aware passes, then exit
 #   --concurrency 1             # one worker at a time for a clean first run
-#   --worker codex              # the original codex runtime (broken — F11; default is now claude)
+#   --worker codex              # the original codex runtime (OK on ≤0.142.0-era codex; broken on 0.142.1–0.142.4 — F11; default is claude)
 ```
 Run it as a **background task** so the session stays free to answer. `--turn-review-timeout
 3600` keeps a worker from timing out while you deliberate. This first-run command uses
